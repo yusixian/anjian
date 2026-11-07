@@ -6,12 +6,12 @@
 
 - 基线：`6054b65ab9b2208a234a78632eb065cfeb3eb166`（v1.51.2）。
 - 本地分支：`work/local-first`，上游只读 remote 为 `upstream`。
-- 已授权本地实现、验证与部署准备。尚未创建远程仓库、提交、推送或实际部署。
+- 已授权实现、创建公开仓库、提交推送及 Dokploy 部署。公开仓库：https://github.com/yusixian/anjian；首个 Anjian 提交为 `4186785b6dd2c775b2b760eb119e7793b6b17aad`。
 - 来源和 MIT / AGPL 许可证须保留；不合入后续授权不明的上游代码。
 
 ## 当前阶段
 
-本地去云端与品牌改造已整合，正在进行最终验证和容器准备。尚未创建远程仓库、提交、推送或部署。
+本地改造已推送 main，首次 GitHub CI 全部通过（run 42359161802）。Dokploy 首次镜像构建正在执行。
 
 已确认用户需要 `main` 的 push（含合并 PR）自动触发 Dokploy 部署。已登录 Dokploy；现有 `moe-prompt-atlas` 应用保持不变。用户已确认公开仓库 `yusixian/anjian`，正式域名 `anjian.cosine.ren` 与 `anjian-preview.cosine.ren`；已授权创建仓库、推送与部署。
 
@@ -33,7 +33,7 @@
 - 文档闭环：浏览器选中文字批注，CLI 读到对应 thread/block，修改 doc.xml 后网页实时更新，CLI 回复显示为 Codex 回复。
 - 服务端 HTTPS publicOrigin/boardOrigin、非 loopback Board 监听与 Host 限制已有定向回归验证。真实 HTTPS 反代尚未验证。
 - Docker Compose 静态解析通过；Docker Desktop 启动失败：dockerd 无法连接 `/run/containerd/containerd.sock`（timeout），日志确认 daemon 已退出。镜像尚未构建；未重置 Docker 数据。
-- GitHub 当前账号为 yusixian；只读查询未找到 yusixian/anjian。Dokploy 当前已登录。
+- GitHub 仓库 yusixian/anjian 已创建，公开且默认分支为 main。Dokploy 项目 `yhOw9_JJM0dLXu2abBvfc`、环境 `j72NLQOKyxDyUtbwRTPm6`、Compose `S73UF2n-BFdnrkrW5qXyK`，应用名 `anjian-anjian-gxizee`。已配置 main、On Push、Autodeploy、两个 HTTPS origin 和分别指向 27319/27329 的域名路由；首次构建已启动，尚待容器与线上验收。
 
 ## 后续
 

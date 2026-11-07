@@ -42,7 +42,7 @@ Compose 默认仅将 27319、27329 绑定到服务器回环地址。浏览器使
 
 直接推送 main 和合并 PR 到 main 都会产生 push 事件；其他分支的推送不应触发该生产应用。On Push 不会等待 GitHub Actions 完成。推荐为 main 配置 PR 检查门槛，通过仓库的 `Anjian checks` 后再合入。
 
-当前仓库与应用尚未创建，以上是待应用的配置，不代表 webhook 已经验证。
+公开仓库 `yusixian/anjian` 与 Dokploy Anjian Compose 应用已创建，上述来源配置已保存。main webhook 的端到端部署仍待验证。
 
 Dokploy 的部署任务显示完成只表示部署命令结束，不证明应用已经可用。域名路由与命名卷用法参考 [Dokploy Compose 文档](https://docs.dokploy.com/docs/core/docker-compose)和[域名配置](https://docs.dokploy.com/docs/core/docker-compose/domains)。
 
