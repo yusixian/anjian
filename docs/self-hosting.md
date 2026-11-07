@@ -1,15 +1,15 @@
 # Anjian 自托管
 
-已在 Dokploy 验证源码镜像构建、运行中容器、主界面 HTTPS 与文档批注/CLI 回复。main 推送已实际触发自动部署。容器重启后文档与评论保留已验证；容器替换后的卷恢复、线上画板独立来源和 SSH 接入仍待验收，详见 [交付记录](DELIVERY_GOAL.md)。
+已在 Dokploy 验证源码镜像构建、运行中容器、主界面 HTTPS 与文档批注/CLI 回复。main 推送已实际触发自动部署。容器重启后文档与评论保留已验证；线上画板独立来源已验证，容器替换后的卷恢复和 SSH 接入仍待验收，详见 [交付记录](DELIVERY_GOAL.md)。
 
 ## 两个来源
 
-主界面与可执行 HTML 预览使用不同 origin，避免作品脚本获得主界面的同源权限。
+画板预览使用独立 HTTPS origin。独立 HTML 作品通过不含 allow-same-origin 的 iframe 沙箱加载，使用不透明来源。两条路径均限制作品脚本取得主界面的同源权限。
 
 | 服务 | 容器端口 | 示例域名 | 配置 |
 | --- | --- | --- | --- |
 | 作品库、文档、评论 API 与 WebSocket | 27319 | `https://anjian.example.com` | `ANJIAN_PUBLIC_ORIGIN` |
-| HTML / 画板预览 | 27329 | `https://preview.example.net` | `ANJIAN_BOARD_ORIGIN` |
+| 画板预览 | 27329 | `https://preview.example.net` | `ANJIAN_BOARD_ORIGIN` |
 
 origin 是协议、主机和可选端口，不含路径或查询参数。公网部署需为两个来源提供 HTTPS，反向代理需支持 WebSocket。示例不是已分配的域名；建议为可执行预览选择独立站点，实际隔离效果还需浏览器验证。
 

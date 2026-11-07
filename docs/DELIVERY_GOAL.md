@@ -31,13 +31,16 @@
 - 完整测试集限制 4 个 worker 复查：160 个文件、1,373 项全部通过（71.53 秒）。使用已构建产物，配置为 `/tmp/anjian-server-vitest.config.ts`；此前无并发限制的一轮有两项 5 秒超时，定向复查也通过。
 - 真实浏览器：语言切换为 English 后刷新保留 `anjian.locale=en`；中文首页展示三类作品；HTML 按钮计数从 0 更新为 1；画板桌面与 390px 手机预览正常，手机页面无横向溢出。
 - 文档闭环：浏览器选中文字批注，CLI 读到对应 thread/block，修改 doc.xml 后网页实时更新，CLI 回复显示为 Codex 回复。
-- 服务端 HTTPS publicOrigin/boardOrigin、非 loopback Board 监听与 Host 限制已有定向回归验证。主界面真实 HTTPS 访问已验证，线上画板的独立来源仍待验证。
+- 服务端 HTTPS publicOrigin/boardOrigin、非 loopback Board 监听与 Host 限制已有定向回归验证。主界面与线上画板真实 HTTPS 访问已验证。画板 iframe 来源为 `https://anjian-preview.cosine.ren`，主页面读取 contentDocument 返回 null；390px 手机视口页面宽度与 scrollWidth 均为 390，WebSocket 状态为已连接。
 - Docker Compose 静态解析通过；Docker Desktop 启动失败：dockerd 无法连接 `/run/containerd/containerd.sock`（timeout），日志确认 daemon 已退出。未重置本机 Docker 数据；随后已在 Dokploy 完成真实 Linux 镜像构建。
 - GitHub 仓库 yusixian/anjian 已创建，公开且默认分支为 main。Dokploy 项目 `yhOw9_JJM0dLXu2abBvfc`、环境 `j72NLQOKyxDyUtbwRTPm6`、Compose `S73UF2n-BFdnrkrW5qXyK`，应用名 `anjian-anjian-gxizee`。已配置 main、On Push、Autodeploy、两个 HTTPS origin 和分别指向 27319/27329 的域名路由；首次镜像构建完成，容器 `anjian-anjian-gxizee-anjian-1` 运行。无密钥访问返回 403；已认证的状态接口返回 200、版本 0.1.0、中文界面。
 
 - 线上文档 `deployment-check` 已通过网页写入批注；容器内 CLI 读取同一 thread/block 并回复，网页实时显示 Agent 回复。此证据来自 Dokploy 容器终端，不代表电脑到服务器的 SSH 连接已验证。
 - 推送 `e74e1fa` 后，Dokploy 自动生成对应完整 SHA 的部署记录并完成；已确认 main webhook 生效。随后通过 Dokploy Restart 重启容器，运行时长回到 1 秒；刷新网页后文档、批注及回复均保留。尚未验证容器替换和备份恢复。
 
+- 线上 HTML 验收作品按钮由 0 更新为 1，iframe 未授予 allow-same-origin，contentDocument 为 null。HTML 使用主站 URL 的不透明来源沙箱；画板使用独立预览域名，两条路径已分别检查。
+- 最新文档提交暂未全部推送：本机 GitHub HTTPS 连接报 SSL_ERROR_SYSCALL，浏览器 GitHub API 请求也失败。没有将最新 CI 或部署标记为通过。
+
 ## 后续
 
-完成容器替换后的卷恢复检查、线上画板的双来源预览与最新 CI 核验；验证本地 Agent 通过 SSH 连接远程工作目录。当前已证明本机及服务器容器内的反馈闭环，不证明本地电脑到服务器的文件同步或宿主自动唤醒成功。
+完成容器替换后的卷恢复检查与最新 CI 核验；验证本地 Agent 通过 SSH 连接远程工作目录（已向用户询问 SSH 入口）。当前已证明本机及服务器容器内的反馈闭环，不证明本地电脑到服务器的文件同步或宿主自动唤醒成功。
