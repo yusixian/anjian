@@ -150,6 +150,11 @@ test('feedback cursor replays comments after the Hub restarts', async () => {
     body: JSON.stringify({ op: 'add', blockId, text: 'Please update this' }),
   });
   expect(comment.status).toBe(200);
+  const human = await fx.request(`/api/document/feedback/comments?key=${MASTER}`, {
+    method: 'POST', headers: { Origin: fx.origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'create', blockId, quote: 'Review me', text: 'Human feedback' }),
+  });
+  expect(human.status).toBe(200);
   const otherDevice = await fx.login();
   const unread = async (authorization: Record<string, string>) => {
     const response = await fx.request(`${route}/agent/document/feedback/comments`, {

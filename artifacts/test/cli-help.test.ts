@@ -41,7 +41,10 @@ test('comment help shows one usage line per action', () => {
     expect(help).toMatch(new RegExp(`anjian comment ${action} +--artifact`));
 });
 
-test('local-only CLI has no cloud or upstream update commands', () => {
-  expect(COMMANDS.map((command) => command.name)).toEqual(['start', 'stop', 'check', 'comment']);
-  expect(rootHelp(COMMANDS)).not.toMatch(/publish|login|cloud|update/i);
+test('self-hosted CLI retains local commands without official cloud or updater commands', () => {
+  const names = COMMANDS.map((command) => command.name);
+  expect(names).toEqual(expect.arrayContaining(['start', 'stop', 'check', 'comment', 'login', 'logout', 'link', 'push', 'pull', 'watch']));
+  expect(names).not.toContain('publish');
+  expect(names).not.toContain('update');
+  expect(rootHelp(COMMANDS)).not.toMatch(/ryugi|official cloud/i);
 });
