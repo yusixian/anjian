@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
-import type { ArtifactType } from '../shared/types';
+import type { ArtifactType, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
 import { artifactPath, resolveArtifactAddress } from './artifact-address';
 import { watchArtifacts } from './artifact-watcher';
@@ -33,6 +33,8 @@ export interface ArtifactsServer {
   handleUpgrade: (req: http.IncomingMessage, socket: Duplex, head?: Buffer) => void;
   linkFor: (type: ArtifactType, id: string) => string;
   liveClients: () => number;
+  onMessage: (listener: (message: ServerMessage) => void) => void;
+  settleDocument: (id: string, source?: string) => Promise<void>;
   onActivity: (listener: () => void) => void;
   onArtifactChange: (listener: ChangeListener) => void;
   port: number;
@@ -151,6 +153,14 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     handleUpgrade,
     handleBoardRequest,
     liveClients: () => clients.size,
+    onMessage: (listener) => { ctx.messageListeners.push(listener); },
+    settleDocument: async (id, source) => {
+      const session = await ctx.documents.open(id);
+      if (!session) return;
+      if (source !== undefined) session.onFileText(source);
+      await session.settled();
+      await session.flush();
+    },
     resolve: (type, idOrAddress) => {
       if (!isArtifactLocator(idOrAddress)) return null;
       return resolveArtifactAddress(root, type, idOrAddress)?.id ?? null;

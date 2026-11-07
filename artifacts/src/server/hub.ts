@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -26,6 +27,9 @@ import {
 } from './machine';
 import { listenFirst } from './ports';
 import { openReady } from './ready';
+import { createRemoteAuth } from './remote-auth';
+import { createRemoteApi } from './remote-api';
+import { createRemoteEvents } from './remote-events';
 import { writeJsonAtomic } from './state';
 
 export interface HubOptions {
@@ -132,6 +136,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     publicOrigin: options.publicOrigin,
   });
 
+  const projectId = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
+  const remoteProjects = () => ordered().map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
+  const remoteEvents = createRemoteEvents(options.paths.home);
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
@@ -153,6 +160,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         mount: { port, boardPort, token: options.token, version: options.version },
       }).then((mounted) => {
         ready.set(project, mounted);
+        try { remoteEvents.append(projectId(project), '', 'resync', { reason: 'project-mounted', action: 'Read current comments with comment list --all' }); }
+        catch (error) { console.error('Remote event persistence failed:', (error as Error).message); }
+        mounted.onMessage((message) => {
+          if (message.type !== 'doc-comments' && message.type !== 'board-comments' && message.type !== 'change') return;
+          if (!('artifact' in message)) return;
+          try { remoteEvents.append(projectId(project), message.artifact, message.type, { action: 'Read current comments or pull the changed artifact' }); }
+          catch (error) { console.error('Remote event persistence failed:', (error as Error).message); }
+        });
         return mounted;
       });
       pending.catch(() => mounts.delete(project));
@@ -417,6 +432,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return true;
   };
 
+  const remoteAuth = createRemoteAuth({
+    home: options.paths.home,
+    origin,
+    isAdmin: (req, requestUrl) => authorized(req, requestUrl),
+    projects: () => remoteProjects().map(({ id, name }) => ({ id, name })),
+  });
+  const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
+
   front.on('request', (req, res) => {
     void (async () => {
       if (!hostAllowed(policy, req.headers.host)) {
@@ -424,6 +447,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
+      if (await remoteAuth.handle(req, res, url)) return;
+      if (await remoteApi(req, res, url)) return;
       if (url.pathname === '/api/status') {
         if (!authorized(req, url)) send(res, 403, 'Forbidden: agent calls need ?key=');
         else sendJson(res, 200, status());
@@ -503,6 +528,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     linkFor: async (project, type, id) => (await mountOf(project)).linkFor(type, id),
     close: async () => {
       closing = true;
+      remoteAuth.close();
       const stopped = [front, board].map(
         (server) => new Promise((resolve) => server.close(resolve)),
       );

@@ -8,6 +8,7 @@ import type { ServerContext } from '../context';
 import { parseDocument } from '../document-codec';
 import { asAgentOp, isId } from '../document-comments';
 import { sendJson } from '../http';
+import { remoteCommentCursor } from '../remote-identity';
 import { readCommentBody } from './comments';
 import type { HttpRoute } from './table';
 
@@ -51,7 +52,7 @@ async function serveAgentComments(
     sendJson(res, 200, {
       type: 'comments',
       artifact: `document/${id}`,
-      threads: documents.listComments(id, agent ?? 'Agent', fields.all === true),
+      threads: documents.listComments(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true),
     });
     return;
   }
@@ -100,7 +101,7 @@ async function serveAgentBoardComments(
   const fields = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const agent = agentName(fields);
   if (fields.op === 'list') {
-    const threads = boardComments.list(id, agent ?? 'Agent', fields.all === true);
+    const threads = boardComments.list(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true);
     sendJson(res, 200, {
       type: 'comments',
       artifact: `artboard/${id}`,

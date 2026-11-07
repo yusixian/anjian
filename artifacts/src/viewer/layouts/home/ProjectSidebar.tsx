@@ -1,7 +1,7 @@
 import { ContextMenuTrigger } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { ChevronDown, ChevronRight, Clock, Folder } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Folder, Laptop } from 'lucide-react';
 import { useState } from 'react';
 
 import type { HubProjectStatus } from '../../../shared/hub';
@@ -157,6 +157,10 @@ export function ProjectSidebar({
         </button>
       )}
       {showDormant && dormant.map(row)}
+      <a href="/devices" {...stylex.props(styles.item)}>
+        <Laptop aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
+        <span {...stylex.props(styles.name)}>{t('home.devices')}</span>
+      </a>
     </nav>
   );
 }

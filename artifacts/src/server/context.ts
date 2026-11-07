@@ -126,7 +126,9 @@ export function createServerContext(options: ServerOptions) {
     ? [options.boardOrigin]
     : (ctx.boardPort ? originsFor(options.urlHost, ctx.boardPort) : []);
 
+  const messageListeners: ((message: ServerMessage) => void)[] = [];
   const broadcast = (message: ServerMessage) => {
+    for (const listener of messageListeners) listener(message);
     const frame = textFrame(JSON.stringify(message));
     for (const socket of clients) socket.write(frame);
   };
@@ -281,6 +283,7 @@ export function createServerContext(options: ServerOptions) {
     selections,
     changeListeners,
     activityListeners,
+    messageListeners,
     broadcast,
     avatars,
     names,

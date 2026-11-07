@@ -199,6 +199,7 @@
   "home": {
     "recent": "最近",
     "recentAll": "最近 · 所有项目",
+    "devices": "设备与 CLI",
     "recentSubtitle": "所有项目 · 按更新时间",
     "projects": "项目",
     "dormant": "休眠",
