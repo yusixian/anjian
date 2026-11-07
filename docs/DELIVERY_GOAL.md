@@ -11,7 +11,7 @@
 
 ## 当前阶段
 
-本地改造已推送 main，首次 GitHub CI 全部通过（run 42359161802）。Dokploy 首次镜像构建成功，容器运行与 HTTPS 文档访问已验证。随后推送 `e74e1fa78ee8859a4e4485c98626813c5ede7b17` 自动触发第二次部署，记录显示 Done（51 秒）；重建后的容器与数据恢复仍待刷新确认。
+本地改造已推送 main，首次 GitHub CI 全部通过（run 42359161802）。Dokploy 首次镜像构建成功，容器运行与 HTTPS 文档访问已验证。随后推送 `e74e1fa78ee8859a4e4485c98626813c5ede7b17` 自动触发第二次部署，记录显示 Done（51 秒）；该次构建使用缓存且未替换容器；随后单独重启容器并刷新网页，文档、批注和 Agent 回复均保留。
 
 已确认用户需要 `main` 的 push（含合并 PR）自动触发 Dokploy 部署。已登录 Dokploy；现有 `moe-prompt-atlas` 应用保持不变。用户已确认公开仓库 `yusixian/anjian`，正式域名 `anjian.cosine.ren` 与 `anjian-preview.cosine.ren`；已授权创建仓库、推送与部署。
 
@@ -36,8 +36,8 @@
 - GitHub 仓库 yusixian/anjian 已创建，公开且默认分支为 main。Dokploy 项目 `yhOw9_JJM0dLXu2abBvfc`、环境 `j72NLQOKyxDyUtbwRTPm6`、Compose `S73UF2n-BFdnrkrW5qXyK`，应用名 `anjian-anjian-gxizee`。已配置 main、On Push、Autodeploy、两个 HTTPS origin 和分别指向 27319/27329 的域名路由；首次镜像构建完成，容器 `anjian-anjian-gxizee-anjian-1` 运行。无密钥访问返回 403；已认证的状态接口返回 200、版本 0.1.0、中文界面。
 
 - 线上文档 `deployment-check` 已通过网页写入批注；容器内 CLI 读取同一 thread/block 并回复，网页实时显示 Agent 回复。此证据来自 Dokploy 容器终端，不代表电脑到服务器的 SSH 连接已验证。
-- 推送 `e74e1fa` 后，Dokploy 自动生成对应完整 SHA 的部署记录并完成；已确认 main webhook 生效。重建后刷新检查尚未返回，不能据此宣称持久化验收完成。
+- 推送 `e74e1fa` 后，Dokploy 自动生成对应完整 SHA 的部署记录并完成；已确认 main webhook 生效。随后通过 Dokploy Restart 重启容器，运行时长回到 1 秒；刷新网页后文档、批注及回复均保留。尚未验证容器替换和备份恢复。
 
 ## 后续
 
-完成重建后数据恢复检查、线上画板的双来源预览与最新 CI 核验；验证本地 Agent 通过 SSH 连接远程工作目录。当前已证明本机及服务器容器内的反馈闭环，不证明本地电脑到服务器的文件同步或宿主自动唤醒成功。
+完成容器替换后的卷恢复检查、线上画板的双来源预览与最新 CI 核验；验证本地 Agent 通过 SSH 连接远程工作目录。当前已证明本机及服务器容器内的反馈闭环，不证明本地电脑到服务器的文件同步或宿主自动唤醒成功。
