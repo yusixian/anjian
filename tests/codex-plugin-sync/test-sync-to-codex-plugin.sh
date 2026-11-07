@@ -198,7 +198,7 @@ write_upstream_fixture() {
 EOF
 
   cat > "$repo/index.js" << 'EOF'
-export { default } from "./.opencode/plugins/ryugi.js";
+export { default } from "./.opencode/plugins/anjian.js";
 EOF
 
   cat > "$repo/.gitignore" << 'EOF'
@@ -230,28 +230,28 @@ EOF
 
   cat > "$repo/.codex-plugin/plugin.json" << EOF
 {
-  "name": "ryugi",
+  "name": "anjian",
   "version": "$MANIFEST_VERSION"
 }
 EOF
 
   cat > "$repo/.kimi-plugin/plugin.json" << EOF
 {
-  "name": "ryugi",
+  "name": "anjian",
   "version": "$MANIFEST_VERSION"
 }
 EOF
 
   cat > "$repo/.antigravity-plugin/plugin.json" << EOF
 {
-  "name": "ryugi",
+  "name": "anjian",
   "version": "$MANIFEST_VERSION"
 }
 EOF
 
   printf 'antigravity png fixture\n' > "$repo/assets/antigravity-logo.png"
 
-  cat > "$repo/assets/ryugi-small.svg" << 'EOF'
+  cat > "$repo/assets/anjian-small.svg" << 'EOF'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>
 EOF
 
@@ -313,7 +313,7 @@ EOF
     .pre-commit-config.yaml \
     assets/antigravity-logo.png \
     assets/app-icon.png \
-    assets/ryugi-small.svg \
+    assets/anjian-small.svg \
     evals/drill/README.md \
     hooks/hooks-codex.json \
     hooks/run-hook.cmd \
@@ -331,15 +331,15 @@ EOF
 write_destination_fixture() {
   local repo="$1"
 
-  mkdir -p "$repo/plugins/ryugi/skills/example"
-  printf 'fixture keep\n' > "$repo/plugins/ryugi/.fixture-keep"
-  cat > "$repo/plugins/ryugi/skills/example/SKILL.md" << 'EOF'
+  mkdir -p "$repo/plugins/anjian/skills/example"
+  printf 'fixture keep\n' > "$repo/plugins/anjian/.fixture-keep"
+  cat > "$repo/plugins/anjian/skills/example/SKILL.md" << 'EOF'
 # Example Skill
 
 Fixture content.
 EOF
-  git -C "$repo" add plugins/ryugi/.fixture-keep
-  git -C "$repo" add plugins/ryugi/skills/example/SKILL.md
+  git -C "$repo" add plugins/anjian/.fixture-keep
+  git -C "$repo" add plugins/anjian/skills/example/SKILL.md
 
   commit_fixture "$repo" "Initial destination fixture"
 }
@@ -347,15 +347,15 @@ EOF
 add_openai_agent_metadata_fixture() {
   local repo="$1"
 
-  mkdir -p "$repo/plugins/ryugi/skills/example/agents"
+  mkdir -p "$repo/plugins/anjian/skills/example/agents"
 
-  cat > "$repo/plugins/ryugi/skills/example/agents/openai.yaml" << 'EOF'
+  cat > "$repo/plugins/anjian/skills/example/agents/openai.yaml" << 'EOF'
 interface:
   display_name: "Example"
   short_description: "Destination-owned OpenAI metadata"
 EOF
 
-  git -C "$repo" add plugins/ryugi/skills/example/agents/openai.yaml
+  git -C "$repo" add plugins/anjian/skills/example/agents/openai.yaml
 
   commit_fixture "$repo" "Add OpenAI agent metadata fixture"
 }
@@ -363,7 +363,7 @@ EOF
 dirty_tracked_destination_skill() {
   local repo="$1"
 
-  cat > "$repo/plugins/ryugi/skills/example/SKILL.md" << 'EOF'
+  cat > "$repo/plugins/anjian/skills/example/SKILL.md" << 'EOF'
 # Example Skill
 
 Locally modified fixture content.
@@ -374,27 +374,27 @@ write_synced_destination_fixture() {
   local repo="$1"
 
   mkdir -p \
-    "$repo/plugins/ryugi/.codex-plugin" \
-    "$repo/plugins/ryugi/.private-journal" \
-    "$repo/plugins/ryugi/assets" \
-    "$repo/plugins/ryugi/hooks" \
-    "$repo/plugins/ryugi/skills/example/agents" \
-    "$repo/plugins/ryugi/skills/example"
+    "$repo/plugins/anjian/.codex-plugin" \
+    "$repo/plugins/anjian/.private-journal" \
+    "$repo/plugins/anjian/assets" \
+    "$repo/plugins/anjian/hooks" \
+    "$repo/plugins/anjian/skills/example/agents" \
+    "$repo/plugins/anjian/skills/example"
 
-  cat > "$repo/plugins/ryugi/.codex-plugin/plugin.json" << EOF
+  cat > "$repo/plugins/anjian/.codex-plugin/plugin.json" << EOF
 {
-  "name": "ryugi",
+  "name": "anjian",
   "version": "$MANIFEST_VERSION"
 }
 EOF
 
-  cat > "$repo/plugins/ryugi/assets/ryugi-small.svg" << 'EOF'
+  cat > "$repo/plugins/anjian/assets/anjian-small.svg" << 'EOF'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>
 EOF
 
-  printf 'png fixture\n' > "$repo/plugins/ryugi/assets/app-icon.png"
+  printf 'png fixture\n' > "$repo/plugins/anjian/assets/app-icon.png"
 
-  cat > "$repo/plugins/ryugi/hooks/hooks-codex.json" << 'EOF'
+  cat > "$repo/plugins/anjian/hooks/hooks-codex.json" << 'EOF'
 {
   "hooks": {
     "SessionStart": [
@@ -413,46 +413,46 @@ EOF
 }
 EOF
 
-  cat > "$repo/plugins/ryugi/hooks/session-start" << 'EOF'
+  cat > "$repo/plugins/anjian/hooks/session-start" << 'EOF'
 #!/usr/bin/env sh
 echo "session-start fixture"
 EOF
-  cat > "$repo/plugins/ryugi/hooks/session-start-codex" << 'EOF'
+  cat > "$repo/plugins/anjian/hooks/session-start-codex" << 'EOF'
 #!/usr/bin/env sh
 echo "session-start-codex fixture"
 EOF
 
-  cat > "$repo/plugins/ryugi/hooks/run-hook.cmd" << 'EOF'
+  cat > "$repo/plugins/anjian/hooks/run-hook.cmd" << 'EOF'
 @echo off
 echo run-hook fixture
 EOF
-  chmod +x "$repo/plugins/ryugi/hooks/session-start" "$repo/plugins/ryugi/hooks/session-start-codex" "$repo/plugins/ryugi/hooks/run-hook.cmd"
+  chmod +x "$repo/plugins/anjian/hooks/session-start" "$repo/plugins/anjian/hooks/session-start-codex" "$repo/plugins/anjian/hooks/run-hook.cmd"
 
-  cat > "$repo/plugins/ryugi/skills/example/SKILL.md" << 'EOF'
+  cat > "$repo/plugins/anjian/skills/example/SKILL.md" << 'EOF'
 # Example Skill
 
 Fixture content.
 EOF
 
-  cat > "$repo/plugins/ryugi/skills/example/agents/openai.yaml" << 'EOF'
+  cat > "$repo/plugins/anjian/skills/example/agents/openai.yaml" << 'EOF'
 interface:
   display_name: "Example"
   short_description: "Destination-owned OpenAI metadata"
 EOF
 
-  printf 'tracked keep\n' > "$repo/plugins/ryugi/.private-journal/keep.txt"
+  printf 'tracked keep\n' > "$repo/plugins/anjian/.private-journal/keep.txt"
 
   git -C "$repo" add \
-    plugins/ryugi/.codex-plugin/plugin.json \
-    plugins/ryugi/assets/app-icon.png \
-    plugins/ryugi/assets/ryugi-small.svg \
-    plugins/ryugi/hooks/hooks-codex.json \
-    plugins/ryugi/hooks/run-hook.cmd \
-    plugins/ryugi/hooks/session-start \
-    plugins/ryugi/hooks/session-start-codex \
-    plugins/ryugi/skills/example/agents/openai.yaml \
-    plugins/ryugi/skills/example/SKILL.md \
-    plugins/ryugi/.private-journal/keep.txt
+    plugins/anjian/.codex-plugin/plugin.json \
+    plugins/anjian/assets/app-icon.png \
+    plugins/anjian/assets/anjian-small.svg \
+    plugins/anjian/hooks/hooks-codex.json \
+    plugins/anjian/hooks/run-hook.cmd \
+    plugins/anjian/hooks/session-start \
+    plugins/anjian/hooks/session-start-codex \
+    plugins/anjian/skills/example/agents/openai.yaml \
+    plugins/anjian/skills/example/SKILL.md \
+    plugins/anjian/.private-journal/keep.txt
 
   commit_fixture "$repo" "Initial synced destination fixture"
 }
@@ -461,14 +461,14 @@ write_stale_ignored_destination_fixture() {
   local repo="$1"
 
   mkdir -p \
-    "$repo/plugins/ryugi/.kimi-plugin" \
-    "$repo/plugins/ryugi/.private-journal"
-  printf 'fixture keep\n' > "$repo/plugins/ryugi/.fixture-keep"
-  printf '{"name":"stale-kimi"}\n' > "$repo/plugins/ryugi/.kimi-plugin/plugin.json"
-  printf 'stale ignored leak\n' > "$repo/plugins/ryugi/.private-journal/leak.txt"
+    "$repo/plugins/anjian/.kimi-plugin" \
+    "$repo/plugins/anjian/.private-journal"
+  printf 'fixture keep\n' > "$repo/plugins/anjian/.fixture-keep"
+  printf '{"name":"stale-kimi"}\n' > "$repo/plugins/anjian/.kimi-plugin/plugin.json"
+  printf 'stale ignored leak\n' > "$repo/plugins/anjian/.private-journal/leak.txt"
   git -C "$repo" add \
-    plugins/ryugi/.fixture-keep \
-    plugins/ryugi/.kimi-plugin/plugin.json
+    plugins/anjian/.fixture-keep \
+    plugins/anjian/.kimi-plugin/plugin.json
 
   commit_fixture "$repo" "Initial stale ignored destination fixture"
 }
@@ -659,8 +659,8 @@ main() {
   script_source="$(cat "$upstream/scripts/sync-to-codex-plugin.sh")"
   preview_section="$(printf '%s\n' "$preview_output" | sed -n '/^=== Preview (rsync --dry-run) ===$/,/^=== End preview ===$/p')"
   stale_preview_section="$(printf '%s\n' "$stale_preview_output" | sed -n '/^=== Preview (rsync --dry-run) ===$/,/^=== End preview ===$/p')"
-  dirty_skill_path="$dirty_apply_dest/plugins/ryugi/skills/example/SKILL.md"
-  noop_openai_metadata_path="$noop_apply_dest/plugins/ryugi/skills/example/agents/openai.yaml"
+  dirty_skill_path="$dirty_apply_dest/plugins/anjian/skills/example/SKILL.md"
+  noop_openai_metadata_path="$noop_apply_dest/plugins/anjian/skills/example/agents/openai.yaml"
 
   echo ""
   echo "Preview assertions..."
@@ -671,7 +671,7 @@ main() {
   assert_not_contains "$preview_section" ".kimi-plugin/plugin.json" "Preview excludes Kimi manifest from Codex sync"
   assert_not_contains "$preview_section" ".antigravity-plugin/plugin.json" "Preview excludes Antigravity manifest from Codex sync"
   assert_not_contains "$preview_section" "assets/antigravity-logo.png" "Preview excludes Antigravity logo from Codex sync"
-  assert_contains "$preview_section" "assets/ryugi-small.svg" "Preview includes SVG asset"
+  assert_contains "$preview_section" "assets/anjian-small.svg" "Preview includes SVG asset"
   assert_contains "$preview_section" "assets/app-icon.png" "Preview includes PNG asset"
   assert_contains "$preview_section" "hooks/hooks-codex.json" "Preview includes Codex hook manifest"
   assert_contains "$preview_section" "hooks/session-start" "Preview includes session-start hook"
@@ -685,11 +685,11 @@ main() {
   assert_not_contains "$preview_section" ".pre-commit-config.yaml" "Preview excludes repo pre-commit config"
   assert_not_contains "$preview_section" "index.js" "Preview excludes OpenCode root entrypoint"
   assert_not_contains "$preview_output" "Overlay file (.codex-plugin/plugin.json) will be regenerated" "Preview omits overlay regeneration note"
-  assert_not_contains "$preview_output" "Assets (ryugi-small.svg, app-icon.png) will be seeded from" "Preview omits assets seeding note"
+  assert_not_contains "$preview_output" "Assets (anjian-small.svg, app-icon.png) will be seeded from" "Preview omits assets seeding note"
   assert_contains "$preview_section" "skills/example/SKILL.md" "Preview reflects dirty tracked destination file"
   assert_not_matches "$preview_section" "\\*deleting +skills/example/agents/openai\\.yaml" "Preview preserves destination-owned OpenAI agent metadata"
   assert_current_branch "$dest" "$dest_branch" "Preview leaves destination checkout on its original branch"
-  assert_branch_absent "$dest" "sync/ryugi-*" "Preview does not create sync branch in destination checkout"
+  assert_branch_absent "$dest" "sync/anjian-*" "Preview does not create sync branch in destination checkout"
 
   echo ""
   echo "Mixed-directory assertions..."
@@ -706,26 +706,26 @@ main() {
   echo ""
   echo "Bootstrap assertions..."
   assert_equals "$bootstrap_status" "0" "Bootstrap preview exits successfully"
-  assert_contains "$bootstrap_output" "Mode:     BOOTSTRAP (creating plugins/ryugi/ when absent)" "Bootstrap preview describes directory creation"
+  assert_contains "$bootstrap_output" "Mode:     BOOTSTRAP (creating plugins/anjian/ when absent)" "Bootstrap preview describes directory creation"
   assert_not_contains "$bootstrap_output" "Assets:" "Bootstrap preview omits external assets path"
   assert_contains "$bootstrap_output" "Dry run only. Nothing was changed or pushed." "Bootstrap preview remains dry-run only"
-  assert_path_absent "$bootstrap_dest/plugins/ryugi" "Bootstrap preview does not create destination plugin directory"
+  assert_path_absent "$bootstrap_dest/plugins/anjian" "Bootstrap preview does not create destination plugin directory"
   assert_current_branch "$bootstrap_dest" "$bootstrap_dest_branch" "Bootstrap preview leaves destination checkout on its original branch"
-  assert_branch_absent "$bootstrap_dest" "bootstrap/ryugi-*" "Bootstrap preview does not create bootstrap branch in destination checkout"
+  assert_branch_absent "$bootstrap_dest" "bootstrap/anjian-*" "Bootstrap preview does not create bootstrap branch in destination checkout"
 
   echo ""
   echo "Apply assertions..."
   assert_equals "$dirty_apply_status" "1" "Dirty local apply exits with failure"
-  assert_contains "$dirty_apply_output" "ERROR: local checkout has uncommitted changes under 'plugins/ryugi'" "Dirty local apply reports protected destination path"
+  assert_contains "$dirty_apply_output" "ERROR: local checkout has uncommitted changes under 'plugins/anjian'" "Dirty local apply reports protected destination path"
   assert_current_branch "$dirty_apply_dest" "$dirty_apply_dest_branch" "Dirty local apply leaves destination checkout on its original branch"
-  assert_branch_absent "$dirty_apply_dest" "sync/ryugi-*" "Dirty local apply does not create sync branch in destination checkout"
+  assert_branch_absent "$dirty_apply_dest" "sync/anjian-*" "Dirty local apply does not create sync branch in destination checkout"
   assert_file_equals "$dirty_skill_path" "# Example Skill
 
 Locally modified fixture content." "Dirty local apply preserves tracked working-tree file content"
   assert_equals "$noop_apply_status" "0" "Clean no-op local apply exits successfully"
   assert_contains "$noop_apply_output" "No changes — embedded plugin was already in sync with upstream" "Clean no-op local apply reports no changes"
   assert_current_branch "$noop_apply_dest" "$noop_apply_dest_branch" "Clean no-op local apply leaves destination checkout on its original branch"
-  assert_branch_absent "$noop_apply_dest" "sync/ryugi-*" "Clean no-op local apply does not create sync branch in destination checkout"
+  assert_branch_absent "$noop_apply_dest" "sync/anjian-*" "Clean no-op local apply does not create sync branch in destination checkout"
   assert_file_equals "$noop_openai_metadata_path" "interface:
   display_name: \"Example\"
   short_description: \"Destination-owned OpenAI metadata\"" "Clean no-op local apply preserves OpenAI agent metadata"

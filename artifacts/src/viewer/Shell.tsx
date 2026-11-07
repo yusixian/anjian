@@ -7,16 +7,6 @@ import { t } from './i18n';
 import { startEmbedChild } from './lib/embed-bridge';
 import { canonicalPath, parseRoute } from './lib/route';
 
-const AutoPublishBar = lazy(() =>
-  import('./components/AutoPublishPrompt').then(({ AutoPublishBar }) => ({
-    default: AutoPublishBar,
-  })),
-);
-const SettingsDialog = lazy(() =>
-  import('./components/SettingsDialog').then(({ SettingsDialog }) => ({
-    default: SettingsDialog,
-  })),
-);
 const ArtboardLayout = lazy(() =>
   import('./layouts/ArtboardLayout').then(({ ArtboardLayout }) => ({ default: ArtboardLayout })),
 );
@@ -49,8 +39,6 @@ const styles = stylex.create({
 const local = (page: ReactNode) => (
   <>
     {page}
-    <AutoPublishBar />
-    <SettingsDialog />
   </>
 );
 
@@ -63,7 +51,7 @@ function RouteView() {
   const [path] = useLocation();
   const route = parseRoute(path);
   useEffect(() => {
-    if (!document.documentElement.dataset.ryugiArtifactId) return;
+    if (!document.documentElement.dataset.anjianArtifactId) return;
     const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) return;
     const url = new URL(location.href);
@@ -76,7 +64,7 @@ function RouteView() {
   if (route.kind === 'list') return local(<ArtifactList />);
   if (route.kind === 'unknown')
     return <div {...stylex.props(styles.unknown)}>No artifact lives at this address.</div>;
-  const id = document.documentElement.dataset.ryugiArtifactId ?? route.id;
+  const id = document.documentElement.dataset.anjianArtifactId ?? route.id;
   if (route.kind === 'preview') return <PreviewLayout id={id} type={route.type} />;
   if (route.kind === 'embed') return <Embedded id={id} type={route.type} />;
   if (route.type === 'html') return local(<HtmlLayout id={id} />);

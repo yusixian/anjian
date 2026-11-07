@@ -14,26 +14,26 @@ export XDG_CONFIG_HOME="$TEST_HOME/.config"
 export OPENCODE_CONFIG_DIR="$TEST_HOME/.config/opencode"
 
 # Standard install layout:
-#   $OPENCODE_CONFIG_DIR/ryugi/             ← package root
-#   $OPENCODE_CONFIG_DIR/ryugi/skills/      ← skills dir (../../skills from plugin)
-#   $OPENCODE_CONFIG_DIR/ryugi/.opencode/plugins/ryugi.js ← plugin file
-#   $OPENCODE_CONFIG_DIR/plugins/ryugi.js   ← symlink OpenCode reads
+#   $OPENCODE_CONFIG_DIR/anjian/             ← package root
+#   $OPENCODE_CONFIG_DIR/anjian/skills/      ← skills dir (../../skills from plugin)
+#   $OPENCODE_CONFIG_DIR/anjian/.opencode/plugins/anjian.js ← plugin file
+#   $OPENCODE_CONFIG_DIR/plugins/anjian.js   ← symlink OpenCode reads
 
-RYUGI_DIR="$OPENCODE_CONFIG_DIR/ryugi"
-RYUGI_SKILLS_DIR="$RYUGI_DIR/skills"
-RYUGI_PLUGIN_FILE="$RYUGI_DIR/.opencode/plugins/ryugi.js"
+ANJIAN_DIR="$OPENCODE_CONFIG_DIR/anjian"
+ANJIAN_SKILLS_DIR="$ANJIAN_DIR/skills"
+ANJIAN_PLUGIN_FILE="$ANJIAN_DIR/.opencode/plugins/anjian.js"
 
 # Install skills
-mkdir -p "$RYUGI_DIR"
-cp -r "$REPO_ROOT/skills" "$RYUGI_DIR/"
+mkdir -p "$ANJIAN_DIR"
+cp -r "$REPO_ROOT/skills" "$ANJIAN_DIR/"
 
 # Install plugin
-mkdir -p "$(dirname "$RYUGI_PLUGIN_FILE")"
-cp "$REPO_ROOT/.opencode/plugins/ryugi.js" "$RYUGI_PLUGIN_FILE"
+mkdir -p "$(dirname "$ANJIAN_PLUGIN_FILE")"
+cp "$REPO_ROOT/.opencode/plugins/anjian.js" "$ANJIAN_PLUGIN_FILE"
 
 # Register plugin via symlink (what OpenCode actually reads)
 mkdir -p "$OPENCODE_CONFIG_DIR/plugins"
-ln -sf "$RYUGI_PLUGIN_FILE" "$OPENCODE_CONFIG_DIR/plugins/ryugi.js"
+ln -sf "$ANJIAN_PLUGIN_FILE" "$OPENCODE_CONFIG_DIR/plugins/anjian.js"
 
 # Create test skills in different locations for testing
 
@@ -67,10 +67,10 @@ EOF
 
 echo "Setup complete: $TEST_HOME"
 echo "OPENCODE_CONFIG_DIR:  $OPENCODE_CONFIG_DIR"
-echo "Ryugi dir:      $RYUGI_DIR"
-echo "Skills dir:           $RYUGI_SKILLS_DIR"
-echo "Plugin file:          $RYUGI_PLUGIN_FILE"
-echo "Plugin registered at: $OPENCODE_CONFIG_DIR/plugins/ryugi.js"
+echo "Anjian dir:      $ANJIAN_DIR"
+echo "Skills dir:           $ANJIAN_SKILLS_DIR"
+echo "Plugin file:          $ANJIAN_PLUGIN_FILE"
+echo "Plugin registered at: $OPENCODE_CONFIG_DIR/plugins/anjian.js"
 echo "Test project at:      $TEST_HOME/test-project"
 
 # Helper function for cleanup (call from tests or trap)
@@ -83,6 +83,6 @@ cleanup_test_env() {
 # Export for use in tests
 export -f cleanup_test_env
 export REPO_ROOT
-export RYUGI_DIR
-export RYUGI_SKILLS_DIR
-export RYUGI_PLUGIN_FILE
+export ANJIAN_DIR
+export ANJIAN_SKILLS_DIR
+export ANJIAN_PLUGIN_FILE

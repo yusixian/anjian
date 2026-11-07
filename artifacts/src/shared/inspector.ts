@@ -62,7 +62,7 @@ export interface InspectorTweak {
   property: InspectorProperty;
   value: string;
 }
-export type InspectorCommand = { type: 'ryugi:inspect'; connection: string; session?: string } & (
+export type InspectorCommand = { type: 'anjian:inspect'; connection: string; session?: string } & (
   | { action: 'enable' | 'disable' | 'reset' | 'cancel-drag' }
   | { action: 'mode'; mode: 'select' | 'comment' }
   | { action: 'select'; id: number | null; primary?: boolean; toggle?: boolean }
@@ -73,37 +73,37 @@ export type InspectorCommand = { type: 'ryugi:inspect'; connection: string; sess
   | { action: 'style'; id: number; property: InspectorProperty; value: string; session: string }
 );
 export type InspectorReport = { session: string; connection: string } & (
-  | { type: 'ryugi:inspect:tree'; nodes: InspectorNode[]; truncated: boolean }
+  | { type: 'anjian:inspect:tree'; nodes: InspectorNode[]; truncated: boolean }
   | {
-      type: 'ryugi:inspect:selection';
+      type: 'anjian:inspect:selection';
       selection: InspectorSelection | null;
       reason: 'user' | 'command' | 'update' | 'primary';
       toggle?: boolean;
     }
-  | { type: 'ryugi:inspect:targets'; request: number; targets: InspectorTarget[] }
-  | { type: 'ryugi:inspect:details'; request: number; nodes: InspectorDetail[] }
+  | { type: 'anjian:inspect:targets'; request: number; targets: InspectorTarget[] }
+  | { type: 'anjian:inspect:details'; request: number; nodes: InspectorDetail[] }
   | {
-      type: 'ryugi:inspect:drag';
+      type: 'anjian:inspect:drag';
       phase: 'start' | 'move' | 'end' | 'cancel';
       x: number;
       y: number;
       append: boolean;
       id?: number;
     }
-  | { type: 'ryugi:inspect:hover'; rect: InspectorRect | null; id?: number | null }
-  | { type: 'ryugi:inspect:rect'; id: number; rect: InspectorRect }
-  | { type: 'ryugi:inspect:tweaks'; tweaks: InspectorTweak[] }
+  | { type: 'anjian:inspect:hover'; rect: InspectorRect | null; id?: number | null }
+  | { type: 'anjian:inspect:rect'; id: number; rect: InspectorRect }
+  | { type: 'anjian:inspect:tweaks'; tweaks: InspectorTweak[] }
   | {
-      type: 'ryugi:inspect:wheel';
+      type: 'anjian:inspect:wheel';
       deltaX: number;
       deltaY: number;
       x: number;
       y: number;
       zoom: boolean;
     }
-  | { type: 'ryugi:inspect:pan'; deltaX: number; deltaY: number }
+  | { type: 'anjian:inspect:pan'; deltaX: number; deltaY: number }
   | {
-      type: 'ryugi:inspect:key';
+      type: 'anjian:inspect:key';
       code: string;
       key: string;
       down: boolean;

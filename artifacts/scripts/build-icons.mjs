@@ -16,7 +16,7 @@ for (const Icon of Object.values(icons)) {
 }
 glyphs.refresh = glyphs['refresh-cw'];
 glyphs.trash = glyphs['trash-2'];
-const outfile = path.join(root, 'dist/runtime/ryugi-icons.js');
+const outfile = path.join(root, 'dist/runtime/anjian-icons.js');
 await build({
   stdin: {
     contents: `import { registerIcons } from './src/runtime/icons'; registerIcons(${JSON.stringify(glyphs)});`,
@@ -32,7 +32,7 @@ await build({
     js: `/*!\n${fs.readFileSync(path.join(root, 'node_modules/lucide-react/LICENSE'), 'utf8')}\n*/`,
   },
 });
-fs.copyFileSync(outfile, path.join(root, '../skills/artifacts/app/runtime/ryugi-icons.js'));
+fs.copyFileSync(outfile, path.join(root, '../skills/artifacts/app/runtime/anjian-icons.js'));
 console.log(
   JSON.stringify({ icons: Object.keys(glyphs).length, bytes: fs.statSync(outfile).size }),
 );

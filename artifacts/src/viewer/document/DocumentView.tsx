@@ -70,24 +70,16 @@ function useAssetBase(contentBase: string | undefined) {
 
 const IDLE_PLAYBACK: AgentPlaybackState = { playing: false, section: null };
 
-export interface CloudLive {
-  canEdit: boolean;
-  online: boolean;
-  reason: string | null;
-}
-
 export function DocumentView({
   id,
   transport,
   live,
-  cloud,
   fallback,
   actions: barActions,
 }: {
   id: string;
   transport: DocumentTransport;
   live: boolean;
-  cloud?: CloudLive;
   fallback?: ReactNode;
   actions?: ReactNode;
 }) {
@@ -104,33 +96,13 @@ export function DocumentView({
   const [playback, setPlayback] = useState<AgentPlaybackState>(IDLE_PLAYBACK);
   const [offline, setOffline] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const historyAvailable = !cloud || (cloud.online && !offline);
-  const historyVisible = historyOpen && historyAvailable;
-  useEffect(() => {
-    if (!historyAvailable) setHistoryOpen(false);
-  }, [historyAvailable]);
-  useEffect(() => {
-    if (!cloud) return;
-    const receive = (event: MessageEvent) => {
-      if (
-        event.source !== window.parent ||
-        event.origin !== location.origin ||
-        event.data?.type !== 'ryugi:document-history' ||
-        event.data.id !== id
-      )
-        return;
-      if (event.data.action === 'close') setHistoryOpen(false);
-      else if (event.data.action === 'toggle' && historyAvailable) setHistoryOpen((open) => !open);
-    };
-    window.addEventListener('message', receive);
-    return () => window.removeEventListener('message', receive);
-  }, [id, cloud, historyAvailable]);
+  const historyVisible = historyOpen;
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
   const [mainEl, setMainEl] = useState<HTMLElement | null>(null);
   const dark = usePrefersDark();
   const { artifact, channel } = transport;
-  const canComment = cloud ? cloud.online : true;
-  const canEdit = cloud ? cloud.canEdit : true;
+  const canComment = true;
+  const canEdit = true;
   const phone = useMedia(PHONE_QUERY);
   const [editing, setEditing] = useState(false);
   const editable = phone ? editing && canEdit : canEdit;
@@ -310,21 +282,19 @@ export function DocumentView({
   return (
     <div
       {...stylex.props(styles.root)}
-      className={`ryugi-doc ${stylex.props(styles.root).className ?? ''}`}
+      className={`anjian-doc ${stylex.props(styles.root).className ?? ''}`}
     >
       <TopBar
         actions={barActions}
         activity={activity}
         agent={meta?.agent}
         agentSection={playback.section}
-        cloud={cloud}
         compact={phone}
         id={id}
         offline={offline}
         openComments={openComments}
-        title={meta?.title || id}
         history={{
-          available: historyAvailable,
+          available: true,
           open: historyVisible,
           toggle: () => setHistoryOpen((open) => !open),
           close: closeHistory,
@@ -340,7 +310,7 @@ export function DocumentView({
           clearSelection={clearSelection}
           editor={editor}
           history={historyView}
-          offline={Boolean(cloud && !cloud.online)}
+          offline={false}
           selection={editing ? null : selection}
           threads={comments.threads}
           onCreate={create}

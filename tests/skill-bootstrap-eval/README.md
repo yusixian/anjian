@@ -3,14 +3,14 @@
 Compare installations using fresh Claude Code processes and disposable
 Git projects. The production skills and integrations are unchanged.
 
-| Arm            | `using-ryugi` available                                       | SessionStart injects its body                            |
+| Arm            | `using-anjian` available                                       | SessionStart injects its body                            |
 | -------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
 | `full`         | Yes                                                           | Yes, through the repository's real `hooks/session-start` |
 | `discoverable` | Yes, with its current description                             | No                                                       |
 | `absent`       | No                                                            | No                                                       |
 | `short`        | Yes, using the frozen candidate in `fixtures/short-router.md` | Yes, through the same real hook                          |
 
-All other Ryugi skills are identical. Each process gets a private
+All other Anjian skills are identical. Each process gets a private
 `CLAUDE_CONFIG_DIR`, the same built-in tools, no external MCP servers, and
 no user-installed plugins or global skills. Claude Code's built-in plugins
 and skills remain present in every arm; the init record captures them.
@@ -32,7 +32,7 @@ python3 tests/skill-bootstrap-eval/run.py --model haiku --reps 5 --workers 5 --t
 ```
 
 `--router-file` selects an alternative candidate. Only the disposable
-plugin copy is changed; the production `using-ryugi` file is preserved.
+plugin copy is changed; the production `using-anjian` file is preserved.
 The original five-case, three-arm defaults remain available for repeating
 the initial ablation.
 

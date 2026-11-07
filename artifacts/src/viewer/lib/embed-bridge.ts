@@ -1,8 +1,8 @@
 export const EMBED_HEARTBEAT_MS = 1000;
 export const EMBED_LOST_MS = 5000;
 
-const HELLO = 'ryugi:embed:hello';
-const HEARTBEAT = 'ryugi:embed:heartbeat';
+const HELLO = 'anjian:embed:hello';
+const HEARTBEAT = 'anjian:embed:heartbeat';
 
 type MessageWindow = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 
@@ -23,7 +23,7 @@ export function startEmbedChild(
   doc: Pick<Document, 'documentElement'> = document,
   win: MessageWindow & { parent: Pick<Window, 'postMessage'> } = window,
 ) {
-  const parentOrigin = doc.documentElement.dataset.ryugiEmbedParent;
+  const parentOrigin = doc.documentElement.dataset.anjianEmbedParent;
   return parentOrigin ? createEmbedChild({ parentOrigin, win }) : null;
 }
 

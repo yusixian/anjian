@@ -1,20 +1,24 @@
 {
   "author": {
-    "name": "Innei",
-    "email": "i@innei.dev"
+    "name": "Anjian contributors"
   },
   "category": "Developer Tools",
   "description": "Make your coding agent a better engineer",
-  "displayName": "Ryugi",
-  "homepage": "https://github.com/Innei/ryugi",
-  "keywords": ["skills", "tdd", "debugging", "collaboration", "best-practices", "workflows"],
+  "displayName": "Anjian",
+  "keywords": [
+    "skills",
+    "tdd",
+    "debugging",
+    "collaboration",
+    "best-practices",
+    "workflows"
+  ],
   "license": "MIT",
-  "logo": "assets/antigravity-logo.png",
-  "name": "ryugi",
-  "repository": "https://github.com/Innei/ryugi",
+  "logo": "./assets/anjian.svg",
+  "name": "anjian",
   "suggestedPrompts": [
     "I've got an idea for something I'd like to build",
     "Let's figure out why this broke"
   ],
-  "version": "1.51.2"
+  "version": "0.1.0"
 }

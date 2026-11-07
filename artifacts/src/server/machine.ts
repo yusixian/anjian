@@ -28,7 +28,7 @@ export function machinePaths(
   env: Record<string, string | undefined> = process.env,
   homedir: string = os.homedir(),
 ): MachinePaths {
-  const home = env.RYUGI_SERVER_HOME || path.join(homedir, '.ryugi', 'server');
+  const home = env.ANJIAN_SERVER_HOME || path.join(homedir, '.anjian', 'server');
   return {
     home,
     pid: path.join(home, 'server.pid'),
@@ -110,7 +110,7 @@ export function removeProject(file: string, projectDir: string) {
   if (kept.length !== projects.length) writeProjects(file, kept);
 }
 
-export const artifactsRootOf = (projectDir: string) => path.join(projectDir, '.ryugi', 'artifacts');
+export const artifactsRootOf = (projectDir: string) => path.join(projectDir, '.anjian', 'artifacts');
 
 export function pruneProjects(file: string) {
   const projects = readProjects(file);

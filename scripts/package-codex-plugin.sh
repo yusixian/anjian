@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Package the Ryugi Codex plugin as a rootless archive for portal upload.
+# Package the Anjian Codex plugin as a rootless archive for portal upload.
 #
 # The Codex portal artifact differs from the old openai/plugins sync flow:
 # it is a standalone archive, but it still needs the OpenAI-owned
@@ -26,14 +26,14 @@ Usage:
 
 Options:
   --output PATH            Write archive to PATH.
-                           Default: ../_tmp/sup-codex-packaging/ryugi-VERSION.zip
+                           Default: ../_tmp/sup-codex-packaging/anjian-VERSION.zip
   --format FORMAT          Archive format: zip or tar.gz. Default: zip.
                            If --output ends in .zip, .tar.gz, or .tgz, that
                            extension is used when --format is omitted.
   --metadata-source PATH   Prior official package directory, .zip, or .tar.gz used to
                            seed skills/*/agents/openai.yaml.
-                           Default: ../_tmp/sup-codex-packaging/ryugi,
-                           falling back to ryugi.zip, then ryugi.tar.gz
+                           Default: ../_tmp/sup-codex-packaging/anjian,
+                           falling back to anjian.zip, then anjian.tar.gz
   --ref REF                Git ref to package. Default: HEAD.
   --allow-dirty            Permit a dirty working tree. The archive still uses --ref.
   --keep-stage             Print and keep the temporary staging directory.
@@ -154,18 +154,18 @@ if [[ "$ALLOW_DIRTY" -ne 1 ]]; then
 fi
 
 if [[ -z "$METADATA_SOURCE" ]]; then
-  if [[ -d "$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi" ]]; then
-    METADATA_SOURCE="$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi"
-  elif [[ -f "$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi.zip" ]]; then
-    METADATA_SOURCE="$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi.zip"
-  elif [[ -f "$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi.tar.gz" ]]; then
-    METADATA_SOURCE="$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi.tar.gz"
+  if [[ -d "$REPO_ROOT/../_tmp/sup-codex-packaging/anjian" ]]; then
+    METADATA_SOURCE="$REPO_ROOT/../_tmp/sup-codex-packaging/anjian"
+  elif [[ -f "$REPO_ROOT/../_tmp/sup-codex-packaging/anjian.zip" ]]; then
+    METADATA_SOURCE="$REPO_ROOT/../_tmp/sup-codex-packaging/anjian.zip"
+  elif [[ -f "$REPO_ROOT/../_tmp/sup-codex-packaging/anjian.tar.gz" ]]; then
+    METADATA_SOURCE="$REPO_ROOT/../_tmp/sup-codex-packaging/anjian.tar.gz"
   else
     die "no metadata source found; pass --metadata-source <prior package dir, zip, or tar.gz>"
   fi
 fi
 
-WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ryugi-codex-package.XXXXXX")"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/anjian-codex-package.XXXXXX")"
 STAGE="$WORK_DIR/payload"
 METADATA_WORK="$WORK_DIR/metadata"
 ARCHIVE_LIST="$WORK_DIR/archive-list"
@@ -246,10 +246,10 @@ VERSION="$(jq -r '.version // empty' "$STAGE/.codex-plugin/plugin.json")"
 if [[ -z "$OUTPUT" ]]; then
   case "$FORMAT" in
     zip)
-      OUTPUT="$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi-$VERSION.zip"
+      OUTPUT="$REPO_ROOT/../_tmp/sup-codex-packaging/anjian-$VERSION.zip"
       ;;
     tar.gz)
-      OUTPUT="$REPO_ROOT/../_tmp/sup-codex-packaging/ryugi-$VERSION.tar.gz"
+      OUTPUT="$REPO_ROOT/../_tmp/sup-codex-packaging/anjian-$VERSION.tar.gz"
       ;;
   esac
 fi
@@ -332,7 +332,7 @@ esac
 
 unexpected_paths="$(
   printf '%s\n' "$archive_paths" \
-    | grep -E '(^ryugi/|^\.agents/|^hooks/|package\.json$|^\.git|^\.pytest_cache|^\.ruff_cache|^scripts/|^tests/|^docs/|^evals/|^lib/|^\.claude|^\.cursor|^\.kimi|^\.opencode|^\.pi|^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^RELEASE-NOTES\.md$|^CHANGELOG\.md$)' || true
+    | grep -E '(^anjian/|^\.agents/|^hooks/|package\.json$|^\.git|^\.pytest_cache|^\.ruff_cache|^scripts/|^tests/|^docs/|^evals/|^lib/|^\.claude|^\.cursor|^\.kimi|^\.opencode|^\.pi|^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^RELEASE-NOTES\.md$|^CHANGELOG\.md$)' || true
 )"
 if [[ -n "$unexpected_paths" ]]; then
   printf '%s\n' "$unexpected_paths" | sed 's/^/  /' >&2

@@ -1,7 +1,7 @@
 {
-  "name": "ryugi",
-  "version": "1.51.2",
-  "description": "Ryugi skills and runtime bootstrap for coding agents",
+  "name": "anjian-workflow",
+  "version": "0.1.0",
+  "description": "Anjian workflow and local agent integrations",
   "keywords": [
     "pi-package",
     "skills",
@@ -12,7 +12,7 @@
   ],
   "license": "MIT",
   "type": "module",
-  "main": ".opencode/plugins/ryugi.js",
+  "main": ".opencode/plugins/anjian.js",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --fix",
@@ -39,10 +39,11 @@
   },
   "pi": {
     "extensions": [
-      "./.pi/extensions/ryugi.ts"
+      "./.pi/extensions/anjian.ts"
     ],
     "skills": [
       "./skills"
     ]
-  }
+  },
+  "private": true
 }

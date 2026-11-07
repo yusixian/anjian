@@ -1,7 +1,7 @@
 export function registerIcons(icons: Record<string, string>) {
-  if (customElements.get('ryugi-icon')) return;
+  if (customElements.get('anjian-icon')) return;
 
-  class RyugiIcon extends HTMLElement {
+  class AnjianIcon extends HTMLElement {
     static observedAttributes = ['name', 'size', 'stroke-width', 'aria-label'];
 
     #root = this.attachShadow({ mode: 'open' });
@@ -34,11 +34,11 @@ export function registerIcons(icons: Record<string, string>) {
         this.setAttribute('aria-hidden', 'true');
       }
       if (name && !source) {
-        const message = `[ryugi-icon] Unknown Lucide icon: ${name}`;
+        const message = `[anjian-icon] Unknown Lucide icon: ${name}`;
         window.dispatchEvent(new ErrorEvent('error', { message }));
       }
     }
   }
 
-  customElements.define('ryugi-icon', RyugiIcon);
+  customElements.define('anjian-icon', AnjianIcon);
 }

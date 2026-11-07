@@ -26,7 +26,6 @@ vi.mock('@stylexjs/stylex', async (original) => ({
 vi.mock('@lobehub/ui/stylex/cssVar.stylex', () => ({
   cssVar: new Proxy({}, { get: (_, key) => `var(--${String(key)})` }),
 }));
-vi.mock('../src/viewer/components/PublishMenu', () => ({ PublishMenu: () => null }));
 vi.mock('@haklex/rich-ext-excalidraw', async () => {
   const { allHeadlessNodes } = await import('@haklex/rich-headless');
   return {
@@ -208,66 +207,6 @@ test('the narrow version picker keeps keyboard focus inside and restores it on c
   expect(document.activeElement).toBe(controls[0]);
   await act(async () => button(dialog, 'Done').click());
   expect(document.activeElement).toBe(selector);
-});
-
-test('cloud disconnect closes history while preserving the original editor instance', async () => {
-  const { doc } = fixture();
-  const updates: Uint8Array[] = [];
-  const transport: DocumentTransport = {
-    artifact: 'document/test',
-    channel: createChannel(),
-    send: () => {},
-    meta: async () => ({ id: 'test', title: 'Test', contentBase: '', warnings: [], version: 1 }),
-    state: async () => ({
-      snapshot: Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64'),
-      lineage: doc.getTree('lexical').roots()[0]!.id,
-    }),
-    update: async (bytes) => {
-      updates.push(bytes);
-    },
-    comment: async () => ({ version: 1, threads: [] }),
-  };
-  const online = { online: true, canEdit: true, reason: null };
-  const host = await mount(
-    createElement(DocumentView, { id: 'test', transport, live: true, cloud: online }),
-  );
-  await vi.waitFor(() => expect(host.querySelector('[contenteditable]')).not.toBeNull());
-  const editor = host.querySelector('[contenteditable]');
-  await act(async () =>
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window.parent,
-        origin: 'https://untrusted.example',
-        data: { type: 'ryugi:document-history', id: 'test', action: 'toggle' },
-      }),
-    ),
-  );
-  expect(host.querySelector('[aria-label="Diff"]')).toBeNull();
-  await act(async () =>
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window.parent,
-        origin: location.origin,
-        data: { type: 'ryugi:document-history', id: 'test', action: 'toggle' },
-      }),
-    ),
-  );
-  await historyReady(host);
-  const baselineUpdates = updates.length;
-  await act(async () =>
-    root!.render(
-      createElement(DocumentView, {
-        id: 'test',
-        transport,
-        live: false,
-        cloud: { online: false, canEdit: false, reason: null },
-      }),
-    ),
-  );
-  expect(host.querySelector('[aria-label="Diff"]')).toBeNull();
-  expect(button(host, 'History').disabled).toBe(true);
-  expect(host.querySelector('[contenteditable]')).toBe(editor);
-  expect(updates.length).toBe(baselineUpdates);
 });
 
 function localTransport(doc: LoroDoc): DocumentTransport {

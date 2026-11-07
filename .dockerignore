@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/dist
+**/.anjian
+**/.ryugi
+**/.vitest
+**/coverage
+**/.DS_Store
+.env
+.env.*

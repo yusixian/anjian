@@ -615,7 +615,7 @@ export function TweaksPanel({ boardId, title, state, anchor, onChange, onReset, 
   const changed = Object.entries(state.values).filter(
     ([key, value]) => value !== state.schema?.controls[key]?.default,
   ).length;
-  const panelClass = [stylex.props(styles.panel).className, 'ryugi-parameters']
+  const panelClass = [stylex.props(styles.panel).className, 'anjian-parameters']
     .filter(Boolean)
     .join(' ');
   return (

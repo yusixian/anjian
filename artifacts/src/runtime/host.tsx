@@ -79,7 +79,7 @@ export function createHostRoot({ wrap, onError }: Options) {
   }
 
   const container = document.createElement('div');
-  container.dataset.ryugiRoot = '';
+  container.dataset.anjianRoot = '';
   (document.body ?? document.documentElement).append(container);
   createRoot(container).render(<Hosts />);
 

@@ -86,10 +86,10 @@ PLAN
   dir_a="$(cd "$repo" && "$SDD_SCRIPTS/sdd-workspace" plan-a.md)"
   dir_b="$(cd "$repo" && "$SDD_SCRIPTS/sdd-workspace" plan-b.md)"
 
-  if [[ "$dir_a" == "$repo/.ryugi/sdd/plan-a" ]]; then
-    pass "prints <repo-root>/.ryugi/sdd/<plan-basename>"
+  if [[ "$dir_a" == "$repo/.anjian/sdd/plan-a" ]]; then
+    pass "prints <repo-root>/.anjian/sdd/<plan-basename>"
   else
-    fail "prints <repo-root>/.ryugi/sdd/<plan-basename>"
+    fail "prints <repo-root>/.anjian/sdd/<plan-basename>"
     echo "    got: $dir_a"
   fi
 
@@ -101,10 +101,10 @@ PLAN
     echo "    b: $dir_b"
   fi
 
-  if [[ -f "$repo/.ryugi/sdd/.gitignore" && "$(cat "$repo/.ryugi/sdd/.gitignore")" == "*" ]]; then
-    pass "self-ignoring .gitignore created at .ryugi/sdd/ with '*'"
+  if [[ -f "$repo/.anjian/sdd/.gitignore" && "$(cat "$repo/.anjian/sdd/.gitignore")" == "*" ]]; then
+    pass "self-ignoring .gitignore created at .anjian/sdd/ with '*'"
   else
-    fail "self-ignoring .gitignore created at .ryugi/sdd/ with '*'"
+    fail "self-ignoring .gitignore created at .anjian/sdd/ with '*'"
   fi
 
   printf 'x\n' > "$dir_a/artifact.md"
@@ -112,7 +112,7 @@ PLAN
   status="$(cd "$repo" && git status --porcelain)"
   # plan-a.md/plan-b.md are intentionally untracked fixture files; only the
   # workspace must be invisible.
-  if [[ "$status" != *".ryugi"* ]]; then
+  if [[ "$status" != *".anjian"* ]]; then
     pass "workspace invisible to git status"
   else
     fail "workspace invisible to git status"
@@ -122,7 +122,7 @@ PLAN
   (cd "$repo" && git add -A)
   local staged
   staged="$(cd "$repo" && git diff --cached --name-only)"
-  if [[ "$staged" != *".ryugi"* ]]; then
+  if [[ "$staged" != *".anjian"* ]]; then
     pass "git add -A does not stage the workspace"
   else
     fail "git add -A does not stage the workspace"
@@ -133,7 +133,7 @@ PLAN
   local brief_out brief_path
   brief_out="$(cd "$repo" && "$SDD_SCRIPTS/task-brief" plan-a.md 1)"
   brief_path="$(printf '%s\n' "$brief_out" | sed -n 's/^wrote \(.*\): [0-9][0-9]* lines$/\1/p')"
-  if [[ "$brief_path" == "$repo/.ryugi/sdd/plan-a/task-1-brief.md" ]]; then
+  if [[ "$brief_path" == "$repo/.anjian/sdd/plan-a/task-1-brief.md" ]]; then
     pass "task-brief writes its brief under the plan's workspace"
   else
     fail "task-brief writes its brief under the plan's workspace"
@@ -150,7 +150,7 @@ PLAN
   rp_out="$(cd "$repo" && "$SDD_SCRIPTS/review-package" plan-a.md HEAD~1 HEAD)"
   rp_path="$(printf '%s\n' "$rp_out" | sed -n 's/^wrote \(.*\): [0-9].*$/\1/p')"
   case "$rp_path" in
-    "$repo/.ryugi/sdd/plan-a/review-"*.diff)
+    "$repo/.anjian/sdd/plan-a/review-"*.diff)
       pass "review-package writes its diff under the plan's workspace"
       ;;
     *)
@@ -208,7 +208,7 @@ PLAN
   wt_root="$(cd "$wt" && git rev-parse --show-toplevel)"
   wt_root="$(physical_path "$wt_root")"
   wt_dir="$(cd "$wt" && "$SDD_SCRIPTS/sdd-workspace" plan-a.md)"
-  if [[ "$wt_dir" == "$wt_root/.ryugi/sdd/plan-a" && "$wt_dir" != "$dir_a" ]]; then
+  if [[ "$wt_dir" == "$wt_root/.anjian/sdd/plan-a" && "$wt_dir" != "$dir_a" ]]; then
     pass "linked worktree resolves its own distinct workspace"
   else
     fail "linked worktree resolves its own distinct workspace"
@@ -219,7 +219,7 @@ PLAN
   printf 'y\n' > "$wt_dir/artifact.md"
   local wt_status
   wt_status="$(cd "$wt" && git status --porcelain)"
-  if [[ "$wt_status" != *".ryugi"* ]]; then
+  if [[ "$wt_status" != *".anjian"* ]]; then
     pass "worktree workspace invisible to git status"
   else
     fail "worktree workspace invisible to git status"
@@ -233,7 +233,7 @@ PLAN
   chmod -x "$stripped"/*
   local noexec_out noexec_rc=0
   noexec_out="$(cd "$repo" && bash "$stripped/task-brief" plan-b.md 1 2>&1)" || noexec_rc=$?
-  if [[ "$noexec_rc" -eq 0 && -f "$repo/.ryugi/sdd/plan-b/task-1-brief.md" ]]; then
+  if [[ "$noexec_rc" -eq 0 && -f "$repo/.anjian/sdd/plan-b/task-1-brief.md" ]]; then
     pass "task-brief works with no exec bit on sdd-workspace"
   else
     fail "task-brief works with no exec bit on sdd-workspace"
@@ -282,11 +282,11 @@ PLAN
 
   # --- Legacy adoption: pre-existing workspace without a marker ---
   printf '# Foo\n\n## Task 1: Foo\n\nFoo.\n' > "$repo/foo.md"
-  mkdir -p "$repo/.ryugi/sdd/foo"
-  printf 'ledger\n' > "$repo/.ryugi/sdd/foo/progress.md"
+  mkdir -p "$repo/.anjian/sdd/foo"
+  printf 'ledger\n' > "$repo/.anjian/sdd/foo/progress.md"
   local dir_foo
   dir_foo="$(cd "$repo" && "$SDD_SCRIPTS/sdd-workspace" foo.md)"
-  if [[ "$dir_foo" == "$repo/.ryugi/sdd/foo" &&
+  if [[ "$dir_foo" == "$repo/.anjian/sdd/foo" &&
     -f "$dir_foo/progress.md" &&
     "$(cat "$dir_foo/plan-path" 2> /dev/null)" == "foo.md" ]]; then
     pass "legacy markerless workspace is adopted in place and marked"
@@ -298,20 +298,20 @@ PLAN
 
   # --- Ownership conflict: marker names a different plan ---
   printf '# Bar\n\n## Task 1: Bar\n\nBar.\n' > "$repo/bar.md"
-  mkdir -p "$repo/.ryugi/sdd/bar"
-  printf 'somewhere-else/bar.md\n' > "$repo/.ryugi/sdd/bar/plan-path"
-  printf 'other ledger\n' > "$repo/.ryugi/sdd/bar/progress.md"
+  mkdir -p "$repo/.anjian/sdd/bar"
+  printf 'somewhere-else/bar.md\n' > "$repo/.anjian/sdd/bar/plan-path"
+  printf 'other ledger\n' > "$repo/.anjian/sdd/bar/progress.md"
   local dir_bar
   dir_bar="$(cd "$repo" && "$SDD_SCRIPTS/sdd-workspace" bar.md)"
-  if [[ "$dir_bar" == "$repo/.ryugi/sdd/bar-repo" &&
+  if [[ "$dir_bar" == "$repo/.anjian/sdd/bar-repo" &&
     "$(cat "$dir_bar/plan-path" 2> /dev/null)" == "bar.md" ]]; then
     pass "owned workspace disambiguates with parent-dir suffix"
   else
     fail "owned workspace disambiguates with parent-dir suffix"
     echo "    got: $dir_bar"
   fi
-  if [[ "$(cat "$repo/.ryugi/sdd/bar/plan-path")" == "somewhere-else/bar.md" &&
-  "$(cat "$repo/.ryugi/sdd/bar/progress.md")" == "other ledger" ]]; then
+  if [[ "$(cat "$repo/.anjian/sdd/bar/plan-path")" == "somewhere-else/bar.md" &&
+  "$(cat "$repo/.anjian/sdd/bar/progress.md")" == "other ledger" ]]; then
     pass "conflicting plan leaves the original workspace untouched"
   else
     fail "conflicting plan leaves the original workspace untouched"
@@ -319,12 +319,12 @@ PLAN
 
   # --- Counter fallback: parent-suffixed workspace is owned too ---
   printf '# Baz\n\n## Task 1: Baz\n\nBaz.\n' > "$repo/baz.md"
-  mkdir -p "$repo/.ryugi/sdd/baz" "$repo/.ryugi/sdd/baz-repo"
-  printf 'one/baz.md\n' > "$repo/.ryugi/sdd/baz/plan-path"
-  printf 'two/baz.md\n' > "$repo/.ryugi/sdd/baz-repo/plan-path"
+  mkdir -p "$repo/.anjian/sdd/baz" "$repo/.anjian/sdd/baz-repo"
+  printf 'one/baz.md\n' > "$repo/.anjian/sdd/baz/plan-path"
+  printf 'two/baz.md\n' > "$repo/.anjian/sdd/baz-repo/plan-path"
   local dir_baz
   dir_baz="$(cd "$repo" && "$SDD_SCRIPTS/sdd-workspace" baz.md)"
-  if [[ "$dir_baz" == "$repo/.ryugi/sdd/baz-repo-2" &&
+  if [[ "$dir_baz" == "$repo/.anjian/sdd/baz-repo-2" &&
     "$(cat "$dir_baz/plan-path" 2> /dev/null)" == "baz.md" ]]; then
     pass "double conflict falls back to a counter suffix"
   else
@@ -354,7 +354,7 @@ PLAN
   local outside_abs dir_out
   outside_abs="$(cd "$TEST_ROOT/outside" && pwd -P)/remote-plan.md"
   dir_out="$(cd "$repo" && "$SDD_SCRIPTS/sdd-workspace" "$TEST_ROOT/outside/remote-plan.md")"
-  if [[ "$dir_out" == "$repo/.ryugi/sdd/remote-plan" &&
+  if [[ "$dir_out" == "$repo/.anjian/sdd/remote-plan" &&
     "$(cat "$dir_out/plan-path" 2> /dev/null)" == "$outside_abs" ]]; then
     pass "out-of-repo plan gets a basename slug and an absolute-path marker"
   else
@@ -363,22 +363,22 @@ PLAN
     echo "    marker: $(cat "$dir_out/plan-path" 2> /dev/null)"
   fi
 
-  # --- A repo's own committed .ryugi/sdd/.gitignore is left alone ---
+  # --- A repo's own committed .anjian/sdd/.gitignore is left alone ---
   git init -q -b main "$TEST_ROOT/own-ignore"
   local own own_ignore
   own="$(cd "$TEST_ROOT/own-ignore" && git rev-parse --show-toplevel)"
   own_ignore=$'*\n!.gitignore\n!*/\n!*/progress.md'
-  mkdir -p "$own/.ryugi/sdd"
-  printf '%s\n' "$own_ignore" > "$own/.ryugi/sdd/.gitignore"
+  mkdir -p "$own/.anjian/sdd"
+  printf '%s\n' "$own_ignore" > "$own/.anjian/sdd/.gitignore"
   printf '# Plan\n\n## Task 1: One\n\nOne.\n' > "$own/plan.md"
   (cd "$own" && git add -A && git -c user.name=t -c user.email=t@t commit -qm init)
   (cd "$own" && "$SDD_SCRIPTS/sdd-workspace" plan.md > /dev/null)
-  if [[ "$(cat "$own/.ryugi/sdd/.gitignore")" == "$own_ignore" &&
-  -z "$(cd "$own" && git status --porcelain -- .ryugi/sdd/.gitignore)" ]]; then
-    pass "an existing .ryugi/sdd/.gitignore is not overwritten"
+  if [[ "$(cat "$own/.anjian/sdd/.gitignore")" == "$own_ignore" &&
+  -z "$(cd "$own" && git status --porcelain -- .anjian/sdd/.gitignore)" ]]; then
+    pass "an existing .anjian/sdd/.gitignore is not overwritten"
   else
-    fail "an existing .ryugi/sdd/.gitignore is not overwritten"
-    echo "    now: $(cat "$own/.ryugi/sdd/.gitignore")"
+    fail "an existing .anjian/sdd/.gitignore is not overwritten"
+    echo "    now: $(cat "$own/.anjian/sdd/.gitignore")"
   fi
 
   echo ""

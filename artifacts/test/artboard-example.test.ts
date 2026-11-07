@@ -52,11 +52,11 @@ test('host parameter changes update the example while preserving dismissed cards
   const document = openExample(true);
   let ready: any;
   page!.parent.postMessage = (data: any) => {
-    if (data.type === 'ryugi:tweaks:ready') ready = data;
+    if (data.type === 'anjian:tweaks:ready') ready = data;
   };
   const command = (data: object) =>
     page!.eval(
-      `dispatchEvent(new MessageEvent('message',{source:parent,data:${JSON.stringify({ type: 'ryugi:tweaks', connection: 'example', ...data })}}))`,
+      `dispatchEvent(new MessageEvent('message',{source:parent,data:${JSON.stringify({ type: 'anjian:tweaks', connection: 'example', ...data })}}))`,
     );
   command({ action: 'connect' });
   document.querySelector<HTMLElement>('#dismiss-research')!.click();

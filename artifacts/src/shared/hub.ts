@@ -23,12 +23,10 @@ export interface HubStatus {
   boardPort: number;
   clients: number;
   lastActivity: number;
-  latest: string | null;
-  live: { local: number; relay: number };
+  live: { local: number };
   pid: number;
   port: number;
   projects: HubProjectStatus[];
-  relay: { announced: number; connected: boolean };
   startedAt: number;
   url: string;
   version: string;

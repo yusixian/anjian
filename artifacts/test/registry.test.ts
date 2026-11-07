@@ -18,7 +18,7 @@ const tempDir = () =>
 
 const entry = (project: string, serverId = 'a'.repeat(48)): RegistryEntry => ({
   project,
-  root: path.join(project, '.ryugi', 'artifacts'),
+  root: path.join(project, '.anjian', 'artifacts'),
   pid: process.pid,
   serverId,
   startedAt: 1,
@@ -26,16 +26,16 @@ const entry = (project: string, serverId = 'a'.repeat(48)): RegistryEntry => ({
 
 test('lives in a fixed per-user directory under /tmp, not the per-session TMPDIR', () => {
   expect(registryDir({ TMPDIR: '/var/folders/x/T' }, 'darwin', 501, '/var/folders/x/T')).toBe(
-    '/tmp/ryugi-501/servers',
+    '/tmp/anjian-501/servers',
   );
-  expect(registryDir({}, 'linux', 1000, '/tmp')).toBe('/tmp/ryugi-1000/servers');
+  expect(registryDir({}, 'linux', 1000, '/tmp')).toBe('/tmp/anjian-1000/servers');
 });
 
-test('uses the user temp directory on Windows and RYUGI_RUNTIME_DIR when set', () => {
+test('uses the user temp directory on Windows and ANJIAN_RUNTIME_DIR when set', () => {
   expect(registryDir({}, 'win32', -1, 'C:\\Users\\a\\AppData\\Local\\Temp')).toBe(
-    path.join('C:\\Users\\a\\AppData\\Local\\Temp', 'ryugi', 'servers'),
+    path.join('C:\\Users\\a\\AppData\\Local\\Temp', 'anjian', 'servers'),
   );
-  expect(registryDir({ RYUGI_RUNTIME_DIR: '/x/run' }, 'linux', 1000, '/tmp')).toBe(
+  expect(registryDir({ ANJIAN_RUNTIME_DIR: '/x/run' }, 'linux', 1000, '/tmp')).toBe(
     path.join('/x/run', 'servers'),
   );
 });

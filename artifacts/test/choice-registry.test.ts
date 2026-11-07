@@ -9,7 +9,7 @@ import { asBoardHumanOp, createBoardCommentRegistry } from '../src/server/board-
 const box = (x: number, y: number) => ({ page: 'p', x, y, w: 400, h: 300 });
 
 function project(extraNotes: Record<string, unknown> = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-choices-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-choices-'));
   const dir = path.join(root, 'artboard', 'pick');
   fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
   const boards = {
@@ -130,7 +130,7 @@ test('choice records carry no board hashes, so editing a board never resets a ch
 });
 
 test('pushes tell the viewer whether a watcher is listening, and a heartbeat change pushes again', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-choices-listen-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-choices-listen-'));
   const dir = path.join(root, 'artboard', 'pick');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(

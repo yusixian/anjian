@@ -4,64 +4,64 @@ import { injectRuntime } from '../src/server/inject';
 
 describe('injectRuntime', () => {
   test('an icon-only HTML page keeps its own theme without loading Lobe UI', () => {
-    const out = injectRuntime('<head></head><ryugi-icon name="copy"></ryugi-icon>', {
-      uiRuntimeUrl: '/runtime/ryugi-ui.js',
+    const out = injectRuntime('<head></head><anjian-icon name="copy"></anjian-icon>', {
+      uiRuntimeUrl: '/runtime/anjian-ui.js',
     });
-    expect(out).toContain('src="/runtime/ryugi-icons.js"');
-    expect(out).not.toContain('src="/runtime/ryugi-ui.js"');
+    expect(out).toContain('src="/runtime/anjian-icons.js"');
+    expect(out).not.toContain('src="/runtime/anjian-ui.js"');
   });
 
   test('artboard icons get their standalone runtime without loading the UI theme', () => {
-    const out = injectRuntime('<head></head><ryugi-icon name="message-square"></ryugi-icon>', {
+    const out = injectRuntime('<head></head><anjian-icon name="message-square"></anjian-icon>', {
       inspector: true,
-      uiRuntimeUrl: '/runtime/ryugi-ui.js',
+      uiRuntimeUrl: '/runtime/anjian-ui.js',
     });
-    expect(out).toContain('/runtime/ryugi-icons.js');
-    expect(out).not.toContain('src="/runtime/ryugi-ui.js"');
+    expect(out).toContain('/runtime/anjian-icons.js');
+    expect(out).not.toContain('src="/runtime/anjian-ui.js"');
   });
 
   test('UI pages load icons before the UI runtime, including for dynamically created controls', () => {
-    const out = injectRuntime('<meta name="ryugi-ui" content="1">', {
-      uiRuntimeUrl: '/runtime/ryugi-ui.js',
+    const out = injectRuntime('<meta name="anjian-ui" content="1">', {
+      uiRuntimeUrl: '/runtime/anjian-ui.js',
     });
-    expect(out.indexOf('src="/runtime/ryugi-icons.js"')).toBeGreaterThan(-1);
-    expect(out.indexOf('ryugi-icons.js')).toBeLessThan(out.indexOf('ryugi-ui.js'));
+    expect(out.indexOf('src="/runtime/anjian-icons.js"')).toBeGreaterThan(-1);
+    expect(out.indexOf('anjian-icons.js')).toBeLessThan(out.indexOf('anjian-ui.js'));
   });
 
   test("puts the runtime script first inside <head>, before the page's own scripts", () => {
     const out = injectRuntime('<!doctype html><html><HEAD><script>page()</script></HEAD></html>');
-    const runtime = out.indexOf('ryugi:snapshot');
+    const runtime = out.indexOf('anjian:snapshot');
     expect(runtime).toBeGreaterThan(out.indexOf('<HEAD>'));
     expect(runtime).toBeLessThan(out.indexOf('page()'));
   });
 
   test('injects the UI runtime for custom elements when a runtime URL is given', () => {
-    const url = '/c/token/runtime/ryugi-ui.js';
+    const url = '/c/token/runtime/anjian-ui.js';
     const out = injectRuntime(
-      '<html><head></head><body><ryugi-button>Go</ryugi-button></body></html>',
+      '<html><head></head><body><anjian-button>Go</anjian-button></body></html>',
       {
         uiRuntimeUrl: url,
       },
     );
     expect(out).toContain(`<script defer src="${url}"></script>`);
-    expect(out.indexOf('ryugi:snapshot')).toBeLessThan(out.indexOf('ryugi-ui.js'));
+    expect(out.indexOf('anjian:snapshot')).toBeLessThan(out.indexOf('anjian-ui.js'));
   });
 
   test('injects the UI runtime for a meta opt-in and not for plain pages', () => {
-    const url = '/c/token/runtime/ryugi-ui.js';
-    expect(injectRuntime('<meta name="ryugi-ui" content="1">', { uiRuntimeUrl: url })).toContain(
-      'ryugi-ui.js',
+    const url = '/c/token/runtime/anjian-ui.js';
+    expect(injectRuntime('<meta name="anjian-ui" content="1">', { uiRuntimeUrl: url })).toContain(
+      'anjian-ui.js',
     );
-    expect(injectRuntime('<p>plain</p>', { uiRuntimeUrl: url })).not.toContain('ryugi-ui.js');
-    expect(injectRuntime('<ryugi-button>Go</ryugi-button>')).not.toContain('ryugi-ui.js');
+    expect(injectRuntime('<p>plain</p>', { uiRuntimeUrl: url })).not.toContain('anjian-ui.js');
+    expect(injectRuntime('<anjian-button>Go</anjian-button>')).not.toContain('anjian-ui.js');
   });
 
   test('keeps line numbers when the UI runtime is injected too', () => {
     const page =
-      '<!doctype html>\n<html>\n<head>\n<title>x</title>\n</head>\n<body>\n<ryugi-button>Go</ryugi-button>\n</body>\n</html>';
-    const out = injectRuntime(page, { uiRuntimeUrl: '/c/token/runtime/ryugi-ui.js' });
+      '<!doctype html>\n<html>\n<head>\n<title>x</title>\n</head>\n<body>\n<anjian-button>Go</anjian-button>\n</body>\n</html>';
+    const out = injectRuntime(page, { uiRuntimeUrl: '/c/token/runtime/anjian-ui.js' });
     expect(out.split('\n')).toHaveLength(page.split('\n').length);
-    expect(out.split('\n')[6]).toBe('<ryugi-button>Go</ryugi-button>');
+    expect(out.split('\n')[6]).toBe('<anjian-button>Go</anjian-button>');
   });
 
   test('keeps every line of the page on its original line number', () => {
@@ -143,21 +143,21 @@ describe('injectRuntime', () => {
       return { env, listeners, posted, dispatched, resize: () => observe() };
     }
 
-    test('props in the URL hash are on window.ryugiProps before page scripts run', () => {
-      const { env } = run(`#ryugi-props=${encodeURIComponent('{"radius":8}')}`);
-      expect(env.window.ryugiProps).toEqual({ radius: 8 });
+    test('props in the URL hash are on window.anjianProps before page scripts run', () => {
+      const { env } = run(`#anjian-props=${encodeURIComponent('{"radius":8}')}`);
+      expect(env.window.anjianProps).toEqual({ radius: 8 });
     });
 
     test('a page without props gets an empty object', () => {
-      expect(run('').env.window.ryugiProps).toEqual({});
+      expect(run('').env.window.anjianProps).toEqual({});
     });
 
-    test('new props in the hash update window.ryugiProps and fire ryugi-props', () => {
+    test('new props in the hash update window.anjianProps and fire anjian-props', () => {
       const { env, listeners, dispatched } = run('');
-      env.location.hash = `#ryugi-props=${encodeURIComponent('{"radius":4}')}`;
+      env.location.hash = `#anjian-props=${encodeURIComponent('{"radius":4}')}`;
       listeners.hashchange!();
-      expect(env.window.ryugiProps).toEqual({ radius: 4 });
-      expect(dispatched.map((event) => event.type)).toEqual(['ryugi-props']);
+      expect(env.window.anjianProps).toEqual({ radius: 4 });
+      expect(dispatched.map((event) => event.type)).toEqual(['anjian-props']);
     });
 
     test('the content height is posted to the parent when it changes', () => {
@@ -167,8 +167,8 @@ describe('injectRuntime', () => {
       env.document.documentElement.offsetHeight = 500;
       resize();
       expect(posted).toEqual([
-        { type: 'ryugi:height', height: 412 },
-        { type: 'ryugi:height', height: 500 },
+        { type: 'anjian:height', height: 412 },
+        { type: 'anjian:height', height: 500 },
       ]);
     });
   });

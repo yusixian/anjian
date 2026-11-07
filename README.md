@@ -1,117 +1,62 @@
-<p align="center">
-  <img src="assets/logo/ryugi-mark.svg" width="112" alt="Ryugi">
-</p>
+# Anjian · 案间
 
-<h1 align="center">Ryugi 流儀</h1>
+面向个人使用的画板、文档与 HTML 作品工作台，以本地运行、中文体验和自主维护为方向。
 
-<p align="center"><b>Your coding agent stops describing UI and starts showing it.</b></p>
+本项目基于 [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2) 分叉，独立演进。它不是 Ryugi 官方版本，也不以持续跟随上游功能或版本为目标。中文名称为「案间」，英文名称为 Anjian。
 
-```text
-/plugin marketplace add Innei/ryugi
-/plugin install ryugi@ryugi-dev
-```
+## 产品方向
 
-Then send `Let's make a react todo list`. Ryugi starts brainstorming before any code, draws the
-options instead of describing them, and builds what you approve under TDD.
+- **个人使用**：围绕方案展示、文档批注、HTML 预览与 Agent 反馈整理使用流程。
+- **本地优先**：作品与评论保存在自己控制的设备或服务器上；基本功能不要求第三方账号。
+- **中文体验**：完善中文界面、错误提示和使用文档。
+- **移除官方云服务**：已移除 Ryugi Cloud 登录、发布、云中继及官方包自动更新路径，使用本项目自行构建的程序。
+- **可自行部署**：保留部署到自己的 Dokploy 的方向，单独处理 HTTPS、持久化、访问控制以及本地 Agent 与服务器之间的通信。
 
-<p align="center">
-  <a href="docs/install.md">Harnesses</a> · <a href="docs/workflow.md">Workflow</a> · <a href="docs/artifacts-cli.md">CLI</a>
-</p>
+这里的“移除云端”指移除官方托管服务依赖；部署到自己控制的服务器仍属于项目目标。自建账号平台、订阅计费和公共云服务不在当前范围内。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.webp">
-  <img src="docs/images/hero-light.webp" alt="The Ryugi artboard: three desktop hero directions and three phone variants side by side, three sticky notes from the brief, and a bar reading 2/2 chosen with a Submit button">
-</picture>
+## 当前状态
 
-**Artboard.** Every option side by side, drawn live while you watch. Two of them are chosen here;
-Submit sends the round back with the brief. Comment on any pixel and answer in the terminal
-(`q1 → b`).
+Anjian 已完成本地构建、独立命名空间与官方云端入口移除。初始语言为中文；保留手动语言选择。
 
-## How it works
+2026-11-07 已验证：
 
-```mermaid
-flowchart LR
-  I[Idea] --> B[Brainstorm] --> S[Spec] --> T[Build · TDD] --> V[Verify] --> L[Land]
-```
+- server、CLI、viewer、viewer library 与 runtime 完整构建和类型检查通过。
+- 浏览器中文作品库、HTML 交互、桌面与手机画板预览可用。
+- 浏览器文档批注 → CLI 读取 → 文件修改 → CLI 回复 → 网页实时同步的本地闭环通过。
+- 限制 4 个 worker 的完整测试集通过：160 个文件、1,373 项测试。
 
-Skills fire on their own; there is nothing to invoke. After you sign off, the agent slices the
-spec into tasks, proves each one red-green, keeps a ledger of judgment calls across compaction,
-gets one fresh review of the branch, and reports how to land it.
-[How it works →](docs/workflow.md)
+Docker 镜像、HTTPS 反向代理、持久化恢复及 Dokploy 自动部署尚未完成验收。详见 [交付记录](docs/DELIVERY_GOAL.md)。
 
-## Document — design docs you can argue with
+## 使用与开发
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/document-dark.webp">
-  <img src="docs/images/document-light.webp" alt="A design document with a contents rail, a flow diagram, a code block and two comment threads in the margin marked waiting on you">
-</picture>
+- [从源码构建和本地运行](docs/install.md)
+- [CLI 命令](docs/artifacts-cli.md)
+- [Docker / Dokploy 自托管准备](docs/self-hosting.md)
 
-Diagrams, charts, code, tables. Comment on a sentence, edit in place; your edits and the agent's
-merge live.
+## 开发起点
 
-## HTML — tune it with real controls
+工作台源码位于 `artifacts/`，包含前端、服务端、CLI、构建脚本和测试；Agent skills 与适配脚本位于 `skills/`、`hooks/` 等目录。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/html-dark.webp">
-  <img src="docs/images/html-light.webp" alt="A spring test bench: sliders for stiffness, damping and mass beside a plotted displacement curve with settle time and overshoot">
-</picture>
+优先从本地源码构建，不要把 `npx ryugi-artifacts` 当成本项目的安装命令：该命令获取的是上游发行包。
 
-A one-page test bench. Sliders keep their values when the agent rewrites the page.
+改造顺序：
 
-## Verify — you pass or reject
+1. 统一 Anjian 品牌、命令及文档，并保留来源署名。
+2. 移除官方云服务和官方自动更新路径，验证本地内容与评论流程。
+3. 完善中文体验和个人使用流程。
+4. 提供 Docker / Dokploy 部署方式，验证数据持久化和 HTTPS 访问。
+5. 接通本地 Agent 与自有服务器上的作品和评论；文件同步与会话通知需要分别验证。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/verify-dark.webp">
-  <img src="docs/images/verify-light.webp" alt="A verify group on the artboard: the approved settings design next to the built page, with Pass and Reject buttons on the group label">
-</picture>
+仓库其他文档目前仍主要来自上游，可能包含官方安装、发布或云服务指引；这些尚不是本项目的操作说明。
 
-Built work next to the approved design, in the same canvas. Pass a group, or reject it and say
-what is off; it comes back fixed.
+## 来源与许可证
 
-## Library — one server, every project
+基线为 [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2)，提交 `6054b65ab9b2208a234a78632eb065cfeb3eb166`。感谢 Innei 与 Ryugi 贡献者。Ryugi 的工作流又源自 Jesse Vincent 与贡献者维护的 [Superpowers](https://github.com/obra/superpowers)；历史来源见 [UPSTREAM.md](UPSTREAM.md)。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/library-dark.webp">
-  <img src="docs/images/library-light.webp" alt="The artifact library: a project rail, type filters, title search and a grid of artboard, document and HTML cards">
-</picture>
+沿用此基线的许可证划分，并保留原有版权声明：
 
-```bash
-npx ryugi-artifacts
-```
+- Skills、集成与文档：见根目录 [MIT LICENSE](LICENSE)。
+- `artifacts/` 应用及其构建产物：见 [AGPL-3.0-only](artifacts/LICENSE)。
+- 第三方依赖遵循各自许可证；发布和部署前仍需核对其要求。
 
-Local first, no subscription. One server serves every project on the machine: recent work across
-all of them, ⌘K to jump, artifact links that survive a restart and a new release. `publish` shares
-one to [Ryugi Cloud](https://ryugi.innei.dev).
-
-## Work with your harness
-
-<details>
-<summary>Other harnesses</summary>
-
-| Harness       | Command                                                                                               |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| Antigravity   | `agy plugin install https://github.com/Innei/ryugi`                                                   |
-| Codex, Cursor | Add this repo as a local plugin source ([detail](docs/install.md#codex-cursor))                       |
-| Devin CLI     | `devin plugins install Innei/ryugi`                                                                   |
-| Factory Droid | `droid plugin marketplace add https://github.com/Innei/ryugi` then `droid plugin install ryugi@ryugi` |
-| Gemini CLI    | `gemini extensions install https://github.com/Innei/ryugi`                                            |
-| Kimi Code     | `/plugins install https://github.com/Innei/ryugi`                                                     |
-| OpenCode      | [.opencode/INSTALL.md](.opencode/INSTALL.md)                                                          |
-| Pi            | `pi install git:github.com/Innei/ryugi`                                                               |
-| Qwen Code     | `qwen extensions install Innei/ryugi`                                                                 |
-| Hermes Agent  | `hermes plugins install Innei/ryugi --enable`                                                         |
-| Muse          | `muse plugins install ./` then `muse plugins approve ryugi`                                           |
-
-Updates and caveats: [docs/install.md](docs/install.md).
-
-</details>
-
-## Credits
-
-Fork of [Superpowers](https://github.com/obra/superpowers) v7.0.0 by Jesse Vincent and [Prime Radiant](https://primeradiant.com) ([UPSTREAM.md](UPSTREAM.md)). [Issues](https://github.com/Innei/ryugi/issues) and PRs welcome; [AGENTS.md](AGENTS.md) has the rules.
-
-## License
-
-Skills, harness integrations and docs: MIT — [LICENSE](LICENSE).
-
-The artifacts application in `artifacts/`, published to npm as [`ryugi-artifacts`](https://www.npmjs.com/package/ryugi-artifacts), and its build outputs: AGPL-3.0-only — [artifacts/LICENSE](artifacts/LICENSE). A modified version run as a network service must offer its source to that service's users.
+新的项目名称不改变继承代码的许可证。若向其他人提供修改后的网络服务，须遵守 AGPL 的对应源码提供要求。后续引入上游代码时应逐项核对该版本授权，不能假定仍适用本基线的许可证。

@@ -73,7 +73,7 @@ describe('parseDocument', () => {
 
   test('steps keep their ids, titles and content through a round trip', () => {
     const state = parseDocument(
-      `<doc><steps id="s"><step id="a" title="安装"><p>下载 <code>ryugi</code>。</p></step><step id="b" title="Run"><p>go</p></step></steps></doc>`,
+      `<doc><steps id="s"><step id="a" title="安装"><p>下载 <code>anjian</code>。</p></step><step id="b" title="Run"><p>go</p></step></steps></doc>`,
     );
     expect(state.root.children[0]).toMatchObject({
       type: 'steps',
@@ -84,7 +84,7 @@ describe('parseDocument', () => {
     });
     const out = serializeDocument(state);
     expect(out).toContain('<step id="a" title="安装">');
-    expect(out).toContain('<code>ryugi</code>');
+    expect(out).toContain('<code>anjian</code>');
     expect(parseDocument(out).root.children[0]).toMatchObject({
       type: 'steps',
       steps: [{ id: 'a' }, { id: 'b' }],

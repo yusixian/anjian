@@ -9,7 +9,7 @@ const listeners: EventListener[] = [];
 const NativeObserver = window.MutationObserver;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const reports = (type: string) =>
-  posted.filter((message) => message.type === `ryugi:board:${type}`);
+  posted.filter((message) => message.type === `anjian:board:${type}`);
 
 beforeEach(() => {
   document.body.innerHTML = '<main><h1>Board</h1><p id="copy">Copy</p></main>';
@@ -63,7 +63,7 @@ test('a burst of DOM changes is reported once, 500 ms after the last change', as
 test('the inspector drawing its own overlay is not a change to the board', async () => {
   await sleep(50);
   const overlay = document.createElement('style');
-  overlay.setAttribute('data-ryugi-inspector', '');
+  overlay.setAttribute('data-anjian-inspector', '');
   document.head.append(overlay);
   overlay.textContent = '*{cursor:default}';
   await sleep(650);
@@ -113,7 +113,7 @@ test('the board is serialized into an SVG with every resource it needs inlined',
     <x-icon></x-icon>
     <input value="typed">
     <script>window.secret = 1</script>
-    <style data-ryugi-inspector>*{cursor:default}</style>`);
+    <style data-anjian-inspector>*{cursor:default}</style>`);
   const icon = win.document.querySelector('x-icon')!;
   icon.attachShadow({ mode: 'open' }).innerHTML =
     '<style>:host{display:inline-flex}</style><svg viewBox="0 0 24 24"><path d="M0 0h24"/></svg>';
@@ -193,12 +193,12 @@ test('a capture request from the viewer always gets an answer, here an unsupport
   window.dispatchEvent(
     new MessageEvent('message', {
       source: window.parent,
-      data: { type: 'ryugi:board:capture', request: 7, scale: 1 },
+      data: { type: 'anjian:board:capture', request: 7, scale: 1 },
     }),
   );
   await sleep(50);
   expect(reports('snapshot')).toEqual([
-    { type: 'ryugi:board:snapshot', request: 7, error: expect.stringContaining('video') },
+    { type: 'anjian:board:snapshot', request: 7, error: expect.stringContaining('video') },
   ]);
 });
 
@@ -206,7 +206,7 @@ test('capture requests from anyone but the viewer are ignored', async () => {
   window.dispatchEvent(
     new MessageEvent('message', {
       source: null,
-      data: { type: 'ryugi:board:capture', request: 8, scale: 1 },
+      data: { type: 'anjian:board:capture', request: 8, scale: 1 },
     }),
   );
   await sleep(50);

@@ -34,11 +34,11 @@ async function start() {
 }
 
 const base = (s: ArtifactsServer) => `http://127.0.0.1:${s.port}`;
-const cookie = (s: ArtifactsServer) => `ryugi_artifacts_${s.port}=${s.token}`;
+const cookie = (s: ArtifactsServer) => `anjian_artifacts_${s.port}=${s.token}`;
 const thumbnail = (s: ArtifactsServer, address: string) =>
   get(`${base(s)}/api/thumbnail${address}.svg?v=1`, { Cookie: cookie(s) });
 
-test('each artifact type is drawn from the payload publish would send', async () => {
+test('each artifact type is drawn from the local preview payload', async () => {
   const { server, root } = await start();
   writeDocument(root, 'spec', {
     'doc.xml': '<doc><h1>Actual design</h1><p>Opening paragraph</p></doc>',

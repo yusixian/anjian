@@ -155,7 +155,7 @@ async function mount() {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: frame.contentWindow!,
-          data: { type: `ryugi:inspect:${type}`, session: 's', connection, ...fields },
+          data: { type: `anjian:inspect:${type}`, session: 's', connection, ...fields },
         }),
       ),
     );

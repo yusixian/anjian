@@ -40,7 +40,7 @@ async function start(root = tempRoot().root) {
 }
 const connect = (server: ArtifactsServer) =>
   openWs(server.port, {
-    Cookie: `ryugi_artifacts_${server.port}=${server.token}`,
+    Cookie: `anjian_artifacts_${server.port}=${server.token}`,
     Origin: `http://127.0.0.1:${server.port}`,
   });
 const node = (n: number) => ({

@@ -4,10 +4,26 @@ import path from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
-import { call, closeAll, sha256, start } from './fake-cloud';
-import { writeArtboard } from './helpers';
+import { type ArtifactsServer, startArtifactsServer } from '../src/server/app';
+import { tempRoot, writeArtboard } from './helpers';
 
-afterEach(closeAll);
+const running: ArtifactsServer[] = [];
+afterEach(async () => { await Promise.all(running.splice(0).map((server) => server.close())); });
+
+async function start() {
+  const { root, viewer, runtime } = tempRoot();
+  const server = await startArtifactsServer({ root, viewerDir: viewer, runtimeDir: runtime, host: '127.0.0.1', urlHost: '127.0.0.1' });
+  running.push(server);
+  return { server, root };
+}
+
+async function call(server: ArtifactsServer, method: string, route: string, body?: unknown) {
+  const response = await fetch(`http://127.0.0.1:${server.port}${route}`, {
+    method,
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+  return { status: response.status, json: await response.json() as any };
+}
 
 const canvas = {
   version: 1,
@@ -44,8 +60,8 @@ function capture(file: string, color = 'red') {
   expect(encoded.status, encoded.stderr?.toString()).toBe(0);
 }
 
-test('Verify videos prepare automatically before acceptance and publish the same bytes as local playback', async () => {
-  const { server, root, cloud } = await start();
+test('Verify videos prepare automatically before acceptance for local playback', async () => {
+  const { server, root } = await start();
   const dir = writeArtboard(root, 'save', canvas);
   const source = path.join(dir, 'pages/save.webm');
   capture(source);
@@ -54,7 +70,6 @@ test('Verify videos prepare automatically before acceptance and publish the same
 
   const first = await call(server, 'GET', '/api/artifacts/artboard/save');
   expect(first.json.pending).toEqual(['save']);
-  expect((await call(server, 'POST', '/api/cloud/publish/artboard/save')).status).toBe(409);
   const vote = () =>
     fetch(`http://127.0.0.1:${server.port}/api/artboard/save/comments?key=${server.token}`, {
       method: 'POST',
@@ -89,11 +104,7 @@ test('Verify videos prepare automatically before acceptance and publish the same
   );
   expect((await vote()).status).toBe(200);
 
-  expect((await call(server, 'POST', '/api/cloud/publish/artboard/save')).status).toBe(200);
-  const published = [...cloud.store.values()][0]!.versions.at(-1)!;
-  expect(published.payload.canvas.boards.save.src).toBe(board.src);
-  expect(published.files.find((file) => file.path === board.src)?.hash).toBe(sha256(prepared));
-  expect(published.files.some((file) => file.path === 'pages/save.webm')).toBe(false);
+  expect(prepared.length).toBeGreaterThan(0);
   expect(fs.readFileSync(source)).toEqual(original);
   expect(fs.readFileSync(path.join(dir, 'canvas.json'), 'utf8')).toBe(spec);
   const comments = () =>
@@ -113,8 +124,8 @@ test('Verify videos prepare automatically before acceptance and publish the same
   );
 }, 15_000);
 
-test('missing FFmpeg falls back to the original for local playback, check and cloud publication', async () => {
-  const { server, root, cloud } = await start();
+test('missing FFmpeg falls back to the original for local playback and check', async () => {
+  const { server, root } = await start();
   const dir = writeArtboard(root, 'fallback', canvas);
   capture(path.join(dir, 'pages/save.webm'));
   vi.stubEnv('PATH', root);
@@ -137,11 +148,6 @@ test('missing FFmpeg falls back to the original for local playback, check and cl
     expect(Buffer.from(await response.arrayBuffer())).toEqual(
       fs.readFileSync(path.join(dir, 'pages/save.webm')),
     );
-    expect((await call(server, 'POST', '/api/cloud/publish/artboard/fallback')).status).toBe(200);
-    expect([...cloud.store.values()][0]!.versions.at(-1)!.files).toContainEqual({
-      path: 'pages/save.webm',
-      hash: sha256(fs.readFileSync(path.join(dir, 'pages/save.webm'))),
-    });
   } finally {
     vi.unstubAllEnvs();
   }

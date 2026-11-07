@@ -134,7 +134,7 @@ if (typeof survivingContextHook !== 'function') {
     .flatMap((message) => message.content)
     .filter(
       (part) =>
-        part.type === 'text' && part.text.startsWith('<EXTREMELY_IMPORTANT>\nYou have Ryugi.'),
+        part.type === 'text' && part.text.startsWith('<EXTREMELY_IMPORTANT>\nYou have Anjian.'),
     ).length;
   if (count !== 1) failures.push(`expected surviving bootstrap once, got ${count}`);
 }
@@ -162,9 +162,9 @@ const frontmatterFixtures = {
     expected: 'Folded line one line two',
   },
 };
-const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-frontmatter-'));
+const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-frontmatter-'));
 try {
-  const fixturePlugin = path.join(fixtureRoot, '.opencode', 'plugins', 'ryugi.js');
+  const fixturePlugin = path.join(fixtureRoot, '.opencode', 'plugins', 'anjian.js');
   fs.mkdirSync(path.dirname(fixturePlugin), { recursive: true });
   fs.copyFileSync(pluginPath, fixturePlugin);
   for (const [id, { frontmatter }] of Object.entries(frontmatterFixtures)) {

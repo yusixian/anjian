@@ -2,7 +2,8 @@ import { portList } from './ports';
 
 export interface ServerConfig {
   boardPorts: number[];
-  cloudOrigin: string;
+  boardOrigin?: string;
+  publicOrigin?: string;
   host: string;
   openCmd: string | null;
   ports: number[];
@@ -12,7 +13,16 @@ export interface ServerConfig {
 
 const SERVER_ID_ARG = '--artifacts-server-id=';
 const PORT_ARG = '--port=';
-const DEFAULT_CLOUD_ORIGIN = 'https://ryugi.innei.dev';
+
+function configuredOrigin(value: string | undefined, name: string): string | undefined {
+  if (!value) return undefined;
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+      url.pathname !== '/' || url.search || url.hash) {
+    throw new Error(`${name} must be an HTTP(S) origin without credentials, path or query`);
+  }
+  return url.origin;
+}
 
 export const isLoopback = (host: string) =>
   host === '127.0.0.1' || host === 'localhost' || host === '::1';
@@ -33,7 +43,8 @@ export function parseEnv(
     boardPorts: portList(env, 'board'),
     openCmd: env.ARTIFACTS_OPEN_CMD || null,
     serverId: serverIdArg ? serverIdArg.slice(SERVER_ID_ARG.length) : null,
-    cloudOrigin: (env.RYUGI_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN).replace(/\/+$/, ''),
+    publicOrigin: configuredOrigin(env.ANJIAN_PUBLIC_ORIGIN, 'ANJIAN_PUBLIC_ORIGIN'),
+    boardOrigin: configuredOrigin(env.ANJIAN_BOARD_ORIGIN, 'ANJIAN_BOARD_ORIGIN'),
   };
 }
 

@@ -14,10 +14,10 @@ export function usePageQuery() {
   const subscribe = useCallback(
     (notify: () => void) => {
       view.addEventListener('popstate', notify);
-      view.addEventListener('ryugi:pagechange', notify);
+      view.addEventListener('anjian:pagechange', notify);
       return () => {
         view.removeEventListener('popstate', notify);
-        view.removeEventListener('ryugi:pagechange', notify);
+        view.removeEventListener('anjian:pagechange', notify);
       };
     },
     [view],
@@ -32,7 +32,7 @@ export function usePageQuery() {
       if (id === null) url.searchParams.delete('page');
       else url.searchParams.set('page', id);
       view.history[replace ? 'replaceState' : 'pushState'](view.history.state, '', url);
-      view.dispatchEvent(new Event('ryugi:pagechange'));
+      view.dispatchEvent(new Event('anjian:pagechange'));
     },
     [view],
   );

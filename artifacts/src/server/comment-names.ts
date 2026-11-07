@@ -3,9 +3,7 @@ import fs from 'node:fs';
 
 import type { Person } from '../shared/comments';
 import { detectAgent } from './agent';
-import { githubAvatar, gravatarAvatar } from './avatars';
-import type { CloudOptions } from './cloud';
-import { readCredentials } from './credentials';
+import { gravatarAvatar } from './avatars';
 
 export interface CommentNames {
   agent: () => string | undefined;
@@ -14,7 +12,6 @@ export interface CommentNames {
 
 interface Options {
   agentFile: string;
-  cloud?: CloudOptions;
   projectDir: string;
 }
 
@@ -40,12 +37,10 @@ function gitPerson(cwd: string): Person | undefined {
   return email ? { name, avatar: gravatarAvatar(email) } : { name };
 }
 
-export function commentNames({ agentFile, projectDir, cloud }: Options): CommentNames {
+export function commentNames({ agentFile, projectDir }: Options): CommentNames {
   let git: { person: Person | undefined } | undefined;
   return {
     human: () => {
-      const login = cloud ? readCredentials(cloud.credentialsFile, cloud.origin)?.login : undefined;
-      if (login) return { name: login, avatar: githubAvatar(login) };
       git ??= { person: gitPerson(projectDir) };
       return git.person;
     },

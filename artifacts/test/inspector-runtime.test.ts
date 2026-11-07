@@ -42,7 +42,7 @@ function command(action: string, fields: Record<string, unknown> = {}, source = 
     new MessageEvent('message', {
       source,
       data: {
-        type: 'ryugi:inspect',
+        type: 'anjian:inspect',
         action,
         connection: 'test-connection',
         session: last('tree')?.session,
@@ -53,7 +53,7 @@ function command(action: string, fields: Record<string, unknown> = {}, source = 
 }
 
 const last = (type: string) =>
-  posted.filter((message) => message.type === `ryugi:inspect:${type}`).at(-1);
+  posted.filter((message) => message.type === `anjian:inspect:${type}`).at(-1);
 
 function cardId() {
   command('enable');
@@ -166,12 +166,12 @@ test('geometry follows selected and hovered nodes without rebuilding the DOM tre
   const id = cardId();
   command('select', { id });
   command('hover', { id });
-  const treeCount = posted.filter((message) => message.type === 'ryugi:inspect:tree').length;
+  const treeCount = posted.filter((message) => message.type === 'anjian:inspect:tree').length;
   x = 42;
   frames.shift()?.(0);
   expect(last('rect')).toMatchObject({ id, rect: { x: 42, width: 100 } });
   expect(last('hover')?.rect.x).toBe(42);
-  expect(posted.filter((message) => message.type === 'ryugi:inspect:tree')).toHaveLength(treeCount);
+  expect(posted.filter((message) => message.type === 'anjian:inspect:tree')).toHaveLength(treeCount);
   command('disable');
   const count = posted.length;
   frames.shift()?.(16);
@@ -214,7 +214,7 @@ test('Shift clicking requests a toggle, and tracked selections keep their geomet
   expect(
     posted.some(
       (message) =>
-        message.type === 'ryugi:inspect:rect' && message.id === headingId && message.rect.x === 25,
+        message.type === 'anjian:inspect:rect' && message.id === headingId && message.rect.x === 25,
     ),
   ).toBe(true);
 });
@@ -257,11 +257,11 @@ test('marquee leaves are the outermost visible content nodes with their rects', 
 
 test('select mode shows the blue pointer over every node and restores the page cursor when disabled', () => {
   cardId();
-  const style = document.querySelector('style[data-ryugi-inspector]');
+  const style = document.querySelector('style[data-anjian-inspector]');
   expect(style?.textContent).toBe(`*{cursor:${POINTER_CURSOR}!important}`);
   expect(last('tree')!.nodes.some((node: { tag: string }) => node.tag === 'style')).toBe(false);
   command('disable');
-  expect(document.querySelector('style[data-ryugi-inspector]')).toBeNull();
+  expect(document.querySelector('style[data-anjian-inspector]')).toBeNull();
 });
 
 test('a pointer drag forwards marquee coordinates and suppresses the resulting page click', () => {
@@ -282,9 +282,9 @@ test('a pointer drag forwards marquee coordinates and suppresses the resulting p
   pointer('pointermove', 100, 120);
   pointer('pointerup', 100, 120);
   expect(last('drag')).toMatchObject({ phase: 'end', x: 100, y: 120, append: false });
-  const count = posted.filter((message) => message.type === 'ryugi:inspect:selection').length;
+  const count = posted.filter((message) => message.type === 'anjian:inspect:selection').length;
   root.click();
-  expect(posted.filter((message) => message.type === 'ryugi:inspect:selection')).toHaveLength(
+  expect(posted.filter((message) => message.type === 'anjian:inspect:selection')).toHaveLength(
     count,
   );
 });
@@ -349,15 +349,15 @@ test('tree paths and tweak origins are clipped to what the viewer accepts', () =
 test('comment mode shows the pin cursor and swallows clicks without selecting', () => {
   cardId();
   command('mode', { mode: 'comment' });
-  const style = document.querySelector('style[data-ryugi-inspector]')!;
+  const style = document.querySelector('style[data-anjian-inspector]')!;
   expect(style.textContent).toBe(`*{cursor:${COMMENT_CURSOR}!important}`);
   const button = root.querySelector('button')!;
   const action = vi.fn();
   button.addEventListener('click', action);
-  const before = posted.filter((m) => m.type === 'ryugi:inspect:selection').length;
+  const before = posted.filter((m) => m.type === 'anjian:inspect:selection').length;
   button.click();
   expect(action).not.toHaveBeenCalled();
-  expect(posted.filter((m) => m.type === 'ryugi:inspect:selection')).toHaveLength(before);
+  expect(posted.filter((m) => m.type === 'anjian:inspect:selection')).toHaveLength(before);
   command('mode', { mode: 'select' });
   expect(style.textContent).toBe(`*{cursor:${POINTER_CURSOR}!important}`);
   button.click();
@@ -378,7 +378,7 @@ test('the mode can be set right after enabling, before the frame knows its sessi
     new MessageEvent('message', {
       source: window.parent,
       data: {
-        type: 'ryugi:inspect',
+        type: 'anjian:inspect',
         action: 'mode',
         mode: 'comment',
         connection: 'test-connection',
@@ -386,7 +386,7 @@ test('the mode can be set right after enabling, before the frame knows its sessi
       },
     }),
   );
-  expect(document.querySelector('style[data-ryugi-inspector]')!.textContent).toContain(
+  expect(document.querySelector('style[data-anjian-inspector]')!.textContent).toContain(
     'data:image/svg+xml',
   );
 });

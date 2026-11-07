@@ -6,7 +6,7 @@ import { afterEach, expect, test } from 'vitest';
 
 import { mountArtifactsProject } from '../src/server/app';
 import { listen } from '../src/server/http';
-import { get, tempRoot, waitFor, writeArtboard } from './helpers';
+import { get, tempRoot, writeArtboard } from './helpers';
 
 const canvas = {
   version: 1,
@@ -87,16 +87,6 @@ test('a mounted project resolves its artifacts by slug or address', async () => 
   expect(project.resolve('artboard', 'flow')).toBe('flow');
   expect(project.resolve('artboard', addressOf(dir))).toBe('flow');
   expect(project.resolve('artboard', 'nope')).toBeNull();
-});
-
-test('a mounted project hands change events to the relay tap instead of its own relay', async () => {
-  const { project, root } = await mounted();
-  writeArtboard(root, 'flow', canvas, { 'pages/p/a.html': '<p>a</p></html>' });
-  const events: string[] = [];
-  project.onRelayEvent((key) => events.push(key));
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  fs.writeFileSync(path.join(root, 'artboard', 'flow', 'pages', 'p', 'a.html'), '<p>b</p></html>');
-  await waitFor(() => events.includes('artboard/flow'));
 });
 
 test('a mounted project writes a server-info that points at the shared port and removes it on close', async () => {

@@ -6,15 +6,12 @@ import type { Duplex } from 'node:stream';
 import type { HubArtifact, HubArtifactList, HubProjectStatus, HubStatus } from '../shared/hub';
 import type { ArtifactType } from '../shared/types';
 import { accessPolicy, hostAllowed, isLoopbackHost, originAllowed } from './access';
-import { mountArtifactsProject, type MountedProject, type ServerOptions } from './app';
+import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
-import { readConfig } from './config';
 import { readArtifactSource, titleOf } from './context';
-import { readCredentials } from './credentials';
-import { hostIdFor } from './host-id';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
 import {
@@ -29,21 +26,19 @@ import {
 } from './machine';
 import { listenFirst } from './ports';
 import { openReady } from './ready';
-import { createRelayClient } from './relay';
 import { writeJsonAtomic } from './state';
 
 export interface HubOptions {
   boardPorts: number[];
-  cloud?: ServerOptions['cloud'];
-  control?: { relaunch: (upgrade: boolean) => boolean; stop: () => void };
+  control?: { relaunch: () => boolean; stop: () => void };
   debounceMs?: number;
   fetch?: typeof fetch;
   host: string;
-  latest?: () => string | null;
   open?: (link: string, local: string, openCmd?: string) => Promise<void>;
   paths: MachinePaths;
   ports: number[];
-  relay?: ServerOptions['relay'];
+  publicOrigin?: string;
+  boardOrigin?: string;
   runtimeDir?: string;
   token: string;
   urlHost: string;
@@ -60,6 +55,7 @@ export interface Hub {
   boardPort: number;
   close: () => Promise<void>;
   linkFor: (project: string, type: ArtifactType, id: string) => Promise<string>;
+  localUrl: string;
   mounted: () => MountedProject[];
   mountOf: (project: string) => Promise<MountedProject>;
   port: number;
@@ -71,17 +67,15 @@ export interface Hub {
   url: string;
 }
 
-const CONTROL_PATH = /^\/api\/hub\/(?:stop|restart|upgrade|log)$/;
+const CONTROL_PATH = /^\/api\/hub\/(?:stop|restart|log)$/;
 const LOG_TAIL_BYTES = 256 * 1024;
 const STATUS_SCAN_MS = 10_000;
 const LOG_TAIL_LINES = 500;
 const ARTIFACT_IN_PATH = /(?:^|\/)(artboard|document|html)\/([\w-]+)/;
 const CONTENT_PATH = /^\/c\/([^/]+)\//;
-const DIRECT_RELAY_PATH = /^\/relay\/a\/([\w-]{1,64})$/;
-const PROJECT_HEADER = 'x-ryugi-project';
+const PROJECT_HEADER = 'x-anjian-project';
 const MAX_BODY = 64 * 1024;
 const ARTIFACT_KEY = /^(?:artboard|document|html)\/[a-z0-9][a-z0-9-]*$/;
-const SEP = '\n';
 
 const realDir = (dir: string) => {
   try {
@@ -114,7 +108,8 @@ function readBody(req: http.IncomingMessage) {
 }
 
 export async function startHub(options: HubOptions): Promise<Hub> {
-  const loopback = isLoopbackHost(options.host);
+  const localBinding = isLoopbackHost(options.host);
+  const loopback = localBinding && !options.publicOrigin;
   const projectsFile = options.paths.projects;
   pruneProjects(projectsFile);
 
@@ -127,12 +122,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const front = http.createServer();
   const board = http.createServer();
   const port = await listenFirst(front, options.host, options.ports);
-  const boardPort = loopback ? await listenFirst(board, options.host, options.boardPorts) : 0;
+  const boardPort = localBinding || options.boardOrigin
+    ? await listenFirst(board, options.host, options.boardPorts)
+    : 0;
   const policy = accessPolicy({
     host: options.host,
     urlHost: options.urlHost,
     ports: boardPort ? [port, boardPort] : [port],
-    cloudOrigin: options.cloud?.origin,
+    publicOrigin: options.publicOrigin,
   });
 
   const mounts = new Map<string, Promise<MountedProject>>();
@@ -148,14 +145,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         runtimeDir: options.runtimeDir,
         host: options.host,
         urlHost: options.urlHost,
-        configFile: path.join(project, '.ryugi', 'config.json'),
-        cloud: options.cloud,
+        configFile: path.join(project, '.anjian', 'config.json'),
+        publicOrigin: options.publicOrigin,
+        boardOrigin: options.boardOrigin,
         fetch: options.fetch,
         debounceMs: options.debounceMs,
         mount: { port, boardPort, token: options.token, version: options.version },
       }).then((mounted) => {
         ready.set(project, mounted);
-        mounted.onRelayEvent((key, message) => relay?.emit(`${project}${SEP}${key}`, message));
         return mounted;
       });
       pending.catch(() => mounts.delete(project));
@@ -164,57 +161,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return pending;
   };
 
-  const configFileOf = (project: string) => path.join(project, '.ryugi', 'config.json');
-  const servedBy = (project: string) => {
-    const mounted = ready.get(project);
-    if (mounted) return mounted.served();
-    const served = new Map<string, string>();
-    for (const [key, entry] of Object.entries(readConfig(configFileOf(project)).config.artifacts))
-      if (entry.cloud) served.set(entry.cloud.id, key);
-    return served;
-  };
-  const servedAll = () => {
-    const all = new Map<string, string>();
-    for (const entry of ordered())
-      for (const [cloudId, key] of servedBy(entry.dir))
-        if (!all.has(cloudId)) all.set(cloudId, `${entry.dir}${SEP}${key}`);
-    return all;
-  };
-  const split = (composite: string) => {
-    const at = composite.lastIndexOf(SEP);
-    return { project: composite.slice(0, at), key: composite.slice(at + 1) };
-  };
-  const relay =
-    options.relay && options.cloud
-      ? createRelayClient({
-          ...options.relay,
-          token: () =>
-            readCredentials(options.cloud!.credentialsFile, options.cloud!.origin)?.token ?? null,
-          served: servedAll,
-          local: () => ({
-            hostId: hostIdFor(options.cloud!.credentialsFile),
-            port,
-            ...(loopback ? { embed: true, embedDocument: true } : { key: options.token }),
-          }),
-          handle: async (composite, body, conn) => {
-            const { project, key } = split(composite);
-            return (await mountOf(project)).handleRelay(key, body, conn);
-          },
-          onActivity: () => {},
-          onWatch: (keys) => {
-            const byProject = new Map<string, Set<string>>();
-            for (const composite of keys) {
-              const { project, key } = split(composite);
-              byProject.set(project, (byProject.get(project) ?? new Set()).add(key));
-            }
-            for (const [project, mounted] of ready)
-              mounted.relayWatch(byProject.get(project) ?? new Set());
-          },
-        })
-      : null;
-
-  const origin = `http://${urlHostForHttp(options.urlHost)}:${port}`;
+  const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
   const url = loopback ? `${origin}/` : `${origin}/?key=${options.token}`;
+  const localHost = options.host === '0.0.0.0' ? '127.0.0.1' : urlHostForHttp(options.host);
+  const localUrl = `http://${localHost}:${port}/${loopback ? '' : `?key=${options.token}`}`;
   const infoFileOf = (project: string) =>
     path.join(artifactsRootOf(project), '.state', 'server-info');
   const writeCompatInfo = (project: string) => {
@@ -223,8 +173,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       writeJsonAtomic(infoFileOf(project), {
         type: 'server-started',
         url,
+        localUrl,
         port,
         boardPort,
+        publicOrigin: options.publicOrigin,
+        boardOrigin: options.boardOrigin,
         root: artifactsRootOf(project),
       });
     } catch {}
@@ -271,20 +224,17 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   };
 
   const status = (): HubStatus => {
-    const relayState = relay?.state();
     const local = [...ready.values()].reduce((sum, mounted) => sum + mounted.liveClients(), 0);
     return {
       pid: process.pid,
       version: options.version,
-      latest: options.latest?.() ?? null,
       startedAt,
       lastActivity,
       clients: local,
       port,
       boardPort,
       url,
-      relay: { connected: relayState?.connected ?? false, announced: relayState?.announced ?? 0 },
-      live: { local, relay: relayState?.watched ?? 0 },
+      live: { local },
       projects: projectStatuses(),
     };
   };
@@ -297,7 +247,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     keyOk(url) ||
     (req.headers.cookie ?? '')
       .split(';')
-      .some((part) => safeEqual(part.trim(), `ryugi_artifacts_${port}=${options.token}`));
+      .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
   const fromAgent = (req: http.IncomingMessage, url: URL) =>
     req.headers.origin === undefined && keyOk(url);
 
@@ -309,20 +259,6 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return dir && registered(dir) ? dir : null;
   };
 
-  const publishedIn = (project: string, cloudId: string) => {
-    try {
-      const { artifacts } = readConfig(path.join(project, '.ryugi', 'config.json')).config;
-      return Object.values(artifacts).some((entry) => entry.cloud?.id === cloudId);
-    } catch {
-      return false;
-    }
-  };
-
-  const byCloudId = (cloudId: string) => {
-    for (const [project, mounted] of ready) if (mounted.served().has(cloudId)) return project;
-    return ordered().find((entry) => publishedIn(entry.dir, cloudId))?.dir ?? null;
-  };
-
   const projectForPath = (pathname: string): string | null => {
     const content = CONTENT_PATH.exec(pathname);
     if (content) {
@@ -330,12 +266,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         if (mounted.contentToken === content[1]) return project;
       return null;
     }
-    const direct = DIRECT_RELAY_PATH.exec(pathname);
-    if (direct) return byCloudId(direct[1]!);
     const artifact = ARTIFACT_IN_PATH.exec(pathname);
     if (artifact) {
       const found = index.find(artifact[1] as ArtifactType, artifact[2]!);
-      return found?.project ?? byCloudId(artifact[2]!);
+      return found?.project ?? null;
     }
     return null;
   };
@@ -379,11 +313,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if ('canvas' in payload ? !openReady(payload) : payload.warnings.length > 0) return;
       done = true;
       const local = mounted.linkFor(ref.type, ref.id);
-      void mounted
-        .cloudLinkFor(ref.type, ref.id)
-        .catch(() => null)
-        .then((cloudLink) => opener(cloudLink ?? local, local, openCmd))
-        .catch(() => undefined);
+      void opener(local, local, openCmd).catch(() => undefined);
     });
   };
 
@@ -396,7 +326,6 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     writeCompatInfo(real);
     const mounted = await mountOf(real);
     if (open) openWhenReady(mounted, open);
-    relay?.refresh();
     return entry;
   };
 
@@ -443,9 +372,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     else if (action === 'stop') {
       sendJson(res, 202, { stopping: true });
       setImmediate(control.stop);
-    } else if (action === 'upgrade' && !options.latest?.())
-      sendJson(res, 409, { error: 'up to date' });
-    else if (control.relaunch(action === 'upgrade')) sendJson(res, 202, { restarting: true });
+    } else if (control.relaunch()) sendJson(res, 202, { restarting: true });
     else sendJson(res, 409, { error: 'cannot relaunch' });
   };
 
@@ -566,6 +493,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     boardPort,
     token: options.token,
     url,
+    localUrl,
     status,
     projects: ordered,
     mounted: () => [...ready.values()],
@@ -578,7 +506,6 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const stopped = [front, board].map(
         (server) => new Promise((resolve) => server.close(resolve)),
       );
-      relay?.close();
       const all = [...mounts.values()];
       mounts.clear();
       ready.clear();

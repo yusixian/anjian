@@ -22,16 +22,16 @@ const occupy = async () => {
 };
 
 test('the default ports are high and fixed', () => {
-  expect(MAIN_PORTS).toEqual([27319, 27320, 27321]);
-  expect(BOARD_PORTS).toEqual([27329, 27330, 27331]);
+  expect(MAIN_PORTS).toEqual([27419, 27420, 27421]);
+  expect(BOARD_PORTS).toEqual([27429, 27430, 27431]);
   expect(portList({}, 'main')).toEqual(MAIN_PORTS);
   expect(portList({}, 'board')).toEqual(BOARD_PORTS);
 });
 
 test('the port lists can be overridden for tests and odd machines', () => {
-  expect(portList({ RYUGI_ARTIFACTS_PORTS: '4100, 4101' }, 'main')).toEqual([4100, 4101]);
-  expect(portList({ RYUGI_ARTIFACTS_BOARD_PORTS: '0' }, 'board')).toEqual([0]);
-  expect(portList({ RYUGI_ARTIFACTS_PORTS: 'nope' }, 'main')).toEqual(MAIN_PORTS);
+  expect(portList({ ANJIAN_ARTIFACTS_PORTS: '4100, 4101' }, 'main')).toEqual([4100, 4101]);
+  expect(portList({ ANJIAN_ARTIFACTS_BOARD_PORTS: '0' }, 'board')).toEqual([0]);
+  expect(portList({ ANJIAN_ARTIFACTS_PORTS: 'nope' }, 'main')).toEqual(MAIN_PORTS);
 });
 
 test('listenFirst skips an occupied port and binds the next one', async () => {

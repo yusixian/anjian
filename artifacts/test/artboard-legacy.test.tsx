@@ -120,7 +120,7 @@ test('the parameter entry indicates modified values after closing and clears aft
       new MessageEvent('message', {
         source: frame.contentWindow!,
         data: {
-          type: 'ryugi:tweaks:ready',
+          type: 'anjian:tweaks:ready',
           connection,
           session: 'parameters',
           error: null,

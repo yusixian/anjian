@@ -52,7 +52,7 @@ async function start(
 }
 
 const base = (s: ArtifactsServer) => `http://127.0.0.1:${s.port}`;
-const cookie = (s: ArtifactsServer) => `ryugi_artifacts_${s.port}=${s.token}`;
+const cookie = (s: ArtifactsServer) => `anjian_artifacts_${s.port}=${s.token}`;
 const api = async (s: ArtifactsServer, rel: string) =>
   JSON.parse((await get(`${base(s)}${rel}`, { Cookie: cookie(s) })).body);
 const content = (s: ArtifactsServer, rel: string) => get(`${base(s)}/c/${s.contentToken}/${rel}`);
@@ -77,7 +77,7 @@ describe('session key', () => {
       expect(res.status, rel).toBe(200);
       expect(res.headers['content-type']).toBe('text/html; charset=utf-8');
       expect(String(res.headers['set-cookie'])).toContain(
-        `ryugi_artifacts_${server.port}=${server.token}`,
+        `anjian_artifacts_${server.port}=${server.token}`,
       );
       expect(String(res.headers['set-cookie'])).toContain('HttpOnly');
     }
@@ -238,7 +238,7 @@ describe('page metadata', () => {
   test('serves each page title and description before JavaScript runs, with key-free canonical and sharing URLs', async () => {
     const temp = tempRoot();
     const { server, root } = await start({
-      root: path.join(temp.root, 'test-project/.ryugi/artifacts'),
+      root: path.join(temp.root, 'test-project/.anjian/artifacts'),
       viewer: path.resolve(__dirname, '../dist/viewer'),
     });
     writeArtboard(
@@ -280,11 +280,7 @@ describe('page metadata', () => {
       expect(response.body).toContain('<meta name="robots" content="noindex, nofollow"');
     }
     const response = await get(`${base(server)}/?key=${server.token}`);
-    const image = response.body.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
-    expect(image).toMatch(new RegExp(`^http://localhost:${server.port}/app-icon-.*\\.png$`));
-    expect(
-      (await get(image!.replace('localhost', '127.0.0.1'), { Cookie: cookie(server) })).status,
-    ).toBe(200);
+    expect(response.body).not.toContain('property="og:image"');
     const icon = response.body.match(/<link rel="icon"[^>]*href="([^"]+)"/)?.[1];
     expect(icon).toBeTruthy();
     expect(
@@ -297,7 +293,7 @@ describe('page metadata', () => {
   test('page language and description follow Accept-Language', async () => {
     const temp = tempRoot();
     const { server } = await start({
-      root: path.join(temp.root, 'test-project/.ryugi/artifacts'),
+      root: path.join(temp.root, 'test-project/.anjian/artifacts'),
       viewer: path.resolve(__dirname, '../dist/viewer'),
     });
     const english = await get(`${base(server)}/?key=${server.token}`, {
@@ -333,7 +329,7 @@ describe('page metadata', () => {
     }
     const list = await iconOf('/');
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatch(/href="\/app-icon-[^"]*\.svg"/);
+    expect(list[0]).toContain('href="/anjian.svg"');
   });
 
   test('escapes artifact titles and uses the configured host, including for preview and index aliases', async () => {
@@ -391,7 +387,7 @@ describe('artifact list API', () => {
     const project = fs.mkdtempSync(
       path.join((await import('node:os')).tmpdir(), 'library-project-'),
     );
-    const { server, root } = await start({ root: path.join(project, '.ryugi/artifacts') });
+    const { server, root } = await start({ root: path.join(project, '.anjian/artifacts') });
     const dir = writeHtml(root, 'tuner', {
       'index.html': '<title>Tuner</title>',
       'style.css': 'body{}',
@@ -666,7 +662,7 @@ describe('document API', () => {
     const { server, root } = await start();
     writeDocument(root, 'relay-sync', {
       'doc.xml': '<doc/>',
-      'assets/tuner.html': '<ryugi-slider id="r"></ryugi-slider>',
+      'assets/tuner.html': '<anjian-slider id="r"></anjian-slider>',
     });
     const res = await content(server, 'document/relay-sync/assets/tuner.html');
     expect(res.status).toBe(200);
@@ -674,9 +670,9 @@ describe('document API', () => {
     expect(res.headers['content-security-policy']).toBe(
       'sandbox allow-scripts allow-modals allow-forms allow-popups allow-downloads',
     );
-    expect(res.body).toContain('ryugi:snapshot');
+    expect(res.body).toContain('anjian:snapshot');
     expect(res.body).toContain(
-      `<script defer src="/c/${server.contentToken}/runtime/ryugi-ui.js"></script>`,
+      `<script defer src="/c/${server.contentToken}/runtime/anjian-ui.js"></script>`,
     );
     expect(res.body).toContain('color-scheme:light dark');
   });
@@ -689,7 +685,7 @@ describe('artboard content', () => {
     const res = await content(server, 'artboard/b1/pages/p/a.html');
     expect(res.status).toBe(200);
     expect(res.body).toContain('<p>a</p>');
-    expect(res.body).toContain('ryugi:inspect');
+    expect(res.body).toContain('anjian:inspect');
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.headers['content-security-policy']).toBe('sandbox allow-scripts');
   });
@@ -747,22 +743,22 @@ describe('artboard content', () => {
 describe('UI runtime', () => {
   test('serves the runtime under the content token only', async () => {
     const { server } = await start();
-    const ok = await get(`${base(server)}/c/${server.contentToken}/runtime/ryugi-ui.js`);
+    const ok = await get(`${base(server)}/c/${server.contentToken}/runtime/anjian-ui.js`);
     expect(ok.status).toBe(200);
-    expect(ok.body).toBe('window.__ryugiUi = true');
-    expect((await get(`${base(server)}/runtime/ryugi-ui.js`)).status).not.toBe(200);
-    expect((await get(`${base(server)}/c/wrong/runtime/ryugi-ui.js`)).status).toBe(404);
+    expect(ok.body).toBe('window.__anjianUi = true');
+    expect((await get(`${base(server)}/runtime/anjian-ui.js`)).status).not.toBe(200);
+    expect((await get(`${base(server)}/c/wrong/runtime/anjian-ui.js`)).status).toBe(404);
   });
 
-  test('injects the runtime into HTML that uses ryugi elements, and not into plain HTML', async () => {
+  test('injects the runtime into HTML that uses anjian elements, and not into plain HTML', async () => {
     const { server, root } = await start();
-    writeHtml(root, 'ui', { 'index.html': '<title>UI</title><ryugi-button>Go</ryugi-button>' });
+    writeHtml(root, 'ui', { 'index.html': '<title>UI</title><anjian-button>Go</anjian-button>' });
     writeHtml(root, 'plain', { 'index.html': '<title>Plain</title><p>plain</p>' });
     const injected = await content(server, 'html/ui/index.html');
     expect(injected.body).toContain(
-      `<script defer src="/c/${server.contentToken}/runtime/ryugi-ui.js"></script>`,
+      `<script defer src="/c/${server.contentToken}/runtime/anjian-ui.js"></script>`,
     );
-    expect((await content(server, 'html/plain/index.html')).body).not.toContain('ryugi-ui.js');
+    expect((await content(server, 'html/plain/index.html')).body).not.toContain('anjian-ui.js');
   });
 });
 
@@ -996,10 +992,10 @@ describe('html runtime', () => {
       'other.html': '<head></head><p>y</p>',
     });
     writeArtboard(root, 'b1', canvas, { 'pages/p/a.html': '<head></head><p>a</p>' });
-    expect((await content(server, 'html/tuner/index.html')).body).toContain('ryugi:snapshot');
-    expect((await content(server, 'html/tuner/other.html')).body).not.toContain('ryugi:snapshot');
+    expect((await content(server, 'html/tuner/index.html')).body).toContain('anjian:snapshot');
+    expect((await content(server, 'html/tuner/other.html')).body).not.toContain('anjian:snapshot');
     expect((await content(server, 'artboard/b1/pages/p/a.html')).body).not.toContain(
-      'ryugi:snapshot',
+      'anjian:snapshot',
     );
   });
 

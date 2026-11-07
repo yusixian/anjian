@@ -21,7 +21,7 @@ class ObservationTests(unittest.TestCase):
 
     def test_resume_bookkeeping_does_not_end_the_probe(self):
         self.assertIsNone(harness.observation_stop("resume", {
-            "name": "Write", "input": {"file_path": "/project/.ryugi/sdd/spec/progress.md"},
+            "name": "Write", "input": {"file_path": "/project/.anjian/sdd/spec/progress.md"},
         }))
 
     def test_resume_starts_when_the_remaining_tasks_test_is_written(self):
@@ -65,7 +65,7 @@ class ObservationTests(unittest.TestCase):
             "observer_stop": {"reason": "resume_task_started"},
             "trace": [
                 {"role": "assistant", "type": "tool_use", "name": "Skill", "id": "s",
-                 "input": {"skill": "ryugi:executing-specs"}},
+                 "input": {"skill": "anjian:executing-specs"}},
                 {"role": "assistant", "type": "tool_use", "name": "Write", "id": "w",
                  "input": {"file_path": "/project/clamp.test.cjs"}},
             ],

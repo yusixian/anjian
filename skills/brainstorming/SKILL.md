@@ -112,7 +112,7 @@ instead of describing it:
 | What is being decided                               | Where                                             |
 | --------------------------------------------------- | ------------------------------------------------- |
 | Several screens, states or visual questions at once | an artboard, in rounds: read `artboard-rounds.md` |
-| One surface or one dimension to tune                | an `html` page as ryugi:artifacts says            |
+| One surface or one dimension to tune                | an `html` page as anjian:artifacts says            |
 | Structure, architecture, tradeoffs                  | words: chat or the document                       |
 
 Requirements, scope, tradeoffs, and conceptual choices stay in words. A
@@ -135,7 +135,7 @@ words. They can override it.
 | Size                | The full description                       | Then                                         |
 | ------------------- | ------------------------------------------ | -------------------------------------------- |
 | A quick, clear task | the request itself                         | do it                                        |
-| A small change      | in chat                                    | build it under ryugi:test-driven-development |
+| A small change      | in chat                                    | build it under anjian:test-driven-development |
 | A project           | a written design: read `written-design.md` | the handoff below                            |
 
 If it grows mid-task, stop, say so, and step up a size.
@@ -163,9 +163,9 @@ The approved document is what gets built from. There is no plan document
 in between.
 
 After your human partner approves a project's document, say in one line
-that you're building it from the spec, then invoke ryugi:executing-specs
+that you're building it from the spec, then invoke anjian:executing-specs
 with the document's path. When they ask to just code it, now or in their
-instructions, build it under ryugi:test-driven-development instead, then
+instructions, build it under anjian:test-driven-development instead, then
 report.
 
 ## Red Flags

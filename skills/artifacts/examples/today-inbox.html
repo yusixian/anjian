@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Today — action cards and loops</title>
-    <script type="application/json" data-ryugi-tweaks>
+    <script type="application/json" data-anjian-tweaks>
       {
         "controls": {
           "accent": {
@@ -189,7 +189,7 @@
       const loops = document.getElementById('loops');
 
       function render() {
-        const parameters = window.ryugiTweaks ?? { count: 2, showLoops: true };
+        const parameters = window.anjianTweaks ?? { count: 2, showLoops: true };
         cards.forEach((card, index) => {
           card.hidden = index >= parameters.count || dismissed.has(card.dataset.card);
         });
@@ -211,7 +211,7 @@
       });
       openLoops.addEventListener('click', () => loops.showModal());
       document.getElementById('close-loops').addEventListener('click', () => loops.close());
-      document.addEventListener('ryugi-tweaks', render);
+      document.addEventListener('anjian-tweaks', render);
       render();
     </script>
   </body>

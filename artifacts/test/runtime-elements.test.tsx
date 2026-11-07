@@ -31,32 +31,32 @@ describe('runtime elements', () => {
 
   test('option children are read, not left visible in the light DOM', async () => {
     const box = await mount(
-      '<ryugi-segmented value="x"><ryugi-segment value="x">X</ryugi-segment><ryugi-segment value="y">Y</ryugi-segment></ryugi-segmented>',
+      '<anjian-segmented value="x"><anjian-segment value="x">X</anjian-segment><anjian-segment value="y">Y</anjian-segment></anjian-segmented>',
     );
-    const el = box.querySelector('ryugi-segmented')!;
-    expect(el.querySelector(':scope > ryugi-segment')).toBeNull();
+    const el = box.querySelector('anjian-segmented')!;
+    expect(el.querySelector(':scope > anjian-segment')).toBeNull();
     expect((el as unknown as { optionList: unknown[] }).optionList).toHaveLength(2);
   });
 
   test('slotted children move into the rendered component', async () => {
-    const box = await mount('<ryugi-button>Add <b>one</b></ryugi-button>');
-    const el = box.querySelector('ryugi-button')!;
+    const box = await mount('<anjian-button>Add <b>one</b></anjian-button>');
+    const el = box.querySelector('anjian-button')!;
     expect(el.querySelector('button b')?.textContent).toBe('one');
     expect([...el.childNodes].every((node) => node.nodeType === Node.ELEMENT_NODE)).toBe(true);
   });
 
   test('button icons use the shared icon renderer at the component size', async () => {
     const box = await mount(
-      '<ryugi-button icon="message-square" size="small">Comment</ryugi-button>',
+      '<anjian-button icon="message-square" size="small">Comment</anjian-button>',
     );
-    expect(box.querySelector('button ryugi-icon')?.getAttribute('name')).toBe('message-square');
-    expect(box.querySelector('button ryugi-icon')?.getAttribute('size')).toBe('14');
+    expect(box.querySelector('button anjian-icon')?.getAttribute('name')).toBe('message-square');
+    expect(box.querySelector('button anjian-icon')?.getAttribute('size')).toBe('14');
     expect(box.querySelector('button [role="img"]')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   test('popover provides one native trigger and opens its content', async () => {
     const box = await mount(
-      '<ryugi-popover id="details" content="Copied links stay private">Details</ryugi-popover>',
+      '<anjian-popover id="details" content="Copied links stay private">Details</anjian-popover>',
     );
     expect(box.querySelectorAll('button')).toHaveLength(1);
     const clicked: Event[] = [];
@@ -68,7 +68,7 @@ describe('runtime elements', () => {
   });
 
   test('tooltip provides one native trigger with its label', async () => {
-    const box = await mount('<ryugi-tooltip content="Copy link" open>Copy</ryugi-tooltip>');
+    const box = await mount('<anjian-tooltip content="Copy link" open>Copy</anjian-tooltip>');
     expect(document.body.textContent).toContain('Copy link');
     expect(box.querySelectorAll('button')).toHaveLength(1);
     expect(box.querySelector('button')?.textContent).toBe('Copy');
@@ -76,13 +76,13 @@ describe('runtime elements', () => {
 
   test('menu options emit the selected action and keep disabled actions disabled', async () => {
     const box = await mount(
-      '<ryugi-menu id="actions" label="More"><ryugi-menu-item value="copy" icon="copy">Copy link</ryugi-menu-item><ryugi-menu-item value="delete" disabled>Delete</ryugi-menu-item></ryugi-menu>',
+      '<anjian-menu id="actions" label="More"><anjian-menu-item value="copy" icon="copy">Copy link</anjian-menu-item><anjian-menu-item value="delete" disabled>Delete</anjian-menu-item></anjian-menu>',
     );
     const selected: unknown[] = [];
-    box.addEventListener('ryugi-change', (event) =>
+    box.addEventListener('anjian-change', (event) =>
       selected.push((event as CustomEvent).detail.value),
     );
-    expect(box.querySelector('ryugi-menu-item')).toBeNull();
+    expect(box.querySelector('anjian-menu-item')).toBeNull();
     await act(async () => box.querySelector('button')!.click());
     const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     expect(items.map((item) => item.textContent)).toEqual(['Copy link', 'Delete']);
@@ -93,7 +93,7 @@ describe('runtime elements', () => {
 
   test('disabling a menu disables its native trigger', async () => {
     const box = await mount(
-      '<ryugi-menu disabled label="Unavailable"><ryugi-menu-item value="copy">Copy</ryugi-menu-item></ryugi-menu>',
+      '<anjian-menu disabled label="Unavailable"><anjian-menu-item value="copy">Copy</anjian-menu-item></anjian-menu>',
     );
     expect(box.querySelector('button')?.disabled).toBe(true);
   });

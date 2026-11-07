@@ -5,7 +5,7 @@ import { clampFrameHeight, dynamicFrameSrc } from '../src/viewer/document/dynami
 test('the frame src is the asset under the content base, versioned, with props in the hash', () => {
   const src = dynamicFrameSrc('/c/t/document/spec/', 'assets/tuner.html', 3, { radius: 8 });
   expect(src).toBe(
-    `/c/t/document/spec/assets/tuner.html?v=3#ryugi-props=${encodeURIComponent('{"radius":8}')}`,
+    `/c/t/document/spec/assets/tuner.html?v=3#anjian-props=${encodeURIComponent('{"radius":8}')}`,
   );
 });
 

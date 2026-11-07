@@ -9,7 +9,7 @@ import { asHumanOp, createCommentStore } from '../src/server/document-comments';
 const names = (agent: string) => ({ human: () => ({ name: 'innei' }), agent: () => agent });
 
 function savedFile() {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-store-')), 'comments.json');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-store-')), 'comments.json');
   const store = createCommentStore(file, names('Codex'));
   const { threads } = store.apply({ op: 'create', blockId: 'b1', quote: '', text: 'why?' });
   const thread = threads[0]!;
@@ -53,7 +53,7 @@ test('an agent reply written while the server was down is still filled in', () =
 });
 
 test('a comment on several blocks keeps its complete target after restarting', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-store-')), 'comments.json');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-store-')), 'comments.json');
   const op = asHumanOp({
     op: 'create',
     blockId: 'b1',
@@ -68,7 +68,7 @@ test('a comment on several blocks keeps its complete target after restarting', (
 });
 
 test('different multi-block targets do not merge when an agent writes id-less comments', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-store-')), 'comments.json');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-store-')), 'comments.json');
   fs.writeFileSync(
     file,
     JSON.stringify({
@@ -90,7 +90,7 @@ test('different multi-block targets do not merge when an agent writes id-less co
 });
 
 test('cross-paragraph text anchors survive server validation and restarting', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-store-')), 'comments.json');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-store-')), 'comments.json');
   const anchor = {
     blockId: 'b1',
     blockIds: ['b1', 'b2'],
@@ -107,7 +107,7 @@ test('cross-paragraph text anchors survive server validation and restarting', ()
 });
 
 test('comments on repeated text at different offsets are separate discussions', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-store-')), 'comments.json');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-store-')), 'comments.json');
   fs.writeFileSync(
     file,
     JSON.stringify({

@@ -28,11 +28,11 @@ export default defineConfig({
     lib: {
       entry: 'src/runtime/index.tsx',
       formats: ['iife'],
-      name: 'RyugiUI',
-      fileName: () => 'ryugi-ui.js',
+      name: 'AnjianUI',
+      fileName: () => 'anjian-ui.js',
     },
     rolldownOptions: {
-      output: { assetFileNames: 'ryugi-ui.css' },
+      output: { assetFileNames: 'anjian-ui.css' },
     },
   },
 });

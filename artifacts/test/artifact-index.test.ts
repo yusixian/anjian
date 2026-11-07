@@ -9,7 +9,7 @@ import { createArtifactIndex } from '../src/server/artifact-index';
 function project(artifacts: Record<string, string | null>) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-index-')));
   for (const [key, address] of Object.entries(artifacts)) {
-    const artifactDir = path.join(dir, '.ryugi', 'artifacts', key);
+    const artifactDir = path.join(dir, '.anjian', 'artifacts', key);
     fs.mkdirSync(artifactDir, { recursive: true });
     if (address) fs.writeFileSync(path.join(artifactDir, '.artifact-id'), `${address}\n`);
   }
@@ -45,7 +45,7 @@ test('a new artifact is found after a miss rescans', () => {
   const one = project({});
   const index = createArtifactIndex(() => [one], { rescanAfterMs: 0 });
   expect(index.find('html', 'page')).toBeNull();
-  const dir = path.join(one, '.ryugi', 'artifacts', 'html', 'page');
+  const dir = path.join(one, '.anjian', 'artifacts', 'html', 'page');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '.artifact-id'), `${B}\n`);
   expect(index.find('html', B)).toEqual({ project: one, id: 'page' });

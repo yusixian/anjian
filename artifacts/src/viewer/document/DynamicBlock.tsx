@@ -45,14 +45,14 @@ export function DynamicBlock({ url, componentProps, initialHeight }: Props) {
       host?.send({ type: 'runtime-error', artifact: host.artifact, file: url, message }),
     onLoaded: () => host?.send({ type: 'loaded', artifact: host.artifact, file: url }),
     onMessage: (data) => {
-      if (data.type !== 'ryugi:height') return;
+      if (data.type !== 'anjian:height') return;
       const next = clampFrameHeight(Number(data.height));
       if (next !== null) setHeight(next);
     },
   });
 
   return (
-    <div className="ryugi-dynamic" contentEditable={false} style={{ height }}>
+    <div className="anjian-dynamic" contentEditable={false} style={{ height }}>
       {src ? (
         <iframe
           allow="clipboard-write"

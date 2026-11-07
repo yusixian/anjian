@@ -1,12 +1,7 @@
 {
-  "name": "ryugi-artifacts",
-  "version": "1.51.2",
-  "description": "Server and viewer for the Ryugi artifacts app",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Innei/ryugi.git",
-    "directory": "artifacts"
-  },
+  "name": "anjian",
+  "version": "0.1.0",
+  "description": "Anjian — local-first personal artifacts workbench",
   "license": "AGPL-3.0-only",
   "type": "module",
   "exports": {
@@ -37,7 +32,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "ryugi-artifacts": "bin/ryugi-artifacts.cjs"
+    "anjian": "bin/anjian.cjs"
   },
   "files": [
     "bin",
@@ -56,7 +51,6 @@
     "build:server": "esbuild src/server/main.ts --bundle --platform=node --target=node18 --format=cjs --alias:loro-crdt=loro-crdt/base64 --outfile=dist/server.cjs && node -e \"const fs=require('node:fs');fs.copyFileSync('dist/server.cjs','../skills/artifacts/app/server.cjs')\"",
     "build:viewer": "NODE_ENV=production vite build && node -e \"const fs=require('node:fs');const to='../skills/artifacts/app/viewer';fs.rmSync(to,{recursive:true,force:true});fs.cpSync('dist/viewer',to,{recursive:true})\"",
     "dev": "vite",
-    "prepublishOnly": "pnpm build",
     "test": "vitest run",
     "typecheck": "tsrs --noEmit -p tsconfig.json"
   },
@@ -153,8 +147,5 @@
       "optional": true
     }
   },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  }
+  "private": true
 }

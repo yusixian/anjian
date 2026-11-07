@@ -18,7 +18,7 @@ def main():
         record = json.loads(record_path.read_text())
         project = args.run_dir / "projects" / record["name"]
         # Create a fresh copy with the original bug, preserving the model's project.
-        with tempfile.TemporaryDirectory(prefix="ryugi-regression-check-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="anjian-regression-check-") as temporary:
             target = Path(temporary)
             for source in project.iterdir():
                 if source.name in (".git", "node_modules", "filter.cjs"):

@@ -12,8 +12,8 @@ export interface ServerResponse {
 
 const readUrl = (file: string) => {
   try {
-    const { url } = JSON.parse(readText(file) ?? '') as { url?: unknown };
-    return typeof url === 'string' ? url : null;
+    const { url, localUrl } = JSON.parse(readText(file) ?? '') as { url?: unknown; localUrl?: unknown };
+    return typeof localUrl === 'string' ? localUrl : typeof url === 'string' ? url : null;
   } catch {
     return null;
   }
@@ -44,7 +44,7 @@ export function serverClient(projectDir: string) {
         res = await fetch(`${base.origin}${route}?key=${encodeURIComponent(key)}`, {
           method,
           headers: {
-            'X-Ryugi-Project': encodeURIComponent(paths.project),
+            'X-Anjian-Project': encodeURIComponent(paths.project),
             ...(body ? { 'Content-Type': 'application/json' } : {}),
           },
           body: body ? JSON.stringify(body) : undefined,

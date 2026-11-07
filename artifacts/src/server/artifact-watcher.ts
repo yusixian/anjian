@@ -28,7 +28,6 @@ export function watchArtifacts(ctx: ServerContext) {
         const dir = resolveArtifactDir(root, ref.type, ref.id);
         if (!dir) {
           signatures.delete(key);
-          ctx.autoPublisher?.removed(key);
           const frame = textFrame(
             JSON.stringify({
               type: 'change',
@@ -51,16 +50,12 @@ export function watchArtifacts(ctx: ServerContext) {
         )
           boardComments.boardsChanged(ref.id);
         if (signatures.get(key) === artifactSignature(dir, ref.type)) continue;
-        ctx.autoPublisher?.changed(key);
         runtimeWarnings.delete(key);
         const payload = ctx.refreshState(ref, dir);
         const frame = textFrame(
           JSON.stringify({ type: 'change', artifact: key, files: changed } satisfies ServerMessage),
         );
         for (const socket of clients) socket.write(frame);
-        ctx.relay?.emit(key, { type: 'change', artifact: key, files: changed });
-        ctx.direct.emit(key, { type: 'change', artifact: key, files: changed });
-        ctx.cloud?.changed(key);
         ctx.changeListeners.forEach((listener) => listener(ref, payload, changed));
       }
       ctx.touch();

@@ -35,7 +35,7 @@ function fakeServer() {
 function setup() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'start-artifacts-')));
   const project = path.join(root, 'project');
-  fs.mkdirSync(path.join(project, '.ryugi', 'artifacts'), { recursive: true });
+  fs.mkdirSync(path.join(project, '.anjian', 'artifacts'), { recursive: true });
   const serverHome = path.join(root, 'server');
   fs.mkdirSync(serverHome, { recursive: true });
   return {
@@ -45,7 +45,7 @@ function setup() {
       PATH: process.env.PATH,
       HOME: root,
       XDG_CONFIG_HOME: path.join(root, 'config'),
-      RYUGI_SERVER_HOME: serverHome,
+      ANJIAN_SERVER_HOME: serverHome,
     },
   };
 }

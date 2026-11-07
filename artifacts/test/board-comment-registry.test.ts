@@ -10,7 +10,7 @@ import { packArtifact } from '../src/server/pack';
 import type { ServerMessage } from '../src/shared/types';
 
 function project() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-board-comments-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-board-comments-'));
   const dir = path.join(root, 'artboard', 'review');
   fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
   fs.writeFileSync(

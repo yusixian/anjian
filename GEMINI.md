@@ -1,2 +1,2 @@
-@./skills/using-ryugi/SKILL.md
-@./skills/using-ryugi/references/gemini-tools.md
+@./skills/using-anjian/SKILL.md
+@./skills/using-anjian/references/gemini-tools.md

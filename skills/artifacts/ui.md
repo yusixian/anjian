@@ -2,21 +2,21 @@
 
 HTML artifacts can use a small set of Lobe UI components through Web
 Components. The artifacts server loads the runtime automatically when the page
-contains a `<ryugi-…>` element:
+contains a `<anjian-…>` element:
 
 ```html
-<ryugi-button variant="primary">Save</ryugi-button>
+<anjian-button variant="primary">Save</anjian-button>
 ```
 
 No script tag is needed. If you create components dynamically, add
-`<meta name="ryugi-ui" content="1">` to the page so the runtime is loaded.
+`<meta name="anjian-ui" content="1">` to the page so the runtime is loaded.
 
 The runtime loads with `defer`. A page script that needs the components should
 wait for the document event:
 
 ```js
 document.addEventListener(
-  'ryugi-ui:ready',
+  'anjian-ui:ready',
   () => {
     // custom elements are defined
   },
@@ -31,10 +31,10 @@ there is no layout wrapper to learn.
 
 - Give every interactive control a stable `id`. The viewer restores custom
   controls across rewrites by `id`, the same way it restores native inputs.
-- Listen for `ryugi-change` on controls:
+- Listen for `anjian-change` on controls:
 
   ```js
-  document.addEventListener('ryugi-change', (event) => {
+  document.addEventListener('anjian-change', (event) => {
     const { value, checked } = event.detail;
     console.log(event.target.id, value, checked);
   });
@@ -44,17 +44,17 @@ there is no layout wrapper to learn.
   present for checkboxes and switches.
 
 - `value` / `checked` attributes set the initial state. Read the current state
-  from the element's `value` / `checked` property after `ryugi-ui:ready`, and
-  listen for `ryugi-change` for later updates.
+  from the element's `value` / `checked` property after `anjian-ui:ready`, and
+  listen for `anjian-change` for later updates.
 - `class` styles the host; `style` is forwarded to the component as well, so
   `style="width:100%"` works. Style the host, not the component's internal
   classes.
-- Keep children simple. For `ryugi-button`, `ryugi-card`, `ryugi-text`,
-  `ryugi-tag`, `ryugi-checkbox`, and `ryugi-badge`, the original children are
-  moved into the component. `ryugi-select`, `ryugi-segmented`, and
-  `ryugi-radio-group` use option children instead.
-- Do not invent a `ryugi-` tag. If a component is not listed here, use HTML.
-- `ryugi-card` already paints a surface. Do not put a background, border and
+- Keep children simple. For `anjian-button`, `anjian-card`, `anjian-text`,
+  `anjian-tag`, `anjian-checkbox`, and `anjian-badge`, the original children are
+  moved into the component. `anjian-select`, `anjian-segmented`, and
+  `anjian-radio-group` use option children instead.
+- Do not invent a `anjian-` tag. If a component is not listed here, use HTML.
+- `anjian-card` already paints a surface. Do not put a background, border and
   padding on both the host and the card: pick one. For a floating panel,
   either position the host and let the card paint its own surface, or make the
   host the surface and use `variant="borderless"` without `glass`/`shadow`.
@@ -69,8 +69,8 @@ there is no layout wrapper to learn.
 ### Button
 
 ```html
-<ryugi-button variant="primary" size="middle" icon="plus">Add</ryugi-button>
-<ryugi-button variant="outlined" loading>Working…</ryugi-button>
+<anjian-button variant="primary" size="middle" icon="plus">Add</anjian-button>
+<anjian-button variant="outlined" loading>Working…</anjian-button>
 ```
 
 Attributes: `variant` (`filled`, `outlined`, `borderless`), `size`
@@ -84,7 +84,7 @@ Uses the native `click` event.
 ### Action icon
 
 ```html
-<ryugi-action-icon icon="settings" title="Settings" aria-label="Settings"></ryugi-action-icon>
+<anjian-action-icon icon="settings" title="Settings" aria-label="Settings"></anjian-action-icon>
 ```
 
 Attributes: `icon` (same set as Button), `size`, `disabled`, `title`,
@@ -93,12 +93,12 @@ Attributes: `icon` (same set as Button), `size`, `disabled`, `title`,
 ### Tooltip and popover
 
 ```html
-<ryugi-tooltip content="Copy a private link" placement="top">
-  <ryugi-icon name="copy" size="14"></ryugi-icon> Copy
-</ryugi-tooltip>
-<ryugi-popover id="sharing" content="Only people you invite can open this link.">
+<anjian-tooltip content="Copy a private link" placement="top">
+  <anjian-icon name="copy" size="14"></anjian-icon> Copy
+</anjian-tooltip>
+<anjian-popover id="sharing" content="Only people you invite can open this link.">
   Sharing details
-</ryugi-popover>
+</anjian-popover>
 ```
 
 Both provide a native button trigger; children are its label and decorative
@@ -110,21 +110,21 @@ a controlled preview. Native trigger clicks still reach your handlers.
 ### Action menu
 
 ```html
-<ryugi-menu id="actions" label="More" icon="ellipsis">
-  <ryugi-menu-item value="copy" icon="copy">Copy link</ryugi-menu-item>
-  <ryugi-menu-item value="delete" icon="trash-2" disabled>Delete</ryugi-menu-item>
-</ryugi-menu>
+<anjian-menu id="actions" label="More" icon="ellipsis">
+  <anjian-menu-item value="copy" icon="copy">Copy link</anjian-menu-item>
+  <anjian-menu-item value="delete" icon="trash-2" disabled>Delete</anjian-menu-item>
+</anjian-menu>
 ```
 
 Attributes: `label`, `icon`, `placement`, `disabled`. Items accept `value`,
 `icon`, `disabled`; their text is the label. Selecting an enabled item emits
-`ryugi-change` with its action in `event.detail.value`. Actions are not
+`anjian-change` with its action in `event.detail.value`. Actions are not
 restored as control values on reload.
 
 ### Input
 
 ```html
-<ryugi-input id="title" placeholder="Title" value="Ryugi" style="width:100%"></ryugi-input>
+<anjian-input id="title" placeholder="Title" value="Anjian" style="width:100%"></anjian-input>
 ```
 
 Attributes: `type`, `size` (`small`, `middle`, `large`), `variant`
@@ -134,7 +134,7 @@ Attributes: `type`, `size` (`small`, `middle`, `large`), `variant`
 ### Textarea
 
 ```html
-<ryugi-textarea id="notes" rows="4" placeholder="Notes" style="width:100%"></ryugi-textarea>
+<anjian-textarea id="notes" rows="4" placeholder="Notes" style="width:100%"></anjian-textarea>
 ```
 
 Attributes: `rows`, `size`, `variant`, `placeholder`, `value`, `disabled`,
@@ -143,7 +143,7 @@ Attributes: `rows`, `size`, `variant`, `placeholder`, `value`, `disabled`,
 ### Number
 
 ```html
-<ryugi-input-number id="count" value="12" min="0" max="100" step="1"></ryugi-input-number>
+<anjian-input-number id="count" value="12" min="0" max="100" step="1"></anjian-input-number>
 ```
 
 Attributes: `value`, `min`, `max`, `step`, `precision`, `controls`, `size`,
@@ -152,7 +152,7 @@ Attributes: `value`, `min`, `max`, `step`, `precision`, `controls`, `size`,
 ### Slider
 
 ```html
-<ryugi-slider id="size" value="32" min="0" max="100" step="1"></ryugi-slider>
+<anjian-slider id="size" value="32" min="0" max="100" step="1"></anjian-slider>
 ```
 
 Attributes: `value`, `min`, `max`, `step`, `disabled`.
@@ -162,7 +162,7 @@ Attributes: `value`, `min`, `max`, `step`, `disabled`.
 The most useful control for tuning an exact value.
 
 ```html
-<ryugi-slider-input id="radius" value="8" min="0" max="32" step="1"></ryugi-slider-input>
+<anjian-slider-input id="radius" value="8" min="0" max="32" step="1"></anjian-slider-input>
 ```
 
 Attributes: `value`, `min`, `max`, `step`, `controls`, `size`, `variant`,
@@ -171,7 +171,7 @@ Attributes: `value`, `min`, `max`, `step`, `controls`, `size`, `variant`,
 ### Switch
 
 ```html
-<ryugi-switch id="dark" checked></ryugi-switch>
+<anjian-switch id="dark" checked></anjian-switch>
 ```
 
 Attributes: `checked`, `loading`, `size`, `disabled`, `name`.
@@ -179,7 +179,7 @@ Attributes: `checked`, `loading`, `size`, `disabled`, `name`.
 ### Checkbox
 
 ```html
-<ryugi-checkbox id="compact">Compact</ryugi-checkbox>
+<anjian-checkbox id="compact">Compact</anjian-checkbox>
 ```
 
 Attributes: `checked`, `shape`, `size`, `disabled`, `name`. Children are the
@@ -188,11 +188,11 @@ label.
 ### Segmented
 
 ```html
-<ryugi-segmented id="mode" value="grid">
-  <ryugi-segment value="list">List</ryugi-segment>
-  <ryugi-segment value="grid">Grid</ryugi-segment>
-  <ryugi-segment value="masonry">Masonry</ryugi-segment>
-</ryugi-segmented>
+<anjian-segmented id="mode" value="grid">
+  <anjian-segment value="list">List</anjian-segment>
+  <anjian-segment value="grid">Grid</anjian-segment>
+  <anjian-segment value="masonry">Masonry</anjian-segment>
+</anjian-segmented>
 ```
 
 Attributes: `value`, `size` (`small`, `middle`, `large`), `variant`
@@ -201,11 +201,11 @@ Attributes: `value`, `size` (`small`, `middle`, `large`), `variant`
 ### Select
 
 ```html
-<ryugi-select id="layout" value="a" placeholder="Choose layout">
-  <ryugi-option value="a">Sidebar</ryugi-option>
-  <ryugi-option value="b">Top tabs</ryugi-option>
-  <ryugi-option value="c">Bottom rail</ryugi-option>
-</ryugi-select>
+<anjian-select id="layout" value="a" placeholder="Choose layout">
+  <anjian-option value="a">Sidebar</anjian-option>
+  <anjian-option value="b">Top tabs</anjian-option>
+  <anjian-option value="c">Bottom rail</anjian-option>
+</anjian-select>
 ```
 
 Attributes: `value`, `placeholder`, `size`, `variant`, `allowClear`,
@@ -214,11 +214,11 @@ Attributes: `value`, `placeholder`, `size`, `variant`, `allowClear`,
 ### Radio group
 
 ```html
-<ryugi-radio-group id="density" value="comfortable">
-  <ryugi-radio value="compact">Compact</ryugi-radio>
-  <ryugi-radio value="comfortable">Comfortable</ryugi-radio>
-  <ryugi-radio value="spacious">Spacious</ryugi-radio>
-</ryugi-radio-group>
+<anjian-radio-group id="density" value="comfortable">
+  <anjian-radio value="compact">Compact</anjian-radio>
+  <anjian-radio value="comfortable">Comfortable</anjian-radio>
+  <anjian-radio value="spacious">Spacious</anjian-radio>
+</anjian-radio-group>
 ```
 
 Attributes: `value`, `horizontal`, `gap`, `size`, `disabled`.
@@ -226,7 +226,7 @@ Attributes: `value`, `horizontal`, `gap`, `size`, `disabled`.
 ### Colour picker
 
 ```html
-<ryugi-color-picker id="accent" value="#c56473" trigger="field"></ryugi-color-picker>
+<anjian-color-picker id="accent" value="#c56473" trigger="field"></anjian-color-picker>
 ```
 
 Attributes: `value`, `alpha`, `defaultFormat` (`hex`, `rgb`, `hsl`),
@@ -236,23 +236,23 @@ Attributes: `value`, `alpha`, `defaultFormat` (`hex`, `rgb`, `hsl`),
 
 ### Toast
 
-HTML artifacts can call the bundled Lobe UI toast API as `window.ryugiToast`.
-If the page has no `ryugi-` UI controls, opt in with the meta tag. Wait for
-`ryugi-ui:ready` before calling it:
+HTML artifacts can call the bundled Lobe UI toast API as `window.anjianToast`.
+If the page has no `anjian-` UI controls, opt in with the meta tag. Wait for
+`anjian-ui:ready` before calling it:
 
 ```html
-<meta name="ryugi-ui" content="1" />
+<meta name="anjian-ui" content="1" />
 <button id="save" type="button">Save</button>
 <script>
   document.addEventListener(
-    'ryugi-ui:ready',
+    'anjian-ui:ready',
     () => {
       document.getElementById('save').addEventListener('click', async () => {
         try {
           await saveDraft(); // the page's own operation
-          window.ryugiToast.success({ id: 'save-result', title: 'Saved' });
+          window.anjianToast.success({ id: 'save-result', title: 'Saved' });
         } catch {
-          window.ryugiToast.error({
+          window.anjianToast.error({
             id: 'save-result',
             title: 'Save failed',
             description: 'Try again.',
@@ -272,15 +272,15 @@ copies. The default duration is 5000ms; `duration: 0` stays until closed.
 `loading` stays until closed by default.
 
 Calls return a handle with `id` and `close()`. Use
-`window.ryugiToast.dismiss(id)` to close one, or `dismiss()` to close all.
+`window.anjianToast.dismiss(id)` to close one, or `dismiss()` to close all.
 Toasts appear at the bottom right and follow the page's theme. They are
-transient: rewriting the page does not restore them. No `ryugi-toast` tag is
+transient: rewriting the page does not restore them. No `anjian-toast` tag is
 needed. Artboard pages do not load this UI runtime.
 
 ### Tag
 
 ```html
-<ryugi-tag variant="outlined">New</ryugi-tag>
+<anjian-tag variant="outlined">New</anjian-tag>
 ```
 
 Attributes: `variant` (`filled`, `outlined`, `borderless`, `solid`), `size`,
@@ -289,11 +289,11 @@ Attributes: `variant` (`filled`, `outlined`, `borderless`, `solid`), `size`,
 ### Alert
 
 ```html
-<ryugi-alert
+<anjian-alert
   type="info"
   title="Streaming"
   description="Pending boards draw as skeletons."
-></ryugi-alert>
+></anjian-alert>
 ```
 
 Attributes: `type` (`success`, `info`, `warning`, `error`, `secondary`),
@@ -303,7 +303,7 @@ Attributes: `type` (`success`, `info`, `warning`, `error`, `secondary`),
 ### Progress
 
 ```html
-<ryugi-progress percent="64" size="small"></ryugi-progress>
+<anjian-progress percent="64" size="small"></anjian-progress>
 ```
 
 Attributes: `percent`, `size`, `status`.
@@ -311,10 +311,10 @@ Attributes: `percent`, `size`, `status`.
 ### Badge
 
 ```html
-<ryugi-badge count="3" status="processing"></ryugi-badge>
-<ryugi-badge count="3">
-  <ryugi-avatar src="avatar.png" alt="Innei" size="32"></ryugi-avatar>
-</ryugi-badge>
+<anjian-badge count="3" status="processing"></anjian-badge>
+<anjian-badge count="3">
+  <anjian-avatar src="avatar.png" alt="Innei" size="32"></anjian-avatar>
+</anjian-badge>
 ```
 
 Attributes: `count`, `dot`, `status`, `text`, `showZero`, `size`, `color`.
@@ -322,7 +322,7 @@ Attributes: `count`, `dot`, `status`, `text`, `showZero`, `size`, `color`.
 ### Avatar
 
 ```html
-<ryugi-avatar src="avatar.png" alt="Innei" size="32"></ryugi-avatar>
+<anjian-avatar src="avatar.png" alt="Innei" size="32"></anjian-avatar>
 ```
 
 Attributes: `src`, `alt`, `size`, `shape`.
@@ -330,7 +330,7 @@ Attributes: `src`, `alt`, `size`, `shape`.
 ### Divider
 
 ```html
-<ryugi-divider dashed></ryugi-divider>
+<anjian-divider dashed></anjian-divider>
 ```
 
 Attributes: `orientation`, `dashed`.
@@ -338,10 +338,10 @@ Attributes: `orientation`, `dashed`.
 ### Card
 
 ```html
-<ryugi-card variant="outlined" shadow>
-  <ryugi-text strong>Header</ryugi-text>
-  <ryugi-text type="secondary">Supporting copy.</ryugi-text>
-</ryugi-card>
+<anjian-card variant="outlined" shadow>
+  <anjian-text strong>Header</anjian-text>
+  <anjian-text type="secondary">Supporting copy.</anjian-text>
+</anjian-card>
 ```
 
 Attributes: `variant` (`filled`, `outlined`, `borderless`), `shadow`,
@@ -353,9 +353,9 @@ and use `variant="borderless"` so there is only one visible container.
 ### Text
 
 ```html
-<ryugi-text type="secondary">Secondary body text</ryugi-text>
-<ryugi-text strong>Strong label</ryugi-text>
-<ryugi-text code>const x = 1</ryugi-text>
+<anjian-text type="secondary">Secondary body text</anjian-text>
+<anjian-text strong>Strong label</anjian-text>
+<anjian-text code>const x = 1</anjian-text>
 ```
 
 Attributes: `type` (`secondary`, `success`, `warning`, `danger`, `info`),
@@ -364,24 +364,24 @@ Attributes: `type` (`secondary`, `success`, `warning`, `danger`, `info`),
 ## Complete tuning panel
 
 ```html
-<ryugi-card>
-  <ryugi-text strong>Header</ryugi-text>
-  <ryugi-text type="secondary">Tune the reading column.</ryugi-text>
+<anjian-card>
+  <anjian-text strong>Header</anjian-text>
+  <anjian-text type="secondary">Tune the reading column.</anjian-text>
 
-  <ryugi-slider-input id="measure" value="64" min="40" max="90" step="1"></ryugi-slider-input>
+  <anjian-slider-input id="measure" value="64" min="40" max="90" step="1"></anjian-slider-input>
 
-  <ryugi-segmented id="density" value="comfortable">
-    <ryugi-segment value="compact">Compact</ryugi-segment>
-    <ryugi-segment value="comfortable">Comfortable</ryugi-segment>
-    <ryugi-segment value="spacious">Spacious</ryugi-segment>
-  </ryugi-segmented>
+  <anjian-segmented id="density" value="comfortable">
+    <anjian-segment value="compact">Compact</anjian-segment>
+    <anjian-segment value="comfortable">Comfortable</anjian-segment>
+    <anjian-segment value="spacious">Spacious</anjian-segment>
+  </anjian-segmented>
 
-  <ryugi-switch id="dark"></ryugi-switch>
-  <ryugi-tag>Live preview</ryugi-tag>
-</ryugi-card>
+  <anjian-switch id="dark"></anjian-switch>
+  <anjian-tag>Live preview</anjian-tag>
+</anjian-card>
 
 <script>
-  document.addEventListener('ryugi-change', (event) => {
+  document.addEventListener('anjian-change', (event) => {
     document.body.dataset[event.target.id] = event.detail.value;
   });
 </script>

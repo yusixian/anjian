@@ -1,20 +1,15 @@
 import { exec } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { version } from '../../package.json';
 import { openBrowser } from './browser-focus';
-import { credentialsFile } from './credentials';
 import { startHub } from './hub';
 import { parseEnv } from './lifecycle';
 import { ensureHome, machinePaths } from './machine';
-import { pinLauncherRelease, relaunchCommand, spawnAfterExit } from './relaunch';
+import { relaunchCommand, spawnAfterExit } from './relaunch';
 import { writeJsonAtomic } from './state';
-import { createUpdateCheck } from './update-check';
-
-const UPDATE_POLL_MS = 60 * 60 * 1000;
 
 function machineKey(file: string) {
   try {
@@ -30,10 +25,6 @@ async function main() {
   const config = parseEnv(process.env, process.argv.slice(2));
   const paths = machinePaths();
   ensureHome(paths.home);
-  const updates = createUpdateCheck({
-    cacheFile: path.join(paths.home, 'latest.json'),
-    current: version,
-  });
   const hub = await startHub({
     host: config.host,
     urlHost: config.urlHost,
@@ -44,15 +35,11 @@ async function main() {
     paths,
     token: machineKey(paths.key),
     version,
-    latest: () => updates.latest(),
-    cloud: {
-      origin: config.cloudOrigin,
-      credentialsFile: credentialsFile(process.env, process.platform, os.homedir()),
-    },
-    relay: { url: `${config.cloudOrigin.replace(/^http/, 'ws')}/api/relay/host`, version },
+    publicOrigin: config.publicOrigin,
+    boardOrigin: config.boardOrigin,
     control: {
       stop: () => void shutdown('stop'),
-      relaunch: (upgrade) => relaunch(upgrade),
+      relaunch,
     },
     open: async (link, local, openCmd) => {
       const command = openCmd ?? config.openCmd;
@@ -66,11 +53,6 @@ async function main() {
     },
   });
 
-  if (process.env.RYUGI_NO_UPDATE_CHECK !== '1') {
-    void updates.refresh();
-    setInterval(() => void updates.refresh(), UPDATE_POLL_MS).unref();
-  }
-
   let stopping = false;
   async function shutdown(reason: string, intended = true) {
     if (stopping) return;
@@ -82,28 +64,12 @@ async function main() {
     process.exit(0);
   }
 
-  function readRunningVersion() {
-    try {
-      return fs.readFileSync(paths.version, 'utf8').trim() || version;
-    } catch {
-      return version;
-    }
-  }
-
-  function relaunch(upgrade: boolean) {
+  function relaunch() {
     const command = relaunchCommand(process.env, __dirname);
     const project = hub.projects()[0]?.dir;
-    const latest = updates.latest();
-    const throughLauncher = Boolean(process.env.RYUGI_ARTIFACTS_LAUNCHER);
-    if (!command || !project || (upgrade && (!latest || !throughLauncher))) return false;
-    try {
-      if (upgrade && latest) pinLauncherRelease(process.env, os.homedir(), latest);
-    } catch {
-      return false;
-    }
+    if (!command || !project) return false;
     const env = { ...process.env };
     delete env.CODEX_CI;
-    if (!throughLauncher) env.RYUGI_ARTIFACTS_VERSION = readRunningVersion();
     spawnAfterExit(
       process.pid,
       [
@@ -122,7 +88,7 @@ async function main() {
       ],
       env,
     );
-    setImmediate(() => void shutdown(upgrade ? 'upgrade' : 'restart', false));
+    setImmediate(() => void shutdown('restart', false));
     return true;
   }
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
@@ -133,13 +99,15 @@ async function main() {
   const started = {
     type: 'server-started',
     url: hub.url,
+    localUrl: hub.localUrl,
     port: hub.port,
     boardPort: hub.boardPort,
     version,
     pid: process.pid,
     host: config.host,
     urlHost: config.urlHost,
-    cloudOrigin: config.cloudOrigin,
+    publicOrigin: config.publicOrigin,
+    boardOrigin: config.boardOrigin,
   };
   writeJsonAtomic(paths.info, started);
   console.info(JSON.stringify(started));

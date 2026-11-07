@@ -17,7 +17,7 @@ const names = fs
   .map((file) => file.slice(0, -'.json'.length));
 
 test('the thumbnail path moves to v2 so cached v1 drawings are replaced', () => {
-  expect(THUMBNAIL_PATH).toBe('_ryugi/thumbnail-v2.svg');
+  expect(THUMBNAIL_PATH).toBe('_anjian/thumbnail-v2.svg');
 });
 
 test('a document thumbnail lays the page at a slant with a soft shadow', () => {
@@ -27,7 +27,7 @@ test('a document thumbnail lays the page at a slant with a soft shadow', () => {
   expect(svg).toContain('Spec');
 });
 
-test.each(names)('%s renders byte for byte what Ryugi Cloud rendered before the move', (name) => {
+test.each(names)('%s renders the expected local Anjian thumbnail', (name) => {
   const { artifact, payload } = JSON.parse(
     fs.readFileSync(path.join(fixtures, `${name}.json`), 'utf8'),
   ) as { artifact: ThumbnailArtifact; payload: unknown };

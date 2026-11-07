@@ -1,6 +1,7 @@
 import type { CanvasPayload } from '../../shared/types';
 
 export interface ViewerPayload extends CanvasPayload {
+  boardOrigin?: string;
   boardPath?: string;
   boardPort?: number;
   contentBase: string;

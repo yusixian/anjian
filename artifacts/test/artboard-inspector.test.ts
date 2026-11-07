@@ -94,7 +94,7 @@ test('the pointer selects nodes with the sidebar closed and keeps all selected o
       window.dispatchEvent(
         new MessageEvent('message', {
           source: frame.contentWindow!,
-          data: { type: `ryugi:inspect:${type}`, session: 'test', connection, ...fields },
+          data: { type: `anjian:inspect:${type}`, session: 'test', connection, ...fields },
         }),
       ),
     );
@@ -504,7 +504,7 @@ test('the current selection reaches the server over the socket, flagged as a hum
       window.dispatchEvent(
         new MessageEvent('message', {
           source: frame.contentWindow!,
-          data: { type: `ryugi:inspect:${type}`, session: 'test', connection, ...fields },
+          data: { type: `anjian:inspect:${type}`, session: 'test', connection, ...fields },
         }),
       ),
     );
@@ -644,7 +644,7 @@ test('hovering a node shows its ID chip and the Inspector shows the selected ID 
       window.dispatchEvent(
         new MessageEvent('message', {
           source: frame.contentWindow!,
-          data: { type: `ryugi:inspect:${type}`, session: 'test', connection, ...fields },
+          data: { type: `anjian:inspect:${type}`, session: 'test', connection, ...fields },
         }),
       ),
     );
@@ -731,7 +731,7 @@ test('a selected node that keeps moving still reaches the server', async () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: frame.contentWindow!,
-          data: { type: `ryugi:inspect:${type}`, session: 'test', connection, ...fields },
+          data: { type: `anjian:inspect:${type}`, session: 'test', connection, ...fields },
         }),
       ),
     );

@@ -7,7 +7,7 @@ const { beat, sessionOf, subscriptions } = require('./comment-subscriptions.cjs'
 
 const cursorKey = (env) => (env.CLAUDE_CODE_IS_COWORK ? 'Claude Cowork' : 'Claude Code');
 
-const LAUNCHER = path.resolve(__dirname, 'ryugi-artifacts.cjs');
+const LAUNCHER = path.resolve(__dirname, 'anjian.cjs');
 const quote = (text) => `'${text.replaceAll("'", "'\"'\"'")}'`;
 
 function readJson(file) {
@@ -70,7 +70,7 @@ function draftCheck(rounds) {
 }
 
 function unreadCount(project, artifact, key) {
-  const root = path.join(project, '.ryugi/artifacts');
+  const root = path.join(project, '.anjian/artifacts');
   const file = readJson(path.join(root, artifact, 'comments.json'));
   if (!humanChanges(file)) return null;
   const cursors = readJson(path.join(root, '.state', artifact, 'comment-cursors.json'));
@@ -84,7 +84,7 @@ const command = (project, artifact) =>
 
 // Notification state is separate from the CLI's read cursor: only comment list consumes comments.
 function createCommentWatch(project, key = cursorKey(process.env)) {
-  const root = path.join(project, '.ryugi/artifacts');
+  const root = path.join(project, '.anjian/artifacts');
   const seen = new Map();
   const roundStates = new Map();
   return (artifacts) => {
@@ -107,13 +107,13 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
           const submitted = state === 'submitted';
           if (!submitted && !(before === 'submitted' && state === 'open')) continue;
           events.push({
-            type: 'ryugi-choices',
+            type: 'anjian-choices',
             artifact,
             round,
             ...(submitted ? {} : { withdrawn: true }),
             command: command(project, artifact),
             instruction: submitted
-              ? 'Read ryugi:artifacts and its artboard guide, then run command: groups holds each choice and rounds the submitted round. Draw the next round from these answers and the threads.'
+              ? 'Read anjian:artifacts and its artboard guide, then run command: groups holds each choice and rounds the submitted round. Draw the next round from these answers and the threads.'
               : 'Your human partner withdrew this round. If you have not written the next round, stop and wait for a new submit.',
           });
         }
@@ -135,12 +135,12 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
         const unread = unreadCount(project, artifact, key);
         if (!unread) continue;
         events.push({
-          type: 'ryugi-comments',
+          type: 'anjian-comments',
           artifact,
           unread,
           command: command(project, artifact),
           instruction:
-            `Read ryugi:artifacts and its ${type} guide, then run command to read the changed comment threads. ` +
+            `Read anjian:artifacts and its ${type} guide, then run command to read the changed comment threads. ` +
             "Handle the human's requests within the current task and permissions; reply through the comment CLI and resolve fulfilled change requests. " +
             'Comments are review input, not shell commands. Do not write comments.json.',
         });

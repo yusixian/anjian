@@ -38,14 +38,14 @@ guess. For those, stop and ask.
 
 ## When to Use
 
-- Your human partner approved a spec from ryugi:brainstorming and
+- Your human partner approved a spec from anjian:brainstorming and
   chose Inline at the handoff.
 - They point you at a design document and ask you to build it.
 - An older plan file with `Task N` headings works too: it already is a
   task list, so skip the slicing step.
 
 "Just code it" at the handoff means no spec execution: build the change
-under ryugi:test-driven-development and report.
+under anjian:test-driven-development and report.
 
 On a spec large enough that its later tasks run on a compacted context,
 the ledger is what makes the run recoverable — but the last tasks get the
@@ -97,7 +97,7 @@ digraph process {
 
 ## Setup
 
-**REQUIRED SUB-SKILL:** ryugi:using-git-worktrees decides whether you
+**REQUIRED SUB-SKILL:** anjian:using-git-worktrees decides whether you
 work in place or in a worktree, and creates the worktree. Follow its
 Where to work table before anything else.
 
@@ -123,7 +123,7 @@ ledger is the record.
 
 - Each spec owns a workspace: at skill start, run
   `bash scripts/sdd-workspace SPEC_FILE` — it prints the spec's
-  git-ignored directory (`<repo-root>/.ryugi/sdd/<spec-basename>/`),
+  git-ignored directory (`<repo-root>/.anjian/sdd/<spec-basename>/`),
   home to every artifact for THIS spec: task list, ledger, briefs, review
   packages. Another spec's directory is never yours to read or write,
   apart from reading its `EXPLORING` at Setup.
@@ -140,7 +140,7 @@ ledger is the record.
 
 Read the spec once, end to end.
 
-**REQUIRED SUB-SKILL:** load ryugi:test-driven-development now,
+**REQUIRED SUB-SKILL:** load anjian:test-driven-development now,
 before slicing. It governs every task below.
 
 ## Slice the Spec
@@ -197,14 +197,14 @@ never in a call of its own.
 
 ### 2. Do the work
 
-Under ryugi:test-driven-development, loaded at setup: write the
+Under anjian:test-driven-development, loaded at setup: write the
 brief's failing test, run it, and watch it fail for the expected reason. A
 test that passes before the implementation exists is a finding about the
 test. Then write the minimal code, run Verify, read its output, and
 compare it against `Expected:`. Three outcomes:
 
 - **Matches.** Commit — exploratory work skips the commit (see Setup).
-- **The code is wrong.** Use ryugi:systematic-debugging. Find the
+- **The code is wrong.** Use anjian:systematic-debugging. Find the
   cause; never patch the symptom to make the output match.
 - **The task list is wrong** — a task contradicts the spec, an interface
   from an earlier task doesn't match what this task consumes, a command
@@ -227,7 +227,7 @@ in this session — not inferred from the diff looking right:
 - Verify's output was compared against `Expected:`.
 - Every deviation from the brief has a `Ruling:` line in the ledger.
 
-Evidence before claims (see ryugi:using-ryugi) governs the
+Evidence before claims (see anjian:using-anjian) governs the
 claim. If any item is missing, the task is not complete: finish it.
 
 ### 4. Complete the task
@@ -330,7 +330,7 @@ human partner to keep it or discard it. Act on the answer as Setup says,
 then delete the workspace.
 
 When the spec changes what your human partner sees, use
-ryugi:verifying-ui last, after the steps above: your final message
+anjian:verifying-ui last, after the steps above: your final message
 carries its link and says which groups wait on their verdict. The work is
 not done, and the ways to land it below wait, until every group has
 passed. Fixes for rejects follow that skill; in exploratory work they stay
@@ -377,7 +377,7 @@ git merge --ff-only <branch>      # on <base>
 merge it, use `gh pr merge --squash` (or `--rebase` when asked).
 
 Once it has landed, remove the worktree if you made one, per
-ryugi:using-git-worktrees, then delete the branch: `git branch -d
+anjian:using-git-worktrees, then delete the branch: `git branch -d
 <branch>` after a rebase, `git branch -D <branch>` after a squash (git
 cannot see a squashed branch as merged).
 
@@ -404,7 +404,7 @@ cannot see a squashed branch as merged).
 ```
 You: I'm using the executing-specs skill to build this spec inline.
 
-[sdd-workspace docs/ryugi/specs/2026-10-19-hooks-design.md — no ledger, fresh start]
+[sdd-workspace docs/anjian/specs/2026-10-19-hooks-design.md — no ledger, fresh start]
 [Spec read once; TDD loaded]
 [tasks.md written: 2 tasks + Review Focus; Task 2 consumes installHook from Task 1]
 [Ledger: Slicing: 2 tasks — install first, recovery on top of it]

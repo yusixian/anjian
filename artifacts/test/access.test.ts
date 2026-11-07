@@ -12,7 +12,6 @@ const loopback = accessPolicy({
   host: '127.0.0.1',
   urlHost: 'localhost',
   ports: [4100, 4101],
-  cloudOrigin: 'https://ryugi.innei.dev',
 });
 
 test('recognises loopback bind addresses', () => {
@@ -44,7 +43,7 @@ test('a non-loopback server leaves hosts to the key', () => {
   expect(hostAllowed(remote, 'anything:4100')).toBe(true);
 });
 
-test('origins: none passes, local passes, cloud only where allowed, others fail', () => {
+test('origins: none and local pass, other origins fail', () => {
   expect(originAllowed(loopback, undefined)).toBe(true);
   expect(originAllowed(loopback, 'http://localhost:4100')).toBe(true);
   expect(originAllowed(loopback, 'http://127.0.0.1:4100')).toBe(true);
@@ -52,7 +51,13 @@ test('origins: none passes, local passes, cloud only where allowed, others fail'
   expect(originAllowed(loopback, 'https://evil.test')).toBe(false);
   expect(originAllowed(loopback, 'null')).toBe(false);
   expect(originAllowed(loopback, 'https://ryugi.innei.dev')).toBe(false);
-  expect(originAllowed(loopback, 'https://ryugi.innei.dev', { cloud: true })).toBe(true);
+});
+
+test('a configured public origin is admitted exactly', () => {
+  const policy = accessPolicy({ host: '127.0.0.1', urlHost: 'localhost', ports: [4100], publicOrigin: 'https://anjian.example' });
+  expect(hostAllowed(policy, 'anjian.example')).toBe(true);
+  expect(originAllowed(policy, 'https://anjian.example')).toBe(true);
+  expect(originAllowed(policy, 'https://evil.example')).toBe(false);
 });
 
 test('navigation: only direct or same-origin loads', () => {

@@ -181,11 +181,11 @@ export function useHighlights(anchors: ThreadAnchor[], threads: Thread[], active
       .filter((a) => shown.has(a.threadId) && a.threadId !== activeId)
       .flatMap(anchorRanges);
     const active = anchors.filter((a) => a.threadId === activeId).flatMap(anchorRanges);
-    CSS.highlights.set('ryugi-comment', new Highlight(...normal));
-    CSS.highlights.set('ryugi-comment-active', new Highlight(...active));
+    CSS.highlights.set('anjian-comment', new Highlight(...normal));
+    CSS.highlights.set('anjian-comment-active', new Highlight(...active));
     return () => {
-      CSS.highlights.delete('ryugi-comment');
-      CSS.highlights.delete('ryugi-comment-active');
+      CSS.highlights.delete('anjian-comment');
+      CSS.highlights.delete('anjian-comment-active');
     };
   }, [anchors, threads, activeId]);
 }
@@ -199,9 +199,9 @@ export function useDraftHighlight(range: Range | null, elements?: HTMLElement[])
       };
     }
     if (!range || typeof CSS === 'undefined' || !('highlights' in CSS)) return;
-    CSS.highlights.set('ryugi-comment-draft', new Highlight(range));
+    CSS.highlights.set('anjian-comment-draft', new Highlight(range));
     return () => {
-      CSS.highlights.delete('ryugi-comment-draft');
+      CSS.highlights.delete('anjian-comment-draft');
     };
   }, [range, elements]);
 }

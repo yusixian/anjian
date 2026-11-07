@@ -4,15 +4,15 @@ import { act } from 'react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 
 type Toast = Pick<ToastAPI, 'success' | 'error' | 'info' | 'warning' | 'loading' | 'dismiss'>;
-const api = () => (window as Window & { ryugiToast?: Toast }).ryugiToast;
+const api = () => (window as Window & { anjianToast?: Toast }).anjianToast;
 const notifications = () =>
-  document.querySelector('[data-ryugi-toast-root]')?.shadowRoot ?? document;
+  document.querySelector('[data-anjian-toast-root]')?.shadowRoot ?? document;
 let startup: ToastInstance | undefined;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   document.addEventListener(
-    'ryugi-ui:ready',
+    'anjian-ui:ready',
     () => {
       startup = api()?.info({ title: 'Ready to notify', duration: 0 });
     },

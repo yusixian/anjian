@@ -35,8 +35,8 @@ describe('parseEnv', () => {
     expect(parseEnv({})).toMatchObject({
       host: '127.0.0.1',
       urlHost: 'localhost',
-      ports: [27319, 27320, 27321],
-      boardPorts: [27329, 27330, 27331],
+      ports: [27419, 27420, 27421],
+      boardPorts: [27429, 27430, 27431],
       serverId: null,
     });
   });
@@ -50,7 +50,7 @@ describe('parseEnv', () => {
 
   test('a --port argument replaces the main port list', () => {
     expect(parseEnv({}, ['--port=4100']).ports).toEqual([4100]);
-    expect(parseEnv({ RYUGI_ARTIFACTS_PORTS: '0' }).ports).toEqual([0]);
+    expect(parseEnv({ ANJIAN_ARTIFACTS_PORTS: '0' }).ports).toEqual([0]);
   });
 
   test('reads the server id argument and the open command', () => {
@@ -60,11 +60,13 @@ describe('parseEnv', () => {
     });
   });
 
-  test('points at the official cloud unless RYUGI_CLOUD_ORIGIN overrides it', () => {
-    expect(parseEnv({}).cloudOrigin).toBe('https://ryugi.innei.dev');
-    expect(parseEnv({ RYUGI_CLOUD_ORIGIN: 'http://localhost:8787/' }).cloudOrigin).toBe(
-      'http://localhost:8787',
-    );
+  test('accepts configured public and board origins without any default remote', () => {
+    expect(parseEnv({}).publicOrigin).toBeUndefined();
+    expect(parseEnv({ ANJIAN_PUBLIC_ORIGIN: 'https://anjian.example/', ANJIAN_BOARD_ORIGIN: 'https://board.example/' })).toMatchObject({
+      publicOrigin: 'https://anjian.example',
+      boardOrigin: 'https://board.example',
+    });
+    expect(() => parseEnv({ ANJIAN_PUBLIC_ORIGIN: 'https://anjian.example/path' })).toThrow();
   });
 });
 

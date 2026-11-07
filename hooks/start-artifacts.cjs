@@ -1,13 +1,10 @@
 'use strict';
 
-const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { credentialsPath } = require('./selection-context.cjs');
 
-const LAUNCHER = path.resolve(__dirname, '..', 'skills', 'artifacts', 'app', 'ryugi-artifacts.cjs');
 
 function readJson(file) {
   try {
@@ -18,7 +15,7 @@ function readJson(file) {
 }
 
 function serverHome(env) {
-  return env.RYUGI_SERVER_HOME || path.join(os.homedir(), '.ryugi', 'server');
+  return env.ANJIAN_SERVER_HOME || path.join(os.homedir(), '.anjian', 'server');
 }
 
 function registerWithRunningServer(project) {
@@ -26,7 +23,7 @@ function registerWithRunningServer(project) {
   if (!info || typeof info.url !== 'string') return Promise.resolve();
   let base;
   try {
-    base = new URL(info.url);
+    base = new URL(info.localUrl || info.url);
   } catch {
     return Promise.resolve();
   }
@@ -55,21 +52,7 @@ function registerWithRunningServer(project) {
 function main() {
   const project = process.argv[2];
   if (!project) return;
-  const config = readJson(path.join(project, '.ryugi', 'config.json'));
-  const artifacts =
-    config && typeof config.artifacts === 'object' && config.artifacts ? config.artifacts : {};
-  const published = Object.entries(artifacts).some(
-    ([key, entry]) =>
-      key.startsWith('document/') && entry && entry.cloud && typeof entry.cloud.id === 'string',
-  );
-  const credentials = readJson(credentialsPath(process.env, process.platform, os.homedir()));
-  const signedIn = credentials && typeof credentials.token === 'string';
-  if (!published || !signedIn) return registerWithRunningServer(project);
-  spawnSync(
-    process.execPath,
-    [LAUNCHER, 'start', '--json', '--no-open', '--project-dir', project],
-    { env: process.env, stdio: 'ignore', timeout: 60000 },
-  );
+  return registerWithRunningServer(project);
 }
 
 void main();

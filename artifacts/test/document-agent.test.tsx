@@ -51,7 +51,6 @@ vi.mock('@stylexjs/stylex', async (original) => ({
 vi.mock('@lobehub/ui/stylex/cssVar.stylex', () => ({
   cssVar: new Proxy({}, { get: (_, key) => `var(--${String(key)})` }),
 }));
-vi.mock('../src/viewer/components/PublishMenu', () => ({ PublishMenu: () => null }));
 
 let root: Root | null = null;
 beforeAll(() => {

@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest';
 import { packArtifact } from '../src/server/pack';
 import { writeFiles } from './helpers';
 
-const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-pack-'));
+const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-pack-'));
 
 describe('packArtifact', () => {
   test('collects every file by its relative path, skipping dotfiles and dot directories', () => {

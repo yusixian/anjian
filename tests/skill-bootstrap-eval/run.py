@@ -90,10 +90,10 @@ def make_plugin(repo, root, arm, router_file=None):
         ignore=shutil.ignore_patterns("node_modules", "viewer", "runtime", "cli.cjs", "server.cjs"),
     )
     if arm == "absent":
-        shutil.rmtree(plugin / "skills/using-ryugi")
+        shutil.rmtree(plugin / "skills/using-anjian")
     if arm == "short":
         router_file = router_file or repo / "tests/skill-bootstrap-eval/fixtures/short-router.md"
-        shutil.copy2(router_file, plugin / "skills/using-ryugi/SKILL.md")
+        shutil.copy2(router_file, plugin / "skills/using-anjian/SKILL.md")
     if arm in ("full", "short"):
         (plugin / "hooks").mkdir()
         for name in ("session-start", "project-root.sh"):
@@ -171,7 +171,7 @@ def make_project(path, case):
             "## Review Focus\n\nNo UI or dependency changes.\n"
         )
         (path / "docs/spec.md").write_text(spec)
-        (path / ".gitignore").write_text(".ryugi/\n")
+        (path / ".gitignore").write_text(".anjian/\n")
     subprocess.run(["git", "init", "-q", str(path)], check=True)
     subprocess.run(["git", "-C", str(path), "add", "."], check=True)
     subprocess.run([
@@ -180,7 +180,7 @@ def make_project(path, case):
         "commit", "-qm", "fixture",
     ], check=True)
     if case == "resume":
-        workspace = path / ".ryugi/sdd/spec"
+        workspace = path / ".anjian/sdd/spec"
         workspace.mkdir(parents=True)
         (workspace / "plan-path").write_text("docs/spec.md\n")
         (workspace / "tasks.md").write_text(spec)
@@ -322,7 +322,7 @@ def main():
     parser.add_argument("--arms", nargs="+", choices=ARMS, default=list(BASE_ARMS))
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
-    root = args.output or Path(tempfile.mkdtemp(prefix="ryugi-bootstrap-eval-"))
+    root = args.output or Path(tempfile.mkdtemp(prefix="anjian-bootstrap-eval-"))
     root.mkdir(parents=True, exist_ok=True)
     settings = root / "settings.json"
     user_settings = json.loads((Path.home() / ".claude/settings.json").read_text())
@@ -331,7 +331,7 @@ def main():
     if not (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")):
         parser.error("Supply CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY for the isolated CLI sessions")
     plugins = {arm: make_plugin(repo, root, arm, args.router_file) for arm in args.arms}
-    source = repo / "skills/using-ryugi/SKILL.md"
+    source = repo / "skills/using-anjian/SKILL.md"
     write_json(root / "manifest.json", {
         "repo_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip(),
         "bootstrap_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
@@ -339,8 +339,8 @@ def main():
         "settings": json.loads(settings.read_text()), "cases": CASES, "arms": args.arms,
         "model": args.model,
         "selected_cases": args.cases,
-        "arm_bootstraps": {arm: (plugin / "skills/using-ryugi/SKILL.md").read_text()
-                           if (plugin / "skills/using-ryugi/SKILL.md").exists() else None
+        "arm_bootstraps": {arm: (plugin / "skills/using-anjian/SKILL.md").read_text()
+                           if (plugin / "skills/using-anjian/SKILL.md").exists() else None
                            for arm, plugin in plugins.items()},
         "reps": args.reps, "workers": args.workers, "timeout": args.timeout,
     })

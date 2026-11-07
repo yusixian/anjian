@@ -34,7 +34,7 @@ async function start() {
 }
 
 const base = (s: ArtifactsServer) => `http://127.0.0.1:${s.port}`;
-const cookie = (s: ArtifactsServer) => `ryugi_artifacts_${s.port}=${s.token}`;
+const cookie = (s: ArtifactsServer) => `anjian_artifacts_${s.port}=${s.token}`;
 const commentsFile = (root: string) => path.join(root, 'artboard', 'review', 'comments.json');
 
 function post(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Fetched> {

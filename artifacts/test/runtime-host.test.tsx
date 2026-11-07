@@ -18,7 +18,7 @@ afterEach(() => {
 
 const Theme = createContext('none');
 
-function host(tag = 'ryugi-test') {
+function host(tag = 'anjian-test') {
   const el = document.createElement(tag);
   document.body.append(el);
   return el;

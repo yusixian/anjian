@@ -229,12 +229,12 @@ assert_command_output \
   bash "$HOOK_UNDER_TEST"
 
 legacy_home="$(make_home legacy-warning-removed)"
-mkdir -p "$legacy_home/.config/ryugi/skills"
+mkdir -p "$legacy_home/.config/anjian/skills"
 assert_command_output \
   "SessionStart omits obsolete legacy custom-skill warning" \
   "nested" \
   "" \
-  "Ryugi now uses"$'\037'"~/.config/ryugi/skills"$'\037'"~/.claude/skills"$'\037'"legacy" \
+  "Anjian now uses"$'\037'"~/.config/anjian/skills"$'\037'"~/.claude/skills"$'\037'"legacy" \
   "$legacy_home" \
   CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
   bash "$HOOK_UNDER_TEST"
@@ -354,7 +354,7 @@ assert_command_output \
   "session-start reached through a backslash path still reads the skill" \
   "nested" \
   "" \
-  "Error reading using-ryugi skill" \
+  "Error reading using-anjian skill" \
   "$backslash_home" \
   CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
   "$bash_bin" -c 'cd "$1" && exec "$2" "$3"' _ "$backslash_cwd" "$bash_bin" "$backslash_hook"
@@ -384,8 +384,8 @@ fi
 
 project_home="$(make_home published-project)"
 project_dir="$project_home/project"
-mkdir -p "$project_dir/.ryugi"
-printf '{"version":1,"artifacts":{"document/plan":{"cloud":{"id":"c1","url":"u","publishedAt":"t","visibility":"private"}}}}\n' > "$project_dir/.ryugi/config.json"
+mkdir -p "$project_dir/.anjian"
+printf '{"version":1,"artifacts":{"document/plan":{"cloud":{"id":"c1","url":"u","publishedAt":"t","visibility":"private"}}}}\n' > "$project_dir/.anjian/config.json"
 started=$SECONDS
 assert_command_output \
   "a project with published documents still gets normal context" \
@@ -404,8 +404,8 @@ fi
 
 repo_home="$(make_home published-repo)"
 repo_dir="$(cd "$repo_home" && pwd -P)/repo"
-mkdir -p "$repo_dir/.git" "$repo_dir/.ryugi" "$repo_dir/packages/app" "$repo_home/bin"
-cp "$project_dir/.ryugi/config.json" "$repo_dir/.ryugi/config.json"
+mkdir -p "$repo_dir/.git" "$repo_dir/.anjian" "$repo_dir/packages/app" "$repo_home/bin"
+cp "$project_dir/.anjian/config.json" "$repo_dir/.anjian/config.json"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s"\n' "$repo_home/node-args" > "$repo_home/bin/node"
 chmod +x "$repo_home/bin/node"
 env -i PATH="$repo_home/bin:${PATH:-}" HOME="$repo_home" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" CLAUDE_PROJECT_DIR="$repo_dir/packages/app" \

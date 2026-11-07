@@ -64,7 +64,7 @@ export const InspectorPanel = memo(function InspectorPanel({
       setCopyStatus(t('inspector.copyFailed'));
     }
   };
-  const panelClass = [stylex.props(styles.panel).className, 'ryugi-inspector']
+  const panelClass = [stylex.props(styles.panel).className, 'anjian-inspector']
     .filter(Boolean)
     .join(' ');
   return (

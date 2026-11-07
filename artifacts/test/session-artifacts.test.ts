@@ -2,71 +2,37 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-
 import { afterEach, expect, test } from 'vitest';
 
 const script = path.resolve(__dirname, '../../hooks/start-artifacts.cjs');
-const launcher = path.resolve(__dirname, '../../skills/artifacts/app/ryugi-artifacts.cjs');
-const cleanups: (() => void)[] = [];
-afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
-
-function project({ signedIn, published }: { signedIn: boolean; published: boolean }) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-session-'));
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-session-home-'));
-  fs.mkdirSync(path.join(dir, '.ryugi', 'artifacts', 'document', 'plan'), { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, '.ryugi', 'artifacts', 'document', 'plan', 'doc.xml'),
-    '<doc><p>one</p></doc>',
-  );
-  const artifacts = published
-    ? {
-        'document/plan': { cloud: { id: 'c1', url: 'u', publishedAt: 't', visibility: 'private' } },
-      }
-    : { 'html/x': { cloud: { id: 'c2', url: 'u', publishedAt: 't', visibility: 'private' } } };
-  fs.writeFileSync(
-    path.join(dir, '.ryugi', 'config.json'),
-    JSON.stringify({ version: 1, artifacts }),
-  );
-  if (signedIn) {
-    fs.mkdirSync(path.join(home, 'ryugi'), { recursive: true });
-    fs.writeFileSync(
-      path.join(home, 'ryugi', 'credentials.json'),
-      JSON.stringify({ origin: 'https://ryugi.innei.dev', token: 't', login: 'innei' }),
-    );
-  }
-  const env = {
-    ...process.env,
-    XDG_CONFIG_HOME: home,
-    ARTIFACTS_OPEN: '0',
-    RYUGI_ARTIFACTS_OWNER: String(process.pid),
-  };
-  cleanups.push(() =>
-    spawnSync(process.execPath, [launcher, 'stop', '--project-dir', dir], { env, timeout: 10000 }),
-  );
-  const run = () =>
-    spawnSync(process.execPath, [script, dir], { encoding: 'utf8', env, timeout: 30000 });
-  const info = path.join(dir, '.ryugi', 'artifacts', '.state', 'server-info');
-  return { dir, run, info };
+const launcher = path.resolve(__dirname, '../../skills/artifacts/app/anjian.cjs');
+const dirs: string[] = [];
+afterEach(() => dirs.splice(0).forEach(dir => fs.rmSync(dir, { recursive: true, force: true })));
+function fixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-session-'));
+  dirs.push(dir);
+  const project = path.join(dir, 'project');
+  fs.mkdirSync(path.join(project, '.anjian/artifacts/document/plan'), {recursive:true});
+  fs.writeFileSync(path.join(project, '.anjian/artifacts/document/plan/doc.xml'), '<doc><p>one</p></doc>');
+  const env = {...process.env, ANJIAN_SERVER_HOME:path.join(dir, 'server'), ARTIFACTS_OPEN:'0'};
+  const run = () => spawnSync(process.execPath,[script,project],{env,encoding:'utf8',timeout:10000});
+  return {dir,project,env,run};
 }
-
-test('starts the artifacts server for a signed-in project with a published document and registers it', () => {
-  const { dir, run, info } = project({ signedIn: true, published: true });
+test('session hook does not start a server when none is running', () => {
+  const {env,run} = fixture();
   expect(run().status).toBe(0);
-  expect(fs.existsSync(info)).toBe(true);
-  const registry = JSON.parse(
-    fs.readFileSync(path.join(process.env.RYUGI_SERVER_HOME!, 'projects.json'), 'utf8'),
-  ) as { projects: { dir: string }[] };
-  expect(registry.projects.map((entry) => entry.dir)).toContain(fs.realpathSync(dir));
+  expect(fs.existsSync(env.ANJIAN_SERVER_HOME)).toBe(false);
 });
-
-test('does nothing when signed out', () => {
-  const { run, info } = project({ signedIn: false, published: true });
-  expect(run().status).toBe(0);
-  expect(fs.existsSync(info)).toBe(false);
-});
-
-test('does nothing when only non-document artifacts are published', () => {
-  const { run, info } = project({ signedIn: true, published: false });
-  expect(run().status).toBe(0);
-  expect(fs.existsSync(info)).toBe(false);
-});
+test('session hook registers a project with an already running local server without cloud credentials', () => {
+  const {dir,project,env,run} = fixture();
+  const initial = path.join(dir,'initial'); fs.mkdirSync(initial);
+  try {
+    const started=spawnSync(process.execPath,[launcher,'start','--background','--project-dir',initial,'--no-open'],{env,encoding:'utf8',timeout:15000});
+    expect(started.status, started.stderr).toBe(0);
+    expect(run().status).toBe(0);
+    const registry=JSON.parse(fs.readFileSync(path.join(env.ANJIAN_SERVER_HOME,'projects.json'),'utf8'));
+    expect(registry.projects.map((p:{dir:string})=>p.dir)).toContain(fs.realpathSync(project));
+  } finally {
+    spawnSync(process.execPath,[launcher,'stop','--project-dir',initial],{env,timeout:10000});
+  }
+},30000);

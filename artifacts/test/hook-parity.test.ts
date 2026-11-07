@@ -132,8 +132,8 @@ test('the hook reads the cursor the CLI writes for the same harness', () => {
 });
 
 test('the reminder names artboards with comments waiting on the agent', () => {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-hook-'));
-  const root = path.join(project, '.ryugi', 'artifacts');
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-hook-'));
+  const root = path.join(project, '.anjian', 'artifacts');
   const write = (file: string, value: unknown) => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value));

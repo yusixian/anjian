@@ -122,6 +122,7 @@ function DesktopArtboard({
   warnings,
   pending,
   contentBase,
+  boardOrigin,
   boardPort,
   boardPath,
   versions,
@@ -201,15 +202,15 @@ function DesktopArtboard({
     onInput: (boardId, input) => {
       const board = canvas?.boards[boardId];
       if (!board) return;
-      if (input.type === 'ryugi:inspect:wheel') {
+      if (input.type === 'anjian:inspect:wheel') {
         const now = viewNow();
         wheelAt({
           ...input,
           x: now.x + (board.x + input.x) * now.k,
           y: now.y + (board.y + input.y) * now.k,
         });
-      } else if (input.type === 'ryugi:inspect:pan') panBy(input.deltaX, input.deltaY);
-      else if (input.type === 'ryugi:inspect:drag') {
+      } else if (input.type === 'anjian:inspect:pan') panBy(input.deltaX, input.deltaY);
+      else if (input.type === 'anjian:inspect:drag') {
         if (commentTool) boardComments.onFrameDrag(boardId, input);
         else if (selectionEnabled)
           selection.drag(
@@ -285,7 +286,7 @@ function DesktopArtboard({
     document.title = canvas?.title || id;
   }, [canvas?.title, id]);
   useTypeFavicon('artboard');
-  function onKey(e: KeyboardEvent | Extract<InspectorReport, { type: 'ryugi:inspect:key' }>) {
+  function onKey(e: KeyboardEvent | Extract<InspectorReport, { type: 'anjian:inspect:key' }>) {
     if (
       'target' in e &&
       (e.defaultPrevented ||
@@ -414,7 +415,7 @@ function DesktopArtboard({
       boards,
     ],
   );
-  const source = useBoardOrigin({ contentBase, boardPort, boardPath });
+  const source = useBoardOrigin({ contentBase, boardOrigin, boardPort, boardPath });
   const waiting = useMemo(
     () => (source ? pendingBoards : new Set(boards.map(([board]) => board))),
     [source, pendingBoards, boards],

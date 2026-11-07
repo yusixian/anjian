@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths, readProjects, registerProject } from '../src/server/machine';
@@ -22,10 +22,10 @@ afterEach(async () => {
 
 function newProject() {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-project-')));
-  fs.mkdirSync(path.join(dir, '.ryugi', 'artifacts'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.anjian', 'artifacts'), { recursive: true });
   return dir;
 }
-const rootOf = (project: string) => path.join(project, '.ryugi', 'artifacts');
+const rootOf = (project: string) => path.join(project, '.anjian', 'artifacts');
 
 async function hub(home = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-'))) {
   const temp = tempRoot();
@@ -36,7 +36,7 @@ async function hub(home = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-h
     runtimeDir: temp.runtime,
     ports: [0],
     boardPorts: [0],
-    paths: machinePaths({ RYUGI_SERVER_HOME: home }),
+    paths: machinePaths({ ANJIAN_SERVER_HOME: home }),
     token: 't'.repeat(48),
     version: '9.9.9',
   });
@@ -79,7 +79,7 @@ test('a slug shared by two projects follows the project header from the CLI', as
   writeArtboard(rootOf(two), 'flow', canvas('Second flow'));
   await h.register(one);
   await h.register(two);
-  const res = await api(h, '/api/artifacts/artboard/flow', { 'X-Ryugi-Project': one });
+  const res = await api(h, '/api/artifacts/artboard/flow', { 'X-Anjian-Project': one });
   expect(res.body).toContain('First flow');
 });
 
@@ -87,14 +87,14 @@ test('the project header is URI-encoded, so a path outside ASCII still names its
   const h = await hub();
   const parent = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-')));
   const one = path.join(parent, '设计稿');
-  fs.mkdirSync(path.join(one, '.ryugi', 'artifacts'), { recursive: true });
+  fs.mkdirSync(path.join(one, '.anjian', 'artifacts'), { recursive: true });
   const two = newProject();
   writeArtboard(rootOf(one), 'flow', canvas('First flow'));
   writeArtboard(rootOf(two), 'flow', canvas('Second flow'));
   await h.register(one);
   await h.register(two);
   const res = await api(h, '/api/artifacts/artboard/flow', {
-    'X-Ryugi-Project': encodeURIComponent(one),
+    'X-Anjian-Project': encodeURIComponent(one),
   });
   expect(res.body).toContain('First flow');
 });
@@ -108,7 +108,7 @@ test('a browser request cannot pick a project with the header', async () => {
   await h.register(one);
   await h.register(two);
   const res = await api(h, '/api/artifacts/artboard/flow', {
-    'X-Ryugi-Project': one,
+    'X-Anjian-Project': one,
     'Origin': `http://localhost:${h.port}`,
   });
   expect(res.body).toContain('Second flow');
@@ -153,10 +153,10 @@ test('registered projects are remembered and mounted on first use after a restar
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-'));
   const one = newProject();
   writeArtboard(rootOf(one), 'flow', canvas('Remembered'));
-  registerProject(machinePaths({ RYUGI_SERVER_HOME: home }).projects, one, 1);
+  registerProject(machinePaths({ ANJIAN_SERVER_HOME: home }).projects, one, 1);
   const h = await hub(home);
   expect((await api(h, '/api/artifacts/artboard/flow')).body).toContain('Remembered');
-  expect(readProjects(machinePaths({ RYUGI_SERVER_HOME: home }).projects)[0]!.dir).toBe(one);
+  expect(readProjects(machinePaths({ ANJIAN_SERVER_HOME: home }).projects)[0]!.dir).toBe(one);
 });
 
 test('content tokens route to their project', async () => {
@@ -204,7 +204,7 @@ test('a registration that asks to open an artifact opens it once it is ready', a
     ports: [0],
     boardPorts: [0],
     paths: machinePaths({
-      RYUGI_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-')),
+      ANJIAN_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-')),
     }),
     token: 't'.repeat(48),
     version: '9.9.9',
@@ -277,7 +277,7 @@ test('the home page removes a project from its own origin only', async () => {
   expect(h.projects()).toEqual([]);
 });
 
-async function controlledHub(latest: string | null = null) {
+async function controlledHub() {
   const temp = tempRoot();
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-'));
   const calls: string[] = [];
@@ -288,14 +288,13 @@ async function controlledHub(latest: string | null = null) {
     runtimeDir: temp.runtime,
     ports: [0],
     boardPorts: [0],
-    paths: machinePaths({ RYUGI_SERVER_HOME: home }),
+    paths: machinePaths({ ANJIAN_SERVER_HOME: home }),
     token: 't'.repeat(48),
     version: '1.0.0',
-    latest: () => latest,
     control: {
       stop: () => calls.push('stop'),
-      relaunch: (upgrade) => {
-        calls.push(upgrade ? 'upgrade' : 'restart');
+      relaunch: () => {
+        calls.push('restart');
         return true;
       },
     },
@@ -322,13 +321,81 @@ test('another origin cannot stop the server', async () => {
   expect(calls).toEqual([]);
 });
 
-test('upgrade needs a newer release', async () => {
-  const none = await controlledHub(null);
-  expect((await post(none.h, '/api/hub/upgrade', {})).status).toBe(409);
-  const newer = await controlledHub('1.1.0');
-  expect((await post(newer.h, '/api/hub/upgrade', {})).status).toBe(202);
-  await settle();
-  expect(newer.calls).toEqual(['upgrade']);
+test('old upgrade and cloud routes are absent', async () => {
+  const { h } = await controlledHub();
+  expect((await post(h, '/api/hub/upgrade', {})).status).toBe(404);
+  expect((await post(h, '/api/cloud/login', {})).status).toBe(404);
+  expect((await api(h, '/api/cloud/callback')).status).toBe(404);
+});
+
+test('a public origin needs the key and admits only its own browser origin', async () => {
+  const temp = tempRoot();
+  const requests = vi.fn<typeof fetch>();
+  const h = await startHub({
+    host: '127.0.0.1',
+    urlHost: 'localhost',
+    viewerDir: temp.viewer,
+    runtimeDir: temp.runtime,
+    ports: [0],
+    boardPorts: [0],
+    paths: machinePaths({ ANJIAN_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-public-home-')) }),
+    token: 't'.repeat(48),
+    version: '9.9.9',
+    publicOrigin: 'https://anjian.example',
+    boardOrigin: 'https://boards.example',
+    fetch: requests,
+  });
+  hubs.push(h);
+  const project = newProject();
+  writeArtboard(rootOf(project), 'flow', canvas('Local board'));
+  await h.register(project);
+  expect(h.url).toBe(`https://anjian.example/?key=${h.token}`);
+  expect(h.localUrl).toBe(`http://127.0.0.1:${h.port}/?key=${h.token}`);
+  expect((await api(h, '/api/status')).status).toBe(403);
+  expect((await api(h, `/api/status?key=${h.token}`)).status).toBe(200);
+  const publicPage = await api(h, `/?key=${h.token}`, { Host: 'anjian.example' });
+  expect(publicPage.status).toBe(200);
+  expect(String(publicPage.headers['set-cookie'])).toContain('; Secure');
+  const localPage = await api(h, `/?key=${h.token}`);
+  expect(localPage.status).toBe(200);
+  expect(String(localPage.headers['set-cookie'])).not.toContain('; Secure');
+  expect((await api(h, `/api/hub/artifacts?key=${h.token}`, { Origin: 'https://evil.example' })).status).toBe(403);
+  expect((await api(h, `/api/hub/artifacts?key=${h.token}`, { Origin: 'https://anjian.example' })).status).toBe(200);
+  expect((await get(`http://127.0.0.1:${h.boardPort}/robots.txt`, { Host: 'boards.example' })).status).toBe(200);
+  expect((await get(`http://127.0.0.1:${h.boardPort}/robots.txt`, { Host: 'evil.example' })).status).toBe(403);
+  expect((await post(h, `/api/cloud/login?key=${h.token}`, {})).status).toBe(404);
+  expect(requests).not.toHaveBeenCalled();
+});
+
+test('a container bind serves boards only for the configured board host', async () => {
+  const temp = tempRoot();
+  const h = await startHub({
+    host: '0.0.0.0',
+    urlHost: 'localhost',
+    viewerDir: temp.viewer,
+    runtimeDir: temp.runtime,
+    ports: [0],
+    boardPorts: [0],
+    paths: machinePaths({ ANJIAN_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-container-home-')) }),
+    token: 't'.repeat(48),
+    version: '9.9.9',
+    publicOrigin: 'https://anjian.example',
+    boardOrigin: 'https://boards.example',
+  });
+  hubs.push(h);
+  const project = newProject();
+  writeArtboard(rootOf(project), 'flow', canvas('Container board'));
+  await h.register(project);
+  expect(h.boardPort).toBeGreaterThan(0);
+  const boardApi = await api(h, `/api/artifacts/artboard/flow?key=${h.token}`);
+  expect(JSON.parse(boardApi.body)).toMatchObject({
+    boardOrigin: 'https://boards.example',
+    boardPort: h.boardPort,
+  });
+  const board = (host: string) => get(`http://127.0.0.1:${h.boardPort}/robots.txt`, { Host: host });
+  expect((await board('boards.example')).status).toBe(200);
+  expect((await board('evil.example')).status).toBe(403);
+  expect((await board(`localhost:${h.boardPort}`)).status).toBe(403);
 });
 
 test('the log reads the tail of the server log, filtered by project', async () => {
@@ -346,37 +413,6 @@ test('the log reads the tail of the server log, filtered by project', async () =
   expect((await api(h, '/api/hub/log', { Origin: 'https://evil.example' })).status).toBe(403);
 });
 
-test('a sign-in started from one project finishes when the callback reaches another', async () => {
-  const temp = tempRoot();
-  const h = await startHub({
-    host: '127.0.0.1',
-    urlHost: 'localhost',
-    viewerDir: temp.viewer,
-    runtimeDir: temp.runtime,
-    ports: [0],
-    boardPorts: [0],
-    paths: machinePaths({
-      RYUGI_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-')),
-    }),
-    token: 't'.repeat(48),
-    version: '9.9.9',
-    cloud: {
-      origin: 'http://127.0.0.1:9',
-      credentialsFile: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'creds-')), 'c.json'),
-    },
-  });
-  hubs.push(h);
-  const one = newProject();
-  const two = newProject();
-  await h.register(one);
-  await h.register(two);
-  const login = await post(h, '/api/cloud/login', {}, { 'X-Ryugi-Project': one });
-  const { url } = (await login.json()) as { url: string };
-  const state = new URL(url).searchParams.get('state')!;
-  const callback = await api(h, `/api/cloud/callback?state=${state}&code=c`);
-  expect(callback.status).toBe(502);
-});
-
 test('a closing hub mounts nothing new and leaves no server-info behind', async () => {
   const h = await hub();
   const one = newProject();
@@ -388,33 +424,6 @@ test('a closing hub mounts nothing new and leaves no server-info behind', async 
   hubs.splice(hubs.indexOf(h), 1);
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(fs.existsSync(path.join(rootOf(one), '.state', 'server-info'))).toBe(false);
-});
-
-test('a published artifact of a project not mounted yet still answers on its cloud id', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-'));
-  const one = newProject();
-  writeArtboard(rootOf(one), 'flow', canvas('Dormant flow'));
-  fs.writeFileSync(
-    path.join(one, '.ryugi', 'config.json'),
-    JSON.stringify({
-      version: 1,
-      artifacts: {
-        'artboard/flow': {
-          cloud: { id: 'c1', url: 'u', publishedAt: 't', visibility: 'private' },
-        },
-      },
-    }),
-  );
-  registerProject(machinePaths({ RYUGI_SERVER_HOME: home }).projects, one, 1);
-  const h = await hub(home);
-  expect(h.mounted()).toHaveLength(0);
-  const ws = await openWs(
-    h.port,
-    { Host: `localhost:${h.port}`, Origin: `http://localhost:${h.port}` },
-    '/relay/a/c1',
-  );
-  expect(ws.status).toBe(101);
-  ws.socket?.destroy();
 });
 
 test('a page call without an artifact in its path reaches the project of the page', async () => {

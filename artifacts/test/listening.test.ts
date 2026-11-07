@@ -9,7 +9,7 @@ import { listeningOn } from '../src/server/listening';
 const NOW = 1_800_000_000_000;
 
 function stateDir(sessions: { host: string; artifacts: string[]; beat?: number }[]) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-listening-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-listening-'));
   sessions.forEach((session, index) => {
     const folder = path.join(dir, `${session.host}-comment-watch`);
     fs.mkdirSync(folder, { recursive: true });

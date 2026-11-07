@@ -23,9 +23,9 @@ const thread = (id = 't1') => ({
 });
 
 function fixture(t) {
-  const project = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-comment-watch-')));
+  const project = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-comment-watch-')));
   t.after(() => fs.rmSync(project, { recursive: true, force: true }));
-  const root = path.join(project, '.ryugi/artifacts');
+  const root = path.join(project, '.anjian/artifacts');
   const write = (relative, value) => {
     const file = path.join(root, relative);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -150,7 +150,7 @@ test('a human resolving a thread leaves the agent asleep, also after a restart',
 test('the plugin monitor starts only once the artifacts skill runs', () => {
   const entries = JSON.parse(fs.readFileSync(path.join(repo, 'monitors/monitors.json'), 'utf8'));
   const entry = entries.find((item) => item.name === 'artifact-comments');
-  assert.equal(entry.when, 'on-skill-invoke:ryugi:artifacts');
+  assert.equal(entry.when, 'on-skill-invoke:anjian:artifacts');
 });
 
 test('a malformed partial write is retried without losing the next valid comment', (t) => {
@@ -183,7 +183,7 @@ test('notification commands preserve paths with spaces, apostrophes and shell su
   f.save('document/plan', [thread()]);
   const project = path.join(f.project, "a b'$(touch WRONG)");
   fs.mkdirSync(project);
-  fs.renameSync(path.join(f.project, '.ryugi'), path.join(project, '.ryugi'));
+  fs.renameSync(path.join(f.project, '.anjian'), path.join(project, '.anjian'));
   const event = watch(project)()[0];
   const args = execFileSync('bash', ['-c', `set -- ${event.command}; printf '%s\\0' "$@"`], {
     cwd: f.project,
@@ -227,7 +227,7 @@ function monitor(t, cwd, overrides) {
 }
 
 function launcher(t) {
-  const app = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-comment-launcher-'));
+  const app = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-comment-launcher-'));
   t.after(() => fs.rmSync(app, { recursive: true, force: true }));
   const source = path.join(repo, 'skills/artifacts/app');
   for (const name of fs.readdirSync(source))
@@ -237,7 +237,7 @@ function launcher(t) {
   return (project, session, ...args) => {
     const result = spawnSync(
       process.execPath,
-      [path.join(app, 'ryugi-artifacts.cjs'), ...args, '--json', '--project-dir', project],
+      [path.join(app, 'anjian.cjs'), ...args, '--json', '--project-dir', project],
       { env: { ...process.env, CLAUDE_CODE_SESSION_ID: session }, encoding: 'utf8' },
     );
     assert.equal(result.status, 0, result.stderr);
@@ -326,7 +326,7 @@ test('comments on an open choice round stay silent until the round is submitted'
   f.rounds('submitted');
   const [event, ...rest] = poll();
   assert.deepEqual(rest, []);
-  assert.equal(event.type, 'ryugi-choices');
+  assert.equal(event.type, 'anjian-choices');
   assert.equal(event.artifact, 'artboard/pick');
   assert.equal(event.round, 'r1');
   assert.ok(event.command.includes('comment list --json'));
@@ -340,7 +340,7 @@ test('a withdrawal wakes once, and a comment after submit wakes as usual', (t) =
   const poll = watch(f.project);
   assert.deepEqual(poll(), []);
   f.save('artboard/pick', [f.comment('t1', 1, 'q1-a')]);
-  assert.equal(poll()[0].type, 'ryugi-comments');
+  assert.equal(poll()[0].type, 'anjian-comments');
   f.rounds('open');
   const events = poll();
   assert.equal(events.length, 1);
@@ -351,7 +351,7 @@ test('without rounds.json every board comment wakes, never silence', (t) => {
   const f = choiceFixture(t);
   const poll = watch(f.project);
   f.save('artboard/pick', [f.comment('t1', 1, 'q1-a')]);
-  assert.equal(poll()[0].type, 'ryugi-comments');
+  assert.equal(poll()[0].type, 'anjian-comments');
 });
 
 test('a running watcher keeps a heartbeat beside its subscription', async (t) => {
@@ -400,6 +400,6 @@ test('a last comment and the submit in one tick wake once', (t) => {
   f.rounds('submitted');
   assert.deepEqual(
     poll().map((event) => event.type),
-    ['ryugi-choices'],
+    ['anjian-choices'],
   );
 });

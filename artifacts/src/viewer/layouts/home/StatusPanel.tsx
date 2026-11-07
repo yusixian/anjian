@@ -29,10 +29,6 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
       body: JSON.stringify({ dir: project.dir }),
     });
 
-  const relay = status.relay.connected
-    ? t('server.relayAnnounced', { count: status.relay.announced })
-    : t('server.relayNotConnected');
-
   return (
     <>
       <dl {...stylex.props(styles.rows)}>
@@ -44,25 +40,11 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
         </dd>
         <dt {...stylex.props(styles.term)}>{t('server.address')}</dt>
         <dd {...stylex.props(styles.value)}>{addressOf(status.url)}</dd>
-        <dt {...stylex.props(styles.term)}>{t('server.relay')}</dt>
-        <dd {...stylex.props(styles.value)}>{relay}</dd>
         <dt {...stylex.props(styles.term)}>{t('server.livePages')}</dt>
         <dd {...stylex.props(styles.value)}>
-          {t('server.liveCounts', { local: status.live.local, relay: status.live.relay })}
+          {status.live.local}
         </dd>
       </dl>
-      {status.latest && (
-        <div {...stylex.props(styles.update)}>
-          <span>{t('server.newVersion', { version: status.latest })}</span>
-          <Button
-            size="small"
-            type="primary"
-            onClick={() => void run('/api/hub/upgrade', t('server.restarting'))}
-          >
-            {t('server.upgrade')}
-          </Button>
-        </div>
-      )}
       <h3 {...stylex.props(styles.section)}>
         {t('server.projects')} · {status.projects.length}
       </h3>

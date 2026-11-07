@@ -1,6 +1,6 @@
 # Document artifacts
 
-A living doc at `.ryugi/artifacts/document/<id>/`. You write it; your human
+A living doc at `.anjian/artifacts/document/<id>/`. You write it; your human
 partner reads it in their browser, comments on passages, and can fix text in
 place. Their edits and yours merge live.
 
@@ -102,8 +102,8 @@ drawn with box-drawing characters is reported in `warnings.json`.
   C->>S: ack(41)]]></mermaid>
   <alert type="note"><p>Offline over 7 days falls back to snapshots.</p></alert>
   <details summary="Alternatives considered"><p>Polling every 5s.</p></details>
-  <steps><step title="Install the CLI"><p>Run <code>pnpm add -g ryugi</code>.</p></step>
-    <step title="Start the relay"><codeblock lang="sh"><![CDATA[ryugi relay]]></codeblock></step></steps>
+  <steps><step title="Install the CLI"><p>Run <code>pnpm build</code>.</p></step>
+    <step title="Start the relay"><codeblock lang="sh"><![CDATA[anjian relay]]></codeblock></step></steps>
   <math display="block">x^2</math>
   <img src="assets/flow.png" alt="flow" caption="Sync flow" width="640"/>
   <excalidraw>assets/flow.excalidraw</excalidraw>
@@ -139,12 +139,12 @@ rejected.
 
 `<dynamic>` embeds `assets/<name>.html` as a live block, sandboxed. Write
 that file as a small HTML artifact page: [`html.md`](./html.md) and the
-`ryugi-*` components in [`ui.md`](./ui.md) apply, but keep it one file with
+`anjian-*` components in [`ui.md`](./ui.md) apply, but keep it one file with
 its scripts and styles inline, and size it by its content, not `vh` or
 `height: 100%`. The block sits on the document's own background: don't wrap
-it in a `ryugi-card` or give `body` a background.
+it in a `anjian-card` or give `body` a background.
 
-The CDATA JSON arrives as `window.ryugiProps`. Rewriting the file reloads
+The CDATA JSON arrives as `window.anjianProps`. Rewriting the file reloads
 the block with your human partner's control values kept; changing the
 props reloads it with the values reset.
 
@@ -156,7 +156,7 @@ complete only once `dynamic["assets/<name>.html"].ran` is `true`.
 Read and answer comments through the CLI, never through `comments.json`.
 
 ```bash
-node app/ryugi-artifacts.cjs comment list --json --project-dir /path/to/project --artifact document/<id>
+node app/anjian.cjs comment list --json --project-dir /path/to/project --artifact document/<id>
 ```
 
 - `list` prints what your human partner changed since you last ran it: new
@@ -170,7 +170,7 @@ node app/ryugi-artifacts.cjs comment list --json --project-dir /path/to/project 
 - Reply, with the message on stdin:
 
   ```bash
-  node app/ryugi-artifacts.cjs comment reply --json --project-dir /path/to/project --artifact document/<id> --thread <thread-id> <<'EOF'
+  node app/anjian.cjs comment reply --json --project-dir /path/to/project --artifact document/<id> --thread <thread-id> <<'EOF'
   Changed to 2% and updated the body to match.
   EOF
   ```

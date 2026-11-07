@@ -1,19 +1,7 @@
 import { onClientText } from '../client-reports';
 import type { ServerContext } from '../context';
-import { completeHandshake, handleClientFrames, rejectUpgrade } from '../ws';
+import { completeHandshake, handleClientFrames } from '../ws';
 import type { UpgradeRoute } from './table';
-
-const DIRECT_RELAY_ROUTE = /^\/relay\/a\/([\w-]{1,64})$/;
-
-export const directRelayRoute: UpgradeRoute<ServerContext> = {
-  path: DIRECT_RELAY_ROUTE,
-  auth: 'direct-relay',
-  handle: (_req, socket, ctx, { match, clientKey }) => {
-    const key = ctx.servedArtifacts().get(match[1]!);
-    if (!key) rejectUpgrade(socket, 404, 'Not Found');
-    else ctx.direct.accept(socket, clientKey, key);
-  },
-};
 
 export const clientSocketRoute: UpgradeRoute<ServerContext> = {
   path: '/ws',

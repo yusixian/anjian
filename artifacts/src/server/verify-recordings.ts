@@ -116,7 +116,7 @@ export function createVerifyRecordings(options: Options) {
       job.state = { ...cached.result, status: 'ready', outcome: cached.result.status };
       if (cached.result.status === 'trimmed') {
         job.output = output;
-        job.virtual = `pages/ryugi-recordings/${key}.mp4`;
+        job.virtual = `pages/anjian-recordings/${key}.mp4`;
         job.hash = cached.hash;
         files.set(`${job.artifact}/${job.virtual}`, output);
       }

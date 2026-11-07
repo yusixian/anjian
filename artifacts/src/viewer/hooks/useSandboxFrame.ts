@@ -43,12 +43,12 @@ export function useSandboxFrame(target: string | null, handlers: Handlers) {
       setSrc(target);
     };
     const onMessage = (event: MessageEvent<FrameMessage>) => {
-      if (event.source === frame && event.data?.type === 'ryugi:state')
+      if (event.source === frame && event.data?.type === 'anjian:state')
         finish(event.data.state ?? null);
     };
     window.addEventListener('message', onMessage);
     const timer = setTimeout(() => finish(null), SNAPSHOT_TIMEOUT_MS);
-    frame.postMessage({ type: 'ryugi:snapshot' }, '*');
+    frame.postMessage({ type: 'anjian:snapshot' }, '*');
     return () => {
       done = true;
       window.removeEventListener('message', onMessage);
@@ -59,7 +59,7 @@ export function useSandboxFrame(target: string | null, handlers: Handlers) {
   useEffect(() => {
     const onMessage = (event: MessageEvent<FrameMessage>) => {
       if (event.source !== frameRef.current?.contentWindow) return;
-      if (event.data?.type === 'ryugi:error') {
+      if (event.data?.type === 'anjian:error') {
         if (errorsThisLoad.current >= MAX_ERRORS_PER_LOAD) return;
         errorsThisLoad.current += 1;
         latest.current.onError(String(event.data.message).slice(0, 500));
@@ -74,7 +74,7 @@ export function useSandboxFrame(target: string | null, handlers: Handlers) {
     if (src) latest.current.onLoaded(src);
     const state = pendingState.current;
     pendingState.current = null;
-    if (state) frameRef.current?.contentWindow?.postMessage({ type: 'ryugi:restore', state }, '*');
+    if (state) frameRef.current?.contentWindow?.postMessage({ type: 'anjian:restore', state }, '*');
   };
 
   return { frameRef, src, onLoad };

@@ -5,10 +5,10 @@ Lucide library. It loads locally, without a CDN or a React/theme runtime:
 
 ```html
 <button type="button" aria-label="Comment">
-  <ryugi-icon name="message-square" size="18"></ryugi-icon>
+  <anjian-icon name="message-square" size="18"></anjian-icon>
 </button>
-<ryugi-icon name="copy" size="18"></ryugi-icon>
-<ryugi-icon name="ellipsis" size="18"></ryugi-icon>
+<anjian-icon name="copy" size="18"></anjian-icon>
+<anjian-icon name="ellipsis" size="18"></anjian-icon>
 ```
 
 Use Lucide's kebab-case names. `size` defaults to 20 pixels, `stroke-width`
@@ -17,11 +17,11 @@ so page rules such as `.preview svg` cannot resize it. Unknown names are
 reported as runtime errors; use an existing name from [Lucide](https://lucide.dev/icons/).
 
 Icons are decorative by default. Label their action button. A standalone
-meaningful image can use `aria-label` on `ryugi-icon` instead.
+meaningful image can use `aria-label` on `anjian-icon` instead.
 
 For icons created only by JavaScript, put
-`<meta name="ryugi-icons" content="1">` in the head and wait for
-`customElements.whenDefined('ryugi-icon')` before measuring them.
+`<meta name="anjian-icons" content="1">` in the head and wait for
+`customElements.whenDefined('anjian-icon')` before measuring them.
 
 ## Moving the design into the app
 

@@ -20,38 +20,34 @@ vi.mock('@lobehub/ui/stylex/cssVar.stylex', () => ({
   cssVar: new Proxy({}, { get: (_, key) => `var(--${String(key)})` }),
 }));
 
-const status = (latest: string | null): HubStatus => ({
+const status = (): HubStatus => ({
   pid: 1,
   version: '1.0.0',
-  latest,
   startedAt: Date.now() - 3 * 3600_000,
   lastActivity: Date.now(),
   clients: 2,
   port: 27319,
   boardPort: 27329,
   url: 'http://localhost:27319/',
-  relay: { connected: true, announced: 23 },
-  live: { local: 6, relay: 1 },
+  live: { local: 6 },
   projects: [
-    { dir: '/p/ryugi', name: 'ryugi', lastUsedAt: 0, dormant: false, artifacts: 31 },
+    { dir: '/p/anjian', name: 'anjian', lastUsedAt: 0, dormant: false, artifacts: 31 },
     { dir: '/p/old-blog', name: 'old-blog', lastUsedAt: 0, dormant: true, artifacts: 4 },
   ],
 });
 
 let root: Root | null = null;
 let host: HTMLElement;
-let latest: string | null = null;
 const requests: { url: string; method: string; body?: string }[] = [];
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   requests.length = 0;
-  latest = null;
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     requests.push({ url, method: init?.method ?? 'GET', body: init?.body as string | undefined });
-    if (url === '/api/status') return new Response(JSON.stringify(status(latest)));
+    if (url === '/api/status') return new Response(JSON.stringify(status()));
     if (url.startsWith('/api/hub/log'))
-      return new Response(JSON.stringify({ lines: ['{"project":"/p/ryugi"}'] }));
+      return new Response(JSON.stringify({ lines: ['{"project":"/p/anjian"}'] }));
     return new Response(JSON.stringify({ ok: true }), { status: 202 });
   });
 });
@@ -86,42 +82,23 @@ const click = async (element: Element) => {
   await act(async () => {});
 };
 
-test('the pill shows the version, the relay and an update badge when a release is newer', async () => {
-  latest = '1.1.0';
+test('the status pill shows a local server without Cloud relay or upstream upgrades', async () => {
   await render();
   const pill = host.querySelector('button[aria-expanded]')!;
   expect(pill.textContent).toContain('v1.0.0');
-  expect(pill.textContent).toContain('relay connected');
-  expect(pill.textContent).toContain('Update');
-});
-
-test('no update badge when the server is current', async () => {
-  await render();
-  expect(host.querySelector('button[aria-expanded]')!.textContent).not.toContain('Update');
-});
-
-test('the panel lists the server state and projects, and stop calls the server', async () => {
-  latest = '1.1.0';
-  await render();
-  await click(host.querySelector('button[aria-expanded]')!);
+  expect(pill.textContent).toContain('Local');
+  expect(pill.textContent).not.toContain('relay');
+  expect(pill.textContent).not.toContain('Update');
+  await click(pill);
   const panel = host.querySelector('[role="dialog"]')!;
   expect(panel.textContent).toContain('localhost:27319');
-  expect(panel.textContent).toContain('23');
   expect(panel.textContent).toContain('old-blog');
-  expect(panel.textContent).toContain('1.1.0');
-  await click(button('Stop')!);
-  expect(requests.some((r) => r.url === '/api/hub/stop' && r.method === 'POST')).toBe(true);
-});
-
-test('upgrade and restart call the server', async () => {
-  latest = '1.1.0';
-  await render();
-  await click(host.querySelector('button[aria-expanded]')!);
-  await click(button('Upgrade and restart')!);
+  expect(button('Upgrade and restart')).toBeUndefined();
   await click(button('Restart')!);
+  await click(button('Stop')!);
   expect(requests.filter((r) => r.method === 'POST').map((r) => r.url)).toEqual([
-    '/api/hub/upgrade',
     '/api/hub/restart',
+    '/api/hub/stop',
   ]);
 });
 
@@ -141,7 +118,7 @@ test('the log opens from the panel', async () => {
   await click(host.querySelector('button[aria-expanded]')!);
   await click(button('View log')!);
   expect(requests.some((r) => r.url === '/api/hub/log')).toBe(true);
-  expect(host.querySelector('pre')!.textContent).toContain('/p/ryugi');
+  expect(host.querySelector('pre')!.textContent).toContain('/p/anjian');
 });
 
 test('uptime reads in days and hours, or hours and minutes', () => {

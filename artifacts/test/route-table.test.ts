@@ -17,7 +17,6 @@ const fakeContext = (overrides: Partial<RouteContext> = {}): RouteContext => ({
   isAuthorized: (_req, key) => key === 'secret',
   keyOk: (key) => key === 'secret',
   loopback: true,
-  options: {},
   policy: accessPolicy({ host: '127.0.0.1', urlHost: '127.0.0.1', ports: [4000] }),
   sameOrigin: (req) => req.headers.origin === `http://${req.headers.host}`,
   touch: vi.fn(),
@@ -92,6 +91,18 @@ describe('route table dispatch', () => {
       'Forbidden: agent calls need ?key=',
     );
     expect(run(routes, fakeRequest('/agent?key=secret', {}, 'POST')).body).toBe('agent');
+  });
+
+  it('enforces the public origin even when a loopback bind requires a key', () => {
+    const ctx = fakeContext({
+      loopback: false,
+      policy: accessPolicy({ host: '127.0.0.1', urlHost: 'localhost', ports: [4000], publicOrigin: 'https://anjian.example' }),
+    });
+    const routes: HttpRoute<RouteContext>[] = [
+      { path: '/agent', methods: ['POST'], auth: 'viewer', handle: reply('agent') },
+    ];
+    expect(run(routes, fakeRequest('/agent?key=secret', { origin: 'https://evil.example' }, 'POST'), ctx).body).toBe('Forbidden origin');
+    expect(run(routes, fakeRequest('/agent?key=secret', { origin: 'https://anjian.example' }, 'POST'), ctx).body).toBe('agent');
   });
 
   it('answers 400 for a path that cannot be decoded and 500 when a handler rejects', async () => {

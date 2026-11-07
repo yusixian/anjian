@@ -55,7 +55,7 @@ test('the hello from the frame at the local origin makes it ready', () => {
   act(() => {
     window.dispatchEvent(
       new MessageEvent('message', {
-        data: { type: 'ryugi:embed:hello' },
+        data: { type: 'anjian:embed:hello' },
         origin: 'http://localhost:4100',
         source: frame.contentWindow,
       }),

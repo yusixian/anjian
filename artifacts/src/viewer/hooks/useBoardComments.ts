@@ -7,7 +7,7 @@ import { clickAnchor, pinNumbers, selectionAnchor } from '../lib/board-anchor';
 import type { BoardCommentsState } from '../lib/board-comments';
 import type { Inspector, InspectorInput } from './useInspector';
 
-type DragInput = Extract<InspectorInput, { type: 'ryugi:inspect:drag' }>;
+type DragInput = Extract<InspectorInput, { type: 'anjian:inspect:drag' }>;
 
 interface Options {
   boards: Record<string, BoardSpec>;

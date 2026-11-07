@@ -53,10 +53,10 @@ export function installInspector(
   let suppressClick = false;
   const tracked = new Map<number, InspectorRect>();
   const cursor = doc.createElement('style');
-  cursor.setAttribute('data-ryugi-inspector', '');
+  cursor.setAttribute('data-anjian-inspector', '');
   cursor.textContent = `*{cursor:${pointerCursor}!important}`;
   const post = (type: string, data: Record<string, unknown>) =>
-    win.parent.postMessage({ type: `ryugi:inspect:${type}`, session, connection, ...data }, '*');
+    win.parent.postMessage({ type: `anjian:inspect:${type}`, session, connection, ...data }, '*');
   const idOf = (el: Element) => {
     let id = ids.get(el);
     if (!id) {
@@ -173,7 +173,7 @@ export function installInspector(
     const nodes: InspectorNode[] = [];
     let truncated = false;
     const visit = (el: Element, parentId: number | null, depth: number): number | null => {
-      if (ignored.has(el.tagName) || el.hasAttribute('data-ryugi-inspector')) return null;
+      if (ignored.has(el.tagName) || el.hasAttribute('data-anjian-inspector')) return null;
       if (nodes.length >= 2500 || depth >= 50) {
         truncated = true;
         return null;
@@ -253,7 +253,7 @@ export function installInspector(
     geometryFrame = win.requestAnimationFrame(geometry);
   };
   const ignoredTarget = (el: Element) =>
-    !!el.closest('[data-ryugi-inspector], script, style, link');
+    !!el.closest('[data-anjian-inspector], script, style, link');
   const onClick = (event: MouseEvent) => {
     if (
       !enabled ||
@@ -408,7 +408,7 @@ export function installInspector(
     post('hover', { rect: null, id: null });
   };
   const onMessage = (event: MessageEvent) => {
-    if (event.source !== win.parent || event.data?.type !== 'ryugi:inspect') return;
+    if (event.source !== win.parent || event.data?.type !== 'anjian:inspect') return;
     const data = event.data;
     if (data.action === 'enable') {
       if (typeof data.connection !== 'string' || !data.connection || data.connection.length > 128)

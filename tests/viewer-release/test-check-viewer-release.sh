@@ -19,7 +19,7 @@ fail() {
 repo="$TEST_ROOT/repo"
 mkdir -p "$repo/scripts" "$repo/artifacts/src" "$repo/skills"
 cp "$SCRIPT_SOURCE" "$repo/scripts/check-viewer-release.sh"
-printf '{ "name": "ryugi-artifacts", "version": "1.0.0" }\n' > "$repo/artifacts/package.json"
+printf '{ "name": "anjian", "version": "1.0.0" }\n' > "$repo/artifacts/package.json"
 printf 'export const a = 1;\n' > "$repo/artifacts/src/a.ts"
 
 g() {
@@ -52,7 +52,7 @@ fi
 grep -q 'artifacts/src' "$TEST_ROOT/out" || fail "failure should name artifacts/src: $(cat "$TEST_ROOT/out")"
 grep -q 'bump-version.sh' "$TEST_ROOT/out" || fail "failure should point at bump-version.sh: $(cat "$TEST_ROOT/out")"
 
-printf '{ "name": "ryugi-artifacts", "version": "1.0.1" }\n' > "$repo/artifacts/package.json"
+printf '{ "name": "anjian", "version": "1.0.1" }\n' > "$repo/artifacts/package.json"
 g add -A
 g commit -qm "bump"
 check || fail "a viewer change with a version bump should pass: $(cat "$TEST_ROOT/out")"

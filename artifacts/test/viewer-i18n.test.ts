@@ -22,6 +22,7 @@ test('uses Chinese when the browser prefers it', () => {
   const enI18n = createViewerI18n(['fr', 'en-US']);
   expect(zhI18n.language).toBe('zh');
   expect(enI18n.language).toBe('en');
-  expect(zhI18n.t('common.share')).toBe(zh.common.share);
-  expect(enI18n.t('common.share')).toBe(en.common.share);
+  expect(zhI18n.t('common.loading')).toBe(zh.common.loading);
+  expect(enI18n.t('common.loading')).toBe(en.common.loading);
+  expect(createViewerI18n([]).language).toBe('zh');
 });

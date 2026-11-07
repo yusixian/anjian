@@ -10,7 +10,6 @@ export interface RouteContext {
   isAuthorized: (req: http.IncomingMessage, key: string | null) => boolean;
   keyOk: (key: string | null) => boolean;
   loopback: boolean;
-  options: { cloud?: { origin: string } };
   policy: AccessPolicy;
   sameOrigin: (req: http.IncomingMessage) => boolean;
   touch: () => void;
@@ -25,8 +24,7 @@ export interface RouteParams {
 
 type Matcher<C> = string | RegExp | ((pathname: string, ctx: C) => string[] | null);
 
-export type HttpAuth =
-  'public' | 'key' | 'viewer' | 'navigation' | 'agent' | 'same-origin' | 'cloud';
+export type HttpAuth = 'public' | 'key' | 'viewer' | 'navigation' | 'agent' | 'same-origin';
 
 export interface HttpRoute<C extends RouteContext> {
   auth: HttpAuth;
@@ -41,7 +39,7 @@ export interface HttpRoute<C extends RouteContext> {
   raw?: boolean;
 }
 
-export type UpgradeAuth = 'direct-relay' | 'socket';
+export type UpgradeAuth = 'socket';
 
 export interface UpgradeRoute<C extends RouteContext> {
   auth: UpgradeAuth;
@@ -78,22 +76,12 @@ const HTTP_RULES: Record<HttpAuth, HttpRule> = {
   },
   'agent': { gated: true, denied: AGENT_DENIED, allow: (req, ctx, key) => ctx.agentOk(req, key) },
   'same-origin': { gated: true, denied: 'Forbidden', allow: (req, ctx) => ctx.sameOrigin(req) },
-  'cloud': {
-    gated: true,
-    denied: 'Forbidden',
-    allow: (req, ctx, key) => req.method === 'GET' || ctx.keyOk(key) || ctx.sameOrigin(req),
-  },
 };
 
 const UPGRADE_RULES: Record<
   UpgradeAuth,
   (req: http.IncomingMessage, ctx: RouteContext, key: string | null) => boolean
 > = {
-  'direct-relay': (req, ctx, key) => {
-    const fromCloud =
-      ctx.options.cloud !== undefined && req.headers.origin === ctx.options.cloud.origin;
-    return ctx.keyOk(key) && (fromCloud || ctx.sameOrigin(req));
-  },
   'socket': (req, ctx, key) => ctx.isAuthorized(req, key) && ctx.sameOrigin(req),
 };
 
@@ -111,7 +99,8 @@ function httpDenial(
 ) {
   const rule = HTTP_RULES[auth];
   if (rule.gated) {
-    if (ctx.loopback && !originAllowed(ctx.policy, req.headers.origin)) return 'Forbidden origin';
+    if ((ctx.loopback || ctx.policy.publicOrigin) && !originAllowed(ctx.policy, req.headers.origin))
+      return 'Forbidden origin';
     if (!ctx.isAuthorized(req, key))
       return 'Forbidden: open the full artifact link including ?key=';
   }

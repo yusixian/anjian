@@ -7,12 +7,12 @@ import { afterEach, expect, test } from 'vitest';
 
 import { get, readJson, waitFor, writeHtml } from './helpers';
 
-const entry = path.resolve(__dirname, '../bin/ryugi-artifacts.cjs');
+const entry = path.resolve(__dirname, '../bin/anjian.cjs');
 const projects: string[] = [];
 const children: ChildProcess[] = [];
 
 function project() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi cli project '));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian cli project '));
   projects.push(dir);
   return dir;
 }
@@ -27,22 +27,22 @@ test('help and invalid options exit without starting a server', () => {
   const cwd = project();
   const help = spawnSync(process.execPath, [entry, '--help'], { cwd, encoding: 'utf8' });
   expect(help.status).toBe(0);
-  expect(help.stdout).toContain('ryugi-artifacts');
+  expect(help.stdout).toContain('anjian');
   const invalid = spawnSync(process.execPath, [entry, '--no-such-option'], {
     cwd,
     encoding: 'utf8',
   });
   expect(invalid.status).toBe(1);
-  expect(fs.existsSync(path.join(cwd, '.ryugi'))).toBe(false);
+  expect(fs.existsSync(path.join(cwd, '.anjian'))).toBe(false);
 });
 
 test("<command> --help and -h print that command's help without starting a server", () => {
   const cwd = project();
   for (const flag of ['--help', '-h']) {
-    const result = spawnSync(process.execPath, [entry, 'publish', flag], { cwd, encoding: 'utf8' });
+    const result = spawnSync(process.execPath, [entry, 'start', flag], { cwd, encoding: 'utf8' });
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/^Usage: ryugi-artifacts publish/);
-    expect(result.stdout).toContain('--unpublish');
+    expect(result.stdout).toMatch(/^Usage: anjian start/);
+    expect(result.stdout).toContain('--project-dir');
     expect(result.stdout).not.toContain('auto-publish');
   }
   const comment = spawnSync(process.execPath, [entry, 'comment', 'add', '--help'], {
@@ -50,8 +50,8 @@ test("<command> --help and -h print that command's help without starting a serve
     encoding: 'utf8',
   });
   expect(comment.status).toBe(0);
-  expect(comment.stdout).toContain('ryugi-artifacts comment reply');
-  expect(fs.existsSync(path.join(cwd, '.ryugi'))).toBe(false);
+  expect(comment.stdout).toContain('anjian comment reply');
+  expect(fs.existsSync(path.join(cwd, '.anjian'))).toBe(false);
 });
 
 test('--version and -v print the package version without starting a server', () => {
@@ -64,14 +64,14 @@ test('--version and -v print the package version without starting a server', () 
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(version);
   }
-  expect(fs.existsSync(path.join(cwd, '.ryugi'))).toBe(false);
+  expect(fs.existsSync(path.join(cwd, '.anjian'))).toBe(false);
 });
 
 test.each([false, true])(
   'serves the selected project and stops on Ctrl+C (explicit path: %s)',
   async (explicit) => {
     const dir = project();
-    writeHtml(path.join(dir, '.ryugi/artifacts'), 'tuner', {
+    writeHtml(path.join(dir, '.anjian/artifacts'), 'tuner', {
       'index.html': '<title>CLI example</title>',
     });
     const child = spawn(process.execPath, [entry, ...(explicit ? [dir] : []), '--no-open'], {
@@ -79,10 +79,10 @@ test.each([false, true])(
       env: { ...process.env, CODEX_CI: '1' },
     });
     children.push(child);
-    const infoFile = path.join(dir, '.ryugi/artifacts/.state/server-info');
+    const infoFile = path.join(dir, '.anjian/artifacts/.state/server-info');
     await waitFor(() => fs.existsSync(infoFile), 5000);
     const info = readJson(infoFile);
-    expect(info.root).toBe(path.join(fs.realpathSync(dir), '.ryugi/artifacts'));
+    expect(info.root).toBe(path.join(fs.realpathSync(dir), '.anjian/artifacts'));
     expect((await get(info.url.replace('localhost', '127.0.0.1'))).status).toBe(200);
     child.kill('SIGINT');
     await waitFor(() => !fs.existsSync(infoFile), 5000);
@@ -93,7 +93,7 @@ test.each([false, true])(
 
 test('opens the library root and reuses its server for the next invocation', async () => {
   const dir = project();
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-cli-open-'));
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-cli-open-'));
   const log = path.join(bin, 'opened');
   for (const command of ['open', 'xdg-open'])
     fs.writeFileSync(
@@ -105,9 +105,9 @@ test('opens the library root and reuses its server for the next invocation', asy
   const child = spawn(process.execPath, [entry, dir], { env });
   children.push(child);
   await waitFor(() => fs.existsSync(log), 5000);
-  const info = readJson(path.join(dir, '.ryugi/artifacts/.state/server-info'));
+  const info = readJson(path.join(dir, '.anjian/artifacts/.state/server-info'));
   expect(fs.readFileSync(log, 'utf8').trim()).toBe(info.url);
-  const pidFile = path.join(process.env.RYUGI_SERVER_HOME!, 'server.pid');
+  const pidFile = path.join(process.env.ANJIAN_SERVER_HOME!, 'server.pid');
   const pid = fs.readFileSync(pidFile, 'utf8');
   const again = spawnSync(process.execPath, [entry, '--project-dir', dir, '--no-open'], {
     encoding: 'utf8',
@@ -119,14 +119,15 @@ test('opens the library root and reuses its server for the next invocation', asy
   expect(fs.readFileSync(pidFile, 'utf8')).toBe(pid);
 }, 15000);
 
-test('the npm bin runs the start, stop and publish subcommands', () => {
+test('the local bin starts and stops the server and rejects removed cloud commands', () => {
   const dir = project();
   const env = { ...process.env, ARTIFACTS_OPEN: '0' };
-  const started = spawnSync(process.execPath, [entry, 'start', '--project-dir', dir, '--json'], {
+  const started = spawnSync(process.execPath, [entry, 'start', '--background', '--project-dir', dir, '--json'], {
     encoding: 'utf8',
     env,
     timeout: 15000,
   });
+  expect(started.status, started.stderr).toBe(0);
   expect(JSON.parse(started.stdout.trim()).type).toBe('server-started');
   const published = spawnSync(
     process.execPath,

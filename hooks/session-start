@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SessionStart hook for ryugi plugin
+# SessionStart hook for anjian plugin
 
 set -euo pipefail
 
@@ -15,13 +15,13 @@ case "$0" in
 esac
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Read using-ryugi content via bash's builtin $(< file) instead of
+# Read using-anjian content via bash's builtin $(< file) instead of
 # cat, for the same PATH-independence reason.
-skill_md="${PLUGIN_ROOT}/skills/using-ryugi/SKILL.md"
+skill_md="${PLUGIN_ROOT}/skills/using-anjian/SKILL.md"
 if [ -r "$skill_md" ]; then
-  using_ryugi_content="$(< "$skill_md")"
+  using_anjian_content="$(< "$skill_md")"
 else
-  using_ryugi_content="Error reading using-ryugi skill"
+  using_anjian_content="Error reading using-anjian skill"
 fi
 
 # Escape string for JSON embedding using bash parameter substitution.
@@ -37,8 +37,8 @@ escape_for_json() {
   printf '%s' "$s"
 }
 
-using_ryugi_escaped=$(escape_for_json "$using_ryugi_content")
-session_context="<EXTREMELY_IMPORTANT>\nYou have Ryugi.\n\n**Below is the full content of your 'ryugi:using-ryugi' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_ryugi_escaped}\n</EXTREMELY_IMPORTANT>"
+using_anjian_escaped=$(escape_for_json "$using_anjian_content")
+session_context="<EXTREMELY_IMPORTANT>\nYou have Anjian.\n\n**Below is the full content of your 'anjian:using-anjian' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_anjian_escaped}\n</EXTREMELY_IMPORTANT>"
 
 # Output context injection as JSON.
 # Cursor hooks expect additional_context (snake_case).
@@ -68,17 +68,16 @@ emit_json() {
   fi
 }
 
-# A project with published documents gets its artifacts server for the whole
-# session, so its owner can comment from the cloud. Backgrounded and silent:
+# Register this project with an already running local workbench. Backgrounded and silent:
 # it must never delay or break session start, and skips when node is missing.
 project_dir="${CLAUDE_PROJECT_DIR:-}"
 if [ -n "$project_dir" ]; then
   . "${SCRIPT_DIR}/project-root.sh"
-  project_dir="$(ryugi_project_root "$project_dir")"
+  project_dir="$(anjian_project_root "$project_dir")"
 fi
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${CURSOR_PLUGIN_ROOT:-}" ] && [ "${OS:-}" != "Windows_NT" ] && [ -n "$project_dir" ] \
-  && [ -f "$project_dir/.ryugi/config.json" ] && command -v node > /dev/null 2>&1; then
-  RYUGI_ARTIFACTS_OWNER="$PPID" node "${SCRIPT_DIR}/start-artifacts.cjs" "$project_dir" < /dev/null > /dev/null 2>&1 &
+  && [ -f "$project_dir/.anjian/config.json" ] && command -v node > /dev/null 2>&1; then
+  ANJIAN_ARTIFACTS_OWNER="$PPID" node "${SCRIPT_DIR}/start-artifacts.cjs" "$project_dir" < /dev/null > /dev/null 2>&1 &
 fi
 
 if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then

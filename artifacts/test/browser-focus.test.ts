@@ -11,7 +11,7 @@ const run = (apps: Record<string, unknown>, urls: string[]) =>
   });
 
 test('focuses an existing Dia tab through either its cloud or local address without changing the URL', () => {
-  const tab = { url: () => 'https://ryugi.innei.dev/a/report#ryugi-host=old' };
+  const tab = { url: () => 'https://anjian.innei.dev/a/report#anjian-host=old' };
   let focused: unknown;
   let activated = false;
   const result = run(
@@ -27,12 +27,12 @@ test('focuses an existing Dia tab through either its cloud or local address with
         },
       },
     },
-    ['https://ryugi.innei.dev/a/report', 'http://localhost:5000/document/abc?key=new'],
+    ['https://anjian.innei.dev/a/report', 'http://localhost:5000/document/abc?key=new'],
   );
   expect(result).toBe('found');
   expect(focused).toBe(tab);
   expect(activated).toBe(true);
-  expect(tab.url()).toBe('https://ryugi.innei.dev/a/report#ryugi-host=old');
+  expect(tab.url()).toBe('https://anjian.innei.dev/a/report#anjian-host=old');
 });
 
 test('selects the matching Chrome tab and window, treating loopback hostnames and keys as aliases', () => {
@@ -54,11 +54,11 @@ test('selects the matching Chrome tab and window, treating loopback hostnames an
 });
 
 test('selects an existing Safari tab without navigating it', () => {
-  const tab = { url: () => 'https://ryugi.innei.dev/a/report' };
+  const tab = { url: () => 'https://anjian.innei.dev/a/report' };
   const window = { tabs: () => [tab], currentTab: null as unknown, index: 2 };
   const result = run(
     { 'com.apple.Safari': { running: () => true, windows: () => [window], activate() {} } },
-    ['https://ryugi.innei.dev/a/report'],
+    ['https://anjian.innei.dev/a/report'],
   );
   expect(result).toBe('found');
   expect(window.currentTab).toBe(tab);
@@ -70,10 +70,10 @@ test('an unrelated artifact in the same browser does not prevent a new tab', () 
     {
       'company.thebrowser.dia': {
         running: () => true,
-        windows: () => [{ tabs: () => [{ url: () => 'https://ryugi.innei.dev/a/other' }] }],
+        windows: () => [{ tabs: () => [{ url: () => 'https://anjian.innei.dev/a/other' }] }],
       },
     },
-    ['https://ryugi.innei.dev/a/report'],
+    ['https://anjian.innei.dev/a/report'],
   );
   expect(result).toBe('missing');
 });
@@ -83,13 +83,13 @@ test('keeps an existing tab even if the browser refuses to focus it', () => {
     {
       'company.thebrowser.dia': {
         running: () => true,
-        windows: () => [{ tabs: () => [{ url: () => 'https://ryugi.innei.dev/a/report' }] }],
+        windows: () => [{ tabs: () => [{ url: () => 'https://anjian.innei.dev/a/report' }] }],
         focus() {
           throw new Error('Cannot focus');
         },
       },
     },
-    ['https://ryugi.innei.dev/a/report'],
+    ['https://anjian.innei.dev/a/report'],
   );
   expect(result).toBe('found');
 });
@@ -104,7 +104,7 @@ test('does not assume a tab is missing when its browser cannot be inspected', ()
         },
       },
     },
-    ['https://ryugi.innei.dev/a/report'],
+    ['https://anjian.innei.dev/a/report'],
   );
   expect(result).toBe('unknown');
 });

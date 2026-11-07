@@ -69,7 +69,7 @@ function report(
       new MessageEvent('message', {
         source,
         data: {
-          type: `ryugi:inspect:${type}`,
+          type: `anjian:inspect:${type}`,
           session: 'session-a',
           connection: connection(),
           ...data,
@@ -268,8 +268,8 @@ test('a pinch from a playing or uninspected board still reaches the canvas, plai
   act(() => root.render(createElement(Harness, { enabled: false })));
   report('wheel', pinch);
   expect(inputs).toEqual([
-    ['a', expect.objectContaining({ type: 'ryugi:inspect:wheel', deltaY: -4, zoom: true })],
-    ['a', expect.objectContaining({ type: 'ryugi:inspect:wheel', deltaY: -4, zoom: true })],
+    ['a', expect.objectContaining({ type: 'anjian:inspect:wheel', deltaY: -4, zoom: true })],
+    ['a', expect.objectContaining({ type: 'anjian:inspect:wheel', deltaY: -4, zoom: true })],
   ]);
 });
 
@@ -300,7 +300,7 @@ test('report validation rejects cycles, invalid coordinates and unsupported CSS 
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:tree',
+      type: 'anjian:inspect:tree',
       truncated: false,
       nodes: [{ ...nodes[0], parentId: 1, children: [1] }],
     }),
@@ -308,21 +308,21 @@ test('report validation rejects cycles, invalid coordinates and unsupported CSS 
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:hover',
+      type: 'anjian:inspect:hover',
       rect: { x: NaN, y: 0, width: 1, height: 1 },
     }),
   ).toBeNull();
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:tweaks',
+      type: 'anjian:inspect:tweaks',
       tweaks: [{ id: 1, name: '', property: 'background-image', value: 'url(x)' }],
     }),
   ).toBeNull();
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:hover',
+      type: 'anjian:inspect:hover',
       rect: { x: 0, y: 0, width: 1, height: 1 },
       id: 3,
     }),
@@ -330,38 +330,38 @@ test('report validation rejects cycles, invalid coordinates and unsupported CSS 
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:hover',
+      type: 'anjian:inspect:hover',
       rect: { x: 0, y: 0, width: 1, height: 1 },
       id: 'x',
     }),
   ).toBeNull();
   expect(
-    readInspectorReport({ ...header, type: 'ryugi:inspect:tree', truncated: false, nodes }),
+    readInspectorReport({ ...header, type: 'anjian:inspect:tree', truncated: false, nodes }),
   ).not.toBeNull();
   const { path: _, ...pathless } = nodes[0]!;
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:tree',
+      type: 'anjian:inspect:tree',
       truncated: false,
       nodes: [pathless],
     }),
   ).toBeNull();
   const tweak = { id: 1, name: 'Main', property: 'gap', from: '0px', value: '24px' };
   expect(
-    readInspectorReport({ ...header, type: 'ryugi:inspect:tweaks', tweaks: [tweak] }),
+    readInspectorReport({ ...header, type: 'anjian:inspect:tweaks', tweaks: [tweak] }),
   ).not.toBeNull();
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:tweaks',
+      type: 'anjian:inspect:tweaks',
       tweaks: [{ ...tweak, from: 3 }],
     }),
   ).toBeNull();
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:details',
+      type: 'anjian:inspect:details',
       request: 1,
       nodes: [{ id: 1, text: 'Main', html: '<body></body>' }],
     }),
@@ -369,7 +369,7 @@ test('report validation rejects cycles, invalid coordinates and unsupported CSS 
   expect(
     readInspectorReport({
       ...header,
-      type: 'ryugi:inspect:details',
+      type: 'anjian:inspect:details',
       request: 1,
       nodes: [{ id: 1, text: 'Main', html: 'x'.repeat(2001) }],
     }),

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression check: Ryugi should not route new worktrees through the old
+# Regression check: Anjian should not route new worktrees through the old
 # global worktree directory.
 
 set -euo pipefail
@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 USING_SKILL="$REPO_ROOT/skills/using-git-worktrees/SKILL.md"
-ROTOTILL_SPEC="$REPO_ROOT/docs/ryugi/specs/2026-04-06-worktree-rototill-design.md"
-ROTOTILL_PLAN="$REPO_ROOT/docs/ryugi/plans/2026-04-06-worktree-rototill.md"
+ROTOTILL_SPEC="$REPO_ROOT/docs/anjian/specs/2026-04-06-worktree-rototill-design.md"
+ROTOTILL_PLAN="$REPO_ROOT/docs/anjian/plans/2026-04-06-worktree-rototill.md"
 
 failures=0
 
@@ -46,7 +46,7 @@ assert_not_contains() {
 echo "=== Worktree Path Policy Test ==="
 echo ""
 
-assert_not_contains "$USING_SKILL" "~/.config/ryugi/worktrees" "using-git-worktrees does not mention old global path"
+assert_not_contains "$USING_SKILL" "~/.config/anjian/worktrees" "using-git-worktrees does not mention old global path"
 assert_not_contains "$USING_SKILL" "global legacy" "using-git-worktrees does not use unclear global legacy shorthand"
 assert_not_contains "$USING_SKILL" "Global path" "using-git-worktrees has no global path quick-reference row"
 assert_contains "$USING_SKILL" 'default to `.worktrees/` at the project root' "using-git-worktrees defaults new manual worktrees to .worktrees/"
@@ -68,8 +68,8 @@ assert_contains "$USING_SKILL" 'Never symlink or copy `node_modules`' "using-git
 assert_contains "$USING_SKILL" '`~/.codex/worktrees/`' "using-git-worktrees keeps manual worktrees out of harness folders"
 assert_contains "$USING_SKILL" '## Before you report done' "using-git-worktrees leaves no unreported changes behind"
 
-assert_not_contains "$ROTOTILL_SPEC" "~/.config/ryugi/worktrees" "rototill spec does not preserve old global path policy"
-assert_not_contains "$ROTOTILL_PLAN" "~/.config/ryugi/worktrees" "rototill plan does not preserve old global path policy"
+assert_not_contains "$ROTOTILL_SPEC" "~/.config/anjian/worktrees" "rototill spec does not preserve old global path policy"
+assert_not_contains "$ROTOTILL_PLAN" "~/.config/anjian/worktrees" "rototill plan does not preserve old global path policy"
 assert_not_contains "$ROTOTILL_PLAN" "legacy path compat" "rototill plan does not advertise legacy path compatibility"
 
 echo ""

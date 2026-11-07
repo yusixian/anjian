@@ -1,11 +1,11 @@
 {
   "interface": {
-    "displayName": "Ryugi Dev"
+    "displayName": "Anjian Dev"
   },
-  "name": "ryugi-dev",
+  "name": "anjian-dev",
   "plugins": [
     {
-      "name": "ryugi",
+      "name": "anjian",
       "source": {
         "source": "url",
         "url": "./"

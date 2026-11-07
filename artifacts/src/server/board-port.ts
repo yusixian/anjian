@@ -14,8 +14,8 @@ export const loopbackHosts = (urlHost: string) => [
 export const originsFor = (urlHost: string, port: number) =>
   loopbackHosts(urlHost).map((host) => `http://${host}:${port}`);
 
-export function boardCsp(urlHost: string, viewerPort: number, cloudOrigin?: string) {
-  const ancestors = [...originsFor(urlHost, viewerPort), ...(cloudOrigin ? [cloudOrigin] : [])];
+export function boardCsp(urlHost: string, viewerPort: number, publicOrigin?: string) {
+  const ancestors = [...originsFor(urlHost, viewerPort), ...(publicOrigin ? [publicOrigin] : [])];
   return `worker-src 'none'; frame-ancestors ${ancestors.join(' ')}`;
 }
 

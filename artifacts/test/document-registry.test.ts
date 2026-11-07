@@ -8,7 +8,7 @@ import { createDocumentRegistry } from '../src/server/documents';
 import type { ServerMessage } from '../src/shared/types';
 
 test('a list that picks up an agent file write still pushes it to the page', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-registry-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-registry-'));
   const file = path.join(root, 'document', 'relay', 'comments.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const sent: ServerMessage[] = [];

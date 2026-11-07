@@ -2,10 +2,8 @@ import { execFile } from 'node:child_process';
 
 import { commandHelp, type Options, parse, rootHelp, wantsHelp } from './command';
 import { COMMANDS } from './commands';
-import { loginHintText } from './login-hint';
 import { CliError } from './paths';
 import { type Emit, start } from './start';
-import { notifyUpdate } from './update-hint';
 
 declare const CLI_VERSION: string;
 
@@ -50,8 +48,6 @@ async function browse(argv: string[]) {
       }
       if (value.type !== 'server-started') return;
       console.info(value.url);
-      const hint = loginHintText(value.loginHint);
-      if (hint) console.info(hint);
       if (!value.reused) console.info('Press Ctrl+C to stop the server.');
       if (!values['no-open']) openBrowser(value.url as string);
     },
@@ -62,15 +58,10 @@ async function main(argv: string[]) {
   const [name, ...rest] = argv;
   const command = COMMANDS.find((candidate) => candidate.name === name);
   const json = argv.includes('--json') || (!command?.explicitJson && !process.stdout.isTTY);
-  notifyUpdate(CLI_VERSION, json, argv);
   const emit: Emit = (value) => {
     const line = json ? JSON.stringify(value) : text(value);
     if (!json && typeof value.error === 'string') console.error(line);
     else console.info(line);
-    if (!json) {
-      const hint = loginHintText(value.loginHint);
-      if (hint) console.info(hint);
-    }
   };
   try {
     if (command) {

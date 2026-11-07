@@ -3,7 +3,7 @@ import type http from 'node:http';
 import path from 'node:path';
 
 import type { ArtifactType } from '../../shared/types';
-import { hostAllowed } from '../access';
+import { hostAllowed, isLoopbackHost } from '../access';
 import { resolveArtifactAddress } from '../artifact-address';
 import { artifactKeyOf, resolveArtifactDir } from '../artifacts';
 import { boardCsp, routeBoardRequest } from '../board-port';
@@ -71,7 +71,7 @@ export function serveContent(
   const headers = {
     'Content-Security-Policy':
       mode === 'board'
-        ? boardCsp(options.urlHost, ctx.port, options.cloud?.origin)
+        ? boardCsp(options.urlHost, ctx.port, options.publicOrigin)
         : CONTENT_CSP[page && ref.type === 'document' ? 'html' : ref.type],
     ...(mode === 'board' ? {} : { 'Access-Control-Allow-Origin': '*' }),
   };
@@ -83,7 +83,7 @@ export function serveContent(
     if (err) send(res, 404, 'Not found');
     else {
       const uiRuntimeUrl = runtimeDir
-        ? `${mode === 'board' ? '/c/' : ctx.contentPrefix}runtime/ryugi-ui.js`
+          ? `${mode === 'board' ? '/c/' : ctx.contentPrefix}runtime/anjian-ui.js`
         : undefined;
       send(
         res,
@@ -133,7 +133,12 @@ export const contentRoute: HttpRoute<ServerContext> = {
 
 export const createBoardRequestHandler =
   (ctx: ServerContext) => (req: http.IncomingMessage, res: http.ServerResponse) => {
-    if (!hostAllowed(ctx.policy, req.headers.host)) {
+    const boardHost = ctx.options.boardOrigin && new URL(ctx.options.boardOrigin).host.toLowerCase();
+    const host = req.headers.host?.toLowerCase();
+    const allowedHost = boardHost && !isLoopbackHost(ctx.options.host)
+      ? host === boardHost
+      : hostAllowed(ctx.policy, host) || (boardHost !== undefined && host === boardHost);
+    if (!allowedHost) {
       send(res, 403, 'Forbidden host');
       return;
     }

@@ -11,7 +11,6 @@ import { openBrowser } from '../server/browser-focus';
 import { ensureHome, type MachinePaths, machinePaths, readProjects } from '../server/machine';
 import { readEntries, registryDir, removeEntry } from '../server/registry';
 import type { CommandSpec } from './command';
-import { takeLoginHint } from './login-hint';
 import {
   ARTIFACT_ERROR,
   ARTIFACT_PATTERN,
@@ -40,7 +39,9 @@ export interface StartOptions {
 export type Emit = (value: Record<string, unknown>) => void;
 
 interface ServerInfo {
-  cloudOrigin?: string;
+  localUrl?: string;
+  publicOrigin?: string;
+  boardOrigin?: string;
   host?: string;
   port: number;
   url: string;
@@ -48,15 +49,10 @@ interface ServerInfo {
   version?: string;
 }
 
-const DEFAULT_CLOUD_ORIGIN = 'https://ryugi.innei.dev';
-const RESERVE_TIMEOUT_MS = 5000;
 const REGISTER_TIMEOUT_MS = 15000;
 const STATUS_TIMEOUT_MS = 1000;
 const START_TIMEOUT_MS = 10000;
 const SETTLE_MS = 6000;
-
-const cloudOriginOf = (env: NodeJS.ProcessEnv) =>
-  (env.RYUGI_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN).replace(/\/+$/, '');
 
 const loopbackUrl = (url: string) => {
   const parsed = new URL(url);
@@ -65,7 +61,7 @@ const loopbackUrl = (url: string) => {
 };
 
 const apiUrl = (info: ServerInfo, pathname: string) => {
-  const base = loopbackUrl(info.url);
+  const base = loopbackUrl(info.localUrl ?? info.url);
   const target = new URL(pathname, base.origin);
   const key = base.searchParams.get('key');
   if (key) target.searchParams.set('key', key);
@@ -86,32 +82,6 @@ function withLink(info: ServerInfo, paths: ProjectPaths, artifact: string | unde
     out.link = `${url.origin}${artifactPath(paths.root, ref.type, ref.id)}${key ? `?key=${key}` : ''}`;
   }
   return out;
-}
-
-async function withCloudLink(
-  out: Record<string, unknown>,
-  info: ServerInfo,
-  paths: ProjectPaths,
-  artifact: string | undefined,
-) {
-  if (!artifact) return out;
-  try {
-    const res = await fetch(apiUrl(info, `/api/cloud/reserve/${artifact}`), {
-      method: 'POST',
-      headers: { 'X-Ryugi-Project': encodeURIComponent(paths.project) },
-      signal: AbortSignal.timeout(RESERVE_TIMEOUT_MS),
-    });
-    const { url, limit } = (await res.json()) as {
-      url?: unknown;
-      limit?: { message?: unknown; upgradeUrl?: unknown };
-    };
-    if (typeof url === 'string') return { ...out, cloudLink: url };
-    if (typeof limit?.upgradeUrl === 'string')
-      return { ...out, cloudLimit: { message: limit.message, upgradeUrl: limit.upgradeUrl } };
-    return out;
-  } catch {
-    return out;
-  }
 }
 
 async function acquireLock(lock: string) {
@@ -201,12 +171,12 @@ function serverEnv(options: StartOptions) {
     ARTIFACTS_HOST: options.host,
     ARTIFACTS_URL_HOST: options.urlHost!,
   };
-  if (process.env.RYUGI_ARTIFACTS_COMMAND)
-    env.RYUGI_ARTIFACTS_LAUNCHER = process.env.RYUGI_ARTIFACTS_COMMAND;
+  if (process.env.ANJIAN_ARTIFACTS_COMMAND)
+    env.ANJIAN_ARTIFACTS_LAUNCHER = process.env.ANJIAN_ARTIFACTS_COMMAND;
   for (const key of [
-    'RYUGI_ARTIFACTS_OWNER',
-    'RYUGI_ARTIFACTS_VERSION',
-    'RYUGI_ARTIFACTS_COMMAND',
+    'ANJIAN_ARTIFACTS_OWNER',
+    'ANJIAN_ARTIFACTS_VERSION',
+    'ANJIAN_ARTIFACTS_COMMAND',
     'ARTIFACTS_OPEN_CMD',
     'ARTIFACTS_ROOT',
   ])
@@ -257,7 +227,7 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
   if (!fs.existsSync(path.join(paths.state, '.gitignore')))
     fs.writeFileSync(path.join(paths.state, '.gitignore'), '*\n');
   const cliVersion =
-    process.env.RYUGI_ARTIFACTS_VERSION || (typeof CLI_VERSION === 'string' ? CLI_VERSION : '');
+    process.env.ANJIAN_ARTIFACTS_VERSION || (typeof CLI_VERSION === 'string' ? CLI_VERSION : '');
   const known = readProjects(machine.projects).some((entry) => entry.dir === paths.project);
 
   const finish = async (info: ServerInfo, reused: boolean, hint?: string) => {
@@ -267,9 +237,8 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
     const base = withLink(info, paths, options.artifact);
     if (reused) base.reused = true;
     if (hint) base.hint = hint;
-    const out = await withCloudLink(base, info, paths, options.artifact);
-    const loginHint = takeLoginHint(paths.project);
-    emit(loginHint ? { ...out, loginHint } : out);
+    const out = base;
+    emit(out);
     if (
       reused &&
       known &&
@@ -280,7 +249,7 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
       !process.env.ARTIFACTS_OPEN_CMD
     ) {
       const local = out.link as string;
-      await openBrowser(typeof out.cloudLink === 'string' ? out.cloudLink : local, [local]).catch(
+      await openBrowser(local, [local]).catch(
         (error: Error) => console.error(error.message),
       );
     }
@@ -312,7 +281,8 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
       const mismatch =
         (info.host ?? '127.0.0.1') !== options.host ||
         (info.urlHost ?? 'localhost') !== options.urlHost ||
-        (info.cloudOrigin ?? DEFAULT_CLOUD_ORIGIN) !== cloudOriginOf(process.env) ||
+        (info.publicOrigin ?? '') !== (process.env.ANJIAN_PUBLIC_ORIGIN ?? '').replace(/\/+$/, '') ||
+        (info.boardOrigin ?? '') !== (process.env.ANJIAN_BOARD_ORIGIN ?? '').replace(/\/+$/, '') ||
         (options.port !== undefined && String(info.port) !== options.port);
       if (decision !== 'replace' && !mismatch && (await answers(info))) {
         unlock();
@@ -453,7 +423,7 @@ export const startCommand: CommandSpec = {
         projectDir,
         artifact: values.artifact as string | undefined,
         host: (values.host as string | undefined) ?? '127.0.0.1',
-        urlHost: values['url-host'] as string | undefined,
+        urlHost: (values['url-host'] as string | undefined) ?? process.env.ARTIFACTS_URL_HOST,
         port: values.port as string | undefined,
         open: values['no-open'] ? false : values.open ? true : process.env.ARTIFACTS_OPEN !== '0',
         openExisting: !!values.open,
@@ -464,6 +434,6 @@ export const startCommand: CommandSpec = {
     ),
   text: (value) =>
     value.type === 'server-started'
-      ? `${value.cloudLink ?? value.link ?? value.url}${value.reused ? ' (already running)' : ''}`
+      ? `${value.link ?? value.url}${value.reused ? ' (already running)' : ''}`
       : null,
 };

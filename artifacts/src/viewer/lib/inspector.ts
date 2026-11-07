@@ -64,19 +64,19 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
     return null;
   let valid = false;
   switch (value.type) {
-    case 'ryugi:inspect:tree': {
+    case 'anjian:inspect:tree': {
       valid = typeof value.truncated === 'boolean' && validTree(value.nodes);
       break;
     }
-    case 'ryugi:inspect:hover': {
+    case 'anjian:inspect:hover': {
       valid = rect(value.rect) && (value.id === undefined || value.id === null || id(value.id));
       break;
     }
-    case 'ryugi:inspect:rect': {
+    case 'anjian:inspect:rect': {
       valid = id(value.id) && value.rect !== null && rect(value.rect);
       break;
     }
-    case 'ryugi:inspect:selection': {
+    case 'anjian:inspect:selection': {
       if (
         !['user', 'command', 'update', 'primary'].includes(value.reason as string) ||
         (value.toggle !== undefined && typeof value.toggle !== 'boolean')
@@ -101,7 +101,7 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
           ));
       break;
     }
-    case 'ryugi:inspect:targets': {
+    case 'anjian:inspect:targets': {
       valid =
         id(value.request) &&
         Array.isArray(value.targets) &&
@@ -118,7 +118,7 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
         );
       break;
     }
-    case 'ryugi:inspect:details': {
+    case 'anjian:inspect:details': {
       valid =
         id(value.request) &&
         Array.isArray(value.nodes) &&
@@ -128,7 +128,7 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
         );
       break;
     }
-    case 'ryugi:inspect:drag': {
+    case 'anjian:inspect:drag': {
       valid =
         ['start', 'move', 'end', 'cancel'].includes(value.phase as string) &&
         number(value.x) &&
@@ -137,7 +137,7 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
         (value.id === undefined || id(value.id));
       break;
     }
-    case 'ryugi:inspect:tweaks': {
+    case 'anjian:inspect:tweaks': {
       valid =
         Array.isArray(value.tweaks) &&
         value.tweaks.length <= 2500 &&
@@ -152,7 +152,7 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
         );
       break;
     }
-    case 'ryugi:inspect:wheel': {
+    case 'anjian:inspect:wheel': {
       valid =
         number(value.deltaX) &&
         number(value.deltaY) &&
@@ -161,11 +161,11 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
         typeof value.zoom === 'boolean';
       break;
     }
-    case 'ryugi:inspect:pan': {
+    case 'anjian:inspect:pan': {
       valid = number(value.deltaX) && number(value.deltaY);
       break;
     }
-    case 'ryugi:inspect:key': {
+    case 'anjian:inspect:key': {
       valid =
         text(value.code, 32) &&
         text(value.key, 32) &&

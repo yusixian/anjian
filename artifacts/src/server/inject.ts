@@ -8,7 +8,7 @@ import { EMBEDDED_STYLE, injectionPoint } from './strip-runtime';
 const RUNTIME = `(() => {
   const post = (message) => parent.postMessage(message, '*');
   const readProps = () => {
-    const match = /[#&]ryugi-props=([^&]*)/.exec(location.hash);
+    const match = /[#&]anjian-props=([^&]*)/.exec(location.hash);
     try {
       const props = match ? JSON.parse(decodeURIComponent(match[1])) : {};
       return props && typeof props === 'object' && !Array.isArray(props) ? props : {};
@@ -16,34 +16,34 @@ const RUNTIME = `(() => {
       return {};
     }
   };
-  window.ryugiProps = readProps();
+  window.anjianProps = readProps();
   addEventListener('hashchange', () => {
-    window.ryugiProps = readProps();
-    document.dispatchEvent(new CustomEvent('ryugi-props', { detail: window.ryugiProps }));
+    window.anjianProps = readProps();
+    document.dispatchEvent(new CustomEvent('anjian-props', { detail: window.anjianProps }));
   });
   let height = 0;
   new ResizeObserver(() => {
     const next = Math.ceil(document.documentElement.offsetHeight);
     if (next === height) return;
     height = next;
-    post({ type: 'ryugi:height', height });
+    post({ type: 'anjian:height', height });
   }).observe(document.documentElement);
   addEventListener('error', (event) => {
     const el = event.target;
     if (el && el !== window && el.getAttribute) {
-      post({ type: 'ryugi:error', message: 'failed to load ' + (el.getAttribute('src') || el.getAttribute('href') || el.tagName) });
+      post({ type: 'anjian:error', message: 'failed to load ' + (el.getAttribute('src') || el.getAttribute('href') || el.tagName) });
       return;
     }
     const where = event.filename ? ' (' + event.filename.split('/').pop().split('?')[0] + ':' + event.lineno + ')' : '';
-    post({ type: 'ryugi:error', message: String(event.message || 'error') + where });
+    post({ type: 'anjian:error', message: String(event.message || 'error') + where });
   }, true);
   addEventListener('unhandledrejection', (event) => {
     const reason = event.reason;
-    post({ type: 'ryugi:error', message: 'unhandled rejection: ' + String((reason && reason.message) || reason) });
+    post({ type: 'anjian:error', message: 'unhandled rejection: ' + String((reason && reason.message) || reason) });
   });
   const fields = () =>
-    Array.from(document.querySelectorAll('input, select, textarea, details, [data-ryugi-control]')).filter(
-      (el) => el.hasAttribute('data-ryugi-control') || !el.closest('[data-ryugi-control]'),
+    Array.from(document.querySelectorAll('input, select, textarea, details, [data-anjian-control]')).filter(
+      (el) => el.hasAttribute('data-anjian-control') || !el.closest('[data-anjian-control]'),
     );
   const keyOf = (el, index) => {
     if (el.id) return '#' + el.id;
@@ -58,11 +58,11 @@ const RUNTIME = `(() => {
   addEventListener('message', (event) => {
     if (event.source !== parent) return;
     const data = event.data || {};
-    if (data.type === 'ryugi:snapshot') {
+    if (data.type === 'anjian:snapshot') {
       const state = { scroll: [scrollX, scrollY], fields: {} };
       fields().forEach((el, index) => {
         const key = keyOf(el, index);
-        if (el.hasAttribute('data-ryugi-control')) {
+        if (el.hasAttribute('data-anjian-control')) {
           const saved = {};
           if ('value' in el && el.value !== undefined) saved.value = el.value;
           if (typeof el.checked === 'boolean') saved.checked = el.checked;
@@ -71,13 +71,13 @@ const RUNTIME = `(() => {
         else if (el.type === 'checkbox' || el.type === 'radio') state.fields[key] = { checked: el.checked };
         else if (el.type !== 'file' && el.type !== 'password') state.fields[key] = { value: el.value };
       });
-      post({ type: 'ryugi:state', state });
+      post({ type: 'anjian:state', state });
     }
-    if (data.type === 'ryugi:restore' && data.state && data.state.fields) {
+    if (data.type === 'anjian:restore' && data.state && data.state.fields) {
       fields().forEach((el, index) => {
         const saved = data.state.fields[keyOf(el, index)];
         if (!saved) return;
-        if (el.hasAttribute('data-ryugi-control')) {
+        if (el.hasAttribute('data-anjian-control')) {
           let changed = false;
           if ('value' in saved && el.value !== saved.value) {
             el.value = saved.value;
@@ -88,7 +88,7 @@ const RUNTIME = `(() => {
             changed = true;
           }
           if (changed) {
-            el.dispatchEvent(new CustomEvent('ryugi-change', { bubbles: true, detail: { value: el.value, checked: el.checked } }));
+            el.dispatchEvent(new CustomEvent('anjian-change', { bubbles: true, detail: { value: el.value, checked: el.checked } }));
           }
         } else if ('open' in saved) el.open = saved.open;
         else if ('checked' in saved) {
@@ -112,8 +112,8 @@ const RUNTIME_LINE = RUNTIME.split('\n')
   .map((line) => line.trim())
   .join(' ');
 
-const UI_MARKER = /<ryugi-(?!icon(?:\s|>))[a-z0-9-]+(?:\s|>)/i;
-const UI_META = /<meta[^>]+name=["']ryugi-ui["'][^>]*>/i;
+const UI_MARKER = /<anjian-(?!icon(?:\s|>))[a-z0-9-]+(?:\s|>)/i;
+const UI_META = /<meta[^>]+name=["']anjian-ui["'][^>]*>/i;
 
 export function injectRuntime(
   html: string,
@@ -129,8 +129,8 @@ export function injectRuntime(
       : '';
   const icons =
     options.uiRuntimeUrl &&
-    (ui || /<ryugi-icon(?:\s|>)|<meta[^>]+name=["']ryugi-icons["']/i.test(html))
-      ? `<script defer src="${options.uiRuntimeUrl.replace(/ryugi-ui\.js$/, 'ryugi-icons.js').replaceAll('"', '&quot;')}"></script>`
+    (ui || /<anjian-icon(?:\s|>)|<meta[^>]+name=["']anjian-icons["']/i.test(html))
+      ? `<script defer src="${options.uiRuntimeUrl.replace(/anjian-ui\.js$/, 'anjian-icons.js').replaceAll('"', '&quot;')}"></script>`
       : '';
   const at = injectionPoint(html);
   return html.slice(0, at) + tag + icons + ui + html.slice(at);

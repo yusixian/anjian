@@ -26,8 +26,8 @@
         "path": "skills/using-git-worktrees/SKILL.md"
       },
       {
-        "id": "using-ryugi",
-        "path": "skills/using-ryugi/SKILL.md"
+        "id": "using-anjian",
+        "path": "skills/using-anjian/SKILL.md"
       },
       {
         "id": "verifying-ui",
@@ -39,7 +39,10 @@
       {
         "id": "session-start",
         "event": "SessionStart",
-        "command": ["bash", "hooks/session-start"],
+        "command": [
+          "bash",
+          "hooks/session-start"
+        ],
         "timeoutMs": 5000
       }
     ],
@@ -51,8 +54,8 @@
     "manifestDir": ".muse-plugin"
   },
   "description": "Core skills library for Muse: TDD, debugging, collaboration patterns, and proven techniques",
-  "displayName": "Ryugi",
-  "name": "ryugi",
+  "displayName": "Anjian",
+  "name": "anjian",
   "schemaVersion": 1,
-  "version": "1.51.2"
+  "version": "0.1.0"
 }

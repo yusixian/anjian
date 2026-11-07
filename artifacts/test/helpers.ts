@@ -11,7 +11,7 @@ export function tempRoot() {
   fs.mkdirSync(path.join(viewer, 'assets'));
   fs.writeFileSync(path.join(viewer, 'assets', 'app.js'), 'console.log(1)');
   const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-runtime-'));
-  fs.writeFileSync(path.join(runtime, 'ryugi-ui.js'), 'window.__ryugiUi = true');
+  fs.writeFileSync(path.join(runtime, 'anjian-ui.js'), 'window.__anjianUi = true');
   return { root, viewer, runtime };
 }
 

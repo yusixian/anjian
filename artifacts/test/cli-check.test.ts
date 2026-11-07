@@ -52,21 +52,21 @@ const canvas = (boards: Record<string, string>) => ({
 async function project(write: (root: string) => void) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-project-'));
   projects.push(dir);
-  write(path.join(dir, '.ryugi', 'artifacts'));
+  write(path.join(dir, '.anjian', 'artifacts'));
   expect((await run(['start', '--project-dir', dir, '--background'])).out.type).toBe(
     'server-started',
   );
   return dir;
 }
 
-describe('ryugi-artifacts check', () => {
+describe('anjian check', () => {
   test('waits for the check after the newest write and prints it', async () => {
     const dir = await project((root) =>
       writeArtboard(root, 'nav', canvas({ a: 'pages/p/a.html' }), {
         'pages/p/a.html': '<html><body>a</body></html>',
       }),
     );
-    const board = path.join(dir, '.ryugi', 'artifacts', 'artboard', 'nav');
+    const board = path.join(dir, '.anjian', 'artifacts', 'artboard', 'nav');
     fs.writeFileSync(
       path.join(board, 'canvas.json'),
       JSON.stringify(canvas({ a: 'pages/p/a.html', b: 'pages/p/b.html' })),
@@ -102,7 +102,7 @@ describe('ryugi-artifacts check', () => {
       writeDocument(root, 'plan', { 'doc.xml': '<doc><p id="b1">one</p></doc>' }),
     );
     fs.writeFileSync(
-      path.join(dir, '.ryugi', 'artifacts', 'document', 'plan', 'doc.xml'),
+      path.join(dir, '.anjian', 'artifacts', 'document', 'plan', 'doc.xml'),
       '<doc><p id="b1">one</p><codeblock id="c1" lang="text"><![CDATA[┌───┐    ┌───┐\n│ a │ ─> │ b │\n└───┘    └───┘]]></codeblock></doc>',
     );
     const { code, out } = await run(['check', '--project-dir', dir, '--artifact', 'document/plan']);
@@ -115,7 +115,7 @@ describe('ryugi-artifacts check', () => {
     const dir = await project((root) =>
       writeHtml(root, 'tuner', { 'index.html': '<html><body>t</body></html>' }),
     );
-    fs.rmSync(path.join(dir, '.ryugi', 'artifacts', 'html', 'tuner', 'index.html'));
+    fs.rmSync(path.join(dir, '.anjian', 'artifacts', 'html', 'tuner', 'index.html'));
     const { out } = await run(['check', '--project-dir', dir, '--artifact', 'html/tuner']);
     expect(out.warnings.join('\n')).toMatch(/index\.html/);
   });
@@ -124,7 +124,7 @@ describe('ryugi-artifacts check', () => {
     const dir = await project((root) =>
       writeHtml(root, 'tuner', { 'draft.html': '<html><body>t</body></html>' }),
     );
-    const html = path.join(dir, '.ryugi', 'artifacts', 'html', 'tuner');
+    const html = path.join(dir, '.anjian', 'artifacts', 'html', 'tuner');
     expect(
       (await run(['check', '--project-dir', dir, '--artifact', 'html/tuner'])).out.warnings.join(
         '\n',
@@ -138,7 +138,7 @@ describe('ryugi-artifacts check', () => {
   test('fails when no server is running', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-project-'));
     projects.push(dir);
-    writeHtml(path.join(dir, '.ryugi', 'artifacts'), 'tuner', { 'index.html': '<html></html>' });
+    writeHtml(path.join(dir, '.anjian', 'artifacts'), 'tuner', { 'index.html': '<html></html>' });
     const { code, out } = await run(['check', '--project-dir', dir, '--artifact', 'html/tuner']);
     expect(code).toBe(1);
     expect(out.error).toMatch(/No artifacts server is running/);
@@ -158,7 +158,7 @@ describe('ryugi-artifacts check', () => {
   test('a project the running server does not know yet is told to start first', async () => {
     await project((root) => writeHtml(root, 'tuner', { 'index.html': '<html></html>' }));
     const stranger = fs.mkdtempSync(path.join(os.tmpdir(), 'check-project-'));
-    writeHtml(path.join(stranger, '.ryugi', 'artifacts'), 'tuner', {
+    writeHtml(path.join(stranger, '.anjian', 'artifacts'), 'tuner', {
       'index.html': '<html></html>',
     });
     const { code, out } = await run([

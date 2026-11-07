@@ -1,13 +1,7 @@
 import type { CommentsFile, HumanOp } from '../../shared/comments';
 import { DOCUMENT_FEATURES, DOCUMENT_FEATURES_HEADER } from '../../shared/document-features';
-import type { RelayPresence } from '../../shared/relay';
 import type { DocumentPayload } from '../../shared/types';
-import { type Channel, createChannel } from './channel';
-import {
-  createRelayConnection,
-  type RelayConnection,
-  type RelayConnectionOptions,
-} from './relayConnection';
+import type { Channel } from './channel';
 
 export interface DocumentMeta extends DocumentPayload {
   contentBase: string;
@@ -80,62 +74,6 @@ export function createLocalTransport({
       const res = await post('comments', JSON.stringify(op), 'application/json');
       if (!res.ok) throw new Error(`comment failed (${res.status})`);
       return ((await res.json()) as { comments: CommentsFile }).comments;
-    },
-  };
-}
-
-export interface RelayTransportOptions {
-  artifact: string;
-  connect?: (options: RelayConnectionOptions) => RelayConnection;
-  contentBase: string;
-  onPresence: (presence: RelayPresence) => void;
-  retryMs?: number;
-  url: string;
-  WebSocket?: typeof WebSocket;
-}
-
-export function createRelayTransport(
-  options: RelayTransportOptions,
-): DocumentTransport & { close: () => void; reconnect: () => void } {
-  const channel = createChannel();
-  const connection = (options.connect ?? createRelayConnection)({
-    url: options.url,
-    artifact: options.artifact,
-    WebSocket: options.WebSocket,
-    retryMs: options.retryMs,
-    onPresence: options.onPresence,
-    onEvent: (event) => channel.emit(event as never),
-    onOnline: () => channel.emit({ type: 'open' }),
-  });
-  return {
-    artifact: options.artifact,
-    channel,
-    close: connection.close,
-    reconnect: connection.reconnect,
-    async meta() {
-      const meta = await connection.request<DocumentMeta>({ op: 'meta' });
-      return /^https?:\/\//.test(meta.contentBase ?? '')
-        ? meta
-        : { ...meta, contentBase: options.contentBase };
-    },
-    state: () => connection.request<DocumentState>({ op: 'state' }),
-    async update(bytes) {
-      await connection.request({
-        op: 'update',
-        bytes: encodeBase64(bytes),
-        features: DOCUMENT_FEATURES,
-      });
-    },
-    async comment(op) {
-      return (await connection.request<{ comments: CommentsFile }>({ op: 'comment', comment: op }))
-        .comments;
-    },
-    send(message) {
-      const { type } = message as { type?: unknown };
-      if (type === 'selection')
-        connection.request({ op: 'selection', selection: message as never }).catch(() => {});
-      else if (type === 'loaded' || type === 'runtime-error')
-        connection.request({ op: 'client', message }).catch(() => {});
     },
   };
 }

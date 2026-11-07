@@ -7,7 +7,7 @@ import { parseAcceptLanguage, resolveLocale } from '../../shared/locale';
 import { typeFaviconHref } from '../../shared/type-icons';
 import { ARTIFACT_TYPES } from '../../shared/types';
 import { artifactPath, resolveArtifactAddress } from '../artifact-address';
-import { artifactKeyOf, type ArtifactRef, isArtifactLocator } from '../artifacts';
+import { artifactKeyOf, isArtifactLocator } from '../artifacts';
 import { projectName, type ServerContext, titleOf } from '../context';
 import { send, sendFile, urlHostForHttp } from '../http';
 import { serverText } from '../locales';
@@ -19,7 +19,6 @@ const SHELL_ROUTE = new RegExp(`^/(?:(${ARTIFACT_TYPES.join('|')})/([^/]+)/?)?$`
 const PREVIEW_ROUTE = new RegExp(
   `^/preview/(artboard|document|html)/${ARTIFACT_LOCATOR_SOURCE}/?$`,
 );
-const EMBED_ROUTE = /^\/embed\/(artboard|document)\/([\w-]{1,64})\/?$/;
 
 const viewerCsp = (boardOrigins: string[]) =>
   [
@@ -40,12 +39,9 @@ function serveShell(
   res: http.ServerResponse,
   ctx: ServerContext,
   { pathname, key }: RouteParams,
-  embedded: ArtifactRef | null,
 ) {
   const { root, options, loopback, viewerDir } = ctx;
-  const embed = embedded !== null;
   const requested =
-    embedded ||
     artifactKeyOf(pathname.replace(/^\/(?:preview\/)?/, '').replace(/\/$/, ''), isArtifactLocator);
   const resolved = requested && resolveArtifactAddress(root, requested.type, requested.id);
   const ref = resolved ?? requested;
@@ -71,20 +67,19 @@ function serveShell(
       ? artifactPath(root, ref.type, ref.id)
       : `/${ref.type}/${ref.id}`
     : '/';
-  const canonical = `http://${urlHostForHttp(options.urlHost)}:${ctx.port}${preview ? '/preview' : ''}${canonicalPath}`;
-  const csp = embed
-    ? viewerCsp(ctx.boardOrigins()).replace(
-        "frame-ancestors 'none'",
-        `frame-ancestors ${options.cloud!.origin}`,
-      )
-    : preview
+  const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${ctx.port}`;
+  const canonical = `${origin}${preview ? '/preview' : ''}${canonicalPath}`;
+  const csp = preview
       ? viewerCsp(ctx.boardOrigins()).replace("frame-ancestors 'none'", "frame-ancestors 'self'")
       : viewerCsp(ctx.boardOrigins());
   const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8' };
-  // One server serves every project: the page's own calls (/api/artifacts, /api/cloud/*) find their project by the Referer.
+  // One server serves every project: the page's own API calls find their project by the Referer.
   if (ref) headers['Referrer-Policy'] = 'same-origin';
-  if (key !== null && !loopback)
-    headers['Set-Cookie'] = `${ctx.cookieName}=${ctx.token}; HttpOnly; SameSite=Strict; Path=/`;
+  if (key !== null && !loopback) {
+    const secure = options.publicOrigin?.startsWith('https:') &&
+      req.headers.host?.toLowerCase() === new URL(options.publicOrigin).host.toLowerCase();
+    headers['Set-Cookie'] = `${ctx.cookieName}=${ctx.token}; HttpOnly; SameSite=Strict; Path=/${secure ? '; Secure' : ''}`;
+  }
   const entry =
     preview && fs.existsSync(path.join(viewerDir, 'preview.html')) ? 'preview.html' : 'index.html';
   void fs.promises
@@ -97,7 +92,6 @@ function serveShell(
         url: canonical,
         icon: ref ? typeFaviconHref(ref.type) : undefined,
         artifactId: resolved?.id,
-        embedParent: embed ? options.cloud!.origin : undefined,
       });
       send(res, 200, html, {
         ...headers,
@@ -109,28 +103,16 @@ function serveShell(
     );
 }
 
-export const embedRoute: HttpRoute<ServerContext> = {
-  path: /^\/embed\//,
-  auth: 'viewer',
-  handle: (req, res, ctx, params) => {
-    const embedMatch = EMBED_ROUTE.exec(params.pathname);
-    const embedded =
-      embedMatch && ctx.embedTarget(embedMatch[1] as 'artboard' | 'document', embedMatch[2]!);
-    if (!embedded || !ctx.options.cloud) send(res, 404, 'Not found');
-    else serveShell(req, res, ctx, params, embedded);
-  },
-};
-
 export const libraryRoute: HttpRoute<ServerContext> = {
   path: (pathname) => (pathname === '/' || pathname === '/index.html' ? [pathname] : null),
   auth: 'navigation',
-  handle: (req, res, ctx, params) => serveShell(req, res, ctx, params, null),
+  handle: (req, res, ctx, params) => serveShell(req, res, ctx, params),
 };
 
 export const shellRoute: HttpRoute<ServerContext> = {
   path: (pathname) => SHELL_ROUTE.exec(pathname) ?? PREVIEW_ROUTE.exec(pathname),
   auth: 'viewer',
-  handle: (req, res, ctx, params) => serveShell(req, res, ctx, params, null),
+  handle: (req, res, ctx, params) => serveShell(req, res, ctx, params),
 };
 
 export const viewerFileRoute: HttpRoute<ServerContext> = {

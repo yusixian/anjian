@@ -14,13 +14,6 @@
     "evidenceUpdated": "证据已更新",
     "stale": "锚点已失效"
   },
-  "autoPublish": {
-    "label": "自动发布",
-    "title": "要打开自动发布吗？",
-    "hint": "agent 每轮结束后，改过的 artifact 会以私密方式同步到 Ryugi Cloud，换台设备登录后也能打开。",
-    "later": "以后再说",
-    "turnOn": "打开"
-  },
   "choices": {
     "agent": "Agent",
     "byRecommendation": "{{groups}} 按推荐",
@@ -94,7 +87,6 @@
     "sendHint": "⌘↵ 发送 · Esc 取消"
   },
   "common": {
-    "share": "分享",
     "retry": "重试",
     "clearFilter": "清除筛选",
     "loading": "正在加载…",
@@ -110,7 +102,6 @@
     "close": "关闭",
     "reply": "回复…",
     "cancel": "取消",
-    "signInGithub": "用 GitHub 登录",
     "copied": "已复制",
     "requestFailed": "请求失败（{{status}}）",
     "you": "你",
@@ -148,33 +139,6 @@
     "history": "历史",
     "commentsLabel": "评论",
     "railComments": "评论 {{count}}"
-  },
-  "errors": {
-    "invalid_request": "请求无效。",
-    "sign_in_required": "请先登录 Ryugi Cloud。",
-    "forbidden": "你没有权限访问这里。",
-    "cross_site_refused": "这个请求来自其他网站，已被拒绝。",
-    "not_found": "找不到。",
-    "body_too_large": "请求内容太大。",
-    "rate_limited": "请求太频繁，稍等一会儿再试。",
-    "server_error": "Ryugi Cloud 出了点问题，稍后再试。",
-    "artifact_storage_limit": "这个 artifact 已达存储上限（含保留的历史版本和上传）。",
-    "artifact_too_large": "这个 artifact 太大，无法发布。",
-    "artifact_not_found": "这个 artifact 已经不存在。",
-    "artifact_deleting": "这个 artifact 正在删除。",
-    "missing_entry_file": "这个 artifact 缺少主文件。",
-    "missing_files": "还有文件没上传完，请重新发布。",
-    "publish_conflict": "发布时 artifact 有变动，请重试。",
-    "upload_conflict": "上传时 artifact 有变动，请重试。",
-    "upload_busy": "有文件正在上传，请重试。",
-    "delete_busy": "有上传正在收尾，请再删除一次。",
-    "count_conflict": "保存时 artifact 数量有变动，请重试。",
-    "view_limit": "这个链接本月的浏览次数已用完。",
-    "view_rate_limited": "这个网络的浏览次数太多，明天再试。",
-    "live_paused": "实时预览已暂停，UTC 00:00 恢复。",
-    "live_connections_full": "实时连接太多，关掉一些标签页后再试。",
-    "service_paused": "Ryugi Cloud 暂停服务中，稍后再试。",
-    "publish_not_ready": "发布前先修复这些问题："
   },
   "history": {
     "kindInsert": "新增",
@@ -249,7 +213,8 @@
     "paletteEmpty": "没有匹配的 Artifact",
     "paletteOpen": "打开",
     "paletteNewTab": "新标签页",
-    "emptyRecent": "所有项目里都还没有 Artifact"
+    "emptyRecent": "所有项目里都还没有 Artifact",
+    "switchLanguage": "切换语言为{{language}}"
   },
   "inspector": {
     "tab": {
@@ -391,71 +356,12 @@
     "previousBoard": "上一张",
     "nextBoard": "下一张"
   },
-  "planLimit": {
-    "total": "Pro 的 {{max}} 个名额已用完，删除一些后再试。",
-    "publishes": "免费版今天的 {{max}} 次发布已用完。",
-    "private": "免费版的 {{max}} 个私有名额已用完。",
-    "public": "免费版的 {{max}} 个公开名额已用完。"
-  },
   "preview": {
     "unavailable": "预览暂不可用",
     "loading": "正在加载预览…",
     "waitingPage": "等待页面内容…",
     "waitingDocument": "等待文档内容…",
     "waitingCanvas": "等待画布内容…"
-  },
-  "publication": {
-    "label": "云端发布",
-    "waiting": "等待发布",
-    "preparing": "正在准备发布",
-    "uploading": "正在上传到云端",
-    "publishing": "正在完成发布",
-    "not-ready": "内容还没准备好",
-    "failed": "上传未完成",
-    "published": "已发布到云端",
-    "update_waiting": "修改等待发布",
-    "update_preparing": "正在准备更新",
-    "update_uploading": "正在上传更新",
-    "update_publishing": "正在完成更新",
-    "update_not-ready": "更新还没准备好",
-    "update_failed": "更新未完成",
-    "waitingDescription": "内容还没有保存到云端，暂时无法通过链接分享给其他人。",
-    "preparingDescription": "正在检查内容并准备发布所需的文件。",
-    "uploadingDescription": "正在把文件保存到云端，你可以继续查看和编辑。",
-    "publishingDescription": "文件已上传，正在等待云端确认发布成功。",
-    "not-readyDescription": "内容尚未完整或仍有警告，需要准备好后才能发布。",
-    "failedDescription": "发布尚未完成，本地内容仍然保留。",
-    "publishedDescription": "云端版本已可访问，谁能查看取决于下面的权限。",
-    "updateWaitingDescription": "最新修改还没有发布，当前链接仍可打开上次发布的版本。",
-    "updateFailedDescription": "最新修改未能发布，上次的云端版本仍然可用。",
-    "publishNow": "立即发布",
-    "retry": "重试发布",
-    "autoPublish": "自动发布已开启，会在下一次发布时重试。",
-    "manualPublish": "在本地应用中发布后，链接才会可用。",
-    "offline": "请在电脑上打开本地应用后发布。",
-    "updateLocal": "请更新电脑上的 Ryugi 应用，以便在这里发布。",
-    "previousVersion": "访客目前看到上次发布的版本。"
-  },
-  "publish": {
-    "hintPrivate": "只有你登录后能打开链接",
-    "hintPublic": "拿到链接的人都能打开，不需要登录",
-    "readingStatus": "正在读取发布状态…",
-    "signInPrompt": "登录 Ryugi Cloud 后，可以把这个 artifact 发布成一个链接分享给别人。",
-    "waitingLogin": "等待浏览器完成登录…",
-    "signedInAs": "已登录：{{login}}",
-    "signOut": "退出登录",
-    "visibilityNotSynced": "本地可见性还没同步到云端",
-    "sync": "同步",
-    "update": "更新发布内容",
-    "publish": "发布",
-    "unpublish": "取消发布（链接将失效）",
-    "autoPublishNote": "自动发布已打开。取消发布后它会跳过这个 artifact，直到你再手动发布一次。",
-    "openSettings": "设置",
-    "published": "已发布",
-    "unpublishedChanges": "有未发布的修改",
-    "upToDate": "线上已是最新",
-    "localChanges": "本地有未发布的修改",
-    "localChangesAuto": "本地有未发布的修改，停止修改 5 分钟后自动更新"
   },
   "questions": {
     "previous": "上一题",
@@ -465,20 +371,12 @@
   },
   "server": {
     "offline": "服务已离线",
-    "relayConnected": "relay 已连接",
-    "relayOffline": "relay 未连接",
-    "update": "有更新",
+    "runningLabel": "本地运行",
     "panelLabel": "Artifacts 服务",
     "status": "状态",
     "running": "已运行 {{time}}",
     "address": "地址",
-    "relay": "Cloud relay",
-    "relayAnnounced": "已连接 · 宣告 {{count}} 个产物",
-    "relayNotConnected": "未连接",
     "livePages": "实时页面",
-    "liveCounts": "本机 {{local}} · 中继 {{relay}}",
-    "newVersion": "新版本 {{version}} 可用",
-    "upgrade": "升级并重启",
     "projects": "已登记项目",
     "active": "活跃",
     "dormant": "休眠",
@@ -493,30 +391,6 @@
     "restarting": "正在重启…",
     "stopped": "服务已停止。在任意项目里运行 start 即可重新启动。"
   },
-  "settings": {
-    "title": "设置",
-    "cloud": "Ryugi Cloud",
-    "account": "账户",
-    "signedInAs": "已登录为 {{login}}",
-    "signOut": "退出登录",
-    "signedOut": "登录后可以发布 artifact，并在其他设备上打开。",
-    "waitingLogin": "等待浏览器完成登录…",
-    "autoPublish": "自动发布",
-    "autoPublishHint": "agent 每轮结束后，改过的 artifact 会以私密方式同步到 Ryugi Cloud，换台设备也能打开。只有你能看到。",
-    "projectOverride": "只对 {{project}}",
-    "projectOverrideHint": "存在 .ryugi/config.json，不进 git",
-    "inherit": "跟随全局",
-    "on": "开",
-    "off": "关",
-    "accountMenu": "账户与设置：{{login}}",
-    "menuStatus": "自动发布：{{state}}",
-    "open": "设置…",
-    "signIn": "登录"
-  },
-  "share": {
-    "computerOffline": "电脑离线",
-    "computerOnline": "电脑在线"
-  },
   "time": {
     "justNow": "刚刚",
     "notRecorded": "时间未记录",
@@ -528,8 +402,8 @@
   },
   "type": {
     "all": "全部",
-    "artboard": "Artboard",
-    "document": "Document",
+    "artboard": "画板",
+    "document": "文档",
     "html": "HTML"
   },
   "verdict": {
@@ -557,9 +431,5 @@
     "speed": "倍速",
     "loop": "循环",
     "expand": "放大"
-  },
-  "visibility": {
-    "private": "私有",
-    "public": "公开"
   }
 }

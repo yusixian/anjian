@@ -1,7 +1,7 @@
 # Artboard prototypes
 
 Read this before writing a board with `"interactive": true` or a
-`data-ryugi-tweaks` declaration. Everything in `artboard.md` still applies.
+`data-anjian-tweaks` declaration. Everything in `artboard.md` still applies.
 
 ## Prototype authoring
 
@@ -56,7 +56,7 @@ parameter editor. Inspector's existing Tweaks tab still means CSS overrides.
 Put one JSON declaration in the HTML, before any JS that reads its values:
 
 ```html
-<script type="application/json" data-ryugi-tweaks>
+<script type="application/json" data-anjian-tweaks>
   {
     "controls": {
       "accent": {
@@ -129,19 +129,19 @@ html[data-tweak-density='compact'] article {
 }
 ```
 
-`window.ryugiTweaks` reads a snapshot of the current typed values. Defaults
+`window.anjianTweaks` reads a snapshot of the current typed values. Defaults
 are available when the declaration precedes your logic. Listen on `document`
-for `ryugi-tweaks`; `event.detail` contains the complete updated values:
+for `anjian-tweaks`; `event.detail` contains the complete updated values:
 
 ```js
 function render() {
-  const { count, showLoops } = window.ryugiTweaks;
+  const { count, showLoops } = window.anjianTweaks;
   cards.forEach((card, index) => {
     card.hidden = index >= count;
   });
   loopsButton.hidden = !showLoops;
 }
-document.addEventListener('ryugi-tweaks', render);
+document.addEventListener('anjian-tweaks', render);
 render();
 ```
 

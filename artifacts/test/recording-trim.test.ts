@@ -9,7 +9,7 @@ import { afterAll, test } from 'vitest';
 
 import { trimRecording } from '../src/server/recording-trim';
 
-const root = mkdtempSync(path.join(tmpdir(), 'ryugi-trim-test-'));
+const root = mkdtempSync(path.join(tmpdir(), 'anjian-trim-test-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 function run(command: string, args: string[]) {

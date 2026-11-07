@@ -42,14 +42,14 @@ import { artifactToast, createToastRoot } from './toast';
 
 declare global {
   interface Window {
-    ryugiToast: typeof artifactToast;
+    anjianToast: typeof artifactToast;
   }
 }
 
 const iconFor = (name: unknown) =>
   typeof name === 'string' && name
     ? ({ size = 16, strokeWidth = 2 }: LucideProps) =>
-        createElement('ryugi-icon', { name, size, 'stroke-width': strokeWidth })
+        createElement('anjian-icon', { name, size, 'stroke-width': strokeWidth })
     : undefined;
 
 interface Option {
@@ -96,7 +96,7 @@ const BASE_ATTRS = [
   'checked',
 ];
 
-class RyugiElement extends HTMLElement {
+class AnjianElement extends HTMLElement {
   static spec: Spec;
 
   #children: Node[] = [];
@@ -108,12 +108,12 @@ class RyugiElement extends HTMLElement {
   #checked = false;
 
   static get observedAttributes() {
-    const spec = (this as typeof RyugiElement).spec;
+    const spec = (this as typeof AnjianElement).spec;
     return [...new Set([...BASE_ATTRS, ...Object.keys(spec.attrs ?? {})])];
   }
 
   static specOf(el: HTMLElement) {
-    return (el.constructor as typeof RyugiElement).spec;
+    return (el.constructor as typeof AnjianElement).spec;
   }
 
   get value() {
@@ -145,7 +145,7 @@ class RyugiElement extends HTMLElement {
   }
 
   connectedCallback() {
-    const spec = RyugiElement.specOf(this);
+    const spec = AnjianElement.specOf(this);
     if (!this.#mounted) {
       this.#mounted = true;
       this.#children = [...this.childNodes];
@@ -153,7 +153,7 @@ class RyugiElement extends HTMLElement {
       this.#value = this.#initialValue(spec);
       this.#checked = this.#initialChecked();
       if (spec.options) this.#options = this.#readOptions(spec.options);
-      if (spec.control) this.setAttribute('data-ryugi-control', '');
+      if (spec.control) this.setAttribute('data-anjian-control', '');
       // A portal appends to its container instead of replacing it the way a root does.
       this.replaceChildren();
     }
@@ -168,7 +168,7 @@ class RyugiElement extends HTMLElement {
 
   attributeChangedCallback(name: string, previous: string | null, next: string | null) {
     if (!this.#mounted || previous === next) return;
-    const spec = RyugiElement.specOf(this);
+    const spec = AnjianElement.specOf(this);
     if (name === 'value' && spec.value) this.#value = this.#initialValue(spec);
     if (name === 'checked' && spec.checked) this.#checked = this.#initialChecked();
     this.render();
@@ -179,7 +179,7 @@ class RyugiElement extends HTMLElement {
     if (checked !== undefined) this.#checked = checked;
     this.render();
     this.dispatchEvent(
-      new CustomEvent('ryugi-change', {
+      new CustomEvent('anjian-change', {
         bubbles: true,
         detail: { value: this.#value, checked: this.#checked },
       }),
@@ -233,8 +233,8 @@ class RyugiElement extends HTMLElement {
 
   #readOptions(kind: string): Option[] {
     const tag =
-      { select: 'ryugi-option', segmented: 'ryugi-segment', menu: 'ryugi-menu-item' }[kind] ??
-      'ryugi-radio';
+      { select: 'anjian-option', segmented: 'anjian-segment', menu: 'anjian-menu-item' }[kind] ??
+      'anjian-radio';
     return Array.from(this.querySelectorAll(`:scope > ${tag}`)).map((option) => ({
       disabled:
         option.getAttribute('disabled') !== null && option.getAttribute('disabled') !== 'false',
@@ -246,7 +246,7 @@ class RyugiElement extends HTMLElement {
 }
 
 const makeElement = (spec: Spec) => {
-  class Element extends RyugiElement {}
+  class Element extends AnjianElement {}
   Element.spec = spec;
   return Element;
 };
@@ -258,7 +258,7 @@ const buttonProps = (p: Record<string, unknown>) => {
 
 const definitions: Spec[] = [
   {
-    tag: 'ryugi-button',
+    tag: 'anjian-button',
     attrs: {
       block: { kind: 'boolean', prop: 'block' },
       icon: { kind: 'string', prop: 'icon' },
@@ -275,7 +275,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-action-icon',
+    tag: 'anjian-action-icon',
     attrs: {
       icon: { kind: 'string', prop: 'icon' },
       size: { kind: 'string', prop: 'size' },
@@ -283,7 +283,7 @@ const definitions: Spec[] = [
     view: (_el, p) => <ActionIcon {...buttonProps(p)} icon={iconFor(p.icon ?? 'plus')} />,
   },
   {
-    tag: 'ryugi-tooltip',
+    tag: 'anjian-tooltip',
     attrs: {
       content: { kind: 'string', prop: 'title' },
       placement: { kind: 'string', prop: 'placement' },
@@ -298,7 +298,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-popover',
+    tag: 'anjian-popover',
     attrs: {
       content: { kind: 'string', prop: 'content' },
       placement: { kind: 'string', prop: 'placement' },
@@ -313,7 +313,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-menu',
+    tag: 'anjian-menu',
     options: 'menu',
     attrs: {
       label: { kind: 'string', prop: 'label' },
@@ -336,7 +336,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-input',
+    tag: 'anjian-input',
     attrs: {
       allowClear: { kind: 'boolean', prop: 'allowClear' },
       size: { kind: 'string', prop: 'size' },
@@ -354,7 +354,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-textarea',
+    tag: 'anjian-textarea',
     attrs: {
       rows: { kind: 'number', prop: 'rows' },
       size: { kind: 'string', prop: 'size' },
@@ -371,7 +371,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-input-number',
+    tag: 'anjian-input-number',
     attrs: {
       controls: { kind: 'boolean', prop: 'controls' },
       max: { kind: 'number', prop: 'max' },
@@ -393,7 +393,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-slider',
+    tag: 'anjian-slider',
     attrs: {
       max: { kind: 'number', prop: 'max' },
       min: { kind: 'number', prop: 'min' },
@@ -406,7 +406,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-slider-input',
+    tag: 'anjian-slider-input',
     attrs: {
       controls: { kind: 'boolean', prop: 'controls' },
       max: { kind: 'number', prop: 'max' },
@@ -422,7 +422,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-switch',
+    tag: 'anjian-switch',
     attrs: {
       loading: { kind: 'boolean', prop: 'loading' },
       size: { kind: 'string', prop: 'size' },
@@ -434,7 +434,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-checkbox',
+    tag: 'anjian-checkbox',
     attrs: {
       shape: { kind: 'string', prop: 'shape' },
       size: { kind: 'number', prop: 'size' },
@@ -448,7 +448,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-segmented',
+    tag: 'anjian-segmented',
     attrs: {
       block: { kind: 'boolean', prop: 'block' },
       glass: { kind: 'boolean', prop: 'glass' },
@@ -470,7 +470,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-select',
+    tag: 'anjian-select',
     attrs: {
       allowClear: { kind: 'boolean', prop: 'allowClear' },
       loading: { kind: 'boolean', prop: 'loading' },
@@ -492,7 +492,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-radio-group',
+    tag: 'anjian-radio-group',
     attrs: {
       gap: { kind: 'number', prop: 'gap' },
       horizontal: { kind: 'boolean', prop: 'horizontal' },
@@ -511,7 +511,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-color-picker',
+    tag: 'anjian-color-picker',
     attrs: {
       alpha: { kind: 'boolean', prop: 'alpha' },
       defaultFormat: { kind: 'string', prop: 'defaultFormat' },
@@ -526,7 +526,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-tag',
+    tag: 'anjian-tag',
     attrs: {
       closable: { kind: 'boolean', prop: 'closable' },
       color: { kind: 'string', prop: 'color' },
@@ -541,7 +541,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-alert',
+    tag: 'anjian-alert',
     attrs: {
       closable: { kind: 'boolean', prop: 'closable' },
       description: { kind: 'string', prop: 'description' },
@@ -552,7 +552,7 @@ const definitions: Spec[] = [
     view: (el, p) => <Alert {...p} title={(p.title as string | undefined) ?? el.initialText} />,
   },
   {
-    tag: 'ryugi-progress',
+    tag: 'anjian-progress',
     attrs: {
       percent: { kind: 'number', prop: 'percent' },
       size: { kind: 'string', prop: 'size' },
@@ -561,7 +561,7 @@ const definitions: Spec[] = [
     view: (_el, p) => <Progress percent={0} {...p} />,
   },
   {
-    tag: 'ryugi-badge',
+    tag: 'anjian-badge',
     attrs: {
       color: { kind: 'string', prop: 'color' },
       count: { kind: 'string', prop: 'count' },
@@ -578,7 +578,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-avatar',
+    tag: 'anjian-avatar',
     attrs: {
       alt: { kind: 'string', prop: 'alt' },
       shape: { kind: 'string', prop: 'shape' },
@@ -588,7 +588,7 @@ const definitions: Spec[] = [
     view: (_el, p) => <Avatar {...p} />,
   },
   {
-    tag: 'ryugi-divider',
+    tag: 'anjian-divider',
     attrs: {
       dashed: { kind: 'boolean', prop: 'dashed' },
       orientation: { kind: 'string', prop: 'orientation' },
@@ -596,7 +596,7 @@ const definitions: Spec[] = [
     view: (_el, p) => <Divider {...p} />,
   },
   {
-    tag: 'ryugi-card',
+    tag: 'anjian-card',
     attrs: {
       clickable: { kind: 'boolean', prop: 'clickable' },
       glass: { kind: 'boolean', prop: 'glass' },
@@ -610,7 +610,7 @@ const definitions: Spec[] = [
     ),
   },
   {
-    tag: 'ryugi-text',
+    tag: 'anjian-text',
     attrs: {
       align: { kind: 'string', prop: 'align' },
       code: { kind: 'boolean', prop: 'code' },
@@ -631,16 +631,16 @@ const definitions: Spec[] = [
 ];
 
 const HOST_CSS = `
-ryugi-button,ryugi-action-icon,ryugi-input,ryugi-textarea,ryugi-input-number,ryugi-slider,ryugi-slider-input,ryugi-switch,ryugi-checkbox,ryugi-segmented,ryugi-select,ryugi-radio-group,ryugi-color-picker,ryugi-tag,ryugi-badge,ryugi-avatar,ryugi-tooltip,ryugi-popover,ryugi-menu{display:inline-block;vertical-align:middle}
-ryugi-card,ryugi-alert,ryugi-progress,ryugi-divider,ryugi-text{display:block}
+anjian-button,anjian-action-icon,anjian-input,anjian-textarea,anjian-input-number,anjian-slider,anjian-slider-input,anjian-switch,anjian-checkbox,anjian-segmented,anjian-select,anjian-radio-group,anjian-color-picker,anjian-tag,anjian-badge,anjian-avatar,anjian-tooltip,anjian-popover,anjian-menu{display:inline-block;vertical-align:middle}
+anjian-card,anjian-alert,anjian-progress,anjian-divider,anjian-text{display:block}
 `;
 
 const reportError = (error: unknown) => {
-  console.error('[ryugi-ui]', error);
+  console.error('[anjian-ui]', error);
   window.dispatchEvent(new ErrorEvent('error', { error, message: String(error) }));
 };
 
-if (typeof window !== 'undefined' && !customElements.get('ryugi-button')) {
+if (typeof window !== 'undefined' && !customElements.get('anjian-button')) {
   const pageTheme = document.documentElement.dataset.theme;
   const applyTheme = () =>
     setLobeTheme({
@@ -652,7 +652,7 @@ if (typeof window !== 'undefined' && !customElements.get('ryugi-button')) {
             : 'light',
     });
   const style = document.createElement('style');
-  style.dataset.ryugiUi = '';
+  style.dataset.anjianUi = '';
   style.textContent = HOST_CSS;
   document.head.append(style);
   applyTheme();
@@ -662,7 +662,7 @@ if (typeof window !== 'undefined' && !customElements.get('ryugi-button')) {
       <ConfigProvider enableCustomFonts={false} motion={motion}>
         <IconProvider config={{ 'aria-hidden': true }}>
           {children}
-          <ToastHost className="ryugi-toast-viewport" root={toastRoot} />
+          <ToastHost className="anjian-toast-viewport" root={toastRoot} />
         </IconProvider>
       </ConfigProvider>
     ),
@@ -673,6 +673,6 @@ if (typeof window !== 'undefined' && !customElements.get('ryugi-button')) {
   for (const spec of definitions) {
     if (!customElements.get(spec.tag)) customElements.define(spec.tag, makeElement(spec));
   }
-  window.ryugiToast = artifactToast;
-  document.dispatchEvent(new CustomEvent('ryugi-ui:ready'));
+  window.anjianToast = artifactToast;
+  document.dispatchEvent(new CustomEvent('anjian-ui:ready'));
 }

@@ -16,9 +16,9 @@ test('the published package holds the CLI, the server, the viewer under fixed en
   expect(files).toEqual(
     expect.arrayContaining([
       'dist/server.cjs',
-      'bin/ryugi-artifacts.cjs',
+      'bin/anjian.cjs',
       'dist/cli.cjs',
-      'dist/runtime/ryugi-ui.js',
+      'dist/runtime/anjian-ui.js',
       'dist/viewer/index.css',
       'dist/viewer/index.html',
       'dist/viewer/index.js',
@@ -38,7 +38,7 @@ test('the published package holds the CLI, the server, the viewer under fixed en
         !file.startsWith('dist/viewer-lib/') &&
         !file.startsWith('dist/runtime/') &&
         file !== 'dist/server.cjs' &&
-        file !== 'bin/ryugi-artifacts.cjs' &&
+        file !== 'bin/anjian.cjs' &&
         file !== 'dist/cli.cjs' &&
         file !== 'package.json' &&
         file !== 'LICENSE' &&
@@ -77,8 +77,8 @@ test('the server and viewer builds are mirrored into the plugin for local develo
   expect(fs.readdirSync(path.join(localApp, 'viewer')).sort()).toEqual(
     fs.readdirSync(path.join(pkgDir, 'dist/viewer')).sort(),
   );
-  expect(fs.readFileSync(path.join(localApp, 'runtime/ryugi-ui.js'), 'utf8')).toBe(
-    fs.readFileSync(path.join(pkgDir, 'dist/runtime/ryugi-ui.js'), 'utf8'),
+  expect(fs.readFileSync(path.join(localApp, 'runtime/anjian-ui.js'), 'utf8')).toBe(
+    fs.readFileSync(path.join(pkgDir, 'dist/runtime/anjian-ui.js'), 'utf8'),
   );
 });
 
@@ -87,7 +87,7 @@ test('build output is never committed', () => {
     'skills/artifacts/app/server.cjs',
     'skills/artifacts/app/cli.cjs',
     'skills/artifacts/app/viewer/index.js',
-    'skills/artifacts/app/runtime/ryugi-ui.js',
+    'skills/artifacts/app/runtime/anjian-ui.js',
     'artifacts/dist/server.cjs',
     'artifacts/dist/viewer/index.js',
   ]) {
@@ -111,7 +111,7 @@ test('the thumbnail entry is one self-contained module a Worker can bundle', asy
   const code = fs.readFileSync(file, 'utf8');
   expect(code).not.toMatch(/\bimport\b|\brequire\(|\.css\b/);
   const { renderThumbnail, renderBoardPlaceholder, THUMBNAIL_PATH } = await import(file);
-  expect(THUMBNAIL_PATH).toBe('_ryugi/thumbnail-v2.svg');
+  expect(THUMBNAIL_PATH).toBe('_anjian/thumbnail-v2.svg');
   expect(renderThumbnail({ id: 'a', type: 'html', title: 'Hi' }, null)).toMatch(/^<svg /);
   expect(renderBoardPlaceholder({ id: 'a', w: 10, h: 10 })).toMatch(/^<svg /);
 });

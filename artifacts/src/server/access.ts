@@ -1,5 +1,5 @@
 export interface AccessPolicy {
-  cloudOrigin?: string;
+  publicOrigin?: string;
   hosts: ReadonlySet<string>;
   loopback: boolean;
   origins: ReadonlySet<string>;
@@ -17,9 +17,9 @@ export function accessPolicy({
   host,
   urlHost,
   ports,
-  cloudOrigin,
+  publicOrigin,
 }: {
-  cloudOrigin?: string;
+  publicOrigin?: string;
   host: string;
   ports: number[];
   urlHost: string;
@@ -30,22 +30,18 @@ export function accessPolicy({
     ),
   ];
   const hosts = new Set(ports.flatMap((port) => names.map((name) => `${name}:${port}`)));
+  if (publicOrigin) hosts.add(new URL(publicOrigin).host.toLowerCase());
   const viewerPort = ports[0];
   const origins = new Set(names.map((name) => `http://${name}:${viewerPort}`));
-  return { loopback: isLoopbackHost(host), hosts, origins, cloudOrigin };
+  if (publicOrigin) origins.add(publicOrigin);
+  return { loopback: isLoopbackHost(host), hosts, origins, publicOrigin };
 }
 
 export const hostAllowed = (policy: AccessPolicy, host: string | undefined) =>
   !policy.loopback || (host !== undefined && policy.hosts.has(host.toLowerCase()));
 
-export const originAllowed = (
-  policy: AccessPolicy,
-  origin: string | undefined,
-  { cloud = false }: { cloud?: boolean } = {},
-) =>
-  origin === undefined ||
-  policy.origins.has(origin) ||
-  (cloud && policy.cloudOrigin !== undefined && origin === policy.cloudOrigin);
+export const originAllowed = (policy: AccessPolicy, origin: string | undefined) =>
+  origin === undefined || policy.origins.has(origin);
 
 export const navigationAllowed = (secFetchSite: string | undefined) =>
   secFetchSite === undefined || secFetchSite === 'none' || secFetchSite === 'same-origin';

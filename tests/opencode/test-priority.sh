@@ -20,18 +20,18 @@ trap cleanup_test_env EXIT
 # Create same skill "priority-test" in all three locations with different markers
 echo "Setting up priority test fixtures..."
 
-# 1. Create in ryugi location (lowest priority)
-mkdir -p "$RYUGI_SKILLS_DIR/priority-test"
-cat > "$RYUGI_SKILLS_DIR/priority-test/SKILL.md" << 'EOF'
+# 1. Create in anjian location (lowest priority)
+mkdir -p "$ANJIAN_SKILLS_DIR/priority-test"
+cat > "$ANJIAN_SKILLS_DIR/priority-test/SKILL.md" << 'EOF'
 ---
 name: priority-test
-description: Ryugi version of priority test skill
+description: Anjian version of priority test skill
 ---
-# Priority Test Skill (Ryugi Version)
+# Priority Test Skill (Anjian Version)
 
-This is the RYUGI version of the priority test skill.
+This is the ANJIAN version of the priority test skill.
 
-PRIORITY_MARKER_RYUGI_VERSION
+PRIORITY_MARKER_ANJIAN_VERSION
 EOF
 
 # 2. Create in personal location (medium priority)
@@ -68,10 +68,10 @@ echo "  Created priority-test skill in all three locations"
 echo ""
 echo "Test 1: Verifying test fixtures..."
 
-if [ -f "$RYUGI_SKILLS_DIR/priority-test/SKILL.md" ]; then
-  echo "  [PASS] Ryugi version exists"
+if [ -f "$ANJIAN_SKILLS_DIR/priority-test/SKILL.md" ]; then
+  echo "  [PASS] Anjian version exists"
 else
-  echo "  [FAIL] Ryugi version missing"
+  echo "  [FAIL] Anjian version missing"
   exit 1
 fi
 
@@ -169,49 +169,49 @@ describe_priority_result() {
   fi
 }
 
-# Test 2: Document personal vs bundled ryugi priority
+# Test 2: Document personal vs bundled anjian priority
 echo ""
-echo "Test 2: Documenting personal vs ryugi priority..."
+echo "Test 2: Documenting personal vs anjian priority..."
 echo "  Running from outside project directory..."
 
 run_opencode output "$HOME" "Call the skill tool with name \"priority-test\". Show the exact content including any PRIORITY_MARKER text."
 describe_priority_result \
   "$output" \
   "PRIORITY_MARKER_PERSONAL_VERSION" \
-  "PRIORITY_MARKER_RYUGI_VERSION" \
+  "PRIORITY_MARKER_ANJIAN_VERSION" \
   "Personal version loaded for duplicate native skill name" \
-  "Current OpenCode behavior loaded bundled ryugi version instead of personal version"
+  "Current OpenCode behavior loaded bundled anjian version instead of personal version"
 
-# Test 3: Document project vs bundled ryugi priority
+# Test 3: Document project vs bundled anjian priority
 echo ""
-echo "Test 3: Documenting project vs personal/ryugi priority..."
+echo "Test 3: Documenting project vs personal/anjian priority..."
 echo "  Running from project directory..."
 
 run_opencode output "$TEST_HOME/test-project" "Call the skill tool with name \"priority-test\". Show the exact content including any PRIORITY_MARKER text."
 describe_priority_result \
   "$output" \
   "PRIORITY_MARKER_PROJECT_VERSION" \
-  "PRIORITY_MARKER_RYUGI_VERSION" \
+  "PRIORITY_MARKER_ANJIAN_VERSION" \
   "Project version loaded for duplicate native skill name" \
-  "Current OpenCode behavior loaded bundled ryugi version instead of project version"
+  "Current OpenCode behavior loaded bundled anjian version instead of project version"
 
-# Test 4: Test a non-colliding bundled ryugi skill is still available
+# Test 4: Test a non-colliding bundled anjian skill is still available
 echo ""
-echo "Test 4: Testing non-colliding ryugi skill remains available..."
+echo "Test 4: Testing non-colliding anjian skill remains available..."
 
-mkdir -p "$RYUGI_SKILLS_DIR/ryugi-only-test"
-cat > "$RYUGI_SKILLS_DIR/ryugi-only-test/SKILL.md" << 'EOF'
+mkdir -p "$ANJIAN_SKILLS_DIR/anjian-only-test"
+cat > "$ANJIAN_SKILLS_DIR/anjian-only-test/SKILL.md" << 'EOF'
 ---
-name: ryugi-only-test
-description: Ryugi-only priority test skill
+name: anjian-only-test
+description: Anjian-only priority test skill
 ---
-# Ryugi Only Test Skill
+# Anjian Only Test Skill
 
-PRIORITY_MARKER_RYUGI_ONLY_VERSION
+PRIORITY_MARKER_ANJIAN_ONLY_VERSION
 EOF
 
-run_opencode output "$TEST_HOME/test-project" "Call the skill tool with name \"ryugi-only-test\". Show the exact content including any PRIORITY_MARKER text."
-assert_contains "$output" "PRIORITY_MARKER_RYUGI_ONLY_VERSION" "Non-colliding ryugi skill is still registered"
+run_opencode output "$TEST_HOME/test-project" "Call the skill tool with name \"anjian-only-test\". Show the exact content including any PRIORITY_MARKER text."
+assert_contains "$output" "PRIORITY_MARKER_ANJIAN_ONLY_VERSION" "Non-colliding anjian skill is still registered"
 
 echo ""
 echo "=== All priority tests passed ==="

@@ -1,13 +1,17 @@
 {
   "author": {
-    "name": "Innei",
-    "email": "i@innei.dev"
+    "name": "Anjian contributors"
   },
   "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
-  "homepage": "https://github.com/Innei/ryugi",
-  "keywords": ["skills", "tdd", "debugging", "collaboration", "best-practices", "workflows"],
+  "keywords": [
+    "skills",
+    "tdd",
+    "debugging",
+    "collaboration",
+    "best-practices",
+    "workflows"
+  ],
   "license": "MIT",
-  "name": "ryugi",
-  "repository": "https://github.com/Innei/ryugi",
-  "version": "1.51.2"
+  "name": "anjian",
+  "version": "0.1.0"
 }

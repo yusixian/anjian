@@ -15,28 +15,10 @@ tick();
 `;
 
 export function relaunchCommand(env: NodeJS.ProcessEnv, serverDir: string): string[] | null {
-  const launcher = LAUNCHER_COMMAND.exec(env.RYUGI_ARTIFACTS_LAUNCHER ?? '')?.[1];
+  const launcher = LAUNCHER_COMMAND.exec(env.ANJIAN_ARTIFACTS_LAUNCHER ?? '')?.[1];
   if (launcher) return [process.execPath, launcher];
   const cli = path.join(serverDir, 'cli.cjs');
   return fs.existsSync(cli) ? [process.execPath, cli] : null;
-}
-
-export function pinLauncherRelease(
-  env: NodeJS.ProcessEnv,
-  homedir: string,
-  version: string,
-  now = Date.now(),
-) {
-  const releases = path.join(
-    env.XDG_CACHE_HOME || path.join(homedir, '.cache'),
-    'ryugi',
-    'artifacts',
-  );
-  fs.mkdirSync(releases, { recursive: true });
-  const file = path.join(releases, 'latest.json');
-  const tmp = `${file}.${process.pid}`;
-  fs.writeFileSync(tmp, JSON.stringify({ version, checkedAt: now }));
-  fs.renameSync(tmp, file);
 }
 
 export function spawnAfterExit(pid: number, argv: string[], env: NodeJS.ProcessEnv = process.env) {

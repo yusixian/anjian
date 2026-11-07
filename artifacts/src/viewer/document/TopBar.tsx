@@ -4,10 +4,8 @@ import { Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { RailSwitch } from '../components/RailSwitch';
-import { useCloudHeader } from '../hooks/useCloudHeader';
 import { t } from '../i18n';
 import { activityLabel, type AgentActivity } from './agentActivity';
-import type { CloudLive } from './DocumentView';
 
 const styles = stylex.create({
   bar: {
@@ -42,28 +40,6 @@ const styles = stylex.create({
   dot: { width: 6, height: 6, borderRadius: '50%', backgroundColor: 'currentColor' },
   quiet: { backgroundColor: cssVar.colorFillTertiary, color: cssVar.colorTextSecondary },
   offline: { backgroundColor: cssVar.colorWarningBg, color: cssVar.colorWarningText },
-  host: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    color: cssVar.colorTextSecondary,
-    fontSize: 12,
-    whiteSpace: 'nowrap',
-  },
-  hostDot: {
-    width: 7,
-    height: 7,
-    borderRadius: '50%',
-    backgroundColor: cssVar.colorTextQuaternary,
-  },
-  hostOnline: { backgroundColor: cssVar.colorSuccess },
-  reason: {
-    overflow: 'hidden',
-    color: cssVar.colorTextTertiary,
-    fontSize: 12,
-    whiteSpace: 'nowrap',
-    textOverflow: 'ellipsis',
-  },
   spacer: { flex: 1 },
   compact: { paddingInline: 16, gap: 10 },
   done: {
@@ -85,24 +61,20 @@ interface Props {
   activity: AgentActivity;
   agent?: string;
   agentSection: string | null;
-  cloud?: CloudLive;
   compact?: boolean;
   history?: { available: boolean; open: boolean; toggle: () => void; close: () => void };
   id: string;
   offline: boolean;
   onDone?: () => void;
   openComments: number;
-  title?: string;
 }
 
 export function TopBar({
   id,
-  title,
   activity,
   agentSection,
   offline,
   openComments,
-  cloud,
   compact = false,
   onDone,
   actions,
@@ -110,24 +82,6 @@ export function TopBar({
   history,
 }: Props) {
   const label = activityLabel(activity, agent, agentSection);
-  const framed = useCloudHeader(
-    id,
-    cloud
-      ? {
-          ...(title ? { title } : {}),
-          online: cloud.online,
-          comments: openComments,
-          activity: label,
-          activityTone:
-            activity.kind === 'stale' ? 'warning' : activity.kind === 'working' ? 'quiet' : 'live',
-          retrying: offline,
-          reason: cloud.reason,
-          history: history?.available,
-          historyOpen: history?.open,
-        }
-      : null,
-  );
-  if (framed && !compact) return null;
   return (
     <header {...stylex.props(styles.bar, compact && styles.compact)}>
       {compact ? null : (
@@ -156,16 +110,7 @@ export function TopBar({
           {t('document.readOnlyHistory')}
         </span>
       ) : null}
-      {cloud?.reason && !compact ? (
-        <span {...stylex.props(styles.reason)}>{cloud.reason}</span>
-      ) : null}
       <span {...stylex.props(styles.spacer)} />
-      {cloud ? (
-        <span {...stylex.props(styles.host)}>
-          <i {...stylex.props(styles.hostDot, cloud.online && styles.hostOnline)} />
-          {cloud.online ? t('share.computerOnline') : t('share.computerOffline')}
-        </span>
-      ) : null}
       {history ? (
         <RailSwitch
           available={history.available}
@@ -179,7 +124,7 @@ export function TopBar({
         <button type="button" onClick={onDone} {...stylex.props(styles.done)}>
           {t('common.done')}
         </button>
-      ) : cloud || compact ? null : (
+      ) : compact ? null : (
         actions
       )}
     </header>

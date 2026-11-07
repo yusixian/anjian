@@ -134,7 +134,6 @@ export type DocumentOutcomeMessage =
   | { kind: 'failed'; message: string };
 
 export type ServerMessage =
-  | { type: 'cloud-publication'; artifact: string; publication: import('./cloud').Publication }
   | { type: 'change'; artifact: string; files: string[] }
   | { type: 'doc-update'; artifact: string; bytes: string }
   | {
@@ -152,5 +151,4 @@ export type ServerMessage =
       comments: BoardCommentsFile;
       stale: string[];
       listening?: boolean;
-    }
-  | { type: 'cloud-published'; artifact: string };
+    };

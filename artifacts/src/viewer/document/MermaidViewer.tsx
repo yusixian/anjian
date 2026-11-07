@@ -184,8 +184,8 @@ function MermaidViewer({ title, source, diagram }: ViewerProps) {
 export function openMermaidViewer(props: ViewerProps) {
   createModal({
     content: <MermaidViewer {...props} />,
-    width: 'calc(100vw - 2 * var(--ryugi-viewer-inset))',
-    classNames: { popup: 'ryugi-mermaid-viewer' },
+    width: 'calc(100vw - 2 * var(--anjian-viewer-inset))',
+    classNames: { popup: 'anjian-mermaid-viewer' },
     styles: { content: { height: '100%', padding: 0, overflow: 'hidden' } },
   });
 }

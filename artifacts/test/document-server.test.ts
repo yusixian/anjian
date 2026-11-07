@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createLoroBinding } from '@haklex/rich-collab-loro';
@@ -9,8 +8,6 @@ import { LoroDoc } from 'loro-crdt';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { type ArtifactsServer, startArtifactsServer } from '../src/server/app';
-import type { CloudOptions } from '../src/server/cloud';
-import { writeCredentials } from '../src/server/credentials';
 import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 import { type Fetched, get, openWs, readJson, tempRoot, waitFor, writeDocument } from './helpers';
 
@@ -21,7 +18,7 @@ afterEach(async () => {
   running = [];
 });
 
-async function start(cloud?: CloudOptions) {
+async function start() {
   const { root, viewer } = tempRoot();
   const server = await startArtifactsServer({
     root,
@@ -30,14 +27,13 @@ async function start(cloud?: CloudOptions) {
     urlHost: 'localhost',
     debounceMs: 20,
     documentTiming: { writeDelayMs: 5 },
-    cloud,
   });
   running.push(server);
   return { server, root };
 }
 
 const base = (s: ArtifactsServer) => `http://127.0.0.1:${s.port}`;
-const cookie = (s: ArtifactsServer) => `ryugi_artifacts_${s.port}=${s.token}`;
+const cookie = (s: ArtifactsServer) => `anjian_artifacts_${s.port}=${s.token}`;
 const api = async (s: ArtifactsServer, rel: string) =>
   JSON.parse((await get(`${base(s)}${rel}`, { Cookie: cookie(s) })).body);
 
@@ -189,7 +185,7 @@ describe('live document', () => {
     expect(JSON.parse(refused.body).error).toContain('reload the page');
     const accepted = await post(`${base(server)}/api/document/relay/update`, update, {
       ...headers,
-      'X-Ryugi-Document-Features': 'pending',
+      'X-Anjian-Document-Features': 'pending',
     });
     expect(accepted.status).toBe(204);
     await waitFor(() => fs.readFileSync(docFile(root, 'relay'), 'utf8').includes('one, by hand'));
@@ -442,21 +438,6 @@ describe('comments', () => {
     await waitFor(() => ws.messages.some((m) => JSON.parse(m).type === 'doc-comments'));
     expect((await api(server, '/api/document/relay/state')).comments.threads).toHaveLength(1);
     ws.socket?.destroy();
-  });
-
-  test('a comment from the page carries the signed-in login', async () => {
-    const credentialsFile = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-creds-')),
-      'credentials.json',
-    );
-    writeCredentials(credentialsFile, { origin: 'https://ryugi.test', token: 't', login: 'innei' });
-    const { server, root } = await start({ origin: 'https://ryugi.test', credentialsFile });
-    writeDocument(root, 'relay', { 'doc.xml': '<doc><p id="b1">x</p></doc>' });
-    await postJson(server, 'relay', { op: 'create', blockId: 'b1', quote: 'x', text: 'why?' });
-    expect(readJson(commentsFile(root, 'relay')).threads[0].messages[0]).toMatchObject({
-      author: 'human',
-      name: 'innei',
-    });
   });
 
   test('an agent reply is named after the agent that last started the server', async () => {

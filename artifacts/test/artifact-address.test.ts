@@ -26,7 +26,7 @@ async function start(root = tempRoot().root) {
   });
   const request = (pathname: string) =>
     get(`http://127.0.0.1:${server!.port}${pathname}`, {
-      Cookie: `ryugi_artifacts_${server!.port}=${server!.token}`,
+      Cookie: `anjian_artifacts_${server!.port}=${server!.token}`,
     });
   return { root, request };
 }
@@ -44,7 +44,7 @@ test('all artifact types expose ID addresses while directories and APIs retain s
     expect((await request(`/api/artifacts/${item.type}/${item.id}`)).status).toBe(200);
     const page = await request(item.url);
     expect(page.status).toBe(200);
-    expect(page.body).toContain(`data-ryugi-artifact-id="${item.id}"`);
+    expect(page.body).toContain(`data-anjian-artifact-id="${item.id}"`);
     expect(page.body).toContain(`<title>${item.title}</title>`);
     expect(new URL(server!.linkFor(item.type, item.id)).pathname).toBe(item.url);
     const legacy = await request(`/${item.type}/${item.id}`);
@@ -52,7 +52,7 @@ test('all artifact types expose ID addresses while directories and APIs retain s
       `rel="canonical" href="http://localhost:${server!.port}${item.url}"`,
     );
     const preview = await request(`/preview${item.url}`);
-    expect(preview.body).toContain(`data-ryugi-artifact-id="${item.id}"`);
+    expect(preview.body).toContain(`data-anjian-artifact-id="${item.id}"`);
     expect(preview.body).toContain(`/preview${item.url}`);
   }
 });
@@ -71,7 +71,7 @@ test('an address survives content edits, a slug directory rename and a server re
   expect(new URL(server!.linkFor('html', 'renamed')).pathname).toBe(pathname);
   const page = await second.request(pathname);
   expect(page.body).toContain('<title>After</title>');
-  expect(page.body).toContain('data-ryugi-artifact-id="renamed"');
+  expect(page.body).toContain('data-anjian-artifact-id="renamed"');
   expect(fs.existsSync(path.join(first.root, 'html', 'original'))).toBe(false);
 });
 
@@ -108,7 +108,7 @@ test('IDs written before the alphabet changed still resolve', async () => {
       expect(page.body).toContain(
         `rel="canonical" href="http://localhost:${server!.port}${prefix}/html/${address}"`,
       );
-      expect(page.body).toContain(`data-ryugi-artifact-id="${slug}"`);
+      expect(page.body).toContain(`data-anjian-artifact-id="${slug}"`);
     }
     expect(new URL(server!.linkFor('html', slug)).pathname).toBe(`/html/${address}`);
     expect(fs.readFileSync(path.join(dir, '.artifact-id'), 'utf8')).toBe(`${address}\n`);

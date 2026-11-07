@@ -5,14 +5,14 @@ one line per run. The acceptance targets assume a Retina Mac (DPR 2) and a
 1440×900 viewport, which is what `launch()` opens.
 
 Each run starts its own artifacts server for the artboard's project (signed
-out, so nothing reaches Ryugi Cloud) and stops it at the end. By default it
+out, so nothing reaches Anjian Cloud) and stops it at the end. By default it
 runs this checkout's build; run `pnpm build` first. Pass `--cli` with another
-checkout's `skills/artifacts/app/ryugi-artifacts.cjs` to measure that build.
+checkout's `skills/artifacts/app/anjian.cjs` to measure that build.
 
 ```bash
-node scripts/perf/zoom.mjs <project>/.ryugi/artifacts/artboard/<id>
-node scripts/perf/scenario.mjs <project>/.ryugi/artifacts/artboard/<id> --rounds 2
-node scripts/perf/scenario.mjs <artboard dir> --cold --cli ../other/skills/artifacts/app/ryugi-artifacts.cjs
+node scripts/perf/zoom.mjs <project>/.anjian/artifacts/artboard/<id>
+node scripts/perf/scenario.mjs <project>/.anjian/artifacts/artboard/<id> --rounds 2
+node scripts/perf/scenario.mjs <artboard dir> --cold --cli ../other/skills/artifacts/app/anjian.cjs
 ```
 
 - **Warm** (default): every board goes live once, then the page reloads and

@@ -30,7 +30,7 @@ export interface CommandSpec {
   usage?: string[];
 }
 
-const BIN = 'ryugi-artifacts';
+const BIN = 'anjian';
 
 export const COMMON: Options = {
   'project-dir': {

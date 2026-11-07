@@ -11,7 +11,7 @@ browser measurement, a passing test, a glance at a screenshot, the project's
 own app-checking skill — is not the verdict. The work is done when every
 verify group on the page is passed.
 
-**REQUIRED BACKGROUND:** ryugi:artifacts — its `artboard.md` covers image and
+**REQUIRED BACKGROUND:** anjian:artifacts — its `artboard.md` covers image and
 video boards, verify groups and reading verdicts.
 
 Work with no visible change skips this skill: logic already proven by tests,
@@ -40,10 +40,10 @@ After the fix there is no honest "before".
    app, with whatever tool this environment has — a project skill that
    drives the app is a fine source. Never an HTML board standing in for
    "actual". Copy evidence under `pages/verify/`; keep each video under 8MB
-   and the artboard under 20MB. Over 20MB the cloud copy stops updating:
+   and avoid oversized artboards for responsive local previews:
    say so and shrink or drop the largest recordings.
 4. Set `focus` to the first group, check that `warnings` and `pending` are
-   empty, give the link (the cloud link when there is one), say what each
+   empty, give the local or self-hosted link, say what each
    group shows, and ask them to tell you here when they have decided. End
    your turn; don't poll.
 
@@ -75,11 +75,11 @@ On their next message, run `comment list` and read `groups`.
 - `reject`: read the reason and any pins on its boards, and fix it inside
   that group:
   - Behaviour or state (wrong content, a disabled control, a broken flow):
-    under ryugi:test-driven-development.
+    under anjian:test-driven-development.
   - Look only (layout, spacing, color, type): the rejected screenshot is
     the failing reproduction and the new screenshot is the check.
   - One commit per fix; exploratory work stays uncommitted, as
-    ryugi:executing-specs says.
+    anjian:executing-specs says.
   - Replace the evidence (same file, or add a board to the group), reply on
     the reject thread with what changed and the commit, and leave the
     thread open.

@@ -112,7 +112,7 @@ async function report(
     window.dispatchEvent(
       new MessageEvent('message', {
         source,
-        data: { type: 'ryugi:tweaks:ready', connection, session, schema, error: null },
+        data: { type: 'anjian:tweaks:ready', connection, session, schema, error: null },
       }),
     ),
   );

@@ -20,7 +20,7 @@ function Preview() {
   if (route.kind === 'preview')
     return (
       <PreviewLayout
-        id={document.documentElement.dataset.ryugiArtifactId ?? route.id}
+        id={document.documentElement.dataset.anjianArtifactId ?? route.id}
         type={route.type}
       />
     );

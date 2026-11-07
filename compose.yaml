@@ -1,0 +1,17 @@
+services:
+  anjian:
+    build: .
+    init: true
+    restart: unless-stopped
+    environment:
+      ANJIAN_PUBLIC_ORIGIN: ${ANJIAN_PUBLIC_ORIGIN:-}
+      ANJIAN_BOARD_ORIGIN: ${ANJIAN_BOARD_ORIGIN:-}
+      ARTIFACTS_URL_HOST: ${ARTIFACTS_URL_HOST:-localhost}
+    ports:
+      - "127.0.0.1:27319:27319"
+      - "127.0.0.1:27329:27329"
+    volumes:
+      - anjian-data:/data
+    stop_grace_period: 15s
+volumes:
+  anjian-data:

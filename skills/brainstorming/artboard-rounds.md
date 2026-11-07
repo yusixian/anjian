@@ -4,7 +4,7 @@ Visual questions go on an artboard a round at a time, like the document's
 rounds: each group is one question, its boards are the options, and one
 board is your recommendation.
 
-**REQUIRED SUB-SKILL:** Use ryugi:artifacts, type `artboard`, for the
+**REQUIRED SUB-SKILL:** Use anjian:artifacts, type `artboard`, for the
 canvas, the boards and reading what they selected. Name it after the topic
 (`settings-page`).
 
@@ -30,13 +30,13 @@ Your message is one line on what's on the board, plus the link.
 When they answer:
 
 1. Read their answers from `comment list --json` (`groups` and `rounds`,
-   plus the threads), as ryugi:artifacts says under Choice groups. When they
+   plus the threads), as anjian:artifacts says under Choice groups. When they
    answered in the terminal instead, record it on the board first. Read what
    they selected when they point at nodes or tweaks.
 2. Record each answered group as a decision, theirs or the recommendation
    they accepted: in the document's Settled when one is open, in your next
    playback otherwise.
-3. Append the next round below the last one, as ryugi:artifacts says.
+3. Append the next round below the last one, as anjian:artifacts says.
    Earlier rounds stay as history.
 4. In the terminal, one line: what changed, and what the new round asks.
 

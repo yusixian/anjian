@@ -5,7 +5,7 @@ their browser, a round at a time. Each round holds only questions whose
 answers don't depend on each other; between rounds you rewrite what comes
 next from what they said. Most work converges in two or three rounds.
 
-**REQUIRED SUB-SKILL:** Use ryugi:artifacts, type `document`, for creating
+**REQUIRED SUB-SKILL:** Use anjian:artifacts, type `document`, for creating
 the document, editing it and reading comments. Name it after the
 topic (`mention-notifications`, `queue-redis-streams`).
 
@@ -44,7 +44,7 @@ Write it in their language. Top to bottom:
 
 When they asked for a design, an architecture or a kickoff document, or
 their message is already a brief, skip the opening chat question. Write the
-outline first as ryugi:artifacts says, then fill it. Round 1's open items
+outline first as anjian:artifacts says, then fill it. Round 1's open items
 cover what the brief leaves out.
 
 Your first message is one line on how to answer, and the link. That's the
@@ -61,7 +61,7 @@ they already answered in chat.
 
 When they say the round is done, or a comment lands:
 
-1. Re-read the document and its comments, as ryugi:artifacts says.
+1. Re-read the document and its comments, as anjian:artifacts says.
 2. Move every answered item to Settled as one line: edited or commented
    ones as theirs, untouched recommendations as accepted.
 3. Drop the questions their answers made moot. Answer each comment, then

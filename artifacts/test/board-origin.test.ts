@@ -49,6 +49,27 @@ test('brackets an IPv6 hostname', () => {
   ).toBe('http://[::1]:4101/c/artboard/AbC/');
 });
 
+test('uses the configured HTTPS board origin and keeps a same-origin board opaque', () => {
+  const input = {
+    location: { protocol: 'https:', hostname: 'app.example.test', origin: 'https://app.example.test' },
+    contentBase: '/c/token/artboard/ideas/',
+    boardOrigin: 'https://boards.example.test',
+    boardPort: 4101,
+    boardPath: '/c/artboard/AbC/',
+    reachable: true,
+  };
+  expect(boardOrigin(input)).toEqual({
+    base: 'https://boards.example.test/c/artboard/AbC/',
+    sandbox: BOARD_SANDBOX_SAME_SITE,
+    mode: 'same-site',
+  });
+  expect(boardOrigin({ ...input, boardOrigin: input.location.origin })).toEqual({
+    base: 'https://app.example.test/c/artboard/AbC/',
+    sandbox: BOARD_SANDBOX_OPAQUE,
+    mode: 'opaque',
+  });
+});
+
 test('falls back to the main port with an opaque sandbox when the board port is missing or unreachable', () => {
   const fallback = {
     base: '/c/token/artboard/ideas/',
@@ -74,13 +95,13 @@ test('an absolute content base on another origin is already same-site content', 
     boardOrigin({
       location: {
         protocol: 'https:',
-        hostname: 'ryugi.innei.dev',
-        origin: 'https://ryugi.innei.dev',
+        hostname: 'anjian.innei.dev',
+        origin: 'https://anjian.innei.dev',
       },
-      contentBase: 'https://ryugi-content.innei.dev/a/1/grant/',
+      contentBase: 'https://anjian-content.innei.dev/a/1/grant/',
     }),
   ).toEqual({
-    base: 'https://ryugi-content.innei.dev/a/1/grant/',
+    base: 'https://anjian-content.innei.dev/a/1/grant/',
     sandbox: BOARD_SANDBOX_SAME_SITE,
     mode: 'same-site',
   });
@@ -91,10 +112,10 @@ test('content on the page origin itself stays opaque', () => {
     boardOrigin({
       location: {
         protocol: 'https:',
-        hostname: 'ryugi.innei.dev',
-        origin: 'https://ryugi.innei.dev',
+        hostname: 'anjian.innei.dev',
+        origin: 'https://anjian.innei.dev',
       },
-      contentBase: 'https://ryugi.innei.dev/c/x/',
+      contentBase: 'https://anjian.innei.dev/c/x/',
     }).sandbox,
   ).toBe(BOARD_SANDBOX_OPAQUE);
 });
@@ -134,5 +155,45 @@ test('the hook probes the board port and reports nothing until the probe settles
   );
   await act(async () => settle(false));
   expect(result!.mode).toBe('opaque');
+  act(() => root.unmount());
+});
+
+test('the hook probes the HTTPS board domain instead of the local HTTP port', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('location', {
+    hostname: 'app.example.test',
+    origin: 'https://app.example.test',
+    protocol: 'https:',
+  });
+  let settle!: () => void;
+  const fetch = vi.fn(() => new Promise<Response>((resolve) => {
+    settle = () => resolve(new Response(''));
+  }));
+  vi.stubGlobal('fetch', fetch);
+  let result: ReturnType<typeof useBoardOrigin> = null;
+  function Harness() {
+    result = useBoardOrigin({
+      contentBase: '/c/t/artboard/ideas/',
+      boardOrigin: 'https://boards.example.test',
+      boardPort: 4101,
+      boardPath: '/c/artboard/AbC/',
+    });
+    return null;
+  }
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  act(() => root.render(createElement(Harness)));
+  expect(result).toBeNull();
+  expect(fetch).toHaveBeenCalledWith(
+    'https://boards.example.test/robots.txt',
+    expect.objectContaining({ mode: 'no-cors' }),
+  );
+  await act(async () => settle());
+  expect(result).toEqual({
+    base: 'https://boards.example.test/c/artboard/AbC/',
+    sandbox: BOARD_SANDBOX_SAME_SITE,
+    mode: 'same-site',
+  });
   act(() => root.unmount());
 });

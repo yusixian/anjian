@@ -1,10 +1,8 @@
 {
   "author": {
-    "name": "Innei",
-    "email": "i@innei.dev"
+    "name": "Anjian contributors"
   },
   "description": "An agentic skills framework & software development methodology that works: planning, TDD, debugging, and collaboration workflows.",
-  "homepage": "https://github.com/Innei/ryugi",
   "keywords": [
     "brainstorming",
     "skills",
@@ -15,7 +13,6 @@
     "workflow"
   ],
   "license": "MIT",
-  "name": "ryugi",
-  "repository": "https://github.com/Innei/ryugi",
-  "version": "1.51.2"
+  "name": "anjian",
+  "version": "0.1.0"
 }

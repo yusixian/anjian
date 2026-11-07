@@ -24,7 +24,7 @@ async function until(check, explanation, timeout = 5000) {
 }
 
 function fixture(t) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-codex-watch-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-codex-watch-')));
   const project = path.join(root, "project with ' quote");
   const data = path.join(root, 'plugin-data');
   const bin = path.join(root, 'bin');
@@ -46,7 +46,7 @@ function fixture(t) {
     PLUGIN_ROOT: repo,
     PLUGIN_DATA: data,
     CODEX_THREAD_ID: inherited,
-    RYUGI_CODEX_REMOTE: 'unix:///tmp/ryugi-test.sock',
+    ANJIAN_CODEX_REMOTE: 'unix:///tmp/anjian-test.sock',
     PATH: `${bin}${path.delimiter}${process.env.PATH}`,
   };
   const input = {
@@ -69,7 +69,7 @@ function fixture(t) {
     const result = spawnSync(
       process.execPath,
       [
-        path.join(app, 'ryugi-artifacts.cjs'),
+        path.join(app, 'anjian.cjs'),
         'start',
         '--json',
         '--project-dir',
@@ -94,7 +94,7 @@ function fixture(t) {
           .map((line) => JSON.parse(line))
       : [];
   const write = (artifact, value) => {
-    const file = path.join(project, '.ryugi/artifacts', artifact, 'comments.json');
+    const file = path.join(project, '.anjian/artifacts', artifact, 'comments.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value));
   };
@@ -155,14 +155,14 @@ test('a new comment is queued to the hook session rather than an inherited paren
   assert.equal(args[0], 'queue');
   assert.equal(args[args.indexOf('--thread') + 1], id);
   assert.ok(args.includes('--resume'));
-  assert.equal(args[args.indexOf('--remote') + 1], f.env.RYUGI_CODEX_REMOTE);
+  assert.equal(args[args.indexOf('--remote') + 1], f.env.ANJIAN_CODEX_REMOTE);
   const message = args[args.indexOf('--message') + 1];
   assert.ok(message.includes('document/plan'));
   assert.ok(message.includes('comment list --json'));
   assert.ok(!message.includes('Change it'));
   assert.ok(
     !fs.existsSync(
-      path.join(f.project, '.ryugi/artifacts/.state/document/plan/comment-cursors.json'),
+      path.join(f.project, '.anjian/artifacts/.state/document/plan/comment-cursors.json'),
     ),
   );
   await delay(1200);
@@ -300,7 +300,7 @@ test('the shipped lifecycle hooks invoke the portable watcher and stop it on ses
 test('a submitted round is queued even with no unread comments, and the watcher beats', async (t) => {
   const f = fixture(t);
   const rounds = (state) => {
-    const file = path.join(f.project, '.ryugi/artifacts/.state/artboard/settings/rounds.json');
+    const file = path.join(f.project, '.anjian/artifacts/.state/artboard/settings/rounds.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
@@ -310,7 +310,7 @@ test('a submitted round is queued even with no unread comments, and the watcher 
   f.write('artboard/settings', { version: 1, threads: [] });
   rounds('open');
   f.start();
-  const alive = path.join(f.project, '.ryugi/artifacts/.state/codex-comment-watch', `${id}.alive`);
+  const alive = path.join(f.project, '.anjian/artifacts/.state/codex-comment-watch', `${id}.alive`);
   await until(() => fs.existsSync(alive), 'codex watcher never wrote a heartbeat');
   rounds('submitted');
   await until(() => f.read().length > 0, 'submitted round never reached codex queue');
@@ -324,7 +324,7 @@ test('the heartbeat keeps beating while a queue call is in flight', async (t) =>
   const f = fixture(t);
   fs.writeFileSync(`${f.fail}.slow`, '');
   f.start();
-  const alive = path.join(f.project, '.ryugi/artifacts/.state/codex-comment-watch', `${id}.alive`);
+  const alive = path.join(f.project, '.anjian/artifacts/.state/codex-comment-watch', `${id}.alive`);
   await until(() => fs.existsSync(alive), 'codex watcher never wrote a heartbeat');
   f.write('document/plan', f.comments());
   await until(() => f.read().length > 0, 'comment never reached codex queue');

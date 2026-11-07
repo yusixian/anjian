@@ -25,17 +25,17 @@ function projectRoot(cwd) {
   for (let current = dir; ; current = path.dirname(current)) {
     chain.push(current);
     if (fs.existsSync(path.join(current, '.git')) && (current !== os.homedir() || dir === current))
-      return chain.find((item) => fs.existsSync(path.join(item, '.ryugi/artifacts'))) || current;
+      return chain.find((item) => fs.existsSync(path.join(item, '.anjian/artifacts'))) || current;
     if (path.dirname(current) === current) return dir;
   }
 }
 
 function subscriptionFile(project, host, session) {
-  return path.join(project, '.ryugi/artifacts/.state', HOSTS[host].dir, `${session}.json`);
+  return path.join(project, '.anjian/artifacts/.state', HOSTS[host].dir, `${session}.json`);
 }
 
 function aliveFile(project, host, session) {
-  return path.join(project, '.ryugi/artifacts/.state', HOSTS[host].dir, `${session}.alive`);
+  return path.join(project, '.anjian/artifacts/.state', HOSTS[host].dir, `${session}.alive`);
 }
 
 function beat(project, host, session, now = Date.now()) {

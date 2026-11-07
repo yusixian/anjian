@@ -8,7 +8,7 @@ export interface ThumbnailArtifact {
 }
 
 // Bump the path when the drawing changes so immutable browser copies are replaced.
-export const THUMBNAIL_PATH = '_ryugi/thumbnail-v2.svg';
+export const THUMBNAIL_PATH = '_anjian/thumbnail-v2.svg';
 
 const STYLE =
   '<style>:root{--ink:#333;--muted:#85817c;--paper:#fff;--bg:#f3f2f0;--border:#dedcd7;--block:#f2f1ee;--alert:#f7eee4}@media (prefers-color-scheme: dark){:root{--ink:#e5e5e5;--muted:#a0a0a0;--paper:#292929;--bg:#1c1c1c;--border:#424242;--block:#353535;--alert:#3b342e}}text{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,sans-serif}rect{stroke-width:.8;vector-effect:non-scaling-stroke}</style>';
@@ -294,7 +294,7 @@ export function renderThumbnail(artifact: ThumbnailArtifact, value: unknown) {
       3,
     )
       .map((line, i) => text(42, 160 + i * 36, line, 25, 'var(--ink)', 600))
-      .join('')}${text(42, 318, `${artifact.project ?? 'RYUGI'} / HTML`, 11, 'var(--muted)')}`;
+      .join('')}${text(42, 318, `${artifact.project ?? 'ANJIAN'} / HTML`, 11, 'var(--muted)')}`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360"><title>${escape(title)}</title>${STYLE}${body}</svg>`;
 }

@@ -27,8 +27,6 @@ export function StatusPill({ onProjectsChanged }: { onProjectsChanged?: () => vo
   }, [open]);
 
   const down = offline || !status;
-  const relayLive = !down && status.relay.connected;
-
   return (
     <div ref={anchor} {...stylex.props(styles.anchor)}>
       <button
@@ -38,15 +36,14 @@ export function StatusPill({ onProjectsChanged }: { onProjectsChanged?: () => vo
         {...stylex.props(styles.pill)}
         onClick={() => setOpen((value) => !value)}
       >
-        <i {...stylex.props(styles.dot, relayLive && styles.dotLive, offline && styles.dotDown)} />
+        <i {...stylex.props(styles.dot, !down && styles.dotLive, offline && styles.dotDown)} />
         {down ? (
           t('server.offline')
         ) : (
           <>
             v{status.version}
             <span {...stylex.props(styles.separator)}>·</span>
-            {relayLive ? t('server.relayConnected') : t('server.relayOffline')}
-            {status.latest && <span {...stylex.props(styles.badge)}>{t('server.update')}</span>}
+            {t('server.runningLabel')}
           </>
         )}
       </button>

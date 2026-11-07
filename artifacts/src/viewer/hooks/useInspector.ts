@@ -25,7 +25,7 @@ export interface InspectedSelection {
 }
 export type InspectorInput = Extract<
   InspectorReport,
-  { type: 'ryugi:inspect:wheel' | 'ryugi:inspect:pan' | 'ryugi:inspect:key' | 'ryugi:inspect:drag' }
+  { type: 'anjian:inspect:wheel' | 'anjian:inspect:pan' | 'anjian:inspect:key' | 'anjian:inspect:drag' }
 >;
 interface Options {
   enabled: boolean;
@@ -85,7 +85,7 @@ export function useInspector(options: Options) {
   const send = useCallback((boardId: string, command: Command) => {
     const entry = registered.current.get(boardId);
     entry?.element.contentWindow?.postMessage(
-      { type: 'ryugi:inspect', connection: entry.connection, session: entry.session, ...command },
+      { type: 'anjian:inspect', connection: entry.connection, session: entry.session, ...command },
       '*',
     );
   }, []);
@@ -178,7 +178,7 @@ export function useInspector(options: Options) {
       if (!match) return;
       const [boardId, entry] = match;
       const data = readInspectorReport(event.data);
-      if (data?.type === 'ryugi:inspect:wheel' && data.zoom) {
+      if (data?.type === 'anjian:inspect:wheel' && data.zoom) {
         current.current.options.onInput(boardId, data);
         return;
       }
@@ -188,10 +188,10 @@ export function useInspector(options: Options) {
         (entry.session !== null && entry.session !== data.session)
       )
         return;
-      if (!current.current.options.enabled && data.type !== 'ryugi:inspect:tweaks') return;
-      if (current.current.options.playing.has(boardId) && data.type !== 'ryugi:inspect:tweaks')
+      if (!current.current.options.enabled && data.type !== 'anjian:inspect:tweaks') return;
+      if (current.current.options.playing.has(boardId) && data.type !== 'anjian:inspect:tweaks')
         return;
-      if (data.type === 'ryugi:inspect:tree') {
+      if (data.type === 'anjian:inspect:tree') {
         entry.session = data.session;
         const ids = new Set(data.nodes.map((node) => node.id));
         setState((previous) => ({
@@ -216,7 +216,7 @@ export function useInspector(options: Options) {
         return;
       }
       if (entry.session === null) return;
-      if (data.type === 'ryugi:inspect:selection') {
+      if (data.type === 'anjian:inspect:selection') {
         const human = data.reason === 'user' || data.reason === 'command';
         if (human) area.current = null;
         setState((previous) => {
@@ -258,7 +258,7 @@ export function useInspector(options: Options) {
             revision: human ? previous.revision + 1 : previous.revision,
           };
         });
-      } else if (data.type === 'ryugi:inspect:targets') {
+      } else if (data.type === 'anjian:inspect:targets') {
         const pending = area.current;
         if (!pending || data.request !== pending.request || pending.leaves.has(boardId)) return;
         pending.leaves.set(
@@ -266,7 +266,7 @@ export function useInspector(options: Options) {
           data.targets.map((target) => ({ ...target, boardId })),
         );
         applyArea(pending);
-      } else if (data.type === 'ryugi:inspect:details') {
+      } else if (data.type === 'anjian:inspect:details') {
         if (describing.current.get(boardId) !== data.request) return;
         setState((previous) => {
           const details = Object.fromEntries(
@@ -275,12 +275,12 @@ export function useInspector(options: Options) {
           for (const node of data.nodes) details[`${boardId}:${node.id}`] = node;
           return { ...previous, details };
         });
-      } else if (data.type === 'ryugi:inspect:hover') {
+      } else if (data.type === 'anjian:inspect:hover') {
         setState((previous) => ({
           ...previous,
           hover: data.rect ? { boardId, rect: data.rect, id: data.id ?? null } : null,
         }));
-      } else if (data.type === 'ryugi:inspect:rect') {
+      } else if (data.type === 'anjian:inspect:rect') {
         setState((previous) => ({
           ...previous,
           targets: previous.targets.map((target) =>
@@ -293,7 +293,7 @@ export function useInspector(options: Options) {
               ? { boardId, node: { ...previous.selection.node, rect: data.rect } }
               : previous.selection,
         }));
-      } else if (data.type === 'ryugi:inspect:tweaks') {
+      } else if (data.type === 'anjian:inspect:tweaks') {
         setState((previous) =>
           previous.frames[boardId]
             ? {

@@ -1,6 +1,6 @@
 ---
 name: using-git-worktrees
-description: Use when ryugi:executing-specs or ryugi:test-driven-development sends you here before the first implementation edit, when uncommitted work has to move to or be committed on a branch other than the one checked out, or when work done in a worktree has landed
+description: Use when anjian:executing-specs or anjian:test-driven-development sends you here before the first implementation edit, when uncommitted work has to move to or be committed on a branch other than the one checked out, or when work done in a worktree has landed
 ---
 
 # Using Git Worktrees
@@ -19,7 +19,7 @@ git rev-parse --path-format=absolute --git-dir --git-common-dir
 git rev-parse --show-superproject-working-tree
 git branch --show-current
 git status --porcelain
-cat .ryugi/sdd/*/EXPLORING
+cat .anjian/sdd/*/EXPLORING
 ```
 
 The answer holds for the rest of the session. When another skill sends

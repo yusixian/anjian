@@ -177,7 +177,7 @@ export function CommentsPanel({
   const shown = (tab === 'open' ? open : onPage).sort(
     (a, b) => (numbers.get(a.id) ?? 0) - (numbers.get(b.id) ?? 0),
   );
-  const panelClass = [stylex.props(inspectorStyles.panel).className, 'ryugi-inspector']
+  const panelClass = [stylex.props(inspectorStyles.panel).className, 'anjian-inspector']
     .filter(Boolean)
     .join(' ');
   return (

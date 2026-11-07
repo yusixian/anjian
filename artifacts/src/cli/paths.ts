@@ -29,7 +29,7 @@ export class CliError extends Error {
 
 // Launchers before this release ship hooks that read the given directory, so only a launcher that says so gets resolution.
 const resolvesRoot = () =>
-  !process.env.RYUGI_ARTIFACTS_COMMAND || process.env.RYUGI_ARTIFACTS_RESOLVE_ROOT === '1';
+  !process.env.ANJIAN_ARTIFACTS_COMMAND || process.env.ANJIAN_ARTIFACTS_RESOLVE_ROOT === '1';
 
 function projectRoot(dir: string) {
   let home = '';
@@ -43,7 +43,7 @@ function projectRoot(dir: string) {
     if (path.dirname(current) === current) return dir;
   }
   return (
-    chain.find((candidate) => fs.existsSync(path.join(candidate, '.ryugi', 'artifacts'))) ??
+    chain.find((candidate) => fs.existsSync(path.join(candidate, '.anjian', 'artifacts'))) ??
     chain.at(-1)!
   );
 }
@@ -57,7 +57,7 @@ export function projectPaths(dir: string): ProjectPaths {
     throw new CliError(`Project directory not found: ${dir}`);
   }
   if (resolvesRoot()) project = projectRoot(project);
-  const root = path.join(project, '.ryugi', 'artifacts');
+  const root = path.join(project, '.anjian', 'artifacts');
   const state = path.join(root, '.state');
   return {
     project,
@@ -75,8 +75,8 @@ export function projectPaths(dir: string): ProjectPaths {
   };
 }
 
-// The skill runs the CLI through its launcher, so `ryugi-artifacts` is not on its PATH.
-export const invocation = () => process.env.RYUGI_ARTIFACTS_COMMAND || 'ryugi-artifacts';
+// The skill runs the CLI through its launcher, so `anjian` is not on its PATH.
+export const invocation = () => process.env.ANJIAN_ARTIFACTS_COMMAND || 'anjian';
 
 export const ARTIFACT_PATTERN = /^(artboard|document|html)\/[a-z0-9][a-z0-9-]*$/;
 export const ARTIFACT_ERROR =

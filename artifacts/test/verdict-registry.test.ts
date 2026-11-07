@@ -12,7 +12,7 @@ import {
 } from '../src/server/board-comments';
 
 function project() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-verdicts-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-verdicts-'));
   const dir = path.join(root, 'artboard', 'review');
   fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
   fs.writeFileSync(

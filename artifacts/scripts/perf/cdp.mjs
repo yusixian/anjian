@@ -6,20 +6,20 @@ import path from 'node:path';
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const DEFAULT_CLI = path.resolve(
   import.meta.dirname,
-  '../../../skills/artifacts/app/ryugi-artifacts.cjs',
+  '../../../skills/artifacts/app/anjian.cjs',
 );
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function parseArgs(argv) {
   const [dir, ...rest] = argv;
   if (!dir)
-    throw new Error('usage: <artboard dir> [--cli <ryugi-artifacts.cjs>] [--cold] [--rounds <n>]');
+    throw new Error('usage: <artboard dir> [--cli <anjian.cjs>] [--cold] [--rounds <n>]');
   const flag = (name) => rest.includes(name);
   const value = (name, fallback) => (rest.includes(name) ? rest[rest.indexOf(name) + 1] : fallback);
   const artboard = path.resolve(dir);
-  const marker = `${path.sep}.ryugi${path.sep}artifacts${path.sep}artboard${path.sep}`;
+  const marker = `${path.sep}.anjian${path.sep}artifacts${path.sep}artboard${path.sep}`;
   const at = artboard.lastIndexOf(marker);
-  if (at < 0) throw new Error(`${dir} is not inside <project>/.ryugi/artifacts/artboard/`);
+  if (at < 0) throw new Error(`${dir} is not inside <project>/.anjian/artifacts/artboard/`);
   return {
     project: artboard.slice(0, at),
     artifact: `artboard/${artboard.slice(at + marker.length)}`,
@@ -29,12 +29,12 @@ export function parseArgs(argv) {
   };
 }
 
-// A private config dir keeps the server signed out, so it never relays to Ryugi Cloud.
+// A private config dir keeps the server signed out, so it never relays to Anjian Cloud.
 export function startServer({ project, artifact, cli }) {
   const env = {
     ...process.env,
-    XDG_CONFIG_HOME: mkdtempSync(path.join(tmpdir(), 'ryugi-perf-config-')),
-    RYUGI_CLOUD_ORIGIN: 'http://127.0.0.1:9',
+    XDG_CONFIG_HOME: mkdtempSync(path.join(tmpdir(), 'anjian-perf-config-')),
+    ANJIAN_CLOUD_ORIGIN: 'http://127.0.0.1:9',
   };
   const run = (...args) =>
     JSON.parse(
@@ -134,7 +134,7 @@ const PROBES = String.raw`(() => {
 })()`;
 
 export async function launch({ width = 1440, height = 900, profile } = {}) {
-  const dir = profile ?? mkdtempSync(path.join(tmpdir(), 'ryugi-perf-chrome-'));
+  const dir = profile ?? mkdtempSync(path.join(tmpdir(), 'anjian-perf-chrome-'));
   const port = 9400 + Math.floor(Math.random() * 500);
   const proc = spawn(
     CHROME,
@@ -246,7 +246,7 @@ export async function launch({ width = 1440, height = 900, profile } = {}) {
 
 export function boardCount({ project, artifact }) {
   const canvas = JSON.parse(
-    readFileSync(path.join(project, '.ryugi/artifacts', artifact, 'canvas.json'), 'utf8'),
+    readFileSync(path.join(project, '.anjian/artifacts', artifact, 'canvas.json'), 'utf8'),
   );
   const page = canvas.activePage ?? canvas.pages[0].id;
   return Object.values(canvas.boards).filter((board) => board.page === page).length;

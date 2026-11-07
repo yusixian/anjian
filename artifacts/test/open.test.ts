@@ -27,7 +27,7 @@ afterEach(() => {
 
 function projectRoot() {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-open-project-'));
-  return path.join(project, '.ryugi', 'artifacts');
+  return path.join(project, '.anjian', 'artifacts');
 }
 
 function fakeOpenCommand() {
@@ -54,7 +54,7 @@ async function startServer(
     env: {
       ...process.env,
       ...env,
-      RYUGI_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-open-home-')),
+      ANJIAN_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-open-home-')),
       ARTIFACTS_HOST: '127.0.0.1',
       ARTIFACTS_URL_HOST: 'localhost',
     },
@@ -115,7 +115,7 @@ describe('automatic browser open', () => {
       const key = new URL(info.url).searchParams.get('key');
       const viewer = connected
         ? await openWs(info.port, {
-            Cookie: `ryugi_artifacts_${info.port}=${key}`,
+            Cookie: `anjian_artifacts_${info.port}=${key}`,
             Origin: `http://127.0.0.1:${info.port}`,
           })
         : null;

@@ -1,7 +1,7 @@
 import type { TweakSchema, tweakTools, TweakValues } from '../shared/tweaks';
 
 export function installTweaks(win: Window & typeof globalThis, makeTools: typeof tweakTools) {
-  if (Object.getOwnPropertyDescriptor(win, 'ryugiTweaks')) return;
+  if (Object.getOwnPropertyDescriptor(win, 'anjianTweaks')) return;
   const { readTweakSchema, readTweakValues, reconcileTweakValues } = makeTools();
   const doc = win.document;
   const session = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -24,17 +24,17 @@ export function installTweaks(win: Window & typeof globalThis, makeTools: typeof
       doc.documentElement.style.setProperty(`--tweak-${key}`, String(value));
       doc.documentElement.setAttribute(`data-tweak-${key}`, String(value));
     }
-    if (emit) doc.dispatchEvent(new win.CustomEvent('ryugi-tweaks', { detail: { ...values } }));
+    if (emit) doc.dispatchEvent(new win.CustomEvent('anjian-tweaks', { detail: { ...values } }));
   }
 
   function read() {
-    const scripts = doc.querySelectorAll('script[type="application/json"][data-ryugi-tweaks]');
+    const scripts = doc.querySelectorAll('script[type="application/json"][data-anjian-tweaks]');
     const next = scripts.length ? scripts[0]!.textContent : null;
     if (next === source && scripts.length === declarationCount) return;
     source = next;
     declarationCount = scripts.length;
     try {
-      if (scripts.length > 1) throw new Error('Use one data-ryugi-tweaks declaration per board.');
+      if (scripts.length > 1) throw new Error('Use one data-anjian-tweaks declaration per board.');
       if (next && next.length > 65536) throw new Error('Parameter declaration is too large.');
       const result = readTweakSchema(next === null ? null : JSON.parse(next));
       schema = result.schema;
@@ -49,10 +49,10 @@ export function installTweaks(win: Window & typeof globalThis, makeTools: typeof
 
   const report = () =>
     win.parent.postMessage(
-      { type: 'ryugi:tweaks:ready', connection, session, schema, error, values: { ...values } },
+      { type: 'anjian:tweaks:ready', connection, session, schema, error, values: { ...values } },
       '*',
     );
-  Object.defineProperty(win, 'ryugiTweaks', {
+  Object.defineProperty(win, 'anjianTweaks', {
     get: () => {
       read();
       return { ...values };
@@ -69,7 +69,7 @@ export function installTweaks(win: Window & typeof globalThis, makeTools: typeof
   win.addEventListener('message', (event) => {
     if (event.source !== win.parent) return;
     const data = event.data;
-    if (!data || data.type !== 'ryugi:tweaks') return;
+    if (!data || data.type !== 'anjian:tweaks') return;
     if (
       data.action === 'connect' &&
       typeof data.connection === 'string' &&

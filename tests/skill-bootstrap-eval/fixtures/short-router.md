@@ -1,18 +1,18 @@
 ---
-name: using-ryugi
-description: Use when choosing a Ryugi workflow for a task.
+name: using-anjian
+description: Use when choosing a Anjian workflow for a task.
 ---
 
-# Ryugi workflows
+# Anjian workflows
 
 Load the matching skill for the task's current stage:
 
-- New features or behavior changes: `ryugi:brainstorming` before implementation.
-- Approved designs ready to implement or resume: `ryugi:executing-specs`.
-- Bugs or unexpected behavior: `ryugi:systematic-debugging` before fixing.
-- Implementation: `ryugi:test-driven-development`.
-- Visible UI changed: `ryugi:verifying-ui` before reporting completion.
-- Visual comparisons, mockups or shared design documents: `ryugi:artifacts`.
+- New features or behavior changes: `anjian:brainstorming` before implementation.
+- Approved designs ready to implement or resume: `anjian:executing-specs`.
+- Bugs or unexpected behavior: `anjian:systematic-debugging` before fixing.
+- Implementation: `anjian:test-driven-development`.
+- Visible UI changed: `anjian:verifying-ui` before reporting completion.
+- Visual comparisons, mockups or shared design documents: `anjian:artifacts`.
 
 When your human partner says to skip discussion and code, proceed under TDD.
 Ordinary questions and read-only checks can be answered directly.

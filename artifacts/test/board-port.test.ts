@@ -19,10 +19,10 @@ const CANVAS = {
   pages: [{ id: 'p', name: 'P' }],
 };
 
-async function start(cloud?: string) {
+async function start(publicOrigin?: string) {
   const { root, viewer, runtime } = tempRoot();
   fs.writeFileSync(path.join(viewer, 'index.html'), '<!doctype html><title>viewer</title>');
-  fs.writeFileSync(path.join(runtime, 'ryugi-ui.js'), 'void 0');
+  fs.writeFileSync(path.join(runtime, 'anjian-ui.js'), 'void 0');
   writeArtboard(root, 'ideas', CANVAS, {
     'pages/a.html': '<!doctype html><html><head></head><body>A</body></html>',
     'pages/style.css': 'body{}',
@@ -33,9 +33,7 @@ async function start(cloud?: string) {
     runtimeDir: runtime,
     host: '127.0.0.1',
     urlHost: 'localhost',
-    ...(cloud
-      ? { cloud: { origin: cloud, credentialsFile: path.join(root, 'creds.json') } as never }
-      : {}),
+    publicOrigin,
   });
   running.push(server);
   const address = artifactPath(root, 'artboard', 'ideas').split('/').pop()!;
@@ -53,7 +51,7 @@ test('listens on a second port, recorded in server-info', async () => {
 });
 
 test('serves a board page by address with a same-origin friendly CSP', async () => {
-  const { server, address } = await start('https://ryugi.example');
+  const { server, address } = await start('https://anjian.example');
   const page = await board(server, `/c/artboard/${address}/pages/a.html`);
   expect(page.status).toBe(200);
   expect(page.body).toContain('A');
@@ -62,13 +60,13 @@ test('serves a board page by address with a same-origin friendly CSP', async () 
   expect(csp).toContain("worker-src 'none'");
   expect(csp).toContain(`frame-ancestors http://localhost:${server.port}`);
   expect(csp).toContain(`http://127.0.0.1:${server.port}`);
-  expect(csp).toContain('https://ryugi.example');
+  expect(csp).toContain('https://anjian.example');
 });
 
 test('serves board assets and the runtime', async () => {
   const { server, address } = await start();
   expect((await board(server, `/c/artboard/${address}/pages/style.css`)).status).toBe(200);
-  expect((await board(server, '/c/runtime/ryugi-ui.js')).status).toBe(200);
+  expect((await board(server, '/c/runtime/anjian-ui.js')).status).toBe(200);
   expect((await board(server, '/robots.txt')).status).toBe(200);
 });
 
@@ -85,7 +83,7 @@ test('the artifact API tells the viewer where boards live', async () => {
   const payload = JSON.parse(
     (
       await get(`http://127.0.0.1:${server.port}/api/artifacts/artboard/ideas`, {
-        Cookie: `ryugi_artifacts_${server.port}=${server.token}`,
+        Cookie: `anjian_artifacts_${server.port}=${server.token}`,
       })
     ).body,
   );

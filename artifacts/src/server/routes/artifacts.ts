@@ -6,7 +6,7 @@ import { AVATAR_ROUTE } from '../avatars';
 import { projectName, type ServerContext, titleOf } from '../context';
 import { latestMtime } from '../html';
 import { send, sendJson } from '../http';
-import { publishPayload } from '../publish-payload';
+import { previewPayload } from '../preview-payload';
 import type { HttpRoute } from './table';
 
 const API_ARTIFACT_ROUTE = /^\/api\/artifacts\/([^/]+)\/([^/]+)$/;
@@ -63,7 +63,7 @@ export const previewApiRoute: HttpRoute<ServerContext> = {
       const payload = ctx.readArtifact(dir, ref);
       const title = titleOf(payload);
       sendJson(res, 200, {
-        ...publishPayload(ref, dir, title, payload),
+        ...previewPayload(ref, dir, title, payload),
         title,
         warnings: payload.warnings,
         contentBase: `${ctx.contentPrefix}${type}/${id}/`,
@@ -95,7 +95,7 @@ export const thumbnailRoute: HttpRoute<ServerContext> = {
       const title = titleOf(payload);
       const svg = renderThumbnail(
         { id: ref.id, type: ref.type, title, project: projectName(ctx) },
-        ref.type === 'html' ? null : publishPayload(ref, resolved.dir, title, payload),
+        ref.type === 'html' ? null : previewPayload(ref, resolved.dir, title, payload),
       );
       send(res, 200, svg, {
         'Content-Type': 'image/svg+xml',
@@ -125,6 +125,7 @@ export const artifactApiRoute: HttpRoute<ServerContext> = {
       ...(ref.type === 'artboard' && ctx.boardPort
         ? {
             boardPort: ctx.boardPort,
+            ...(ctx.options.boardOrigin ? { boardOrigin: ctx.options.boardOrigin } : {}),
             boardPath: `/c${artifactPath(ctx.root, 'artboard', ref.id)}/`,
           }
         : {}),

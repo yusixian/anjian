@@ -13,7 +13,7 @@ export function dynamicFrameSrc(
   const src = `${contentBase}${url}?v=${version}`;
   return Object.keys(props).length === 0
     ? src
-    : `${src}#ryugi-props=${encodeURIComponent(JSON.stringify(props))}`;
+    : `${src}#anjian-props=${encodeURIComponent(JSON.stringify(props))}`;
 }
 
 export function clampFrameHeight(height: number): number | null {

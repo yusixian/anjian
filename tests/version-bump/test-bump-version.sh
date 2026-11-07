@@ -41,7 +41,7 @@ JSON
 }
 
 happy_repo="$TEST_ROOT/happy"
-make_fixture "$happy_repo" $'name: ryugi\nversion: 1.2.3'
+make_fixture "$happy_repo" $'name: anjian\nversion: 1.2.3'
 
 /bin/bash "$happy_repo/scripts/bump-version.sh" --check > "$TEST_ROOT/check.out"
 /bin/bash "$happy_repo/scripts/bump-version.sh" --audit > "$TEST_ROOT/audit.out"
@@ -68,7 +68,7 @@ done
   || fail "repo versions drift: $(cat "$TEST_ROOT/repo-check.out")"
 
 invalid_repo="$TEST_ROOT/invalid"
-make_fixture "$invalid_repo" $'name: ryugi\nversion: 123'
+make_fixture "$invalid_repo" $'name: anjian\nversion: 123'
 cp "$invalid_repo/package.json" "$TEST_ROOT/package.before"
 cp "$invalid_repo/.hermes-plugin/plugin.yaml" "$TEST_ROOT/plugin.before"
 
@@ -83,10 +83,10 @@ cmp -s "$TEST_ROOT/plugin.before" "$invalid_repo/.hermes-plugin/plugin.yaml" \
   || fail "invalid YAML manifest changed"
 
 audit_repo="$TEST_ROOT/audit-boundaries"
-make_fixture "$audit_repo" $'name: ryugi\nversion: 1.2.3'
+make_fixture "$audit_repo" $'name: anjian\nversion: 1.2.3'
 /bin/bash "$audit_repo/scripts/bump-version.sh" 4.0.0 > /dev/null
 printf 'host = "10.4.0.0"\n' > "$audit_repo/server.js"
-printf 'pin: ryugi.git#v4.0.0\n' > "$audit_repo/INSTALL.md"
+printf 'pin: anjian.git#v4.0.0\n' > "$audit_repo/INSTALL.md"
 /bin/bash "$audit_repo/scripts/bump-version.sh" --audit > "$TEST_ROOT/audit-boundaries.out"
 
 grep -q 'INSTALL.md' "$TEST_ROOT/audit-boundaries.out" \

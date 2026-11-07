@@ -2,7 +2,7 @@
 .private-journal/
 .claude/*
 !.claude/skills/
-.ryugi/
+.anjian/
 .DS_Store
 node_modules/
 inspo
@@ -26,3 +26,5 @@ skills/artifacts/app/server.cjs
 skills/artifacts/app/viewer/
 skills/artifacts/app/runtime/
 skills/artifacts/app/cli.cjs
+
+verification/

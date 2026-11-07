@@ -1,15 +1,13 @@
 import { Button, Input, Segmented, Select, toast } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
-import { Search } from 'lucide-react';
+import { Languages, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import logo from '../../../../assets/ryugi-small.svg';
 import type { HubArtifact, HubProjectStatus } from '../../shared/hub';
 import { ARTIFACT_TYPES, type ArtifactType } from '../../shared/types';
-import { AccountMenu } from '../components/AccountMenu';
-import { RyugiMark } from '../components/RyugiMark';
+import { AnjianMark } from '../components/AnjianMark';
 import { WarningsBadge } from '../components/WarningsBadge';
-import { useTranslation } from '../i18n';
+import { setViewerLanguage, useTranslation } from '../i18n';
 import { type ArtifactSort, filterArtifacts } from '../lib/artifact-list';
 import { ArtifactCard } from './home/ArtifactCard';
 import { CommandPalette } from './home/CommandPalette';
@@ -25,7 +23,7 @@ const openArtifact = (artifact: HubArtifact, newTab: boolean) => {
 };
 
 export function ArtifactList() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { list, error, refresh, removeProject } = useHubArtifacts();
   const [selection, setSelection] = useState<HomeSelection>('recent');
   const [scope, setScope] = useState<SearchScope>('project');
@@ -54,7 +52,7 @@ export function ArtifactList() {
   const nameOf = (dir: string) => projects.find((p) => p.dir === dir)?.name ?? dir;
 
   useEffect(() => {
-    document.title = selected ? `${selected.name} · Artifacts` : 'Artifacts · Ryugi';
+    document.title = selected ? `${selected.name} · 案间` : '案间 · Anjian';
   }, [selected]);
 
   useEffect(() => {
@@ -109,14 +107,22 @@ export function ArtifactList() {
     <div {...stylex.props(styles.library)}>
       <header {...stylex.props(styles.topbar)}>
         <div {...stylex.props(styles.breadcrumb)}>
-          <img alt="" src={logo} {...stylex.props(styles.logo)} />
-          <strong {...stylex.props(styles.brand)}>ryugi</strong>
+          <AnjianMark size={20} />
+          <strong {...stylex.props(styles.brand)}>案间</strong>
           <span {...stylex.props(styles.slash)}>/</span>
           <b {...stylex.props(styles.crumb)}>{selected?.name ?? t('home.recentAll')}</b>
         </div>
         <div {...stylex.props(styles.topbarEnd)}>
+          <button
+            aria-label={t('home.switchLanguage', { language: i18n.language === 'zh' ? 'English' : '中文' })}
+            type="button"
+            {...stylex.props(styles.languageButton)}
+            onClick={() => void setViewerLanguage(i18n.language === 'zh' ? 'en' : 'zh')}
+          >
+            <Languages aria-hidden="true" size={14} />
+            <span>{i18n.language === 'zh' ? '中文' : 'English'}</span>
+          </button>
           <StatusPill onProjectsChanged={() => void refresh()} />
-          <AccountMenu />
         </div>
       </header>
       <div {...stylex.props(styles.body)}>
@@ -219,7 +225,7 @@ export function ArtifactList() {
           {list !== null && base.length === 0 && !query.trim() && (
             <div {...stylex.props(styles.empty)}>
               <div {...stylex.props(styles.emptyIcon)}>
-                <RyugiMark size={28} />
+                <AnjianMark size={28} />
               </div>
               <h2 {...stylex.props(styles.emptyTitle)}>
                 {view === 'recent' ? t('home.emptyRecent') : t('library.emptyTitle')}
@@ -258,11 +264,11 @@ export function ArtifactList() {
           </ul>
           <footer {...stylex.props(styles.footer)}>
             <span {...stylex.props(styles.footerGroup)}>
-              <img alt="" src={logo} {...stylex.props(styles.logo, styles.footerLogo)} />
+              <AnjianMark size={16} />
               {t('library.footer')}
             </span>
             {selected && (
-              <code {...stylex.props(styles.footerCode)}>{selected.dir}/.ryugi/artifacts</code>
+              <code {...stylex.props(styles.footerCode)}>{selected.dir}/.anjian/artifacts</code>
             )}
           </footer>
         </main>

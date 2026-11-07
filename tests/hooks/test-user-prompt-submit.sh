@@ -17,13 +17,13 @@ fail() {
 
 project() {
   local dir="$TEST_ROOT/$1"
-  mkdir -p "$dir/.ryugi/artifacts/.state/artboard/node-id"
-  printf '{"type":"server-started"}\n' > "$dir/.ryugi/artifacts/.state/server-info"
+  mkdir -p "$dir/.anjian/artifacts/.state/artboard/node-id"
+  printf '{"type":"server-started"}\n' > "$dir/.anjian/artifacts/.state/server-info"
   printf '%s\n' "$dir"
 }
 
 write_selection() {
-  cat > "$1/.ryugi/artifacts/.state/artboard/node-id/selection.json" << 'JSON'
+  cat > "$1/.anjian/artifacts/.state/artboard/node-id/selection.json" << 'JSON'
 {
   "artifact": "artboard/node-id",
   "updatedAt": "2026-10-20T13:00:00.000Z",
@@ -68,7 +68,7 @@ expect "includes the selected node's HTML" "$out" '<div class="card">Team</div>'
 expect "includes the selected node's tweak" "$out" 'padding: 14px → 20px'
 expect "counts selected nodes that were not described" "$out" '2 more selected'
 expect "lists tweaks on other nodes" "$out" 'hero-2#13 <p> in pages/main/hero-2.html at `body > p`: color: rgb(0, 0, 0) → red'
-expect "points at the full file" "$out" '.ryugi/artifacts/.state/artboard/node-id/selection.json'
+expect "points at the full file" "$out" '.anjian/artifacts/.state/artboard/node-id/selection.json'
 
 out="$(run_hook "$dir" "把 hero-2#5 的间距改大")"
 expect "resolves an ID typed in the message" "$out" 'hero-2#5 <span> in pages/main/hero-2.html at `body > span`'
@@ -87,14 +87,14 @@ const node = (n) => ({ id: `hero-2#${n}`, board: "hero-2", file: "pages/main/her
 const selected = Array.from({ length: 20 }, (_, i) => ({ ...node(i + 1), text: "t".repeat(200), html: big, tweaks: [] }));
 const nodes = [...selected.map((entry) => node(Number(entry.id.split("#")[1]))), node(900)];
 fs.writeFileSync(process.argv[1], JSON.stringify({ artifact: "artboard/node-id", updatedAt: "2026-10-20T13:00:00.000Z", selected, more: 0, tweaks: [], nodes }));
-' "$dir/.ryugi/artifacts/.state/artboard/node-id/selection.json"
+' "$dir/.anjian/artifacts/.state/artboard/node-id/selection.json"
 out="$(run_hook "$dir" "hero-2#900 也改")"
 expect "keeps the typed ID when the selection is too large to show" "$out" 'hero-2#900 <div> in pages/main/hero-2.html'
-expect "keeps the file pointer when the selection is too large to show" "$out" '.ryugi/artifacts/.state/artboard/node-id/selection.json'
+expect "keeps the file pointer when the selection is too large to show" "$out" '.anjian/artifacts/.state/artboard/node-id/selection.json'
 if [[ "${#out}" -le 8200 ]]; then pass "stays within the context budget"; else fail "stays within the context budget (${#out})"; fi
 
 dir="$(project idle)"
-cat > "$dir/.ryugi/artifacts/.state/artboard/node-id/selection.json" << 'JSON'
+cat > "$dir/.anjian/artifacts/.state/artboard/node-id/selection.json" << 'JSON'
 { "artifact": "artboard/node-id", "updatedAt": "2026-10-20T13:00:00.000Z", "selected": [], "more": 0, "tweaks": [],
   "nodes": [{ "id": "hero-2#5", "board": "hero-2", "file": "pages/main/hero-2.html", "tag": "span", "path": "body > span", "name": "c2" }] }
 JSON
@@ -110,7 +110,7 @@ if [[ -z "$out" ]]; then pass "ignores IDs that are not in the node map"; else f
 
 dir="$(project stopped)"
 write_selection "$dir"
-rm "$dir/.ryugi/artifacts/.state/server-info"
+rm "$dir/.anjian/artifacts/.state/server-info"
 out="$(run_hook "$dir" "改一下这里")"
 if [[ -z "$out" ]]; then pass "ignores selections when no server is running"; else fail "ignores selections when no server is running"; fi
 
@@ -122,19 +122,19 @@ mkdir -p "$dir/.git" "$dir/packages/app"
 write_selection "$dir"
 out="$(run_hook "$dir/packages/app" "change this")"
 expect "finds the repository's server from a session in a subdirectory" "$out" 'hero-2#12 <div> in pages/main/hero-2.html'
-expect "points at the file relative to the session directory" "$out" 'Full selection and node map: ../../.ryugi/artifacts/.state/artboard/node-id/selection.json'
+expect "points at the file relative to the session directory" "$out" 'Full selection and node map: ../../.anjian/artifacts/.state/artboard/node-id/selection.json'
 
 echo "Documents"
 
 doc_project() {
   local dir
   dir="$(project "$1")"
-  mkdir -p "$dir/.ryugi/artifacts/document/relay" "$dir/.ryugi/artifacts/.state/document/relay"
+  mkdir -p "$dir/.anjian/artifacts/document/relay" "$dir/.anjian/artifacts/.state/document/relay"
   printf '%s\n' "$dir"
 }
 
 write_doc_comments() {
-  cat > "$1/.ryugi/artifacts/document/relay/comments.json" << 'JSON'
+  cat > "$1/.anjian/artifacts/document/relay/comments.json" << 'JSON'
 { "version": 1, "threads": [
   { "id": "t1", "anchor": { "blockId": "b1", "quote": "事件" }, "status": "open", "statusAt": "2026-10-21T08:00:00.000Z", "statusBy": "human",
     "messages": [{ "id": "m1", "author": "human", "text": "why?", "at": "2026-10-21T08:00:00.000Z" }] },
@@ -148,9 +148,9 @@ dir="$(doc_project doc-unread)"
 write_doc_comments "$dir"
 out="$(run_hook "$dir" "继续")"
 expect "reminds about a document with unread comments" "$out" 'Comment threads changed since you last listed: document/relay (1).'
-expect "gives the command that lists them" "$out" "skills/artifacts/app/ryugi-artifacts.cjs\" comment list --json --project-dir \"$(cd "$dir" && pwd -P)\" --artifact document/relay"
+expect "gives the command that lists them" "$out" "skills/artifacts/app/anjian.cjs\" comment list --json --project-dir \"$(cd "$dir" && pwd -P)\" --artifact document/relay"
 
-printf '{"Claude Code":"2026-10-21T08:00:00.000Z"}\n' > "$dir/.ryugi/artifacts/.state/document/relay/comment-cursors.json"
+printf '{"Claude Code":"2026-10-21T08:00:00.000Z"}\n' > "$dir/.anjian/artifacts/.state/document/relay/comment-cursors.json"
 out="$(run_hook "$dir" "继续")"
 if [[ -z "$out" ]]; then pass "is quiet once the agent has listed past the changes"; else
   fail "is quiet once the agent has listed past the changes"
@@ -161,21 +161,21 @@ out="$(run_hook "$dir" "继续" CLAUDE_CODE_IS_COWORK=1)"
 expect "uses the Claude Cowork cursor under Cowork" "$out" 'document/relay (1)'
 
 dir="$(doc_project doc-selected)"
-cat > "$dir/.ryugi/artifacts/.state/document/relay/selection.json" << 'JSON'
+cat > "$dir/.anjian/artifacts/.state/document/relay/selection.json" << 'JSON'
 { "artifact": "document/relay", "updatedAt": "2026-10-21T09:00:00.000Z", "quote": "按事件粒度推送\n再说", "blockIds": ["b2", "b3"], "heading": "同步策略" }
 JSON
 out="$(run_hook "$dir" "改一下这段")"
 expect "names the document with a selection" "$out" 'Document document/relay, open in the viewer (updated 2026-10-21T09:00:00.000Z):'
 expect "gives the heading and blocks of the selection" "$out" 'Selected under "同步策略", blocks b2, b3:'
 expect "quotes the selected text" "$out" '> 按事件粒度推送'
-expect "points at the document selection file" "$out" '.ryugi/artifacts/.state/document/relay/selection.json'
+expect "points at the document selection file" "$out" '.anjian/artifacts/.state/document/relay/selection.json'
 
 dir="$(doc_project doc-crowded)"
 write_selection "$dir"
 node -e '
 const fs = require("fs");
 fs.writeFileSync(process.argv[1], JSON.stringify({ artifact: "document/relay", updatedAt: "2026-10-21T09:00:00.000Z", quote: "q".repeat(2000), blockIds: ["b1"], heading: "" }));
-' "$dir/.ryugi/artifacts/.state/document/relay/selection.json"
+' "$dir/.anjian/artifacts/.state/document/relay/selection.json"
 write_doc_comments "$dir"
 out="$(run_hook "$dir" "看看")"
 expect "keeps the artboard selection first" "$out" 'hero-2#12 <div>'
@@ -186,8 +186,8 @@ dir="$(doc_project many-docs)"
 write_selection "$dir"
 write_doc_comments "$dir"
 for n in $(seq 1 60); do
-  mkdir -p "$dir/.ryugi/artifacts/document/waiting-document-number-$n"
-  cp "$dir/.ryugi/artifacts/document/relay/comments.json" "$dir/.ryugi/artifacts/document/waiting-document-number-$n/comments.json"
+  mkdir -p "$dir/.anjian/artifacts/document/waiting-document-number-$n"
+  cp "$dir/.anjian/artifacts/document/relay/comments.json" "$dir/.anjian/artifacts/document/waiting-document-number-$n/comments.json"
 done
 out="$(run_hook "$dir" "看看")"
 expect "keeps the artboard selection when many documents wait on the agent" "$out" 'hero-2#12 <div>'

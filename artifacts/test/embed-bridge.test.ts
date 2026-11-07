@@ -8,7 +8,7 @@ import {
   startEmbedChild,
 } from '../src/viewer/lib/embed-bridge';
 
-const CLOUD = 'https://ryugi.example';
+const CLOUD = 'https://anjian.example';
 const LOCAL = 'http://127.0.0.1:4100';
 
 type Listener = (event: MessageEvent) => void;
@@ -34,10 +34,10 @@ test('the child greets its parent at the cloud origin and keeps sending heartbea
   const parent = { postMessage: (data: unknown, origin: string) => posted.push([data, origin]) };
   const win = Object.assign(fakeWindow(), { parent });
   const child = createEmbedChild({ parentOrigin: CLOUD, win: win as never });
-  expect(posted).toEqual([[{ type: 'ryugi:embed:hello' }, CLOUD]]);
+  expect(posted).toEqual([[{ type: 'anjian:embed:hello' }, CLOUD]]);
   vi.advanceTimersByTime(EMBED_HEARTBEAT_MS * 2);
   expect(
-    posted.filter(([data]) => (data as { type: string }).type === 'ryugi:embed:heartbeat'),
+    posted.filter(([data]) => (data as { type: string }).type === 'anjian:embed:heartbeat'),
   ).toHaveLength(2);
   child.close();
   vi.advanceTimersByTime(EMBED_HEARTBEAT_MS * 2);
@@ -61,18 +61,18 @@ function host() {
 
 test('the host is ready on the child hello from the right frame and origin only', () => {
   const { frame, win, onReady } = host();
-  win.deliver({ type: 'ryugi:embed:hello' }, {}, LOCAL);
-  win.deliver({ type: 'ryugi:embed:hello' }, frame, 'https://evil.test');
+  win.deliver({ type: 'anjian:embed:hello' }, {}, LOCAL);
+  win.deliver({ type: 'anjian:embed:hello' }, frame, 'https://evil.test');
   expect(onReady).not.toHaveBeenCalled();
-  win.deliver({ type: 'ryugi:embed:hello' }, frame, LOCAL);
+  win.deliver({ type: 'anjian:embed:hello' }, frame, LOCAL);
   expect(onReady).toHaveBeenCalledTimes(1);
 });
 
 test('the host reports the embed lost after it goes quiet', () => {
   const { frame, win, onLost } = host();
-  win.deliver({ type: 'ryugi:embed:hello' }, frame, LOCAL);
+  win.deliver({ type: 'anjian:embed:hello' }, frame, LOCAL);
   vi.advanceTimersByTime(EMBED_LOST_MS - 1000);
-  win.deliver({ type: 'ryugi:embed:heartbeat' }, frame, LOCAL);
+  win.deliver({ type: 'anjian:embed:heartbeat' }, frame, LOCAL);
   vi.advanceTimersByTime(EMBED_LOST_MS - 1000);
   expect(onLost).not.toHaveBeenCalled();
   vi.advanceTimersByTime(2000);
@@ -91,9 +91,9 @@ test('an embed page greets the parent its server named', () => {
   const posted: [unknown, string][] = [];
   const parent = { postMessage: (data: unknown, origin: string) => posted.push([data, origin]) };
   const win = Object.assign(fakeWindow(), { parent });
-  const doc = { documentElement: { dataset: { ryugiEmbedParent: CLOUD } } };
+  const doc = { documentElement: { dataset: { anjianEmbedParent: CLOUD } } };
   const child = startEmbedChild(doc as never, win as never);
-  expect(posted).toEqual([[{ type: 'ryugi:embed:hello' }, CLOUD]]);
+  expect(posted).toEqual([[{ type: 'anjian:embed:hello' }, CLOUD]]);
   child?.close();
 });
 

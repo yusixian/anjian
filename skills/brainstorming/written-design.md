@@ -10,7 +10,7 @@ could build from without going back to your human partner. Cover:
 - what's left to the builder
 - every artifact the conversation used: type, id and path or its link,
   and what was decided there, stated in the text too, since
-  `.ryugi/artifacts/` may not be committed
+  `.anjian/artifacts/` may not be committed
 
 When your human partner has ADHD, also write `<spec>.tldr.md` beside it for
 them: what gets built, what they'll see as numbered steps, decisions in a
@@ -18,7 +18,7 @@ table, your own calls under "check these", a concrete time estimate. They
 review the TL;DR; the builder works from the spec.
 
 **Where it goes:** in a software repo,
-`docs/ryugi/specs/YYYY-MM-DD-<topic>-design.md`, committed.
+`docs/anjian/specs/YYYY-MM-DD-<topic>-design.md`, committed.
 Otherwise, ask. Your human partner's preferences override both.
 
 ## Builder Check

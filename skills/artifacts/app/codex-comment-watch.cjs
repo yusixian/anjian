@@ -70,7 +70,7 @@ function context(input, env = process.env) {
   if (!UUID.test(input.session_id || '') || typeof input.cwd !== 'string') return null;
   const project = projectRoot(input.cwd);
   const data =
-    env.PLUGIN_DATA || env.CLAUDE_PLUGIN_DATA || path.join(project, '.ryugi/artifacts/.state');
+    env.PLUGIN_DATA || env.CLAUDE_PLUGIN_DATA || path.join(project, '.anjian/artifacts/.state');
   return {
     session: input.session_id,
     project,
@@ -126,9 +126,9 @@ function queueComment(ctx, remote, event, signal) {
   const skill = path.join(__dirname, '..', 'SKILL.md');
   const guide = path.join(__dirname, '..', `${event.artifact.split('/')[0]}.md`);
   const what =
-    event.type === 'ryugi-choices'
-      ? `Ryugi choices for round ${event.round} on ${event.artifact} were ${event.withdrawn ? 'withdrawn' : 'submitted'}.`
-      : 'Ryugi review comments changed.';
+    event.type === 'anjian-choices'
+      ? `Anjian choices for round ${event.round} on ${event.artifact} were ${event.withdrawn ? 'withdrawn' : 'submitted'}.`
+      : 'Anjian review comments changed.';
   const message = `${what} Local skill: ${JSON.stringify(skill)}; guide: ${JSON.stringify(guide)}. ${event.instruction}\nRun: ${event.command}`;
   const args = [
     'queue',
@@ -140,7 +140,7 @@ function queueComment(ctx, remote, event, signal) {
     message,
     '--resume',
   ];
-  const tokenEnv = process.env.RYUGI_CODEX_REMOTE_AUTH_TOKEN_ENV;
+  const tokenEnv = process.env.ANJIAN_CODEX_REMOTE_AUTH_TOKEN_ENV;
   if (tokenEnv && /^[a-z_]\w*$/i.test(tokenEnv)) args.push('--remote-auth-token-env', tokenEnv);
   return new Promise((resolve, reject) => {
     execFile(
@@ -174,11 +174,11 @@ function notice(input, message) {
 }
 
 function watch(ctx, input) {
-  const remote = endpoint(process.env.RYUGI_CODEX_REMOTE) || hostEndpoint();
+  const remote = endpoint(process.env.ANJIAN_CODEX_REMOTE) || hostEndpoint();
   if (!remote) {
     notice(
       input,
-      'Ryugi comment watch needs the current Codex App Server endpoint. Set RYUGI_CODEX_REMOTE for a host that does not expose --listen.',
+      'Anjian comment watch needs the current Codex App Server endpoint. Set ANJIAN_CODEX_REMOTE for a host that does not expose --listen.',
     );
     return;
   }
@@ -210,7 +210,7 @@ function watch(ctx, input) {
     const subscriptions = new Set(readJson(ctx.subscriptions)?.artifacts || []);
     for (const event of poll(subscriptions))
       pending.set(
-        event.type === 'ryugi-choices' ? `${event.artifact}#choices` : event.artifact,
+        event.type === 'anjian-choices' ? `${event.artifact}#choices` : event.artifact,
         event,
       );
     if (!pending.size || Date.now() < nextAttempt) return;
@@ -219,7 +219,7 @@ function watch(ctx, input) {
       pending.delete(key);
       return;
     }
-    if (event.type !== 'ryugi-choices') {
+    if (event.type !== 'anjian-choices') {
       const unread = unreadCount(ctx.project, event.artifact, 'Codex');
       if (unread === null) return;
       if (!unread) {

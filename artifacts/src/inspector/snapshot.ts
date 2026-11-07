@@ -1,7 +1,7 @@
 export function installSnapshot(win: Window & typeof globalThis, serialize: typeof serializeBoard) {
   const doc = win.document;
   const post = (type: string, data: Record<string, unknown> = {}) =>
-    win.parent.postMessage({ type: `ryugi:board:${type}`, ...data }, '*');
+    win.parent.postMessage({ type: `anjian:board:${type}`, ...data }, '*');
   const frame = () => new Promise<void>((resolve) => win.requestAnimationFrame(() => resolve()));
   const settle = async () => {
     const fonts = doc.fonts?.ready;
@@ -38,7 +38,7 @@ export function installSnapshot(win: Window & typeof globalThis, serialize: type
   const own = (node: Node | null) =>
     !!node &&
     (node.nodeType === 1 ? (node as Element) : node.parentElement)?.closest?.(
-      '[data-ryugi-inspector]',
+      '[data-anjian-inspector]',
     ) != null;
   let changed = 0;
   const observer = new win.MutationObserver((records) => {
@@ -75,7 +75,7 @@ export function installSnapshot(win: Window & typeof globalThis, serialize: type
     const data = event.data;
     if (
       event.source !== win.parent ||
-      data?.type !== 'ryugi:board:capture' ||
+      data?.type !== 'anjian:board:capture' ||
       !Number.isSafeInteger(data.request) ||
       !(data.scale > 0 && data.scale <= 4)
     )
@@ -183,7 +183,7 @@ export async function serializeBoard(
   for (let index = 0; index < source.length; index++) {
     const from = source[index]!,
       to = target[index] as HTMLElement;
-    if (from.hasAttribute('data-ryugi-inspector')) continue;
+    if (from.hasAttribute('data-anjian-inspector')) continue;
     if (from.shadowRoot) {
       const style = win.getComputedStyle(from);
       to.style.display = style.display;
@@ -259,7 +259,7 @@ export async function serializeBoard(
       jobs.push(inlineCss(inlineStyle, doc.baseURI).then((css) => to.setAttribute('style', css)));
   }
   await Promise.all(jobs);
-  for (const element of clone.querySelectorAll('script, noscript, link, [data-ryugi-inspector]'))
+  for (const element of clone.querySelectorAll('script, noscript, link, [data-anjian-inspector]'))
     element.remove();
   /* An SVG image never runs its animations, so each would show its first keyframe; jump them to their end instead. */
   const settled = doc.createElement('style');

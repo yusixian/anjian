@@ -15,16 +15,16 @@ function install() {
 }
 
 const ask = (source: MessageEventSource | null) =>
-  window.dispatchEvent(new MessageEvent('message', { source, data: { type: 'ryugi:snapshot' } }));
+  window.dispatchEvent(new MessageEvent('message', { source, data: { type: 'anjian:snapshot' } }));
 
 test('the page state goes to its parent when the parent asks', () => {
   const posted = install();
   ask(window.parent);
-  expect(posted).toContainEqual(expect.objectContaining({ type: 'ryugi:state' }));
+  expect(posted).toContainEqual(expect.objectContaining({ type: 'anjian:state' }));
 });
 
 test('a window other than the parent cannot read the page state', () => {
   const posted = install();
   ask(null);
-  expect(posted).not.toContainEqual(expect.objectContaining({ type: 'ryugi:state' }));
+  expect(posted).not.toContainEqual(expect.objectContaining({ type: 'anjian:state' }));
 });

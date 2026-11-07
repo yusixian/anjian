@@ -18,12 +18,12 @@ export default defineConfig({
     hookTimeout: 120000,
     // Spawned CLIs and servers inherit these, so no test can sign in with the developer's real account.
     env: {
-      XDG_CONFIG_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-test-config-')),
-      RYUGI_RUNTIME_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'ryugi-test-runtime-')),
-      RYUGI_CLOUD_ORIGIN: 'http://127.0.0.1:9',
-      RYUGI_ARTIFACTS_PORTS: '0',
-      RYUGI_ARTIFACTS_BOARD_PORTS: '0',
-      RYUGI_NO_UPDATE_CHECK: '1',
+      XDG_CONFIG_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-test-config-')),
+      ANJIAN_RUNTIME_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-test-runtime-')),
+      ANJIAN_CLOUD_ORIGIN: 'http://127.0.0.1:9',
+      ANJIAN_ARTIFACTS_PORTS: '0',
+      ANJIAN_ARTIFACTS_BOARD_PORTS: '0',
+      ANJIAN_NO_UPDATE_CHECK: '1',
     },
   },
 });

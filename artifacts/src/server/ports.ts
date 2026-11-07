@@ -2,11 +2,11 @@ import type http from 'node:http';
 
 import { listen } from './http';
 
-export const MAIN_PORTS = [27319, 27320, 27321];
-export const BOARD_PORTS = [27329, 27330, 27331];
+export const MAIN_PORTS = [27419, 27420, 27421];
+export const BOARD_PORTS = [27429, 27430, 27431];
 
 export function portList(env: Record<string, string | undefined>, kind: 'main' | 'board') {
-  const raw = kind === 'main' ? env.RYUGI_ARTIFACTS_PORTS : env.RYUGI_ARTIFACTS_BOARD_PORTS;
+  const raw = kind === 'main' ? env.ANJIAN_ARTIFACTS_PORTS : env.ANJIAN_ARTIFACTS_BOARD_PORTS;
   const fallback = kind === 'main' ? MAIN_PORTS : BOARD_PORTS;
   if (!raw) return fallback;
   const ports = raw.split(',').map((part) => Number(part.trim()));

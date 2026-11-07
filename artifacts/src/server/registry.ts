@@ -18,9 +18,9 @@ export function registryDir(
   uid: number = process.getuid?.() ?? -1,
   tmpdir: string = os.tmpdir(),
 ) {
-  if (env.RYUGI_RUNTIME_DIR) return path.join(env.RYUGI_RUNTIME_DIR, 'servers');
-  if (platform === 'win32') return path.join(tmpdir, 'ryugi', 'servers');
-  return `/tmp/ryugi-${uid}/servers`;
+  if (env.ANJIAN_RUNTIME_DIR) return path.join(env.ANJIAN_RUNTIME_DIR, 'servers');
+  if (platform === 'win32') return path.join(tmpdir, 'anjian', 'servers');
+  return `/tmp/anjian-${uid}/servers`;
 }
 
 const fileFor = (dir: string, project: string) =>
@@ -59,7 +59,7 @@ function readEntry(file: string): RegistryEntry | null {
     )
       return null;
     if (!Number.isInteger(value.pid) || !Number.isFinite(value.startedAt)) return null;
-    if (value.root !== path.join(value.project, '.ryugi', 'artifacts')) return null;
+    if (value.root !== path.join(value.project, '.anjian', 'artifacts')) return null;
     return value as RegistryEntry;
   } catch {
     return null;

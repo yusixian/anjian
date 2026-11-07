@@ -60,7 +60,7 @@ function run(
 async function project({ running = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comment-project-'));
   projects.push(dir);
-  writeDocument(path.join(dir, '.ryugi', 'artifacts'), 'relay', {
+  writeDocument(path.join(dir, '.anjian', 'artifacts'), 'relay', {
     'doc.xml': '<doc><p id="b1">按事件粒度推送</p></doc>',
   });
   if (running)
@@ -73,14 +73,14 @@ async function project({ running = true } = {}) {
 const comments = (dir: string) =>
   JSON.parse(
     fs.readFileSync(
-      path.join(dir, '.ryugi', 'artifacts', 'document', 'relay', 'comments.json'),
+      path.join(dir, '.anjian', 'artifacts', 'document', 'relay', 'comments.json'),
       'utf8',
     ),
   );
 async function humanReply(dir: string, threadId: string, text: string) {
   const url = new URL(
     JSON.parse(
-      fs.readFileSync(path.join(dir, '.ryugi', 'artifacts', '.state', 'server-info'), 'utf8'),
+      fs.readFileSync(path.join(dir, '.anjian', 'artifacts', '.state', 'server-info'), 'utf8'),
     ).url,
   );
   const key = url.searchParams.get('key');
@@ -94,7 +94,7 @@ async function humanReply(dir: string, threadId: string, text: string) {
 
 const doc = (dir: string) => ['--project-dir', dir, '--artifact', 'document/relay'];
 
-describe('ryugi-artifacts comment', () => {
+describe('anjian comment', () => {
   test('add reads the message from stdin and names it after the calling agent', async () => {
     const dir = await project();
     const { code, out } = await run(
@@ -175,14 +175,14 @@ describe('ryugi-artifacts comment', () => {
     const dir = await project({ running: false });
     const { code, out } = await run(['comment', 'list', ...doc(dir)]);
     expect(code).toBe(1);
-    expect(out.error).toContain('ryugi-artifacts start');
+    expect(out.error).toContain('anjian start');
   });
 
   test('tells the agent to restart an older server that has no comment route', async () => {
     const dir = await project({ running: false });
     const old = http.createServer((_req, res) => res.writeHead(404).end('Not found'));
     const port = await listen(old, '127.0.0.1', 0);
-    const state = path.join(dir, '.ryugi', 'artifacts', '.state');
+    const state = path.join(dir, '.anjian', 'artifacts', '.state');
     fs.mkdirSync(state, { recursive: true });
     fs.writeFileSync(
       path.join(state, 'server-info'),
@@ -257,7 +257,7 @@ describe('artboard comments', () => {
   async function artboardProject(extra: Record<string, unknown> = {}) {
     const dir = await project({ running: false });
     writeArtboard(
-      path.join(dir, '.ryugi', 'artifacts'),
+      path.join(dir, '.anjian', 'artifacts'),
       'review',
       {
         version: 1,

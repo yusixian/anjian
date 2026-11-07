@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# Render the Antigravity Marketplace logo from assets/ryugi-small.svg.
+# Render the Antigravity Marketplace logo from assets/anjian-small.svg.
 #
 # Usage:
 #   scripts/render-antigravity-logo.sh [--output PATH]
 #
-# Draws the Ryugi mark in near-black on a white rounded square with
-# transparent corners, 512x512 PNG. Run it whenever ryugi-small.svg
+# Draws the Anjian mark in near-black on a white rounded square with
+# transparent corners, 512x512 PNG. Run it whenever anjian-small.svg
 # changes; tests/antigravity/test-logo.sh fails if the committed PNG is stale.
 # Requires rsvg-convert (Homebrew: librsvg).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SOURCE_SVG="$REPO_ROOT/assets/ryugi-small.svg"
+SOURCE_SVG="$REPO_ROOT/assets/anjian-small.svg"
 OUTPUT="$REPO_ROOT/assets/antigravity-logo.png"
 
 usage() {

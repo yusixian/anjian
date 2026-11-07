@@ -1,6 +1,6 @@
 # HTML artifacts
 
-One full page at `.ryugi/artifacts/html/<id>/index.html`, shown edge to edge
+One full page at `.anjian/artifacts/html/<id>/index.html`, shown edge to edge
 in your human partner's browser. It reloads whenever any file in its
 directory changes.
 

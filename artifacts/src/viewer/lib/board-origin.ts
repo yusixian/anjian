@@ -9,6 +9,7 @@ export interface BoardOrigin {
 }
 
 interface Input {
+  boardOrigin?: string;
   boardPath?: string;
   boardPort?: number;
   contentBase: string;
@@ -21,6 +22,7 @@ const hostFor = (hostname: string) => (hostname.includes(':') ? `[${hostname}]` 
 export function boardOrigin({
   location,
   contentBase,
+  boardOrigin: configuredOrigin,
   boardPort,
   boardPath,
   reachable,
@@ -29,6 +31,15 @@ export function boardOrigin({
     const sameOrigin = new URL(contentBase).origin === location.origin;
     return {
       base: contentBase,
+      sandbox: sameOrigin ? BOARD_SANDBOX_OPAQUE : BOARD_SANDBOX_SAME_SITE,
+      mode: sameOrigin ? 'opaque' : 'same-site',
+    };
+  }
+  if (configuredOrigin && boardPath && reachable) {
+    const base = new URL(boardPath, configuredOrigin).toString();
+    const sameOrigin = new URL(base).origin === location.origin;
+    return {
+      base,
       sandbox: sameOrigin ? BOARD_SANDBOX_OPAQUE : BOARD_SANDBOX_SAME_SITE,
       mode: sameOrigin ? 'opaque' : 'same-site',
     };

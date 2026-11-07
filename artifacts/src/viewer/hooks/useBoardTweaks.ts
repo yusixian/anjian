@@ -33,7 +33,7 @@ export function useBoardTweaks(artifact: string) {
       if (frame.boardId === boardId && frame.session) {
         frame.element.contentWindow?.postMessage(
           {
-            type: 'ryugi:tweaks',
+            type: 'anjian:tweaks',
             action: 'set',
             connection: frame.connection,
             session: frame.session,
@@ -58,7 +58,7 @@ export function useBoardTweaks(artifact: string) {
       const data = event.data;
       if (
         !data ||
-        data.type !== 'ryugi:tweaks:ready' ||
+        data.type !== 'anjian:tweaks:ready' ||
         typeof data.session !== 'string' ||
         !data.session ||
         data.session.length > 128
@@ -109,7 +109,7 @@ export function useBoardTweaks(artifact: string) {
     frame.connection = crypto.randomUUID();
     frame.session = null;
     frame.element.contentWindow?.postMessage(
-      { type: 'ryugi:tweaks', action: 'connect', connection: frame.connection },
+      { type: 'anjian:tweaks', action: 'connect', connection: frame.connection },
       '*',
     );
   }, []);

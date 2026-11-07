@@ -6,7 +6,7 @@ export const EMBEDDED_STYLE =
 
 const RUNTIME_SCRIPT = /^<script>([\s\S]*?)<\/script>/;
 const RUNTIME_LOADERS =
-  /^(?:<script defer src="[^"]*\/_ryugi\/runtime\/ryugi-(?:icons|ui)\.js"><\/script>)+/;
+  /^(?:<script defer src="[^"]*\/(?:_ryugi|_anjian)\/runtime\/(?:ryugi|anjian)-(?:icons|ui)\.js"><\/script>)+/;
 
 export function injectionPoint(html: string) {
   const head = HEAD.exec(html);
@@ -18,6 +18,6 @@ export function stripRuntime(html: string) {
   let rest = html.slice(at);
   if (rest.startsWith(EMBEDDED_STYLE)) rest = rest.slice(EMBEDDED_STYLE.length);
   const script = RUNTIME_SCRIPT.exec(rest);
-  if (!script || !script[1]!.includes('ryugi:')) return html;
+  if (!script || !script[1]!.includes('ryugi:') && !script[1]!.includes('anjian:')) return html;
   return html.slice(0, at) + rest.slice(script[0].length).replace(RUNTIME_LOADERS, '');
 }

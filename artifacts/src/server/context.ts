@@ -5,45 +5,36 @@ import type { Duplex } from 'node:stream';
 
 import type { CanvasPayload, DocumentPayload, HtmlPayload, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
-import { artifactPath, resolveArtifactAddress } from './artifact-address';
 import {
-  artifactKeyOf,
   type ArtifactRef,
   artifactSignature,
-  isArtifactLocator,
   resolveArtifactDir,
 } from './artifacts';
-import { createAutoPublisher } from './auto-publish';
 import { createAvatars } from './avatars';
 import { type asBoardHumanOp, createBoardCommentRegistry } from './board-comments';
 import { originsFor } from './board-port';
-import { type CloudOptions, createCloudRoutes } from './cloud';
 import { commentNames } from './comment-names';
-import { ensureConfig, readConfig } from './config';
-import { createDirectRelay } from './direct-relay';
+import { ensureConfig } from './config';
 import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks } from './dynamic-blocks';
 import { readHtml } from './html';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
-import { publishPayload } from './publish-payload';
-import type { createRelayClient } from './relay';
-import { dropRelayViewer, handleRelay } from './relay-requests';
 import { createSelectionStore } from './selection';
 import { readCanvas, writeArtifactState } from './state';
 import { createVerifyRecordings } from './verify-recordings';
 import { textFrame } from './ws';
 
 export interface ServerOptions {
-  cloud?: CloudOptions;
   configFile?: string;
   debounceMs?: number;
   documentTiming?: DocumentTiming;
   fetch?: typeof fetch;
   host: string;
   mount?: MountSettings;
-  relay?: { url: string; version: string; pollMs?: number; heartbeatMs?: number };
+  publicOrigin?: string;
+  boardOrigin?: string;
   root: string;
   runtimeDir?: string;
   urlHost: string;
@@ -62,8 +53,6 @@ export type ArtifactPayload = (CanvasPayload | HtmlPayload | DocumentPayload) & 
 };
 
 export type ChangeListener = (ref: ArtifactRef, payload: ArtifactPayload, files: string[]) => void;
-
-type RelayEmitter = Pick<ReturnType<typeof createRelayClient>, 'emit' | 'close'>;
 
 export function readArtifactSource(
   dir: string,
@@ -107,7 +96,7 @@ export function createServerContext(options: ServerOptions) {
   const token = mount?.token ?? (readPersisted(tokenFile) || randomToken());
   if (!mount) fs.writeFileSync(tokenFile, `${token}\n`, { mode: 0o600 });
   const contentToken = randomToken();
-  const loopback = isLoopbackHost(options.host);
+  const loopback = isLoopbackHost(options.host) && !options.publicOrigin;
   const keyOk = (key: string | null) => loopback || (key !== null && safeEqual(key, token));
   const agentOk = (req: http.IncomingMessage, key: string | null) =>
     loopback ? req.headers.origin === undefined : key !== null && safeEqual(key, token);
@@ -133,27 +122,16 @@ export function createServerContext(options: ServerOptions) {
     ctx.lastActivity = Date.now();
     activityListeners.forEach((listener) => listener());
   };
-  const boardOrigins = () => (ctx.boardPort ? originsFor(options.urlHost, ctx.boardPort) : []);
+  const boardOrigins = () => options.boardOrigin
+    ? [options.boardOrigin]
+    : (ctx.boardPort ? originsFor(options.urlHost, ctx.boardPort) : []);
 
-  const relayListeners: ((key: string, message: unknown) => void)[] = [];
-  const direct = createDirectRelay({
-    version: mount?.version ?? options.relay?.version ?? '',
-    handle: (key, body, conn) => handleRelay(ctx, key, body, conn, `http://127.0.0.1:${ctx.port}`),
-    onActivity: () => touch(),
-    onClose: (conn) => dropRelayViewer(ctx, conn),
-  });
   const broadcast = (message: ServerMessage) => {
     const frame = textFrame(JSON.stringify(message));
     for (const socket of clients) socket.write(frame);
-    ctx.relay?.emit(message.artifact, message);
-    direct.emit(message.artifact, message);
   };
   const avatars = createAvatars(options.fetch);
-  const names = commentNames({
-    agentFile: path.join(stateDir, 'agent'),
-    projectDir: path.resolve(root, '../..'),
-    cloud: options.cloud,
-  });
+  const names = commentNames({ agentFile: path.join(stateDir, 'agent'), projectDir: path.resolve(root, '../..') });
   const recordings = createVerifyRecordings({
     stateDir,
     onChange: (id) => {
@@ -164,8 +142,6 @@ export function createServerContext(options: ServerOptions) {
       boardComments.boardsChanged(id);
       const key = `artboard/${id}`;
       broadcast({ type: 'change', artifact: key, files: [] });
-      autoPublisher?.changed(key);
-      cloud?.changed(key);
       changeListeners.forEach((listener) => listener(ref, payload, []));
     },
   });
@@ -198,79 +174,6 @@ export function createServerContext(options: ServerOptions) {
     },
     log: (line) => console.info(JSON.stringify({ type: 'document-log', line })),
   });
-
-  const inspect = async (ref: ArtifactRef) => {
-    const dir = resolveArtifactDir(root, ref.type, ref.id);
-    if (!dir) return null;
-    const session = ref.type === 'document' ? await documents.open(ref.id) : null;
-    await session?.flush();
-    const payload = readArtifact(dir, ref, runtimeOf(ref, dir));
-    const reasons = [...payload.warnings];
-    if ('pending' in payload)
-      reasons.push(...payload.pending.map((board) => `board ${board} is still being written`));
-    if (
-      'canvas' in payload &&
-      payload.canvas?.writing &&
-      !payload.pending.includes(payload.canvas.writing)
-    ) {
-      reasons.push(`board ${payload.canvas.writing} is still being written`);
-    }
-    if (session?.streaming()) reasons.push('the document is still being written');
-    const title = titleOf(payload);
-    let published: Record<string, unknown> | null = null;
-    if (reasons.length === 0) {
-      try {
-        published = publishPayload(
-          ref,
-          dir,
-          title,
-          payload,
-          ref.type === 'document' ? documents.comments(ref.id) : undefined,
-        );
-      } catch (err) {
-        reasons.push((err as Error).message);
-      }
-    }
-    return {
-      dir,
-      title,
-      reasons,
-      payload: published,
-      ...('canvas' in payload ? { fileOverrides: recordings.overrides(ref.id, payload) } : {}),
-    };
-  };
-  const cloud =
-    options.cloud && options.configFile
-      ? createCloudRoutes({
-          ...options.cloud,
-          configFile: options.configFile,
-          project: path.basename(path.resolve(root, '../..')),
-          address: (ref) => artifactPath(root, ref.type, ref.id).split('/').pop()!,
-          port: (): number => ctx.port,
-          inspect,
-          onPublication: (key, publication) => {
-            broadcast({ type: 'cloud-publication', artifact: key, publication });
-          },
-        })
-      : null;
-
-  const autoPublisher = cloud
-    ? createAutoPublisher({
-        stateFile: path.join(stateDir, 'auto-publish.json'),
-        enabled: cloud.autoPublishEnabled,
-        token: cloud.token,
-        publish: async (key) => {
-          const outcome = await cloud.autoPublish(key);
-          if (outcome.kind === 'published') {
-            const frame = textFrame(
-              JSON.stringify({ type: 'cloud-published', artifact: key } satisfies ServerMessage),
-            );
-            for (const socket of clients) socket.write(frame);
-          }
-          return outcome;
-        },
-      })
-    : null;
 
   const sameOrigin = (req: http.IncomingMessage) => {
     const origin = req.headers.origin;
@@ -341,22 +244,6 @@ export function createServerContext(options: ServerOptions) {
     return writeState(ref, dir);
   };
 
-  const servedArtifacts = () => {
-    const served = new Map<string, string>();
-    if (!options.configFile) return served;
-    for (const [key, entry] of Object.entries(readConfig(options.configFile).config.artifacts)) {
-      const ref = artifactKeyOf(key);
-      if (entry.cloud && ref && resolveArtifactDir(root, ref.type, ref.id))
-        served.set(entry.cloud.id, key);
-    }
-    return served;
-  };
-  const embedTarget = (type: 'artboard' | 'document', id: string): ArtifactRef | null => {
-    if (isArtifactLocator(id) && resolveArtifactAddress(root, type, id)) return { type, id };
-    const served = artifactKeyOf(servedArtifacts().get(id) ?? '');
-    return served?.type === type ? served : null;
-  };
-
   const ctx = {
     options,
     root,
@@ -373,15 +260,13 @@ export function createServerContext(options: ServerOptions) {
       host: options.host,
       urlHost: options.urlHost,
       ports: [],
-      cloudOrigin: options.cloud?.origin,
+      publicOrigin: options.publicOrigin,
     }),
     port: 0,
     boardPort: 0,
     cookieName: '',
     startedAt,
     lastActivity: startedAt,
-    relay: null as RelayEmitter | null,
-    relayViewers: new Map<string, { key: string; tab: object }>(),
     keyOk,
     agentOk,
     isAuthorized,
@@ -396,8 +281,6 @@ export function createServerContext(options: ServerOptions) {
     selections,
     changeListeners,
     activityListeners,
-    relayListeners,
-    direct,
     broadcast,
     avatars,
     names,
@@ -406,16 +289,12 @@ export function createServerContext(options: ServerOptions) {
     boardComments,
     listeningTimer,
     documents,
-    cloud,
-    autoPublisher,
     documentState,
     verdictPreparing,
     artifactMeta,
     signatures,
     writeState,
     refreshState,
-    servedArtifacts,
-    embedTarget,
   };
   return ctx;
 }

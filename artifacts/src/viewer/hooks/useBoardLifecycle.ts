@@ -88,7 +88,7 @@ export function useBoardLifecycle({
           if (requests.current.get(id)?.request !== request) return;
           frames.current
             .get(id)
-            ?.contentWindow?.postMessage({ type: 'ryugi:board:capture', request, scale }, '*');
+            ?.contentWindow?.postMessage({ type: 'anjian:board:capture', request, scale }, '*');
         }),
       );
     }
@@ -121,17 +121,17 @@ export function useBoardLifecycle({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const type = event.data?.type;
-      if (typeof type !== 'string' || !type.startsWith('ryugi:board:')) return;
+      if (typeof type !== 'string' || !type.startsWith('anjian:board:')) return;
       const id = [...frames.current].find(
         ([, element]) => element.contentWindow === event.source,
       )?.[0];
       if (!id) return;
-      if (type === 'ryugi:board:ready') {
+      if (type === 'anjian:board:ready') {
         controller.ready(id);
         bump();
-      } else if (type === 'ryugi:board:interacted' || type === 'ryugi:board:changed') {
+      } else if (type === 'anjian:board:interacted' || type === 'anjian:board:changed') {
         controller.touch(id);
-      } else if (type === 'ryugi:board:snapshot') {
+      } else if (type === 'anjian:board:snapshot') {
         const pendingRequest = requests.current.get(id);
         if (!pendingRequest || event.data.request !== pendingRequest.request) return;
         requests.current.delete(id);

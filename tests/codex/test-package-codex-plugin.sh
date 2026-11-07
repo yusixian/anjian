@@ -134,8 +134,8 @@ EOF
 echo "Codex package archive tests"
 
 metadata_source="$TEST_ROOT/metadata-source"
-archive="$TEST_ROOT/ryugi"
-tar_archive="$TEST_ROOT/ryugi.tar.gz"
+archive="$TEST_ROOT/anjian"
+tar_archive="$TEST_ROOT/anjian.tar.gz"
 extracted="$TEST_ROOT/extracted"
 tar_extracted="$TEST_ROOT/tar-extracted"
 write_metadata_fixture "$metadata_source"
@@ -162,17 +162,17 @@ assert_contains "$output" "SHA-256:" "reports archive checksum"
 extract_archive "$archive" "$extracted"
 
 archive_paths="$(list_archive "$archive" | normalize_archive_paths)"
-unexpected_pattern='(^ryugi/|^\.agents/|^hooks/|package\.json$|^\.git|^\.pytest_cache|^\.ruff_cache|^scripts/|^tests/|^docs/|^evals/|^lib/|^\.claude|^\.cursor|^\.kimi|^\.opencode|^\.pi|^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^RELEASE-NOTES\.md$|^CHANGELOG\.md$)'
+unexpected_pattern='(^anjian/|^\.agents/|^hooks/|package\.json$|^\.git|^\.pytest_cache|^\.ruff_cache|^scripts/|^tests/|^docs/|^evals/|^lib/|^\.claude|^\.cursor|^\.kimi|^\.opencode|^\.pi|^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^RELEASE-NOTES\.md$|^CHANGELOG\.md$)'
 assert_not_matches "$archive_paths" "$unexpected_pattern" "archive excludes source-only paths"
 assert_contains "$archive_paths" ".codex-plugin/plugin.json" "archive includes Codex manifest"
 assert_contains "$archive_paths" "skills/brainstorming/SKILL.md" "archive includes skills"
 assert_contains "$archive_paths" "skills/brainstorming/agents/openai.yaml" "archive includes OpenAI skill metadata"
 assert_contains "$archive_paths" "assets/app-icon.png" "archive includes app icon"
-assert_contains "$archive_paths" "assets/ryugi-small.svg" "archive includes composer icon"
+assert_contains "$archive_paths" "assets/anjian-small.svg" "archive includes composer icon"
 
 manifest_summary="$(read_archive_file "$archive" .codex-plugin/plugin.json | python3 -c 'import json,sys; data=json.load(sys.stdin); print("\t".join([data["name"], data["version"], data["skills"], str(data.get("hooks"))]))')"
 expected_version="$(python3 -c 'import json; print(json.load(open("'"$REPO_ROOT"'/.codex-plugin/plugin.json"))["version"])')"
-assert_equals "$manifest_summary" "ryugi	$expected_version	./skills/	$source_hooks" "archive manifest preserves source hooks"
+assert_equals "$manifest_summary" "anjian	$expected_version	./skills/	$source_hooks" "archive manifest preserves source hooks"
 
 # Run the manifest's actual lifecycle command from the extracted archive.
 # This catches a declared hook whose module or shared watcher was not shipped.
@@ -231,8 +231,8 @@ assert_equals "$tar_metadata_times" "[0]" "tar.gz archive normalizes entry times
 
 metadata_archive="$TEST_ROOT/metadata-source.tar.gz"
 metadata_zip="$TEST_ROOT/metadata-source.zip"
-archive_from_tar_source="$TEST_ROOT/ryugi-from-tar-source.zip"
-archive_from_zip_source="$TEST_ROOT/ryugi-from-zip-source.zip"
+archive_from_tar_source="$TEST_ROOT/anjian-from-tar-source.zip"
+archive_from_zip_source="$TEST_ROOT/anjian-from-zip-source.zip"
 (
   cd "$metadata_source"
   tar -czf "$metadata_archive" .

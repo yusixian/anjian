@@ -8,9 +8,6 @@ import type { LexicalEditor, SerializedEditorState } from 'lexical';
 import { useEffect, useMemo, useState } from 'react';
 
 import { type CommentsFile, emptyComments } from '../../shared/comments';
-import { RailSwitch } from '../components/RailSwitch';
-import { useCloudHeader } from '../hooks/useCloudHeader';
-import { t } from '../i18n';
 import { createChannel } from './channel';
 import { extraNodes, rendererConfig } from './DocumentEditor';
 import { DocumentLayout } from './DocumentLayout';
@@ -18,18 +15,6 @@ import { type DynamicHost, DynamicHostContext } from './DynamicBlock';
 
 const styles = stylex.create({
   root: { minHeight: '100%', backgroundColor: cssVar.colorBgContainer, color: cssVar.colorText },
-  offline: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    height: 40,
-    paddingInline: 24,
-    color: cssVar.colorTextSecondary,
-    fontFamily: cssVar.fontFamily,
-    fontSize: 12,
-  },
-  dot: { width: 7, height: 7, borderRadius: '50%', backgroundColor: cssVar.colorTextQuaternary },
-  framedOffline: { display: { 'default': 'none', '@media (max-width: 640px)': 'flex' } },
 });
 
 function usePrefersDark() {
@@ -47,7 +32,6 @@ interface Props {
   comments?: CommentsFile;
   contentBase: string;
   id: string;
-  offline?: boolean;
   state: SerializedEditorState;
 }
 
@@ -56,29 +40,18 @@ export default function SnapshotDocument({
   state,
   contentBase,
   comments = emptyComments(),
-  offline = false,
 }: Props) {
   const dark = usePrefersDark();
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
   const host = useMemo<DynamicHost>(
     () => ({
-      artifact: `cloud/${id}`,
+      artifact: `document/${id}`,
       contentBase,
       channel: createChannel(),
       send: () => undefined,
     }),
     [id, contentBase],
   );
-  const openComments = comments.threads.filter((thread) => thread.status === 'open').length;
-  const framed = useCloudHeader(id, {
-    comments: openComments,
-    activity: null,
-    retrying: false,
-    reason: null,
-    history: false,
-    historyOpen: false,
-  });
-
   useEffect(() => {
     const base = document.createElement('base');
     base.href = contentBase;
@@ -89,26 +62,8 @@ export default function SnapshotDocument({
   return (
     <div
       {...stylex.props(styles.root)}
-      className={`ryugi-doc ${stylex.props(styles.root).className ?? ''}`}
+      className={`anjian-doc ${stylex.props(styles.root).className ?? ''}`}
     >
-      {!framed ? (
-        <div {...stylex.props(styles.offline)}>
-          <RailSwitch
-            available={false}
-            comments={openComments}
-            open={false}
-            onComments={() => {}}
-            onHistory={() => {}}
-          />
-          <span>{t('document.historyOffline')}</span>
-        </div>
-      ) : null}
-      {offline ? (
-        <div {...stylex.props(styles.offline, framed && styles.framedOffline)}>
-          <i {...stylex.props(styles.dot)} />
-          {t('document.offlineNoComments')}
-        </div>
-      ) : null}
       <DocumentLayout editor={editor} threads={comments.threads}>
         <DynamicHostContext.Provider value={host}>
           <RichEditor

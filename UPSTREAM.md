@@ -1,4 +1,10 @@
-# Upstream
+# 来源记录
+
+本项目从 Innei/ryugi 的 `v1.51.2` 分叉，基线提交为 `6054b65ab9b2208a234a78632eb065cfeb3eb166`。项目独立演进，以个人使用、本地运行和中文体验为主；不承诺跟随上游发布。引入后续上游代码前，须单独核对其许可证和适用性。
+
+以下保留 Ryugi 原有的 Superpowers 来源与迁移记录，供追溯使用；其中的远程名、发布基线和同步步骤并非本项目的更新策略。
+
+## Ryugi 的上游记录
 
 Ryugi is a fork of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 

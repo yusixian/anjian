@@ -75,6 +75,7 @@ interface Props {
   actions?: ReactNode;
   agent?: string;
   artifact: string | null;
+  boardOrigin?: string;
   boardPath?: string;
   boardPort?: number;
   canvas: CanvasSpec | null;
@@ -99,6 +100,7 @@ export function PhoneArtboard({
   warnings,
   pending,
   contentBase,
+  boardOrigin,
   boardPort,
   boardPath,
   versions,
@@ -164,7 +166,7 @@ export function PhoneArtboard({
   );
   const notes = Object.entries(canvas?.notes ?? {}).filter(([, n]) => n.page === page);
   const pendingBoards = useMemo(() => new Set(pending), [pending]);
-  const source = useBoardOrigin({ contentBase, boardPort, boardPath });
+  const source = useBoardOrigin({ contentBase, boardOrigin, boardPort, boardPath });
   const waiting = useMemo(
     () => (source ? pendingBoards : new Set(boards.map(([board]) => board))),
     [source, pendingBoards, boards],
