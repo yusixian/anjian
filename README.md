@@ -25,13 +25,13 @@ Anjian 已完成本地构建、独立命名空间与官方云端入口移除。�
 - 浏览器文档批注 → CLI 读取 → 文件修改 → CLI 回复 → 网页实时同步的本地闭环通过。
 - 限制 4 个 worker 的完整测试集通过：160 个文件、1,373 项测试。
 
-Docker 镜像、HTTPS 反向代理、持久化恢复及 Dokploy 自动部署尚未完成验收。详见 [交付记录](docs/DELIVERY_GOAL.md)。
+Dokploy 已完成源码镜像构建和 HTTPS 文档访问验证；推送 main 已实际触发自动部署。线上文档批注与容器内 CLI 回复已互通。重建后数据恢复、线上画板隔离与本地 Agent 的 SSH 连接仍待验证。详见 [交付记录](docs/DELIVERY_GOAL.md)。
 
 ## 使用与开发
 
 - [从源码构建和本地运行](docs/install.md)
 - [CLI 命令](docs/artifacts-cli.md)
-- [Docker / Dokploy 自托管准备](docs/self-hosting.md)
+- [Docker / Dokploy 自托管](docs/self-hosting.md)
 
 ## 开发起点
 

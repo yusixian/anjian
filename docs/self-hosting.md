@@ -1,6 +1,6 @@
 # Anjian 自托管
 
-当前为部署准备稿。Compose 配置已通过静态解析；镜像构建、反向代理及 Dokploy 线上运行尚待实际验收。不要把本文件当成已完成部署的报告。
+已在 Dokploy 验证源码镜像构建、运行中容器、主界面 HTTPS 与文档批注/CLI 回复。main 推送已实际触发自动部署。重建后数据恢复、线上画板独立来源和 SSH 接入仍待验收，详见 [交付记录](DELIVERY_GOAL.md)。
 
 ## 两个来源
 
@@ -42,7 +42,7 @@ Compose 默认仅将 27319、27329 绑定到服务器回环地址。浏览器使
 
 直接推送 main 和合并 PR 到 main 都会产生 push 事件；其他分支的推送不应触发该生产应用。On Push 不会等待 GitHub Actions 完成。推荐为 main 配置 PR 检查门槛，通过仓库的 `Anjian checks` 后再合入。
 
-公开仓库 `yusixian/anjian` 与 Dokploy Anjian Compose 应用已创建，上述来源配置已保存。main webhook 的端到端部署仍待验证。
+公开仓库 `yusixian/anjian` 与 Dokploy Anjian Compose 应用已创建，上述来源配置已保存。提交 `e74e1fa78ee8859a4e4485c98626813c5ede7b17` 已通过 main webhook 自动触发部署，Dokploy 记录显示 Done。
 
 Dokploy 的部署任务显示完成只表示部署命令结束，不证明应用已经可用。域名路由与命名卷用法参考 [Dokploy Compose 文档](https://docs.dokploy.com/docs/core/docker-compose)和[域名配置](https://docs.dokploy.com/docs/core/docker-compose/domains)。
 
@@ -57,10 +57,10 @@ Dokploy 的部署任务显示完成只表示部署命令结束，不证明应用
 
 实现前不建议用双向目录同步覆盖整个 `.anjian/artifacts/`：这里既有 Agent 写入的作品，也有服务器管理的评论、编辑状态与会话文件。需要明确文件所有权，或用专门的上传和反馈接口。
 
-第一阶段先验收同机闭环，再实现远程传输。此部分仍是待完成项。
+本机和 Dokploy 容器内的 CLI 反馈闭环已验证；电脑到服务器的远程传输仍待完成。
 ## 首次远程连接：通过 SSH 执行容器内 CLI
 
-第一版可使用已有 SSH 访问执行服务器容器中的 CLI，不需要重新引入官方中继。以下是待部署后验收的操作方案，尚未验证真实 SSH 连接。
+第一版可使用已有 SSH 访问执行服务器容器中的 CLI，不需要重新引入官方中继。已通过 Dokploy 容器终端验证 CLI 读取及回复线上批注；以下 SSH 入口尚未验证真实连接。
 
 先在服务器的 Anjian Compose 目录确认服务名称与项目路径，再执行：
 
