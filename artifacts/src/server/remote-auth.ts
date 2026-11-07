@@ -70,6 +70,8 @@ const html = (res: http.ServerResponse, status: number, title: string, body: str
     {
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      // Form POSTs need a non-null Origin for the strict CSRF check.
+      'Referrer-Policy': 'same-origin',
       'X-Content-Type-Options': 'nosniff',
     },
   );

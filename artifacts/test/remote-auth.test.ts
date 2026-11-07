@@ -67,6 +67,7 @@ describe('remote device authorization', () => {
     expect(pending.status).toBe(202);
     expect(await pending.json()).toEqual({ status: 'pending' });
     const page = await fetch(`${base}/connect?code=${request.userCode}`, { headers: OWNER });
+    expect(page.headers.get('referrer-policy')).toBe('same-origin');
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('个人作品');
     expect((await approve(request.userCode)).status).toBe(200);

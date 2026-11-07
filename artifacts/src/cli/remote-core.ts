@@ -238,6 +238,7 @@ export function filesHash(files: Record<string, string>): string {
 }
 export function applyLocalFiles(projectDir: string, artifact: string, files: Record<string, string>, expectedLocalHash?: string) {
   validateFiles(artifact, files);
+  if (Object.keys(files).length === 0) throw new CliError('Refusing to replace local files with an empty artifact');
   const dir = artifactDir(projectDir, artifact);
   checkDirectory(dir, dir);
   const before = localFiles(projectDir, artifact);

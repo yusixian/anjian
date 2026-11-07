@@ -160,6 +160,10 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
   const { dir, type } = pathsFor(projectDir, artifact);
   if (!fs.existsSync(dir)) return { revision: null, files: {} };
   const files = collect(dir, type);
+  // Mounting can create metadata before the first source file is uploaded.
+  if (files.size === 0) return { revision: null, files: {} };
+  const primary = type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
+  if (!files.has(primary)) throw unsafe(`artifact is missing ${primary}`);
   return snapshot(files, digest(files));
 }
 
@@ -251,7 +255,7 @@ export function writeRemoteArtifact(
   const files = decodeManifest(type, incoming.files);
   const exists = fs.existsSync(dir);
   const current = exists ? collect(dir, type) : new Map<string, Buffer>();
-  const revision = exists ? digest(current) : null;
+  const revision = current.size ? digest(current) : null;
   if (incoming.baseRevision !== revision)
     throw new RemoteTransferError(409, 'revision_conflict', 'remote artifact changed; pull before pushing again');
 

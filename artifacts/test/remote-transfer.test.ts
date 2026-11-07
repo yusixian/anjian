@@ -137,3 +137,12 @@ describe('remote artifact transfer', () => {
       .toBe(false);
   });
 });
+
+test('metadata-only directories remain absent until source is uploaded', () => {
+  const root = project();
+  const dir = path.join(root, '.anjian/artifacts/document/plan');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '.artifact-id'), 'mounted');
+  expect(readRemoteArtifact(root, 'document/plan')).toEqual({ revision: null, files: {} });
+  expect(write(root, 'document/plan', null, { 'doc.xml': encode('<doc><p>first</p></doc>') }).revision).toMatch(/^sha256:/);
+});

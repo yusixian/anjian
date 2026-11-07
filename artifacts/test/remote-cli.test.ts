@@ -164,3 +164,9 @@ describe('remote CLI', () => {
     expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('server managed');
   });
 });
+
+test('empty remote content cannot erase local source', () => {
+  applyLocalFiles(project, 'document/plan', doc('keep'));
+  expect(() => applyLocalFiles(project, 'document/plan', {})).toThrow('empty artifact');
+  expect(localFiles(project, 'document/plan')).toEqual(doc('keep'));
+});
