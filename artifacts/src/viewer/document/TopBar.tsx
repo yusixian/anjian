@@ -3,6 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { LibraryLink } from '../components/LibraryNavigation';
 import { RailSwitch } from '../components/RailSwitch';
 import { t } from '../i18n';
 import { activityLabel, type AgentActivity } from './agentActivity';
@@ -84,6 +85,7 @@ export function TopBar({
   const label = activityLabel(activity, agent, agentSection);
   return (
     <header {...stylex.props(styles.bar, compact && styles.compact)}>
+      <LibraryLink />
       {compact ? null : (
         <span {...stylex.props(styles.crumb)}>
           document / <span {...stylex.props(styles.crumbId)}>{id}</span>

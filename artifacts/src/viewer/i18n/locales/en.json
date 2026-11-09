@@ -37,6 +37,8 @@
     "withdraw": "Withdraw"
   },
   "chrome": {
+    "backToLibrary": "Back to library",
+    "library": "Library",
     "switchPage": "Switch page",
     "noPages": "No pages",
     "selectTitle": "Select (V)",

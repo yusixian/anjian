@@ -4,6 +4,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { LibraryLink } from './LibraryNavigation';
 import type { PageSpec } from '../../shared/types';
 import { t } from '../i18n';
 
@@ -93,6 +94,7 @@ interface Props extends PageSwitcherProps {
 export function PhoneArtboardBar({ title, pages, page, onPageChange, actions, live }: Props) {
   return (
     <header data-chrome {...stylex.props(styles.bar)}>
+      <LibraryLink />
       <span {...stylex.props(styles.title)}>{title}</span>
       <PageSwitcher page={page} pages={pages} onPageChange={onPageChange} />
       <span {...stylex.props(styles.spacer)} />

@@ -2,6 +2,7 @@ import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 import { type ReactNode, useEffect } from 'react';
 
+import { LibraryBar } from '../components/LibraryNavigation';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { useHtmlData } from '../hooks/useHtmlData';
 import { HTML_SANDBOX, useSandboxFrame } from '../hooks/useSandboxFrame';
@@ -10,14 +11,15 @@ import type { ArtifactFeed } from '../lib/feed';
 
 const styles = stylex.create({
   root: {
+    display: 'flex',
+    flexDirection: 'column',
     position: 'fixed',
     inset: 0,
     backgroundColor: cssVar.colorBgContainer,
   },
-  frame: { display: 'block', width: '100%', height: '100%', borderWidth: 0 },
+  frame: { display: 'block', width: '100%', height: 0, flex: 1, minHeight: 0, borderWidth: 0 },
   message: {
-    position: 'absolute',
-    inset: 0,
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -57,6 +59,7 @@ export function HtmlView({
 
   return (
     <div {...stylex.props(styles.root)}>
+      <LibraryBar />
       {ready && src ? (
         <iframe
           allow="clipboard-write"

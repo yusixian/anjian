@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { LibraryLink } from './LibraryNavigation';
 import type { PageSpec } from '../../shared/types';
 import type { Tool } from '../hooks/usePanZoom';
 import { useTranslation } from '../i18n';
@@ -69,7 +70,7 @@ const styles = stylex.create({
   pageName: {
     fontSize: 14,
     fontWeight: 600,
-    maxWidth: 220,
+    maxWidth: 'min(220px, 25vw)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
@@ -142,6 +143,7 @@ export function TopLeftBar({
   const current = pages.find((p) => p.id === page);
   return (
     <div data-chrome {...stylex.props(styles.bar, styles.left)}>
+      <LibraryLink />
       <DropdownMenu
         placement="bottomLeft"
         items={pages.map((p) => ({
