@@ -11,7 +11,7 @@
 
 ## 当前阶段
 
-本地改造已推送 main，首次 GitHub CI 全部通过（run 42359161802）。Dokploy 首次镜像构建成功，容器运行与 HTTPS 文档访问已验证。随后推送 `e74e1fa78ee8859a4e4485c98626813c5ede7b17` 自动触发第二次部署，记录显示 Done（51 秒）；该次构建使用缓存且未替换容器；随后单独重启容器并刷新网页，文档、批注和 Agent 回复均保留。
+生产版本为 `72aedd996df52b4f247025a4f6fc020e635f0928`。功能分支 CI 42492693259 和 main CI 42493032249 均通过。2026-11-09 已核对 Dokploy 对应提交部署 Done（1m 40s）、容器 `7cc16a4f4657` 运行，并完成真实公网 HTTPS CLI 与浏览器验收。
 
 已确认用户需要 `main` 的 push（含合并 PR）自动触发 Dokploy 部署。已登录 Dokploy；现有 `moe-prompt-atlas` 应用保持不变。用户已确认公开仓库 `yusixian/anjian`，正式域名 `anjian.cosine.ren` 与 `anjian-preview.cosine.ren`；已授权创建仓库、推送与部署。
 
@@ -20,7 +20,7 @@
 - [x] Anjian 品牌和来源说明一致，实际命令不再依赖官方 npm 最新版。
 - [x] 无官方 Cloud 登录、发布、中继、自动更新调用；本地存储不碰 Ryugi 目录。
 - [x] 画板、文档、HTML 和评论流程通过真实浏览器验证（桌面与手机）。
-- [ ] Agent 能读取批注并更新作品；本地与远程连接方式明确且验证。
+- [x] Agent 能读取批注并更新作品；本地与远程连接方式明确且验证。
 - [x] 构建、类型和受影响测试通过。
 - [x] Docker 镜像、HTTPS、持久化与重启行为经过验证。
 - [x] 在访问与部署条件满足后，Dokploy 实例可访问并完成验收。
@@ -42,20 +42,30 @@
 - 网络恢复后，远端 main 已核验为 `b42516c0b6cd2840699f401aee6cc75f5e1bfdd9`；CI run `42361944422` 成功，Dokploy 对应部署 Done（53 秒）。前一提交 b5fb2c6 的 CI 有一项 document-server 测试等待拒绝警告超时；最新运行通过，尚未定位该次超时根因。
 - 画板验收配置声明 interactive 后，网页实时出现播放按钮；点击播放后，作品按钮由 0 更新为 1。普通画板默认禁用 iframe 指针交互。
 
-## 后续
+## HTTPS CLI 交付验收（2026-11-09）
 
-用户已明确选择 HTTPS API + CLI，不再以 SSH 作为产品连接要求。剩余必需项：完成浏览器设备授权、独立凭证与项目权限、冲突保护的上传/拉取、批注监听续接的本地和线上验收。容器重启持久化已验证；容器替换与备份恢复未验证，作为额外运维验收保留。当前已证明本机及服务器容器内的反馈闭环，不证明本地电脑到服务器的文件同步或宿主自动唤醒成功。
+实现见 `docs/design/remote-api.md`，使用见 `docs/remote-cli.md`。用户选择 HTTPS API + CLI，不以 SSH 为产品使用条件。
 
-## HTTPS CLI 实现阶段
+- 本地完整回归 165 个文件、1,407 项通过；类型检查通过。功能分支与 main 的 GitHub CI 均通过。
+- 实际浏览器管理员登录、设备配对批准、本地项目绑定、文档首次上传及块 ID 规范化通过。
+- 网页选中文字批注后，本地 CLI watch 续接到 doc-comments 事件，comment list 读到批注；CLI 修改并 push、回复后，网页实时显示更新。
+- 网页编辑后，旧基线 push 被冲突保护拒绝；pull 将网页新内容保存到本地。文档 check 无警告。
+- 独立撤销测试设备经网页撤销后返回 HTTP 401，保留的主 E2E 设备仍可用。
+- 文档在 390px 手机视口无横向溢出。HTML 和画板均经远程 CLI 上传，浏览器按钮从 0 变为 1；HTML 沙箱不授予 allow-same-origin，画板 iframe 来源为 anjian-preview.cosine.ren，两者 contentDocument 均不可由主页面读取。
+- Dokploy 的部署 SHA 与 main 一致；新容器启动后原数据卷中的历史作品仍在。没有执行备份恢复测试。
 
-用户要求直接做到日常可用的程度，已授权实现与原 Anjian 项目内的交付延续。设计见 `docs/design/remote-api.md`，使用说明见 `docs/remote-cli.md`。
+### 保留的回归入口
 
-- 设备配对、项目授权、90 天凭证、网页撤销：已实现，服务端只保存摘要。
-- 项目绑定、push/pull、comment/check、watch、logout：已实现，正在检查并发写入与真实浏览器流程。
-- 新增远程 API 与已有 Hub 集成，设备授权、跨项目拒绝、版本冲突、撤销、重启后的事件续接、每设备批注游标和特殊资源名均有回归测试。
-- 2026-11-07 主代理完整复查：165 个测试文件、1,405 项全部通过（67.25 秒）；复用上一轮完整构建产物，应用源码未改变。类型检查与 `git diff --check` 通过。前一轮的两项测试前提错误已修正。
-- 实现已提交为 `152a159`，测试修正为 `74074fe`。独立分支 `feature/remote-cli` 的推送因 GitHub TLS 连接中断失败，远端分支与 CI 尚未建立。
-- 用户确认继续后，本地浏览器验收服务成功启动。真实浏览器批准设备、CLI 绑定/上传、网页批注、CLI 事件续接/读取/修改/回复、网页实时更新、网页编辑后 CLI 拉取均通过。设备重启后保留；网页撤销后 CLI 返回 invalid device token。设备页 390px 手机视口无横向溢出，临时服务已关闭。
-- 浏览器验收发现并修复授权表单的 Origin:null 问题（页面单独使用 same-origin Referrer-Policy，仍严格校验来源）；同步验收修复元数据目录误判已存在和空远端内容清空本地源码的问题，已补回归测试。23 项相关测试通过；修复后完整回归 165 个文件、1,407 项全部通过（68.04 秒），类型检查与 diff 检查通过。
-- 最新 Git 推送仍失败，GitHub API 读取也返回 EOF；没有更改生产部署。这轮是真实本机浏览器与 CLI 验收，公网 HTTPS 及 Dokploy 新版验收仍待网络恢复。
-- 远程 API 尚未部署；当前生产版本仍为 79ce753。不得将自动化测试通过视为浏览器验收或生产上线完成。
+专用设备 `anjian-production-e2e` 只授权当前 project，凭证保存在本机仓库外的私有目录，不提交 Git；可从「设备与 CLI」撤销。一次性 `anjian-e2e-revocation-check` 已撤销。
+
+- 文档：https://anjian.cosine.ren/document/nQZyCiZ0kSYJz2QuS3eX9
+- HTML：https://anjian.cosine.ren/html/AABMZq3JWddKfuANDDDlf
+- 画板：https://anjian.cosine.ren/artboard/YSIjcKbNaRjbywkMwC7mQ
+
+这些入口需要管理员浏览器登录。本轮是实际浏览器和 CLI 验收，保留了样例与设备；尚未建立 CI 自动执行的公网 E2E 套件。
+
+### 后续改进与边界
+
+- 首次管理员登录仍需带访问密钥的链接，尚无账号密码登录页；这次已在自动化浏览器完成登录，不能据此假设用户其他浏览器也已登录。
+- 事件监听不会自行唤醒 Lody 或其他宿主 Agent；任务调度需另行集成。
+- 备份恢复未验收。公网部署下的持续网络故障及服务重启事件恢复本轮未重复测试，自动化回归覆盖了事件日志重启续接。
