@@ -74,3 +74,9 @@ describe('parseRoute', () => {
     }
   });
 });
+
+test('devices and pairing are workbench routes', () => {
+  expect(parseRoute('/devices')).toEqual({ kind: 'devices', connect: false });
+  expect(parseRoute('/connect')).toEqual({ kind: 'devices', connect: true });
+  expect(parseRoute('/devices/other')).toEqual({ kind: 'unknown' });
+});

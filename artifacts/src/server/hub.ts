@@ -11,6 +11,7 @@ import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
 import { findTrashedArtifact, listTrash, recoverProjectTrash } from './artifact-trash';
 import { createHubTrash } from './hub-trash';
+import { serveHubViewer } from './hub-viewer';
 import { withProjectMutation } from './project-mutations';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
@@ -486,6 +487,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   trashCleanup.unref();
 
   const remoteAuth = createRemoteAuth({
+    viewerPages: true,
     home: options.paths.home,
     origin,
     isAdmin: (req, requestUrl) => authorized(req, requestUrl),
@@ -532,6 +534,23 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const pathname = decode(url.pathname);
       if (pathname === null) {
         send(res, 400, 'Bad request');
+        return;
+      }
+      const devicePage = pathname === '/devices' || pathname === '/connect';
+      if (devicePage || (ordered().length === 0 && req.method === 'GET' && !pathname.startsWith('/api/'))) {
+        if (req.method !== 'GET') { send(res, 405, 'Method not allowed'); return; }
+        if (!authorized(req, url) || !originAllowed(policy, req.headers.origin) ||
+            !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
+          send(res, 403, 'Forbidden'); return;
+        }
+        await serveHubViewer(req, res, {
+          viewerDir: options.viewerDir, pathname,
+          shell: devicePage || pathname === '/' || pathname === '/index.html',
+          boardOrigin: options.boardOrigin,
+          cookieName: `anjian_artifacts_${port}`, token: options.token, key: url.searchParams.get('key'),
+          secure: origin.startsWith('https:') && req.headers.host?.toLowerCase() === new URL(origin).host.toLowerCase(),
+          loopback,
+        });
         return;
       }
       const deletedRoute = /^\/(document|artboard|html)\/([A-Za-z0-9_-]+)\/?$/.exec(pathname);

@@ -159,7 +159,7 @@ export function ProjectSidebar({
         </button>
       )}
       {showDormant && dormant.map(row)}
-      <a href="/devices" {...stylex.props(styles.item)}>
+      <a href="/devices" aria-current={selection === 'devices' ? 'page' : undefined} {...stylex.props(styles.item, selection === 'devices' && styles.active)}>
         <Laptop aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
         <span {...stylex.props(styles.name)}>{t('home.devices')}</span>
       </a>

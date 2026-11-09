@@ -21,7 +21,7 @@ const PREVIEW_ROUTE = new RegExp(
   `^/preview/(artboard|document|html)/${ARTIFACT_LOCATOR_SOURCE}/?$`,
 );
 
-const viewerCsp = (boardOrigins: string[]) =>
+export const viewerCsp = (boardOrigins: string[]) =>
   [
     "default-src 'self'",
     "script-src 'self' 'wasm-unsafe-eval'",

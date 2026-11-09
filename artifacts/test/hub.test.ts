@@ -451,3 +451,18 @@ test('removing a project forgets it', async () => {
   await h.remove(one);
   expect(h.projects()).toEqual([]);
 });
+
+test('device workbench pages and their assets work before a project is registered', async () => {
+  const h = await hub();
+  for (const route of ['/devices', '/connect?code=ABCD-EFGH-IJKL', '/']) {
+    const response = await api(h, route);
+    expect(response.status).toBe(200);
+    expect(response.body).toContain('<title>viewer</title>');
+    expect(response.headers['content-security-policy']).toContain("script-src 'self'");
+  }
+  expect((await api(h, '/assets/app.js')).status).toBe(200);
+  expect((await api(h, '/devices', { origin: 'https://evil.invalid' })).status).toBe(403);
+  const devices = await api(h, '/api/remote/auth/devices');
+  expect(devices.status).toBe(200);
+  expect(JSON.parse(devices.body)).toMatchObject({ devices: [], projects: [] });
+});

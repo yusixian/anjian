@@ -1,6 +1,6 @@
 import { Button, Input, Segmented, Select, toast } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
-import { Languages, Search, Trash2 } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
 
 import type { HubArtifact, HubProjectStatus } from '../../shared/hub';
@@ -8,7 +8,7 @@ import { artifactSelectionKey, type TrashEntry, type TrashTarget } from '../../s
 import { ARTIFACT_TYPES, type ArtifactType } from '../../shared/types';
 import { AnjianMark } from '../components/AnjianMark';
 import { WarningsBadge } from '../components/WarningsBadge';
-import { setViewerLanguage, useTranslation } from '../i18n';
+import { useTranslation } from '../i18n';
 import { type ArtifactSort, filterArtifacts } from '../lib/artifact-list';
 import { ArtifactCard } from './home/ArtifactCard';
 import { BulkDialog } from './home/BulkDialog';
@@ -18,7 +18,7 @@ import { CommandPalette } from './home/CommandPalette';
 import { homeArtifacts, type HomeSelection, type SearchScope } from './home/home-model';
 import { styles } from './home/home-styles';
 import { ProjectSidebar } from './home/ProjectSidebar';
-import { StatusPill } from './home/StatusPill';
+import { WorkbenchHeader } from './home/WorkbenchHeader';
 import { TrashView } from './home/TrashView';
 import { useHubArtifacts } from './home/useHubArtifacts';
 import { useTrash } from './home/useTrash';
@@ -29,11 +29,11 @@ const openArtifact = (artifact: HubArtifact, newTab: boolean) => {
 };
 
 export function ArtifactList() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { list, error, refresh, removeProject } = useHubArtifacts();
   const trash = useTrash();
   const [selection, setSelection] = useState<HomeSelection>(() =>
-    new URLSearchParams(location.search).get('view') === 'trash' ? 'trash' : 'recent',
+    new URLSearchParams(location.search).get('view') === 'trash' ? 'trash' : new URLSearchParams(location.search).get('project') ?? 'recent',
   );
   const [scope, setScope] = useState<SearchScope>('project');
   const [type, setType] = useState<ArtifactType | 'all'>('all');
@@ -89,6 +89,8 @@ export function ArtifactList() {
     const url = new URL(location.href);
     if (next === 'trash') url.searchParams.set('view', 'trash');
     else url.searchParams.delete('view');
+    if (next !== 'recent' && next !== 'trash') url.searchParams.set('project', next);
+    else url.searchParams.delete('project');
     history.replaceState(null, '', url);
     if (next === 'trash') void trash.refresh().then((entries) => {
       const present = new Set(entries.map((entry) => `${entry.project}\n${entry.trashId}`));
@@ -242,26 +244,10 @@ export function ArtifactList() {
 
   return (
     <div {...stylex.props(styles.library)}>
-      <header {...stylex.props(styles.topbar)}>
-        <div {...stylex.props(styles.breadcrumb)}>
-          <AnjianMark size={20} />
-          <strong {...stylex.props(styles.brand)}>案间</strong>
-          <span {...stylex.props(styles.slash)}>/</span>
-          <b {...stylex.props(styles.crumb)}>{selection === 'trash' ? t('bulk.trash') : selected?.name ?? t('home.recentAll')}</b>
-        </div>
-        <div {...stylex.props(styles.topbarEnd)}>
-          <button
-            aria-label={t('home.switchLanguage', { language: i18n.language === 'zh' ? 'English' : '中文' })}
-            type="button"
-            {...stylex.props(styles.languageButton)}
-            onClick={() => void setViewerLanguage(i18n.language === 'zh' ? 'en' : 'zh')}
-          >
-            <Languages aria-hidden="true" size={14} />
-            <span>{i18n.language === 'zh' ? '中文' : 'English'}</span>
-          </button>
-          <StatusPill onProjectsChanged={() => void refresh()} />
-        </div>
-      </header>
+      <WorkbenchHeader
+        title={selection === 'trash' ? t('bulk.trash') : selected?.name ?? t('home.recentAll')}
+        onProjectsChanged={() => void refresh()}
+      />
       <div {...stylex.props(styles.body)}>
         <ProjectSidebar
           projects={projects}

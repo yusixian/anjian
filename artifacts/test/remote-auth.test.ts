@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { createRemoteAuth } from '../src/server/remote-auth';
+import type { RemoteDevicesResponse, RemotePairingResponse } from '../src/shared/devices';
 
 const ORIGIN = 'http://127.0.0.1:1';
 const OWNER = { Cookie: 'owner=1' };
@@ -181,5 +182,90 @@ describe('remote device authorization', () => {
     const next = await issued.json() as { token: string };
     time += 90 * 24 * 60 * 60_000 + 1;
     expect((await fetch(`${base}/api/remote/auth/session`, { headers: { Authorization: `Bearer ${next.token}` } })).status).toBe(401);
+  });
+
+  test('admin JSON reads list devices and pending pairings without credential secrets', async () => {
+    const request = await pair('工作电脑');
+    const pairing = await fetch(`${base}/api/remote/auth/pairing?code=${request.userCode.toLowerCase()}`, { headers: OWNER });
+    expect(pairing.status).toBe(200);
+    expect(await pairing.json()).toEqual({
+      pairing: { code: request.userCode, name: '工作电脑', expiresAt: time + 10 * 60_000 },
+      projects: [{ id: 'project-a', name: '个人作品' }, { id: 'project-b', name: '其他项目' }],
+    } satisfies RemotePairingResponse);
+    const approved = await approve(request.userCode);
+    expect(await approved.json()).toEqual({ approved: true });
+    const claim = await fetch(`${base}/api/remote/auth/token`, json({ deviceCode: request.deviceCode }));
+    const { token, device } = await claim.json() as { token: string; device: { id: string } };
+    const response = await fetch(`${base}/api/remote/auth/devices`, { headers: OWNER });
+    expect(response.status).toBe(200);
+    const listing = await response.json() as RemoteDevicesResponse;
+    expect(listing).toEqual({
+      devices: [{ id: device.id, name: '工作电脑', projects: ['project-a'], createdAt: time, expiresAt: time + 90 * 24 * 60 * 60_000 }],
+      projects: [{ id: 'project-a', name: '个人作品' }, { id: 'project-b', name: '其他项目' }],
+      origin: ORIGIN,
+    });
+    expect(JSON.stringify(listing)).not.toContain(token);
+    expect(JSON.stringify(listing)).not.toContain(request.deviceCode);
+    expect(JSON.stringify(listing)).not.toContain('tokenHash');
+    expect((await fetch(`${base}/api/remote/auth/pairing?code=${request.userCode}`, { headers: OWNER })).status).toBe(410);
+  });
+
+  test('admin JSON reads reject anonymous, scoped token, foreign origin and cross-site requests', async () => {
+    const request = await pair();
+    expect((await approve(request.userCode)).status).toBe(200);
+    const claim = await fetch(`${base}/api/remote/auth/token`, json({ deviceCode: request.deviceCode }));
+    const { token } = await claim.json() as { token: string };
+    for (const route of ['/api/remote/auth/devices', `/api/remote/auth/pairing?code=${request.userCode}`]) {
+      expect((await fetch(`${base}${route}`)).status).toBe(403);
+      expect((await fetch(`${base}${route}`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(403);
+      expect((await fetch(`${base}${route}`, { headers: { ...OWNER, Origin: 'https://attacker.test' } })).status).toBe(403);
+      expect((await fetch(`${base}${route}`, { headers: { ...OWNER, 'Sec-Fetch-Site': 'cross-site' } })).status).toBe(403);
+      expect((await fetch(`${base}${route}`, { headers: { ...OWNER, 'Sec-Fetch-Site': 'same-site' } })).status).toBe(403);
+    }
+  });
+
+  test('JSON decisions report status and keep expired or repeated pairing codes unusable', async () => {
+    const denied = await pair();
+    const deny = await fetch(`${base}/api/remote/auth/deny`, {
+      ...json({ code: denied.userCode }), headers: { ...OWNER, Origin: ORIGIN, 'Content-Type': 'application/json' },
+    });
+    expect(await deny.json()).toEqual({ denied: true });
+    const denyAgain = await fetch(`${base}/api/remote/auth/deny`, {
+      ...json({ code: denied.userCode }), headers: { ...OWNER, Origin: ORIGIN, 'Content-Type': 'application/json' },
+    });
+    expect(denyAgain.status).toBe(410);
+    expect(await denyAgain.json()).toEqual({ error: 'pairing code expired or invalid' });
+    expect((await fetch(`${base}/api/remote/auth/pairing?code=${denied.userCode}`, { headers: OWNER })).status).toBe(410);
+
+    const allowed = await pair();
+    expect((await approve(allowed.userCode)).status).toBe(200);
+    const repeat = await approve(allowed.userCode);
+    expect(repeat.status).toBe(410);
+    expect(await repeat.json()).toEqual({ error: 'pairing code expired or invalid' });
+    const claim = await fetch(`${base}/api/remote/auth/token`, json({ deviceCode: allowed.deviceCode }));
+    const { device } = await claim.json() as { device: { id: string } };
+    const revoke = await fetch(`${base}/api/remote/auth/revoke`, {
+      ...json({ id: device.id }), headers: { ...OWNER, Origin: ORIGIN, 'Content-Type': 'application/json' },
+    });
+    expect(await revoke.json()).toEqual({ revoked: true });
+    expect((await fetch(`${base}/api/remote/auth/devices`, { headers: OWNER }).then((res) => res.json()) as RemoteDevicesResponse).devices).toEqual([]);
+
+    const expired = await pair();
+    time += 10 * 60_000 + 1;
+    const lookup = await fetch(`${base}/api/remote/auth/pairing?code=${expired.userCode}`, { headers: OWNER });
+    expect(lookup.status).toBe(410);
+    expect(await lookup.json()).toEqual({ error: 'pairing code expired or invalid' });
+  });
+
+  test('viewerPages hands authenticated device pages to the hub while retaining unauthorized fallback', async () => {
+    auth.close();
+    auth = createRemoteAuth({
+      home, origin: ORIGIN, isAdmin: (req) => req.headers.cookie === 'owner=1',
+      projects: () => [], now: () => time, viewerPages: true,
+    });
+    expect((await fetch(`${base}/devices`, { headers: OWNER })).status).toBe(404);
+    expect((await fetch(`${base}/connect`, { headers: OWNER })).status).toBe(404);
+    expect((await fetch(`${base}/devices`)).status).toBe(403);
+    expect((await fetch(`${base}/connect`)).status).toBe(403);
   });
 });

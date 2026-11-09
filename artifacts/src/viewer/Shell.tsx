@@ -14,6 +14,9 @@ const ArtboardLayout = lazy(() =>
 const ArtifactList = lazy(() =>
   import('./layouts/ArtifactList').then(({ ArtifactList }) => ({ default: ArtifactList })),
 );
+const DeviceLayout = lazy(() =>
+  import('./layouts/DeviceLayout').then(({ DeviceLayout }) => ({ default: DeviceLayout })),
+);
 const DocumentLayout = lazy(() =>
   import('./layouts/DocumentLayout').then(({ DocumentLayout }) => ({ default: DocumentLayout })),
 );
@@ -63,6 +66,7 @@ function RouteView() {
     window.scrollTo(0, 0);
   }, [path]);
   if (route.kind === 'list') return local(<ArtifactList />);
+  if (route.kind === 'devices') return <DeviceLayout connect={route.connect} />;
   if (route.kind === 'unknown')
     return <div {...stylex.props(styles.unknown)}>No artifact lives at this address.</div>;
   const id = document.documentElement.dataset.anjianArtifactId ?? route.id;

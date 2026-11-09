@@ -121,7 +121,11 @@ test('device pairing resumes after login but still requires explicit project app
   const response = await login({ key: hub.token, returnTo: target });
   const cookie = response.headers.get('set-cookie')!.split(';')[0]!;
   const authorized = await fetch(base + response.headers.get('location'), { headers: { Cookie: cookie } });
-  expect(await authorized.text()).toContain('允许访问的项目');
+  expect(authorized.status).toBe(200);
+  expect(await authorized.text()).toContain('<title>案间</title>');
+  const details = await fetch(base + `/api/remote/auth/pairing?code=${device.userCode}`, { headers: { Cookie: cookie } });
+  expect(details.status).toBe(200);
+  expect((await details.json()).pairing).toMatchObject({ code: device.userCode, name: 'My laptop' });
   const token = await fetch(base + '/api/remote/auth/token', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceCode: device.deviceCode }),
   });
