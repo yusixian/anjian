@@ -28,7 +28,7 @@ async function start(publicOrigin?: string) {
     token: 'a'.repeat(48), version: '0.1.0', publicOrigin,
   });
   hubs.push(hub);
-  await hub.register(path.dirname(path.dirname(root)));
+  await hub.register(root);
   const base = `http://localhost:${hub.port}`;
   const login = (fields: Record<string, string>, origin = base) => fetch(`${base}/login`, {
     method: 'POST', redirect: 'manual', headers: { Origin: origin }, body: new URLSearchParams(fields),
