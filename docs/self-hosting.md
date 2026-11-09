@@ -61,3 +61,29 @@ Dokploy 的部署任务显示完成只表示部署命令结束，不证明应用
 客户端只传输作品源码和资源，不同步服务器的评论、历史或会话状态。版本冲突会拒绝覆盖；事件监听保留游标，断线后可以续接。宿主 Agent 的自动调度与 CLI 事件输出是两个层次。
 
 新增设备授权记录和事件日志位于服务状态目录，必须和 `/data/project` 一起保留命名卷。浏览器审批和撤销要求已登录工作台。所有公网通信使用 HTTPS，不要对外开放 Docker socket 或服务器命令执行接口。
+
+## GitHub 管理员登录
+
+GitHub 登录为可选配置。首个版本只允许一个指定的 GitHub 用户进入，权限等同于此实例的管理员；没有开放注册、普通成员角色、用户列表或按用户隔离作品。CLI 设备仍按原有项目授权独立管理。不要把其他人的账号配置为 Owner 来代替成员管理。
+
+在 GitHub 的 Settings → Developer settings → OAuth Apps 中创建专用应用：
+
+- Homepage URL：你的案间地址，例如 `https://anjian.cosine.ren`。
+- Authorization callback URL：`https://anjian.cosine.ren/auth/github/callback`。
+- 不需要仓库权限、邮箱权限或 Device Flow。
+
+在部署平台的私有环境变量中设置以下三项，并重新部署；不要提交 Client Secret 或在聊天中粘贴它：
+
+```dotenv
+ANJIAN_GITHUB_CLIENT_ID=<OAuth 应用的 Client ID>
+ANJIAN_GITHUB_CLIENT_SECRET=<OAuth 应用的 Client Secret>
+ANJIAN_GITHUB_OWNER_ID=<允许登录的 GitHub 数字用户 ID>
+```
+
+`ANJIAN_PUBLIC_ORIGIN` 必须对应上述主站地址，生产环境使用 HTTPS。数字用户 ID 可通过 `gh api user --jq .id` 查询；认证比较 ID，不依赖可改名的用户名。三项全部留空时使用原访问密钥登录；只填写部分配置会拒绝启动，避免误以为限制已生效。
+
+配置后登录页提供“使用 GitHub 登录”，访问密钥作为管理员备用入口。GitHub access token 仅用于当次查询身份，不持久化或返回浏览器；浏览器使用独立签名 Cookie。未勾选记住设备时，Cookie 为会话 Cookie，且服务端最多接受 24 小时；勾选时为 30 天。更换服务器主密钥、Owner ID 或 OAuth Client ID 会使旧 GitHub 会话失效。
+
+退出清除当前浏览器 Cookie；不撤销其他浏览器会话、已连接的 WebSocket 或已授权 CLI 设备。设备撤销仍在“设备与 CLI”页面处理。服务重启会让未完成的 OAuth 流程失效，重新点击登录即可；已签发会话在配置未变且未过期时仍有效。
+
+OAuth 使用 state、PKCE 和固定回调地址。取消授权、使用未允许账号及 GitHub 暂不可用时可在登录页重试，有效流程保留原作品或配对地址。协议依据：[GitHub OAuth web application flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)。实际发布状态见交付记录。

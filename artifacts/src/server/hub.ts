@@ -13,6 +13,7 @@ import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
 import { createBrowserAuth } from './browser-auth';
+import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
@@ -34,6 +35,7 @@ import { createRemoteEvents } from './remote-events';
 import { writeJsonAtomic } from './state';
 
 export interface HubOptions {
+  github?: GitHubConfig;
   boardPorts: number[];
   control?: { relaunch: () => boolean; stop: () => void };
   debounceMs?: number;
@@ -113,6 +115,7 @@ function readBody(req: http.IncomingMessage) {
 }
 
 export async function startHub(options: HubOptions): Promise<Hub> {
+  const githubConfig = options.github ?? readGitHubConfig();
   const localBinding = isLoopbackHost(options.host);
   const loopback = localBinding && !options.publicOrigin;
   const projectsFile = options.paths.projects;
@@ -137,6 +140,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     publicOrigin: options.publicOrigin,
   });
 
+  const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
+  const github = githubConfig ? createGitHubAuth({ config: githubConfig, token: options.token, origin, cookieName: `anjian_artifacts_${port}`, fetch: options.fetch }) : undefined;
+
   const projectId = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
   const remoteProjects = () => ordered().map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
   const remoteEvents = createRemoteEvents(options.paths.home);
@@ -158,7 +164,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         boardOrigin: options.boardOrigin,
         fetch: options.fetch,
         debounceMs: options.debounceMs,
-        mount: { port, boardPort, token: options.token, version: options.version },
+        mount: { port, boardPort, token: options.token, version: options.version, github },
       }).then((mounted) => {
         ready.set(project, mounted);
         try { remoteEvents.append(projectId(project), '', 'resync', { reason: 'project-mounted', action: 'Read current comments with comment list --all' }); }
@@ -177,7 +183,6 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return pending;
   };
 
-  const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
   const url = loopback ? `${origin}/` : `${origin}/?key=${options.token}`;
   const localHost = options.host === '0.0.0.0' ? '127.0.0.1' : urlHostForHttp(options.host);
   const localUrl = `http://${localHost}:${port}/${loopback ? '' : `?key=${options.token}`}`;
@@ -261,7 +266,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return loopback || (key !== null && safeEqual(key, options.token));
   };
   const authorized = (req: http.IncomingMessage, url: URL) =>
-    keyOk(url) ||
+    keyOk(url) || Boolean(github?.authorized(req.headers.cookie)) ||
     (req.headers.cookie ?? '')
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
@@ -380,7 +385,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const action = url.pathname.slice('/api/hub/'.length);
     if (action === 'log') {
       if (req.method !== 'GET') send(res, 405, 'Method not allowed');
-      else sendJson(res, 200, { lines: logTail(url.searchParams.get('project')) });
+      else sendJson(res, 200, { lines: logTail(url.searchParams.get('project')).map((line) => line.split(options.token).join('[redacted]')) });
       return;
     }
     const control = options.control;
@@ -441,7 +446,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     projects: () => remoteProjects().map(({ id, name }) => ({ id, name })),
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
-  const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized });
+  const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized, github });
 
   front.on('request', (req, res) => {
     void (async () => {
@@ -455,7 +460,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await remoteApi(req, res, url)) return;
       if (url.pathname === '/api/status') {
         if (!authorized(req, url)) send(res, 403, 'Forbidden: agent calls need ?key=');
-        else sendJson(res, 200, status());
+        else sendJson(res, 200, { ...status(), url: fromAgent(req, url) ? status().url : `${origin}/` });
         return;
       }
       if (CONTROL_PATH.test(url.pathname)) {

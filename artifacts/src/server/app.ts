@@ -10,6 +10,7 @@ import { watchArtifacts } from './artifact-watcher';
 import { type ArtifactRef, isArtifactLocator, listArtifacts } from './artifacts';
 import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
+import { createGitHubAuth, readGitHubConfig } from './github-auth';
 import {
   type ArtifactPayload,
   type ChangeListener,
@@ -48,11 +49,13 @@ export interface ArtifactsServer {
 export type MountedProject = ArtifactsServer;
 
 export async function startArtifactsServer(options: ServerOptions): Promise<ArtifactsServer> {
+  const githubConfig = options.mount ? undefined : options.github ?? readGitHubConfig();
   const ctx = createServerContext(options);
   const { root, stateDir, mount, loopback, token, clients } = ctx;
 
   const browserAuth = createBrowserAuth({
     get cookieName() { return ctx.cookieName; },
+    get github() { return ctx.github; },
     token,
     get origin() { return options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${ctx.port}`; },
     loopback,
@@ -93,6 +96,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   }
   const port = ctx.port;
   ctx.cookieName = `anjian_artifacts_${port}`;
+  if (githubConfig) ctx.github = createGitHubAuth({ config: githubConfig, token, origin: options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`, cookieName: ctx.cookieName, fetch: options.fetch });
 
   const handleBoardRequest = createBoardRequestHandler(ctx);
   const boardServer = http.createServer(handleBoardRequest);

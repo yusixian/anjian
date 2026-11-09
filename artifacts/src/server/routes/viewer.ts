@@ -76,7 +76,7 @@ function serveShell(
   const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8' };
   // One server serves every project: the page's own API calls find their project by the Referer.
   if (ref) headers['Referrer-Policy'] = 'same-origin';
-  if (key !== null && !loopback && !safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', ctx.token)) {
+  if (key !== null && safeEqual(key, ctx.token) && !loopback && !safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', ctx.token)) {
     const secure = options.publicOrigin?.startsWith('https:') &&
       req.headers.host?.toLowerCase() === new URL(options.publicOrigin).host.toLowerCase();
     headers['Set-Cookie'] = browserCookie(ctx.cookieName, ctx.token, Boolean(secure));

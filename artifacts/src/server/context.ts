@@ -15,6 +15,7 @@ import { type asBoardHumanOp, createBoardCommentRegistry } from './board-comment
 import { originsFor } from './board-port';
 import { commentNames } from './comment-names';
 import { ensureConfig } from './config';
+import type { createGitHubAuth, GitHubConfig } from './github-auth';
 import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks } from './dynamic-blocks';
@@ -27,6 +28,7 @@ import { createVerifyRecordings } from './verify-recordings';
 import { textFrame } from './ws';
 
 export interface ServerOptions {
+  github?: GitHubConfig;
   configFile?: string;
   debounceMs?: number;
   documentTiming?: DocumentTiming;
@@ -42,6 +44,7 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
+  github?: ReturnType<typeof createGitHubAuth>;
   boardPort: number;
   port: number;
   token: string;
@@ -208,7 +211,8 @@ export function createServerContext(options: ServerOptions) {
   const isAuthorized = (req: http.IncomingMessage, keyFromQuery: string | null) =>
     loopback ||
     (keyFromQuery !== null && safeEqual(keyFromQuery, token)) ||
-    safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', token);
+    safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', token) ||
+    Boolean(ctx.github?.authorized(req.headers.cookie));
 
   const artifactMeta = (ref: ArtifactRef, dir: string, contentOrigin = '') => ({
     ...readArtifact(dir, ref, runtimeOf(ref, dir)),
@@ -267,6 +271,7 @@ export function createServerContext(options: ServerOptions) {
     port: 0,
     boardPort: 0,
     cookieName: '',
+    github: mount?.github as ReturnType<typeof createGitHubAuth> | undefined,
     startedAt,
     lastActivity: startedAt,
     keyOk,
