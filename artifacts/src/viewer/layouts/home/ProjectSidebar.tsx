@@ -1,7 +1,7 @@
 import { ContextMenuTrigger } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { ChevronDown, ChevronRight, Clock, Folder, Laptop } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Folder, Laptop, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import type { HubProjectStatus } from '../../../shared/hub';
@@ -86,12 +86,14 @@ const styles = stylex.create({
 export function ProjectSidebar({
   projects,
   total,
+  trashCount,
   selection,
   onSelect,
   onRemove,
 }: {
   projects: HubProjectStatus[];
   total: number;
+  trashCount: number;
   selection: HomeSelection;
   onSelect: (selection: HomeSelection) => void;
   onRemove: (project: HubProjectStatus) => void;
@@ -161,6 +163,16 @@ export function ProjectSidebar({
         <Laptop aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
         <span {...stylex.props(styles.name)}>{t('home.devices')}</span>
       </a>
+      <button
+        aria-current={selection === 'trash' ? 'page' : undefined}
+        type="button"
+        {...stylex.props(styles.item, selection === 'trash' && styles.active)}
+        onClick={() => onSelect('trash')}
+      >
+        <Trash2 aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
+        <span {...stylex.props(styles.name)}>{t('bulk.trash')}</span>
+        <span {...stylex.props(styles.count)}>{trashCount}</span>
+      </button>
     </nav>
   );
 }

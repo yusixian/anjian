@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import type { HubArtifactList } from '../src/shared/hub';
+import type { TrashEntry } from '../src/shared/trash';
 import { THUMBNAIL_PATH } from '../src/shared/thumbnail';
 import { ArtifactList } from '../src/viewer/layouts/ArtifactList';
 
@@ -74,9 +75,11 @@ class FakeSocket {
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('WebSocket', FakeSocket);
+  history.replaceState(null, '', '/');
   deleted.length = 0;
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     if (url === '/api/hub/artifacts') return new Response(JSON.stringify(hubList()));
+    if (url === '/api/hub/trash' && !init?.method) return new Response(JSON.stringify({ entries: [], deployment: 'local' }));
     if (url === '/api/hub/projects' && init?.method === 'DELETE') {
       deleted.push(JSON.parse(String(init.body)));
       return new Response(JSON.stringify({ removed: true }));
@@ -196,4 +199,86 @@ test('⌘K opens a palette grouped by project, ⌘↵ opens a new tab', async ()
     );
   });
   expect(opened).toHaveBeenCalledWith('/document/BBBBBBBBBBBBBBBBBBBBB', '_blank');
+});
+
+test('selection mode toggles cards and clears choices when the search changes', async () => {
+  await render();
+  await click(button('Select'));
+  expect(cards()).toEqual([]);
+  await click(host.querySelector('button[aria-label="Toggle selection: Pricing page"]')!);
+  expect(host.querySelector('[role="toolbar"]')!.textContent).toContain('1 selected');
+  await type(host.querySelector<HTMLInputElement>('input[type="search"]')!, 'signup');
+  expect(host.querySelector('[role="toolbar"]')!.textContent).toContain('0 selected');
+  expect(host.querySelector('button[aria-label="Toggle selection: Signup flow"]')).not.toBeNull();
+});
+
+test('confirmed move posts only frozen selected targets and offers Undo', async () => {
+  const entry: TrashEntry = {
+    ...hubList().artifacts[0]!, trashId: 'removed-pricing', deletedAt: Date.now(),
+    expiresAt: Date.now() + 30 * 86400_000,
+  };
+  const posted: unknown[] = [];
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (url === '/api/hub/artifacts') return new Response(JSON.stringify(hubList()));
+    if (url === '/api/hub/trash' && init?.method === 'POST') {
+      posted.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ results: [{ key: `${entry.project}\n${entry.url}`, ok: true, entry }] }));
+    }
+    if (url === '/api/hub/trash') return new Response(JSON.stringify({ entries: [entry], deployment: 'local' }));
+    return new Response('{}', { status: 404 });
+  });
+  await render();
+  await click(button('Select'));
+  await click(host.querySelector('button[aria-label="Toggle selection: Pricing page"]')!);
+  await click(button('Move to Trash'));
+  expect(host.querySelector('[role="dialog"]')!.textContent).toContain('Pricing page');
+  expect(posted).toHaveLength(0);
+  await click(button('Move 1 to Trash'));
+  await act(async () => {});
+  expect(posted).toEqual([{ items: [{
+    project: entry.project, type: entry.type, id: entry.id, url: entry.url,
+  }] }]);
+  expect(host.textContent).toContain('1 artifacts moved to Trash');
+  expect(button('Undo')).toBeDefined();
+});
+
+test('a partial Trash listing is reported as an error instead of an empty bin', async () => {
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url === '/api/hub/artifacts') return new Response(JSON.stringify(hubList()));
+    if (url === '/api/hub/trash') return new Response(JSON.stringify({
+      entries: [], warnings: ['One project could not be read'], deployment: 'local',
+    }));
+    return new Response('{}', { status: 404 });
+  });
+  await render();
+  await click(button('Trash'));
+  expect(host.textContent).toContain('Could not load Trash');
+  expect(host.textContent).not.toContain('Trash is empty');
+});
+
+test('retry failed items never includes a newly selected artifact', async () => {
+  const first = hubList().artifacts[0]!;
+  const posted: unknown[] = [];
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (url === '/api/hub/artifacts') return new Response(JSON.stringify(hubList()));
+    if (url === '/api/hub/trash' && init?.method === 'POST') {
+      posted.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ results: [{ key: `${first.project}\n${first.url}`, ok: false, code: 'CONFLICT' }] }));
+    }
+    if (url === '/api/hub/trash') return new Response(JSON.stringify({ entries: [], deployment: 'local' }));
+    return new Response('{}', { status: 404 });
+  });
+  await render();
+  await click(button('Select'));
+  await click(host.querySelector('button[aria-label="Toggle selection: Pricing page"]')!);
+  await click(button('Move to Trash'));
+  await click(button('Move 1 to Trash'));
+  await act(async () => {});
+  await click(host.querySelector('button[aria-label="Toggle selection: Signup flow"]')!);
+  expect(host.querySelector('[role="toolbar"]')!.textContent).toContain('2 selected');
+  await click(button('Retry failed items'));
+  const dialog = host.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain('Pricing page');
+  expect(dialog.textContent).not.toContain('Signup flow');
+  expect(posted).toHaveLength(1);
 });

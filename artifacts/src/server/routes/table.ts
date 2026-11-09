@@ -108,7 +108,7 @@ function httpDenial(
   return rule.allow(req, ctx, key) ? null : rule.denied;
 }
 
-export function dispatchHttp<C extends RouteContext>(
+export async function dispatchHttp<C extends RouteContext>(
   routes: HttpRoute<C>[],
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -121,7 +121,7 @@ export function dispatchHttp<C extends RouteContext>(
   }
   const url = new URL(req.url ?? '/', 'http://artifacts.local');
   const key = url.searchParams.get('key');
-  const serve = (candidates: HttpRoute<C>[], pathname: string) => {
+  const serve = async (candidates: HttpRoute<C>[], pathname: string) => {
     for (const route of candidates) {
       const match = matchPath(route.path, pathname, ctx);
       if (!match) continue;
@@ -130,17 +130,17 @@ export function dispatchHttp<C extends RouteContext>(
         send(res, 403, denied);
         return true;
       }
-      const pending = route.handle(req, res, ctx, { key, match, pathname, url });
-      if (pending instanceof Promise)
-        pending.catch((err) => {
-          if (!res.headersSent) send(res, 500, `Artifacts error: ${(err as Error).message}`);
-        });
+      try {
+        await route.handle(req, res, ctx, { key, match, pathname, url });
+      } catch (err) {
+        if (!res.headersSent) send(res, 500, `Artifacts error: ${(err as Error).message}`);
+      }
       return true;
     }
     return false;
   };
   const raw = routes.filter((route) => route.raw);
-  if (serve(raw, url.pathname)) return;
+  if (await serve(raw, url.pathname)) return;
   ctx.touch();
   let pathname: string;
   try {
@@ -150,7 +150,7 @@ export function dispatchHttp<C extends RouteContext>(
     return;
   }
   const decoded = routes.filter((route) => !route.raw);
-  if (!serve(decoded, pathname)) send(res, 404, 'Not found');
+  if (!(await serve(decoded, pathname))) send(res, 404, 'Not found');
 }
 
 export function dispatchUpgrade<C extends RouteContext>(

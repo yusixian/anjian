@@ -62,10 +62,16 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     get policy() { return ctx.policy; },
     authorized: (req, url) => ctx.isAuthorized(req, url.searchParams.get('key')),
   });
+  let stopping = false;
+  const requests = new Set<Promise<unknown>>();
   const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    void browserAuth(req, res, new URL(req.url ?? '/', 'http://artifacts.local'))
-      .then((handled) => { if (!handled) dispatchHttp(HTTP_ROUTES, req, res, ctx); })
+    if (stopping) { send(res, 503, 'Project is being updated; retry shortly'); return; }
+    req.setTimeout(15_000, () => req.destroy());
+    const request = browserAuth(req, res, new URL(req.url ?? '/', 'http://artifacts.local'))
+      .then((handled) => { if (!handled) return dispatchHttp(HTTP_ROUTES, req, res, ctx); })
       .catch((err: Error) => { if (!res.headersSent) send(res, 500, `Artifacts error: ${err.message}`); });
+    requests.add(request);
+    void request.finally(() => requests.delete(request));
   };
 
   const server = http.createServer((req, res) => {
@@ -76,8 +82,10 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     }
   });
 
-  const handleUpgrade = (req: http.IncomingMessage, socket: Duplex) =>
-    dispatchUpgrade(UPGRADE_ROUTES, req, socket, ctx);
+  const handleUpgrade = (req: http.IncomingMessage, socket: Duplex) => {
+    if (stopping) socket.destroy();
+    else dispatchUpgrade(UPGRADE_ROUTES, req, socket, ctx);
+  };
   server.on('upgrade', handleUpgrade);
 
   if (mount) ctx.port = mount.port;
@@ -187,10 +195,13 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     },
     onActivity: (listener) => ctx.activityListeners.push(listener),
     close: async () => {
+      stopping = true;
+      watcher.close();
+      for (const socket of clients) socket.destroy();
+      await Promise.all([...requests]);
       clearInterval(ctx.listeningTimer);
       await ctx.recordings.close();
       await new Promise<void>((resolve) => {
-        watcher.close();
         ctx.selections.clearAll();
         for (const socket of clients) socket.destroy();
         boardServer.close();
@@ -198,7 +209,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
         server.close(() => resolve());
         server.closeAllConnections();
       });
-      await ctx.documents.close().catch(() => undefined);
+      await ctx.documents.close();
       if (mount) fs.rmSync(path.join(stateDir, 'server-info'), { force: true });
     },
   };

@@ -43,9 +43,9 @@ const fakeResponse = () => {
   return res;
 };
 
-const run = (routes: HttpRoute<RouteContext>[], req: http.IncomingMessage, ctx = fakeContext()) => {
+const run = async (routes: HttpRoute<RouteContext>[], req: http.IncomingMessage, ctx = fakeContext()) => {
   const res = fakeResponse();
-  dispatchHttp(routes, req, res as unknown as http.ServerResponse, ctx);
+  await dispatchHttp(routes, req, res as unknown as http.ServerResponse, ctx);
   return res;
 };
 
@@ -57,43 +57,43 @@ const reply =
   };
 
 describe('route table dispatch', () => {
-  it('serves the first route that matches, in table order', () => {
+  it('serves the first route that matches, in table order', async () => {
     const routes: HttpRoute<RouteContext>[] = [
       { path: /^\/api\/thing\/([^/]+)$/, auth: 'viewer', handle: reply('first') },
       { path: '/api/thing/one', auth: 'viewer', handle: reply('second') },
     ];
-    expect(run(routes, fakeRequest('/api/thing/one?key=secret')).body).toBe('first');
+    expect((await run(routes, fakeRequest('/api/thing/one?key=secret'))).body).toBe('first');
   });
 
-  it('matches raw routes on the undecoded path without recording activity', () => {
+  it('matches raw routes on the undecoded path without recording activity', async () => {
     const ctx = fakeContext();
     const routes: HttpRoute<RouteContext>[] = [
       { path: '/status', raw: true, auth: 'key', handle: reply('status') },
       { path: '/status', auth: 'public', handle: reply('decoded') },
     ];
-    expect(run(routes, fakeRequest('/status?key=secret'), ctx).body).toBe('status');
+    expect((await run(routes, fakeRequest('/status?key=secret'), ctx)).body).toBe('status');
     expect(ctx.touch).not.toHaveBeenCalled();
-    expect(run(routes, fakeRequest('/st%61tus'), ctx).body).toBe('decoded');
+    expect((await run(routes, fakeRequest('/st%61tus'), ctx)).body).toBe('decoded');
     expect(ctx.touch).toHaveBeenCalledTimes(1);
   });
 
-  it('checks the origin before the key, then the method and the rule', () => {
+  it('checks the origin before the key, then the method and the rule', async () => {
     const routes: HttpRoute<RouteContext>[] = [
       { path: '/agent', methods: ['POST'], auth: 'agent', handle: reply('agent') },
     ];
-    expect(run(routes, fakeRequest('/agent', { origin: 'http://evil.test' })).body).toBe(
+    expect((await run(routes, fakeRequest('/agent', { origin: 'http://evil.test' }))).body).toBe(
       'Forbidden origin',
     );
-    expect(run(routes, fakeRequest('/agent', {}, 'POST')).body).toBe(
+    expect((await run(routes, fakeRequest('/agent', {}, 'POST'))).body).toBe(
       'Forbidden: open the full artifact link including ?key=',
     );
-    expect(run(routes, fakeRequest('/agent?key=secret')).body).toBe(
+    expect((await run(routes, fakeRequest('/agent?key=secret'))).body).toBe(
       'Forbidden: agent calls need ?key=',
     );
-    expect(run(routes, fakeRequest('/agent?key=secret', {}, 'POST')).body).toBe('agent');
+    expect((await run(routes, fakeRequest('/agent?key=secret', {}, 'POST'))).body).toBe('agent');
   });
 
-  it('enforces the public origin even when a loopback bind requires a key', () => {
+  it('enforces the public origin even when a loopback bind requires a key', async () => {
     const ctx = fakeContext({
       loopback: false,
       policy: accessPolicy({ host: '127.0.0.1', urlHost: 'localhost', ports: [4000], publicOrigin: 'https://anjian.example' }),
@@ -101,17 +101,16 @@ describe('route table dispatch', () => {
     const routes: HttpRoute<RouteContext>[] = [
       { path: '/agent', methods: ['POST'], auth: 'viewer', handle: reply('agent') },
     ];
-    expect(run(routes, fakeRequest('/agent?key=secret', { origin: 'https://evil.example' }, 'POST'), ctx).body).toBe('Forbidden origin');
-    expect(run(routes, fakeRequest('/agent?key=secret', { origin: 'https://anjian.example' }, 'POST'), ctx).body).toBe('agent');
+    expect((await run(routes, fakeRequest('/agent?key=secret', { origin: 'https://evil.example' }, 'POST'), ctx)).body).toBe('Forbidden origin');
+    expect((await run(routes, fakeRequest('/agent?key=secret', { origin: 'https://anjian.example' }, 'POST'), ctx)).body).toBe('agent');
   });
 
   it('answers 400 for a path that cannot be decoded and 500 when a handler rejects', async () => {
-    expect(run([], fakeRequest('/%E0')).status).toBe(400);
-    const res = run(
+    expect((await run([], fakeRequest('/%E0'))).status).toBe(400);
+    const res = (await run(
       [{ path: '/boom', auth: 'public', handle: () => Promise.reject(new Error('boom')) }],
       fakeRequest('/boom'),
-    );
-    await new Promise((resolve) => setImmediate(resolve));
+    ));
     expect([res.status, res.body]).toEqual([500, 'Artifacts error: boom']);
   });
 

@@ -1,21 +1,27 @@
 import { Button, Input, Segmented, Select, toast } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
-import { Languages, Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Languages, Search, Trash2 } from 'lucide-react';
+import { type MouseEvent, useEffect, useRef, useState } from 'react';
 
 import type { HubArtifact, HubProjectStatus } from '../../shared/hub';
+import { artifactSelectionKey, type TrashEntry, type TrashTarget } from '../../shared/trash';
 import { ARTIFACT_TYPES, type ArtifactType } from '../../shared/types';
 import { AnjianMark } from '../components/AnjianMark';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { setViewerLanguage, useTranslation } from '../i18n';
 import { type ArtifactSort, filterArtifacts } from '../lib/artifact-list';
 import { ArtifactCard } from './home/ArtifactCard';
+import { BulkDialog } from './home/BulkDialog';
+import { selectionForVisible, rangeForVisible } from './home/bulk-trash';
+import { bulkStyles } from './home/bulk-styles';
 import { CommandPalette } from './home/CommandPalette';
 import { homeArtifacts, type HomeSelection, type SearchScope } from './home/home-model';
 import { styles } from './home/home-styles';
 import { ProjectSidebar } from './home/ProjectSidebar';
 import { StatusPill } from './home/StatusPill';
+import { TrashView } from './home/TrashView';
 import { useHubArtifacts } from './home/useHubArtifacts';
+import { useTrash } from './home/useTrash';
 
 const openArtifact = (artifact: HubArtifact, newTab: boolean) => {
   if (newTab) window.open(artifact.url, '_blank');
@@ -25,12 +31,26 @@ const openArtifact = (artifact: HubArtifact, newTab: boolean) => {
 export function ArtifactList() {
   const { t, i18n } = useTranslation();
   const { list, error, refresh, removeProject } = useHubArtifacts();
-  const [selection, setSelection] = useState<HomeSelection>('recent');
+  const trash = useTrash();
+  const [selection, setSelection] = useState<HomeSelection>(() =>
+    new URLSearchParams(location.search).get('view') === 'trash' ? 'trash' : 'recent',
+  );
   const [scope, setScope] = useState<SearchScope>('project');
   const [type, setType] = useState<ArtifactType | 'all'>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<ArtifactSort>('recent');
   const [palette, setPalette] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [confirmMove, setConfirmMove] = useState<TrashTarget[] | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [moveDone, setMoveDone] = useState(0);
+  const [moved, setMoved] = useState<TrashEntry[]>([]);
+  const [failedTargets, setFailedTargets] = useState<TrashTarget[]>([]);
+  const [unconfirmedMove, setUnconfirmedMove] = useState(0);
+  const [undoing, setUndoing] = useState(false);
+  const [undoUnconfirmed, setUndoUnconfirmed] = useState(false);
   const [now, setNow] = useState(Date.now);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -50,10 +70,106 @@ export function ArtifactList() {
     sort,
   );
   const nameOf = (dir: string) => projects.find((p) => p.dir === dir)?.name ?? dir;
+  const picked = items.filter((artifact) => chosen.has(artifactSelectionKey(artifact)));
+  const retryable = failedTargets.filter((target) => picked.some((artifact) => artifactSelectionKey(artifact) === artifactSelectionKey(target)));
+  const allVisibleSelected = items.length > 0 && items.every((artifact) => chosen.has(artifactSelectionKey(artifact)));
+
+  const clearChosen = (notify = false) => {
+    if (notify && chosen.size) toast.info(t('bulk.selectionCleared'));
+    setChosen(new Set());
+    setAnchor(null);
+    setFailedTargets([]);
+  };
+  const chooseView = (next: HomeSelection) => {
+    if (next === selection) return;
+    clearChosen(true);
+    setSelecting(false);
+    setConfirmMove(null);
+    setSelection(next);
+    const url = new URL(location.href);
+    if (next === 'trash') url.searchParams.set('view', 'trash');
+    else url.searchParams.delete('view');
+    history.replaceState(null, '', url);
+    if (next === 'trash') void trash.refresh().then((entries) => {
+      const present = new Set(entries.map((entry) => `${entry.project}\n${entry.trashId}`));
+      setMoved((prior) => prior.filter((entry) => present.has(`${entry.project}\n${entry.trashId}`)));
+      setUnconfirmedMove(0);
+      setUndoUnconfirmed(false);
+    }).catch(() => undefined);
+  };
+  const toggleArtifact = (artifact: HubArtifact, event: MouseEvent<HTMLElement>) => {
+    if (moving) return;
+    const key = artifactSelectionKey(artifact);
+    const extendingRange = event.shiftKey && !!anchor;
+    setSelecting(true);
+    setChosen((previous) => {
+      if (extendingRange) return rangeForVisible(previous, items, anchor, key);
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    if (!extendingRange) setAnchor(key);
+  };
+
+  const moveSelected = async (targets: TrashTarget[]) => {
+    if (moving || targets.length === 0) return;
+    setMoving(true);
+    setMoveDone(0);
+    try {
+      const result = await trash.move(targets, setMoveDone);
+      const failed = new Set(result.failed.map(artifactSelectionKey));
+      setChosen(failed);
+      setFailedTargets(result.failed);
+      if (result.unconfirmed.length) setUnconfirmedMove((count) => count + result.unconfirmed.length);
+      setMoved((prior) => {
+        const byKey = new Map(prior.map((entry) => [`${entry.project}\n${entry.trashId}`, entry]));
+        for (const entry of result.succeeded) byKey.set(`${entry.project}\n${entry.trashId}`, entry);
+        return [...byKey.values()];
+      });
+      if (failed.size === 0) setSelecting(false);
+      if (failed.size) toast.error(t('bulk.partialFailure', { count: failed.size }));
+      if (result.unconfirmed.length) toast.error(t('bulk.unconfirmed', { count: result.unconfirmed.length }));
+      void refresh();
+      setConfirmMove(null);
+    } catch (cause) {
+      await trash.refresh().catch(() => undefined);
+      toast.error(t('bulk.operationFailed', { error: (cause as Error).message }));
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  const undo = async () => {
+    if (!moved.length || undoing || moving || undoUnconfirmed) return;
+    setUndoing(true);
+    const submitted = moved;
+    try {
+      const results = await trash.restore(submitted.map(({ project, trashId }) => ({ project, trashId })));
+      const restored = new Set(results.filter((result) => result.ok).map((result) => result.key));
+      const failed = submitted.filter((item) => !restored.has(`${item.project}\n${item.trashId}`));
+      setMoved(failed);
+      if (failed.length) toast.error(t('bulk.partialRestore', { count: failed.length }));
+      else toast.success(t('bulk.undoComplete'));
+      void refresh();
+    } catch (cause) {
+      try {
+        const current = await trash.refresh();
+        const stillInTrash = new Set(current.map((entry) => `${entry.project}\n${entry.trashId}`));
+        setMoved(submitted.filter((entry) => stillInTrash.has(`${entry.project}\n${entry.trashId}`)));
+        void refresh();
+      } catch {
+        setUndoUnconfirmed(true);
+      }
+      toast.error(t('bulk.operationFailed', { error: (cause as Error).message }));
+    } finally {
+      setUndoing(false);
+    }
+  };
 
   useEffect(() => {
-    document.title = selected ? `${selected.name} · 案间` : '案间 · Anjian';
-  }, [selected]);
+    document.title = selection === 'trash' ? `${t('bulk.trash')} · 案间` : selected ? `${selected.name} · 案间` : '案间 · Anjian';
+  }, [selected, selection, t]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -80,9 +196,30 @@ export function ArtifactList() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selecting || confirmMove || palette || moving) return;
+    const shortcuts = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('input,textarea,select,[contenteditable="true"]')) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSelecting(false);
+        setChosen(new Set());
+        setAnchor(null);
+      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        setChosen(selectionForVisible(new Set(), items, true));
+      }
+    };
+    addEventListener('keydown', shortcuts);
+    return () => removeEventListener('keydown', shortcuts);
+  }, [selecting, confirmMove, palette, moving, items]);
+
   const remove = (project: HubProjectStatus) => {
     void removeProject(project.dir)
-      .then(() => setSelection((current) => (current === project.dir ? 'recent' : current)))
+      .then(() => {
+        if (selection === project.dir) chooseView('recent');
+      })
       .catch(() => toast.error(t('home.removeFailed', { name: project.name })));
   };
 
@@ -110,7 +247,7 @@ export function ArtifactList() {
           <AnjianMark size={20} />
           <strong {...stylex.props(styles.brand)}>案间</strong>
           <span {...stylex.props(styles.slash)}>/</span>
-          <b {...stylex.props(styles.crumb)}>{selected?.name ?? t('home.recentAll')}</b>
+          <b {...stylex.props(styles.crumb)}>{selection === 'trash' ? t('bulk.trash') : selected?.name ?? t('home.recentAll')}</b>
         </div>
         <div {...stylex.props(styles.topbarEnd)}>
           <button
@@ -128,22 +265,43 @@ export function ArtifactList() {
       <div {...stylex.props(styles.body)}>
         <ProjectSidebar
           projects={projects}
-          selection={view}
+          selection={selection}
           total={artifacts.length}
+          trashCount={trash.entries?.length ?? 0}
           onRemove={remove}
-          onSelect={setSelection}
+          onSelect={chooseView}
         />
-        <main {...stylex.props(styles.main)}>
-          <div {...stylex.props(styles.heading)}>
-            <h1 {...stylex.props(styles.headingTitle)}>{selected?.name ?? t('home.recent')}</h1>
+        <main {...stylex.props(styles.main, selecting && bulkStyles.mobileSpace)}>
+          <div {...stylex.props(styles.heading, bulkStyles.heading)}>
+            <h1 {...stylex.props(styles.headingTitle)}>{selection === 'trash' ? t('bulk.trash') : selected?.name ?? t('home.recent')}</h1>
             <span {...stylex.props(styles.headingCount)}>
-              {list === null
+              {selection === 'trash' ? t('bulk.trashSubtitle') : list === null
                 ? '…'
                 : view === 'recent'
                   ? t('home.recentSubtitle')
                   : t('library.count', { count: base.length })}
             </span>
+            {selection !== 'trash' && (
+              <Button className={stylex.props(bulkStyles.touchAction).className} size="small" onClick={() => {
+                setSelecting((current) => !current);
+                clearChosen();
+              }}>
+                {selecting ? t('bulk.done') : t('bulk.select')}
+              </Button>
+            )}
           </div>
+          {selection === 'trash' ? (
+            <TrashView
+              entries={trash.entries}
+              error={trash.error}
+              refresh={trash.refresh}
+              restore={trash.restore}
+              purge={trash.purge}
+              onRestored={() => void refresh()}
+              projectName={nameOf}
+            />
+          ) : (
+          <>
           <div {...stylex.props(styles.toolbar)}>
             <Segmented<ArtifactType | 'all'>
               className={stylex.props(styles.tabs).className}
@@ -151,7 +309,7 @@ export function ArtifactList() {
               size="small"
               styles={{ item: { height: 30, paddingInline: 8 } }}
               value={type}
-              onChange={setType}
+              onChange={(next) => { if (next !== type) clearChosen(true); setType(next); }}
             />
             <div {...stylex.props(styles.tools)}>
               <div aria-label={t('home.scopeLabel')} role="group" {...stylex.props(styles.scope)}>
@@ -165,7 +323,7 @@ export function ArtifactList() {
                       styles.scopeOption,
                       effectiveScope === option.value && styles.scopeOn,
                     )}
-                    onClick={() => setScope(option.value)}
+                    onClick={() => { if (option.value !== scope) clearChosen(true); setScope(option.value); }}
                   >
                     {option.label}
                   </button>
@@ -181,7 +339,7 @@ export function ArtifactList() {
                 type="search"
                 value={query}
                 variant="filled"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => { if (event.target.value !== query) clearChosen(true); setQuery(event.target.value); }}
               />
               <Button
                 aria-label={t('home.paletteLabel')}
@@ -209,6 +367,45 @@ export function ArtifactList() {
               />
             </div>
           </div>
+          {selecting && (
+            <>
+              <div role="toolbar" aria-label={t('bulk.selectionToolbar')} {...stylex.props(bulkStyles.bar)}>
+                <strong {...stylex.props(bulkStyles.count)}>{t('bulk.selectedCount', { count: picked.length })}</strong>
+                <Button className={stylex.props(bulkStyles.touchAction).className} size="small" type="text" disabled={items.length === 0 || moving} onClick={() =>
+                  setChosen(selectionForVisible(chosen, items, !allVisibleSelected))
+                }>
+                  {allVisibleSelected ? t('bulk.clearVisible') : t('bulk.selectVisible', { count: items.length })}
+                </Button>
+                <span {...stylex.props(bulkStyles.spacer)} />
+                <span {...stylex.props(bulkStyles.note)}>{t('bulk.currentResultsOnly')}</span>
+                <Button className={stylex.props(bulkStyles.mobilePrimary).className} danger size="small" disabled={picked.length === 0 || moving} onClick={() =>
+                  setConfirmMove(picked.map(({ project, type, id, url }) => ({ project, type, id, url })))
+                }>
+                  <Trash2 aria-hidden="true" size={14} />{t('bulk.move')}
+                </Button>
+              </div>
+              <p {...stylex.props(bulkStyles.hint)}>{t('bulk.shortcutHint')}</p>
+            </>
+          )}
+          {failedTargets.length > 0 && <div role="alert" {...stylex.props(bulkStyles.banner)}>
+            <span {...stylex.props(bulkStyles.bannerCopy)}>{t('bulk.partialFailure', { count: failedTargets.length })}</span>
+            <Button size="small" disabled={moving || retryable.length === 0} onClick={() =>
+              setConfirmMove(retryable)
+            }>{t('bulk.retryFailed')}</Button>
+          </div>}
+          {unconfirmedMove > 0 && <div role="alert" {...stylex.props(bulkStyles.banner)}>
+            <span {...stylex.props(bulkStyles.bannerCopy)}>{t('bulk.unconfirmed', { count: unconfirmedMove })}</span>
+            <Button size="small" onClick={() => chooseView('trash')}>{t('bulk.viewTrash')}</Button>
+          </div>}
+          {undoUnconfirmed && <div role="alert" {...stylex.props(bulkStyles.banner)}>
+            <span {...stylex.props(bulkStyles.bannerCopy)}>{t('bulk.unconfirmed', { count: moved.length })}</span>
+            <Button size="small" onClick={() => chooseView('trash')}>{t('bulk.viewTrash')}</Button>
+          </div>}
+          {moved.length > 0 && <div role="status" {...stylex.props(bulkStyles.banner)}>
+            <span {...stylex.props(bulkStyles.bannerCopy)}>{t('bulk.movedCount', { count: moved.length })}</span>
+            <Button size="small" loading={undoing} disabled={moving || undoing || undoUnconfirmed} onClick={() => void undo()}>{t('bulk.undo')}</Button>
+            <Button size="small" type="text" onClick={() => chooseView('trash')}>{t('bulk.viewTrash')}</Button>
+          </div>}
           {error && (
             <div {...stylex.props(styles.error)} role="alert">
               {t('library.loadFailed')}
@@ -243,6 +440,7 @@ export function ArtifactList() {
               <Button
                 size="small"
                 onClick={() => {
+                  clearChosen(true);
                   setQuery('');
                   setType('all');
                 }}
@@ -258,6 +456,9 @@ export function ArtifactList() {
                   artifact={artifact}
                   now={now}
                   projectName={everywhere ? nameOf(artifact.project) : null}
+                  selectionMode={selecting}
+                  selected={chosen.has(artifactSelectionKey(artifact))}
+                  onToggle={(event) => toggleArtifact(artifact, event)}
                 />
               </li>
             ))}
@@ -271,8 +472,24 @@ export function ArtifactList() {
               <code {...stylex.props(styles.footerCode)}>{selected.dir}/.anjian/artifacts</code>
             )}
           </footer>
+          </>
+          )}
         </main>
       </div>
+      {confirmMove && (
+        <BulkDialog
+          busy={moving}
+          deployment={trash.deployment}
+          done={moveDone}
+          items={confirmMove.map((item) => {
+            const found = artifacts.find((artifact) => artifactSelectionKey(artifact) === artifactSelectionKey(item));
+            return { key: artifactSelectionKey(item), title: found?.title ?? item.id, type: t(`type.${item.type}`), project: nameOf(item.project) };
+          })}
+          kind="move"
+          onCancel={() => setConfirmMove(null)}
+          onConfirm={() => void moveSelected(confirmMove)}
+        />
+      )}
       {palette && (
         <CommandPalette
           artifacts={artifacts}

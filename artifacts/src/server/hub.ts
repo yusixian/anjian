@@ -6,9 +6,12 @@ import type { Duplex } from 'node:stream';
 
 import type { HubArtifact, HubArtifactList, HubProjectStatus, HubStatus } from '../shared/hub';
 import type { ArtifactType } from '../shared/types';
-import { accessPolicy, hostAllowed, isLoopbackHost, originAllowed } from './access';
+import { accessPolicy, hostAllowed, isLoopbackHost, navigationAllowed, originAllowed } from './access';
 import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
+import { findTrashedArtifact, listTrash, recoverProjectTrash } from './artifact-trash';
+import { createHubTrash } from './hub-trash';
+import { withProjectMutation } from './project-mutations';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
@@ -121,6 +124,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const projectsFile = options.paths.projects;
   pruneProjects(projectsFile);
 
+  for (const project of readProjects(projectsFile)) {
+    await withProjectMutation(project.dir, async () => recoverProjectTrash(project.dir));
+  }
+
   const ordered = () => readProjects(projectsFile).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   const registered = (dir: string) => ordered().some((entry) => entry.dir === dir);
   const index = createArtifactIndex(() => ordered().map((entry) => entry.dir), {
@@ -149,7 +156,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
-  const mountOf = (project: string) => {
+  const paused = new Map<string, Promise<void>>();
+  const mountOf = (project: string): Promise<MountedProject> => {
+    const pause = paused.get(project);
+    if (pause) return pause.then(() => mountOf(project));
     if (closing) return Promise.reject(new Error('Artifacts server is stopping'));
     let pending = mounts.get(project);
     if (!pending) {
@@ -343,24 +353,29 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const register = async (dir: string, open?: OpenRequest) => {
     const real = realDir(dir);
     if (!real) throw new Error(`Project directory not found: ${dir}`);
-    fs.mkdirSync(artifactsRootOf(real), { recursive: true });
-    const entry = registerProject(projectsFile, real);
-    index.rescan();
-    writeCompatInfo(real);
-    const mounted = await mountOf(real);
-    if (open) openWhenReady(mounted, open);
-    return entry;
+    return withProjectMutation(real, async () => {
+      if (!mounts.has(real)) recoverProjectTrash(real);
+      fs.mkdirSync(artifactsRootOf(real), { recursive: true });
+      const entry = registerProject(projectsFile, real);
+      index.rescan();
+      writeCompatInfo(real);
+      const mounted = await mountOf(real);
+      if (open) openWhenReady(mounted, open);
+      return entry;
+    });
   };
 
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
-    removeProject(projectsFile, real);
-    index.rescan();
-    fs.rmSync(infoFileOf(real), { force: true });
-    const pending = mounts.get(real);
-    mounts.delete(real);
-    ready.delete(real);
-    await (await pending)?.close();
+    return withProjectMutation(real, async () => {
+      removeProject(projectsFile, real);
+      index.rescan();
+      fs.rmSync(infoFileOf(real), { force: true });
+      const pending = mounts.get(real);
+      mounts.delete(real);
+      ready.delete(real);
+      await (await pending)?.close();
+    });
   };
 
   const logTail = (project: string | null) => {
@@ -440,6 +455,36 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return true;
   };
 
+  const suspendProject = async <T>(project: string, work: () => T): Promise<T> => {
+    let resume!: () => void;
+    paused.set(project, new Promise<void>((resolve) => { resume = resolve; }));
+    try {
+      const pending = mounts.get(project);
+      if (pending) await (await pending).close();
+      mounts.delete(project);
+      ready.delete(project);
+      return work();
+    } finally {
+      index.rescan();
+      paused.delete(project);
+      resume();
+    }
+  };
+  const trashApi = createHubTrash({
+    projects: () => ordered().map((p) => p.dir),
+    artifacts: () => artifactList().artifacts,
+    readBody,
+    suspend: suspendProject,
+    deployment: loopback ? 'local' : 'self-hosted',
+  });
+  const trashCleanup = setInterval(() => {
+    for (const project of ordered()) {
+      void withProjectMutation(project.dir, async () => { listTrash(project.dir); })
+        .catch(() => console.error('Trash retention cleanup failed'));
+    }
+  }, 60 * 60 * 1000);
+  trashCleanup.unref();
+
   const remoteAuth = createRemoteAuth({
     home: options.paths.home,
     origin,
@@ -459,6 +504,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await browserAuth(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
+      if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
+        if (!authorized(req, url) || !originAllowed(policy, req.headers.origin) ||
+            !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) sendJson(res, 403, { error: 'Forbidden' });
+        else await trashApi(req, res, url.pathname);
+        return;
+      }
       if (url.pathname === '/api/status') {
         if (!authorized(req, url)) send(res, 403, 'Forbidden: agent calls need ?key=');
         else sendJson(res, 200, { ...status(), url: fromAgent(req, url) ? status().url : `${origin}/` });
@@ -482,6 +533,18 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (pathname === null) {
         send(res, 400, 'Bad request');
         return;
+      }
+      const deletedRoute = /^\/(document|artboard|html)\/([A-Za-z0-9_-]+)\/?$/.exec(pathname);
+      if (deletedRoute && authorized(req, url) && originAllowed(policy, req.headers.origin) &&
+          navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
+        const explicitProject = headerProject(req, url);
+        const liveProject = projectForPath(pathname);
+        const candidates = explicitProject ? [explicitProject] : liveProject ? [] : ordered().map((p) => p.dir);
+        const deleted = candidates.some((project) => findTrashedArtifact(project, deletedRoute[1] as ArtifactType, deletedRoute[2]!));
+        if (deleted) {
+          send(res, 410, '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>作品已移入回收站 · 案间</title><body style="font:16px system-ui;padding:48px;max-width:640px;margin:auto"><h1>作品已移入回收站</h1><p>作品暂时无法访问。保留期内可从回收站恢复；已永久删除的作品无法恢复。</p><a href="/?view=trash">前往回收站</a></body></html>', { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
+          return;
+        }
       }
       const mounted = await route(req, url, pathname);
       if (!mounted) send(res, 404, 'Not found');
@@ -538,6 +601,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     linkFor: async (project, type, id) => (await mountOf(project)).linkFor(type, id),
     close: async () => {
       closing = true;
+      clearInterval(trashCleanup);
       remoteAuth.close();
       const stopped = [front, board].map(
         (server) => new Promise((resolve) => server.close(resolve)),

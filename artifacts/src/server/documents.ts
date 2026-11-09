@@ -76,6 +76,7 @@ function outcomeWarnings(outcome: DocumentOutcome): string[] {
 }
 
 export function createDocumentRegistry(options: RegistryOptions): DocumentRegistry {
+  let closing = false;
   const sessions = new Map<string, Promise<DocumentSession | null>>();
   const warnings = new Map<string, string[]>();
   const docFile = (id: string) => path.join(options.root, 'document', id, 'doc.xml');
@@ -153,6 +154,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   };
 
   const open = (id: string) => {
+    if (closing) return Promise.resolve(null);
     let session = sessions.get(id);
     if (!session) {
       session = create(id).catch((err) => {
@@ -174,7 +176,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       void open(id).then((session) => {
         if (!session || !known) return;
         fs.readFile(docFile(id), 'utf8', (err, text) => {
-          if (!err) session.onFileText(text);
+          if (!err && !closing) session.onFileText(text);
         });
       });
     },
@@ -200,6 +202,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
     close: async () => {
+      closing = true;
       const all = await Promise.all(sessions.values());
       await Promise.all(all.map((session) => session?.close()));
       sessions.clear();

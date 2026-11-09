@@ -3,6 +3,8 @@ import type http from 'node:http';
 import type { ArtifactType } from '../shared/types';
 import type { MountedProject } from './app';
 import { sendJson } from './http';
+import { withProjectMutation } from './project-mutations';
+import { ArtifactTrashError, assertArtifactNotTrashed } from './artifact-trash';
 import { setRemoteDevice } from './remote-identity';
 import { RemoteCursorError, type createRemoteEvents } from './remote-events';
 import { readRemoteArtifact, RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
@@ -35,14 +37,6 @@ async function readBody(req: http.IncomingMessage) {
 }
 
 export function createRemoteApi(options: Options) {
-  const locks = new Map<string, Promise<unknown>>();
-  async function exclusive<T>(key: string, work: () => Promise<T>): Promise<T> {
-    const prior = locks.get(key) ?? Promise.resolve();
-    const current = prior.catch(() => undefined).then(work);
-    locks.set(key, current);
-    try { return await current; }
-    finally { if (locks.get(key) === current) locks.delete(key); }
-  }
   return async (req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<boolean> => {
     if (!url.pathname.startsWith('/api/remote/')) return false;
     res.setHeader('Cache-Control', 'no-store');
@@ -99,7 +93,8 @@ export function createRemoteApi(options: Options) {
         sendJson(res, 415, { error: 'Expected application/json' }); return true;
       }
       const body = req.method === 'PUT' ? await readBody(req) : null;
-      const result = await exclusive(`${project.id}/${artifact}`, async () => {
+      const result = await withProjectMutation(project.dir, async () => {
+        assertArtifactNotTrashed(project.dir, type, id);
         const mounted = await options.mount(project.dir);
         if (type === 'document') await mounted.settleDocument(id);
         if (!options.authenticate(req)?.projects.includes(project.id))
@@ -118,6 +113,7 @@ export function createRemoteApi(options: Options) {
       sendJson(res, 200, result);
     } catch (error) {
       if (error instanceof RemoteCursorError) sendJson(res, 410, { code: 'cursor_expired', error: error.message });
+      else if (error instanceof ArtifactTrashError) sendJson(res, error.status, { code: error.code, error: error.message });
       else if (error instanceof RemoteTransferError) sendJson(res, error.status, { code: error.code, error: error.message });
       else sendJson(res, 500, { code: 'remote_operation_failed', error: '远程操作失败，请检查服务端日志后重试' });
     }
