@@ -43,7 +43,7 @@ export function StatusPill({ onProjectsChanged }: { onProjectsChanged?: () => vo
           <>
             v{status.version}
             <span {...stylex.props(styles.separator)}>·</span>
-            {t('server.runningLabel')}
+            {t(status.deployment === 'self-hosted' ? 'server.selfHosted' : 'server.runningLabel')}
           </>
         )}
       </button>

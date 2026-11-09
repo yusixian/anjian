@@ -21,6 +21,7 @@ export interface HubProjectStatus {
 
 export interface HubStatus {
   authenticationRequired?: boolean;
+  deployment?: 'local' | 'self-hosted';
   boardPort: number;
   clients: number;
   lastActivity: number;

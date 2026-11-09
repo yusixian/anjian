@@ -13,6 +13,8 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
   const { t, i18n } = useTranslation();
   const [notice, setNotice] = useState<{ pid: number; text: string } | null>(null);
   const [showLog, setShowLog] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   const run = (path: string, text: string, init?: RequestInit) =>
     hubAction(path, init)
@@ -74,12 +76,32 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
           <Button
             danger
             size="small"
-            onClick={() => void run('/api/hub/stop', t('server.stopped'))}
+            onClick={() => setConfirmStop(true)}
           >
             {t('server.stop')}
           </Button>
         </div>
       </div>
+      {confirmStop && (
+        <section aria-label={t('server.stopTitle')} {...stylex.props(styles.confirm)}>
+          <strong>{t('server.stopTitle')}</strong>
+          <p {...stylex.props(styles.confirmText)}>{t('server.stopDescription')}</p>
+          <div {...stylex.props(styles.controls)}>
+            <Button size="small" disabled={stopping} onClick={() => setConfirmStop(false)}>
+              {t('server.cancel')}
+            </Button>
+            <Button danger size="small" loading={stopping} onClick={() => {
+              setStopping(true);
+              void run('/api/hub/stop', t('server.stopped')).finally(() => {
+                setStopping(false);
+                setConfirmStop(false);
+              });
+            }}>
+              {t('server.confirmStop')}
+            </Button>
+          </div>
+        </section>
+      )}
       {notice && notice.pid === status.pid && (
         <p role="status" {...stylex.props(styles.notice)}>
           {notice.text}

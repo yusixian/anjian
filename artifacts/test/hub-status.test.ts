@@ -58,6 +58,7 @@ test('status describes the server, live pages and projects', async () => {
   expect(status).toMatchObject({
     pid: process.pid,
     version: '9.9.9',
+    deployment: 'local',
     port: h.port,
     url: `http://localhost:${h.port}/`,
     live: { local: 0 },

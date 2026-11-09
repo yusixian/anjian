@@ -33,7 +33,7 @@ export const styles = stylex.create({
     flexShrink: 0,
     filter: { 'default': 'none', '@media (prefers-color-scheme: dark)': 'invert(1)' },
   },
-  brand: { fontSize: 14, letterSpacing: '-0.5px', marginInlineStart: -5 },
+  brand: { flexShrink: 0, whiteSpace: 'nowrap', fontSize: 14, letterSpacing: '-0.5px', marginInlineStart: -5 },
   crumb: {
     'fontWeight': 550,
     'maxWidth': 260,

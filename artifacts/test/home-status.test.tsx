@@ -96,6 +96,11 @@ test('the status pill shows a local server without Cloud relay or upstream upgra
   expect(button('Upgrade and restart')).toBeUndefined();
   await click(button('Restart')!);
   await click(button('Stop')!);
+  expect(requests.some((r) => r.url === '/api/hub/stop')).toBe(false);
+  await click(button('Cancel')!);
+  expect(requests.some((r) => r.url === '/api/hub/stop')).toBe(false);
+  await click(button('Stop')!);
+  await click(button('Confirm stop')!);
   expect(requests.filter((r) => r.method === 'POST').map((r) => r.url)).toEqual([
     '/api/hub/restart',
     '/api/hub/stop',
@@ -125,4 +130,10 @@ test('uptime reads in days and hours, or hours and minutes', () => {
   expect(formatUptime(3 * 86400_000 + 4 * 3600_000, 'en')).toBe('3d 4h');
   expect(formatUptime(2 * 3600_000 + 5 * 60_000, 'en')).toBe('2h 5m');
   expect(formatUptime(30_000, 'en')).toBe('0m');
+});
+
+test('self-hosted status identifies the remote server', async () => {
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ...status(), deployment: 'self-hosted', url: 'https://anjian.cosine.ren' })));
+  await render();
+  expect(host.querySelector('button[aria-expanded]')!.textContent).toContain('Self-hosted');
 });

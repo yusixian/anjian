@@ -248,6 +248,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const local = [...ready.values()].reduce((sum, mounted) => sum + mounted.liveClients(), 0);
     return {
       authenticationRequired: !loopback,
+      deployment: loopback ? 'local' : 'self-hosted',
       pid: process.pid,
       version: options.version,
       startedAt,
