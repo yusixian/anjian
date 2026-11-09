@@ -1,5 +1,10 @@
 # Document artifacts
 
+**Remote binding:** read [remote.md](remote.md) first. Pull before editing existing
+source, then push before check/reply. Local live-file and streaming instructions
+below do not synchronize a remote server; upload complete valid artifacts.
+
+
 A living doc at `.anjian/artifacts/document/<id>/`. You write it; your human
 partner reads it in their browser, comments on passages, and can fix text in
 place. Their edits and yours merge live.
@@ -166,7 +171,7 @@ node app/anjian.cjs comment list --json --project-dir /path/to/project --artifac
 - Each thread has an `id`, an `anchor` (`blockId`, `quote`), `waitingOn`
   and its `messages`. `"waitingOn": "agent"` means it is waiting on you.
 - A comment asking for a change: edit `doc.xml`, reply with what changed,
-  then resolve the thread.
+  resolve only when requested or clearly authorized as settled.
 - Reply, with the message on stdin:
 
   ```bash
@@ -178,5 +183,6 @@ node app/anjian.cjs comment list --json --project-dir /path/to/project --artifac
 - Ask about a passage: `comment add … --block <blockId> --quote "<text>"`,
   message on stdin.
 - Settled: `comment resolve … --thread <thread-id>`.
-- An error saying the server is older than the CLI: run `start` again, then
-  retry.
+- An error saying the server is older than the CLI: for local mode run `start`
+  again. For remote mode, report the version mismatch and update the self-hosted
+  deployment within the user’s authorization; starting locally cannot upgrade it.

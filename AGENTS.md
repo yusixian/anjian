@@ -32,3 +32,9 @@ Anjian（案间）从 Ryugi v1.51.2 分叉，独立维护。目标是个人使�
 - Skills、集成与文档按根目录 LICENSE；artifacts 应用及产物按 artifacts/LICENSE（AGPL-3.0-only）。
 - 重命名不改变继承代码许可证；新增应用依赖须与 AGPL 兼容。
 - 后续上游代码逐项核对授权，不默认适用 v1.51.2 的许可证。
+
+## Agent 操作案间作品
+
+处理作品、网页批注或自托管案间任务，先读 `skills/artifacts/SKILL.md`；远程任务继续读 `skills/artifacts/remote.md`。优先沿用当前工作区 AGENTS.md 中配置的 CLI 包装器与项目路径，通过 `remote status --json` 验证绑定。没有配置时按远程指引授权和绑定；不要把此源码仓库自动当作用户作品项目，也不要默认读取其他项目的凭证。
+
+为其他项目接入时，在该项目 AGENTS.md 写明可执行入口、作品目录、服务器 origin 和私有配置目录的路径；只记录路径，不记录 token、访问 key 或带 key 的 URL。宿主需加载本仓库 Skill 或显式阅读它，仓库文件存在不代表全局安装成功。接入示例见 `docs/install.md`。

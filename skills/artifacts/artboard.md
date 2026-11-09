@@ -1,5 +1,10 @@
 # Artboard
 
+**Remote binding:** read [remote.md](remote.md) first. Pull before editing existing
+source, then push before check/reply. Local live-file and streaming instructions
+below do not synchronize a remote server; upload complete valid artifacts.
+
+
 An artboard is the space of a business requirement: boards are options,
 groups are questions, pages are areas. You put design explorations on it by
 writing files into the artboard's directory; the canvas updates the moment a
@@ -279,7 +284,7 @@ node app/anjian.cjs comment list --json --project-dir /path/to/project --artifac
   made: the node at `path` may have moved or gone. Check the board before
   editing by path, and say what you matched it to when you reply.
 - A comment asking for a change: edit the board's HTML, reply with what
-  changed, then resolve the thread.
+  changed. Resolve only when requested or clearly authorized as settled.
 - Reply, with the message on stdin:
 
   ```bash

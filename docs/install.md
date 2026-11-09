@@ -29,6 +29,19 @@ node skills/artifacts/app/anjian.cjs start --project-dir /绝对路径/项目 --
 
 `skills/`、`hooks/` 和各宿主插件目录已迁移到 Anjian 命名。选择宿主支持的本地插件加载方式，指向本仓库；不要照搬历史文档中的上游 marketplace 安装地址。
 
-首要验收流程是：Agent 写入本地作品，启动工作台，用户批注，Agent 运行 `comment list` 读取批注并更新作品。后台通知钩子是额外集成，仍需在实际宿主中单独验证；CLI 可运行不代表宿主自动唤醒已经成功。
+在宿主中加载 `skills/artifacts/`，或让 Agent 显式读取其中的 `SKILL.md`。只把仓库克隆到磁盘不会使所有新会话自动加载 Skill。
 
-远程部署不自动同步本机文件。自托管边界见 [self-hosting.md](self-hosting.md)。
+在实际作品项目的 `AGENTS.md` 加入以下入口说明，替换成自己的绝对路径。若已有固定项目与客户端目录的包装器，直接记录包装器路径即可。
+
+```markdown
+处理案间作品或网页批注前，读取 /绝对路径/anjian/skills/artifacts/SKILL.md。
+远程任务继续读取同目录 remote.md。
+CLI：node /绝对路径/anjian/skills/artifacts/app/anjian.cjs
+项目：/绝对路径/作品项目（所有命令传 --project-dir）。
+服务器：https://你的案间域名
+客户端配置：默认 ~/.anjian/client/；如果使用自定义 ANJIAN_CLIENT_HOME，所有命令保持一致。
+先运行 remote status --json；未授权时按 remote.md 完成 login 和 link。
+不要输出或提交凭证。watch 只输出事件，不会自动唤醒宿主。
+```
+
+已有远程作品使用「读取批注 → pull → 编辑 → push → check → 回复」。冲突、本地未同步改动和管理员登录处理见 [Agent 远程操作参考](../skills/artifacts/remote.md)。本地模式仍使用文件写入和本地服务器。后台通知钩子是额外集成，需在宿主中单独验证。

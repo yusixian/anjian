@@ -1,5 +1,10 @@
 # HTML artifacts
 
+**Remote binding:** read [remote.md](remote.md) first. Pull before editing existing
+source, then push before check/reply. Local live-file and streaming instructions
+below do not synchronize a remote server; upload complete valid artifacts.
+
+
 One full page at `.anjian/artifacts/html/<id>/index.html`, shown edge to edge
 in your human partner's browser. It reloads whenever any file in its
 directory changes.

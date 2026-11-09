@@ -1,6 +1,6 @@
 ---
 name: artifacts
-description: Use when seeing decides faster than reading — UI directions or mockups to choose between, a page to tune or click through, a design doc, review, proposal, or architecture walkthrough for them or their team to read — or when they ask for an artifact or artboard by name, or for a link to share one. Inside brainstorming or anywhere else
+description: Use when seeing decides faster than reading — UI directions or mockups to choose between, a page to tune or click through, a design doc, review, proposal, or architecture walkthrough for them or their team to read — or when they ask for an artifact or artboard by name, or for a link to share one, self-hosted Anjian synchronization, or remote artifact comments. Inside brainstorming or anywhere else
 ---
 
 # Artifacts
@@ -9,12 +9,28 @@ Artifacts are pages your human partner opens in their browser while you
 work: an artboard of mockups to choose from and comment on, a document to
 read and comment on, or one HTML page to click and tune. You write files into the project; a local server shows each
 artifact at its own link and updates it the moment a file changes. They look,
-then answer in the terminal.
+then comment in the browser or answer in the terminal. With a remote binding, files
+reach the self-hosted server only after an explicit `push`.
+
+## Choose local or remote first
+
+Read the project's `AGENTS.md` for a configured CLI wrapper, project directory and
+optional `ANJIAN_CLIENT_HOME`. Reuse that entry point and run `remote status --json`.
+A successful status identifies the server and project; do not dump credential files.
+If no wrapper is documented, use this skill's `app/anjian.cjs` with an explicit
+`--project-dir`. A missing binding is not evidence that a requested remote task
+should run locally: read [remote.md](remote.md) to log in and link the target.
+
+For a self-hosted URL, a remote binding, or remote comments, read [remote.md](remote.md)
+before writing. Its `pull → edit → push → check → reply` flow takes precedence over
+local server/streaming instructions below and in type references. Remote work needs
+no SSH or local server. Use `start` only for an explicitly local preview.
 
 ## Local workspace
 
-Use the Anjian workbench built from this repository. It has no hosted account,
-cloud publishing, subscription, or automatic upstream package download.
+Use the Anjian workbench built from this repository. It has no official Cloud account,
+cloud publishing, subscription, or automatic upstream package download. Self-hosted
+device authorization is supported as described in `remote.md`.
 Do not switch to a hosted artifacts tool to work around a missing local build.
 
 If the launcher reports that its build is missing, run `pnpm install --frozen-lockfile`
@@ -77,7 +93,7 @@ lowercase letters, digits and hyphens, named after the topic
 - New topic: a new id, and so a new link.
 - Your human partner can override either.
 
-## Start the server and get the link
+## Start the local server and get the link
 
 Paths below are relative to this skill's directory: resolve `app/` to its
 absolute path before you run them. Every artifacts command goes through the
@@ -137,8 +153,8 @@ that a localhost link works on a phone or that a stopped server has a hosted cop
 For a user-authorized LAN setup, bind `--host 0.0.0.0` and use the machine's reachable
 LAN address with `--url-host`. Keep the printed access key. The HTML/artboard preview
 origin also needs to be reachable. For an HTTPS deployment, follow the repository's
-self-hosting instructions; remote content synchronization and Agent notification
-must be verified separately from merely opening the web page.
+self-hosting instructions and [remote.md](remote.md). Verify a successful push and
+readback separately from merely opening the page; event output is not Agent wakeup.
 
 Do not suggest Cloud login, `publish`, `get`, `config --auto-publish`, or subscription
 upgrades: those commands are not part of Anjian. If a user supplies an old Ryugi Cloud
@@ -166,7 +182,8 @@ their official Cloud credentials.
 
 ## After every change
 
-1. Write the files with your file-writing tool.
+1. Write the files with your file-writing tool. For a remote binding, first pull
+   safely as `remote.md` describes; after editing, push successfully before `check`.
 2. Run `check` after your last write. It waits until the server has checked
    that write, then prints `warnings` (and `pending` for an artboard); no
    sleep or `checkedAt` comparison is needed.
