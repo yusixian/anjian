@@ -390,6 +390,7 @@
   "server": {
     "offline": "Server offline",
     "runningLabel": "Local",
+    "signOut": "Sign out",
     "panelLabel": "Artifacts server",
     "status": "Status",
     "running": "Running {{time}}",

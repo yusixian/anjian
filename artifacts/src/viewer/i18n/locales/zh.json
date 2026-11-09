@@ -375,6 +375,7 @@
   "server": {
     "offline": "服务已离线",
     "runningLabel": "本地运行",
+    "signOut": "退出登录",
     "panelLabel": "Artifacts 服务",
     "status": "状态",
     "running": "已运行 {{time}}",

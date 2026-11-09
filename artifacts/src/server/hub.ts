@@ -12,6 +12,7 @@ import { artifactPath } from './artifact-address';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
+import { createBrowserAuth } from './browser-auth';
 import { readArtifactSource, titleOf } from './context';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
@@ -241,6 +242,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const status = (): HubStatus => {
     const local = [...ready.values()].reduce((sum, mounted) => sum + mounted.liveClients(), 0);
     return {
+      authenticationRequired: !loopback,
       pid: process.pid,
       version: options.version,
       startedAt,
@@ -439,6 +441,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     projects: () => remoteProjects().map(({ id, name }) => ({ id, name })),
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
+  const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized });
 
   front.on('request', (req, res) => {
     void (async () => {
@@ -447,6 +450,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
+      if (await browserAuth(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (url.pathname === '/api/status') {

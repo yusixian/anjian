@@ -9,6 +9,7 @@ import { artifactPath, resolveArtifactAddress } from './artifact-address';
 import { watchArtifacts } from './artifact-watcher';
 import { type ArtifactRef, isArtifactLocator, listArtifacts } from './artifacts';
 import { BOARD_PORT_FILE } from './board-port';
+import { createBrowserAuth } from './browser-auth';
 import {
   type ArtifactPayload,
   type ChangeListener,
@@ -50,8 +51,19 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   const ctx = createServerContext(options);
   const { root, stateDir, mount, loopback, token, clients } = ctx;
 
-  const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse) =>
-    dispatchHttp(HTTP_ROUTES, req, res, ctx);
+  const browserAuth = createBrowserAuth({
+    get cookieName() { return ctx.cookieName; },
+    token,
+    get origin() { return options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${ctx.port}`; },
+    loopback,
+    get policy() { return ctx.policy; },
+    authorized: (req, url) => ctx.isAuthorized(req, url.searchParams.get('key')),
+  });
+  const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
+    void browserAuth(req, res, new URL(req.url ?? '/', 'http://artifacts.local'))
+      .then((handled) => { if (!handled) dispatchHttp(HTTP_ROUTES, req, res, ctx); })
+      .catch((err: Error) => { if (!res.headersSent) send(res, 500, `Artifacts error: ${err.message}`); });
+  };
 
   const server = http.createServer((req, res) => {
     try {

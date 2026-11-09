@@ -60,7 +60,9 @@ async function fixture() {
     });
     expect(pair.status).toBe(200);
     const { deviceCode, userCode } = await pair.json() as { deviceCode: string; userCode: string };
-    expect((await request(`/connect?code=${userCode}`)).status).toBe(403);
+    const loginPage = await request(`/connect?code=${userCode}`, { redirect: 'manual' });
+    expect(loginPage.status).toBe(303);
+    expect(loginPage.headers.get('location')).toBe('/login?returnTo=' + encodeURIComponent(`/connect?code=${userCode}`));
     const approve = await request(`/api/remote/auth/approve?key=${MASTER}`, {
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: userCode, projects: [id(alpha)] }),

@@ -8,8 +8,9 @@ import { typeFaviconHref } from '../../shared/type-icons';
 import { ARTIFACT_TYPES } from '../../shared/types';
 import { artifactPath, resolveArtifactAddress } from '../artifact-address';
 import { artifactKeyOf, isArtifactLocator } from '../artifacts';
+import { browserCookie } from '../browser-auth';
 import { projectName, type ServerContext, titleOf } from '../context';
-import { send, sendFile, urlHostForHttp } from '../http';
+import { parseCookies, safeEqual, send, sendFile, urlHostForHttp } from '../http';
 import { serverText } from '../locales';
 import { resolveInside } from '../paths';
 import { allowInlineScripts, viewerPage } from '../viewer-page';
@@ -75,10 +76,10 @@ function serveShell(
   const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8' };
   // One server serves every project: the page's own API calls find their project by the Referer.
   if (ref) headers['Referrer-Policy'] = 'same-origin';
-  if (key !== null && !loopback) {
+  if (key !== null && !loopback && !safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', ctx.token)) {
     const secure = options.publicOrigin?.startsWith('https:') &&
       req.headers.host?.toLowerCase() === new URL(options.publicOrigin).host.toLowerCase();
-    headers['Set-Cookie'] = `${ctx.cookieName}=${ctx.token}; HttpOnly; SameSite=Strict; Path=/${secure ? '; Secure' : ''}`;
+    headers['Set-Cookie'] = browserCookie(ctx.cookieName, ctx.token, Boolean(secure));
   }
   const entry =
     preview && fs.existsSync(path.join(viewerDir, 'preview.html')) ? 'preview.html' : 'index.html';

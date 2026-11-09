@@ -86,6 +86,16 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
         </p>
       )}
       {showLog && <ServerLog projects={status.projects} />}
+      {status.authenticationRequired && (
+        <Button block size="small" type="text" onClick={() => {
+          void fetch('/logout', { method: 'POST' }).then((response) => {
+            if (!response.ok) throw new Error(String(response.status));
+            location.assign('/login?signedOut=1');
+          }).catch((error: Error) => toast.error(t('common.requestFailed', { status: error.message })));
+        }}>
+          {t('server.signOut')}
+        </Button>
+      )}
     </>
   );
 }

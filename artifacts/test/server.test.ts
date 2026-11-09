@@ -64,10 +64,10 @@ afterEach(async () => {
 });
 
 describe('session key', () => {
-  test('the shell is refused without the key', async () => {
+  test('the shell redirects to login without the key', async () => {
     const { server } = await start();
-    expect((await get(`${base(server)}/`)).status).toBe(403);
-    expect((await get(`${base(server)}/html/x`)).status).toBe(403);
+    expect((await get(`${base(server)}/`)).headers.location).toBe('/login?returnTo=%2F');
+    expect((await get(`${base(server)}/html/x`)).headers.location).toBe('/login?returnTo=%2Fhtml%2Fx');
   });
 
   test('the key serves the shell at the root and at an artifact link, and sets a per-port cookie', async () => {
@@ -92,9 +92,11 @@ describe('session key', () => {
     expect((await get(`${base(server)}/api/artifacts`)).status).toBe(403);
   });
 
-  test('a wrong key is refused', async () => {
+  test('a wrong key redirects to login without echoing the key', async () => {
     const { server } = await start();
-    expect((await get(`${base(server)}/?key=nope`)).status).toBe(403);
+    const response = await get(`${base(server)}/?key=nope`);
+    expect(response.status).toBe(303);
+    expect(response.headers.location).toBe('/login?returnTo=%2F');
   });
 
   test('every response sends Referrer-Policy: no-referrer', async () => {
@@ -231,8 +233,8 @@ describe('page metadata', () => {
     expect(robots.status).toBe(200);
     expect(robots.headers['content-type']).toBe('text/plain; charset=utf-8');
     expect(robots.body).not.toContain(server.token);
-    expect((await get(`${base(server)}/`)).status).toBe(403);
-    expect((await get(`${base(server)}/html/private`)).status).toBe(403);
+    expect((await get(`${base(server)}/`)).status).toBe(303);
+    expect((await get(`${base(server)}/html/private`)).status).toBe(303);
   });
 
   test('serves each page title and description before JavaScript runs, with key-free canonical and sharing URLs', async () => {
@@ -428,7 +430,7 @@ describe('read-only previews', () => {
 
   test('preview pages require the key and allow embedding only by this viewer', async () => {
     const { server } = await start();
-    expect((await get(`${base(server)}/preview/html/tuner`)).status).toBe(403);
+    expect((await get(`${base(server)}/preview/html/tuner`)).status).toBe(303);
     const response = await get(`${base(server)}/preview/html/tuner?key=${server.token}`);
     expect(response.status).toBe(200);
     expect(response.headers['content-security-policy']).toContain("frame-ancestors 'self'");

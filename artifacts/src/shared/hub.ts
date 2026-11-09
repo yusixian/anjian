@@ -20,6 +20,7 @@ export interface HubProjectStatus {
 }
 
 export interface HubStatus {
+  authenticationRequired?: boolean;
   boardPort: number;
   clients: number;
   lastActivity: number;

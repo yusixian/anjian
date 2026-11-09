@@ -4,6 +4,7 @@ import { lazy, type ReactNode, Suspense, useEffect } from 'react';
 import { useLocation } from 'wouter';
 
 import { t } from './i18n';
+import { useBrowserSession } from './hooks/useBrowserSession';
 import { startEmbedChild } from './lib/embed-bridge';
 import { canonicalPath, parseRoute } from './lib/route';
 
@@ -73,6 +74,7 @@ function RouteView() {
 }
 
 export function Shell() {
+  useBrowserSession();
   return (
     <Suspense
       fallback={
