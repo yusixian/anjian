@@ -15,6 +15,8 @@ export default defineConfig({
   plugins: [
     stylex.vite({
       useCSSLayers: true,
+      // The shared CSS is loaded by every HTML entry; the default target may be main-only.
+      cssInjectionTarget: (file) => file === 'index.css',
       unstable_moduleResolution: { type: 'commonJS', rootDir: root },
     }),
     react(),

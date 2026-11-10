@@ -38,3 +38,11 @@ test('the standalone preview ships less than 180 KB gzip before loading a render
     'previews must not download the whole application to show a thumbnail',
   ).toBeLessThan(180_000);
 });
+
+test.each(['index', 'preview', 'share'])('%s entry loads generated StyleX rules', (entry) => {
+  const directory = path.resolve('dist/viewer');
+  const html = readFileSync(path.join(directory, `${entry}.html`), 'utf8');
+  const stylesheets = [...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)];
+  const css = stylesheets.map((match) => readFileSync(path.join(directory, match[1]!.replace(/^\//, '')), 'utf8')).join('\n');
+  expect(css, 'standalone entries need StyleX layout rules as well as theme tokens').toMatch(/@layer priority\d+\s*\{/);
+});
