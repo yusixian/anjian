@@ -1,13 +1,14 @@
 import { createLoroBinding, TREE_NAME } from '@haklex/rich-collab-loro';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import type { LoroDoc, VersionVector } from 'loro-crdt';
+import { LoroDoc, type VersionVector } from 'loro-crdt';
 import { useEffect } from 'react';
 
-import type { DocumentState, DocumentTransport } from './transport';
+import { DocumentQuotaError, type DocumentState, type DocumentTransport } from './transport';
 
 interface Props {
   doc: LoroDoc;
   onOffline: (offline: boolean) => void;
+  onQuotaExceeded?: (exceeded: boolean) => void;
   onState?: (state: DocumentState) => void;
   transport: DocumentTransport;
 }
@@ -19,7 +20,7 @@ const MAX_RETRY_MS = 30_000;
 export const decodeBase64 = (base64: string) =>
   Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 
-export function LoroSync({ transport, doc, onOffline, onState }: Props) {
+export function LoroSync({ transport, doc, onOffline, onState, onQuotaExceeded }: Props) {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
@@ -59,9 +60,11 @@ export function LoroSync({ transport, doc, onOffline, onState }: Props) {
         // Advance only to the acknowledged version; edits made during the request still need sending.
         sent = to;
         retryDelay = RETRY_MS;
+        onQuotaExceeded?.(false);
         onOffline(false);
-      } catch {
+      } catch (error) {
         if (!current(run)) return;
+        onQuotaExceeded?.(error instanceof DocumentQuotaError);
         onOffline(true);
         retrySync();
       } finally {
@@ -95,14 +98,29 @@ export function LoroSync({ transport, doc, onOffline, onState }: Props) {
           location.reload();
           return;
         }
-        binding.import(decodeBase64(state.snapshot));
+        const snapshot = decodeBase64(state.snapshot);
+        const remote = new LoroDoc();
+        remote.import(snapshot);
+        const remoteVersion = remote.oplogVersion();
+        binding.import(snapshot);
         onState?.(state);
         if (resend) {
           sent = undefined;
           needsSend = true;
+        } else {
+          // A responsive layout can remount this plugin with unsaved operations still in doc.
+          const accepted = remoteVersion.toJSON();
+          if ([...doc.oplogVersion().toJSON()].some(([peer, count]) => count > (accepted.get(peer) ?? 0))) {
+            sent = remoteVersion;
+            needsSend = true;
+          }
         }
         syncing = false;
         if (needsSend) schedule();
+        else {
+          onQuotaExceeded?.(false);
+          onOffline(false);
+        }
       } catch {
         if (!current(run)) return;
         syncing = false;
@@ -131,7 +149,7 @@ export function LoroSync({ transport, doc, onOffline, onState }: Props) {
       unsubscribeLocal();
       binding.dispose();
     };
-  }, [editor, doc, transport, onOffline, onState]);
+  }, [editor, doc, transport, onOffline, onState, onQuotaExceeded]);
 
   return null;
 }

@@ -126,6 +126,8 @@
     "agentPlaceholder": "写给 agent 的评论…",
     "noComments": "还没有评论。选中文字就能评论。",
     "toc": "目录",
+    "quotaExceeded": "存储额度不足，修改尚未保存。",
+    "quotaRecovery": "请释放空间或联系管理员提高额度，页面会自动重试。修改目前仅保留在此页面，请勿刷新或关闭。",
     "notSynced": "未同步，正在重试",
     "readOnlyHistory": "只读 · 正在对比历史",
     "originalDeleted": "原文已删除",

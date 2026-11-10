@@ -53,6 +53,7 @@ interface Props {
   onAgentPlayback: (state: AgentPlaybackState) => void;
   onEditorReady: (editor: LexicalEditor | null) => void;
   onOffline: (offline: boolean) => void;
+  onQuotaExceeded?: (exceeded: boolean) => void;
   onState?: (state: DocumentState) => void;
   theme: 'light' | 'dark';
   transport: DocumentTransport;
@@ -69,6 +70,7 @@ export function DocumentEditor({
   theme,
   onAgentPlayback,
   onOffline,
+  onQuotaExceeded,
   onState,
   onEditorReady,
   children,
@@ -83,7 +85,7 @@ export function DocumentEditor({
         variant="article"
         onEditorReady={onEditorReady}
       >
-        <LoroSync doc={doc} transport={transport} onOffline={onOffline} onState={onState} />
+        <LoroSync doc={doc} transport={transport} onOffline={onOffline} onQuotaExceeded={onQuotaExceeded} onState={onState} />
         <ExcalidrawPlugin />
         <FloatingLinkEditorPlugin />
         <EditorSurfacePlugins>

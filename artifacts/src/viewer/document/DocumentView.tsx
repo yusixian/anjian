@@ -28,6 +28,15 @@ import { type SelectionTarget, useSelectionComment } from './useSelectionComment
 
 const styles = stylex.create({
   root: { minHeight: '100%', backgroundColor: cssVar.colorBgContainer, color: cssVar.colorText },
+  quotaNotice: {
+    paddingBlock: 12,
+    paddingInline: 24,
+    backgroundColor: cssVar.colorWarningBg,
+    color: cssVar.colorWarningText,
+    fontSize: 13,
+    lineHeight: 1.6,
+    fontFamily: cssVar.fontFamily,
+  },
   message: {
     padding: 48,
     textAlign: 'center',
@@ -95,6 +104,7 @@ export function DocumentView({
   }, []);
   const [playback, setPlayback] = useState<AgentPlaybackState>(IDLE_PLAYBACK);
   const [offline, setOffline] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyVisible = historyOpen;
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
@@ -273,6 +283,7 @@ export function DocumentView({
           onAgentPlayback={setPlayback}
           onEditorReady={setEditor}
           onOffline={setOffline}
+          onQuotaExceeded={setQuotaExceeded}
           onState={onState}
         />
       </PendingContext.Provider>
@@ -291,7 +302,7 @@ export function DocumentView({
         agentSection={playback.section}
         compact={phone}
         id={id}
-        offline={offline}
+        offline={offline && !quotaExceeded}
         openComments={openComments}
         history={{
           available: true,
@@ -301,6 +312,12 @@ export function DocumentView({
         }}
         onDone={phone && editing ? () => setEditing(false) : undefined}
       />
+      {quotaExceeded && (
+        <div role="alert" {...stylex.props(styles.quotaNotice)}>
+          <strong>{t('document.quotaExceeded')}</strong>{' '}
+          {t('document.quotaRecovery')}
+        </div>
+      )}
       {phone ? (
         <PhoneLayout
           actions={actions}

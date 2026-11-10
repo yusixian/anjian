@@ -17,7 +17,7 @@ import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 
 import { createChannel } from '../src/viewer/document/channel';
 import { LoroSync } from '../src/viewer/document/LoroSync';
-import { type DocumentState, encodeBase64 } from '../src/viewer/document/transport';
+import { type DocumentState, DocumentQuotaError, createLocalTransport, encodeBase64 } from '../src/viewer/document/transport';
 
 let root: Root | null = null;
 let disposeHost: (() => void) | undefined;
@@ -32,6 +32,7 @@ afterEach(() => {
   disposeHost?.();
   disposeHost = undefined;
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 function deferred<T>() {
@@ -85,11 +86,12 @@ async function mount({
   if (failState) transport.state.mockRejectedValueOnce(new Error('temporary timeout'));
   if (pendingState) transport.state.mockReturnValueOnce(pendingState);
   const onOffline = vi.fn();
+  const onQuotaExceeded = vi.fn();
   const onState = vi.fn();
   let editor!: LexicalEditor;
   function Sync() {
     [editor] = useLexicalComposerContext();
-    return <LoroSync doc={doc} transport={transport} onOffline={onOffline} onState={onState} />;
+    return <LoroSync doc={doc} transport={transport} onOffline={onOffline} onQuotaExceeded={onQuotaExceeded} onState={onState} />;
   }
   root = createRoot(document.createElement('div'));
   await act(async () =>
@@ -119,8 +121,16 @@ async function mount({
       await vi.advanceTimersByTimeAsync(100);
     });
   return {
+    remount: async () => {
+      await act(async () => {
+        root!.unmount();
+        root = createRoot(document.createElement('div'));
+        root.render(<LexicalComposer initialConfig={{ namespace: 'remounted-peer', onError: error => { throw error; } }}><Sync /></LexicalComposer>);
+      });
+    },
     transport,
     onOffline,
+    onQuotaExceeded,
     onState,
     state,
     edit,
@@ -261,4 +271,37 @@ test('unmount cancels a scheduled recovery', async () => {
   root = null;
   await advance(60_000);
   expect(transport.state).toHaveBeenCalledTimes(1);
+});
+
+
+test('quota errors retain the edit and clear the capacity warning only after acknowledgement', async () => {
+  const { transport, edit, hostText, onQuotaExceeded } = await mount();
+  transport.update.mockRejectedValueOnce(new DocumentQuotaError('quota'));
+  await edit('Pending quota edit');
+  expect(onQuotaExceeded).toHaveBeenLastCalledWith(true);
+  expect(hostText()).toBe('Original');
+  await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+  expect(hostText()).toBe('Pending quota edit');
+  expect(onQuotaExceeded).toHaveBeenLastCalledWith(false);
+});
+
+test('only a structured storage quota response is classified as exhausted storage', async () => {
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+  const transport = createLocalTransport({ id: 'doc', channel: createChannel(), send: () => undefined });
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'storage_quota_exceeded' }), { status: 413 }));
+  await expect(transport.update(new Uint8Array())).rejects.toBeInstanceOf(DocumentQuotaError);
+  fetch.mockResolvedValueOnce(new Response('Update too large', { status: 413 }));
+  await expect(transport.update(new Uint8Array())).rejects.not.toBeInstanceOf(DocumentQuotaError);
+});
+
+
+test('a layout remount resumes an unsaved edit from the server version', async () => {
+  const { transport, edit, hostText, remount, onQuotaExceeded } = await mount();
+  transport.update.mockRejectedValueOnce(new DocumentQuotaError('quota'));
+  await edit('Keep across layout change');
+  expect(hostText()).toBe('Original');
+  await remount();
+  await advance(100);
+  expect(hostText()).toBe('Keep across layout change');
+  expect(onQuotaExceeded).toHaveBeenLastCalledWith(false);
 });

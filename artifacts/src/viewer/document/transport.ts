@@ -3,6 +3,8 @@ import { DOCUMENT_FEATURES, DOCUMENT_FEATURES_HEADER } from '../../shared/docume
 import type { DocumentPayload } from '../../shared/types';
 import type { Channel } from './channel';
 
+export class DocumentQuotaError extends Error {}
+
 export interface DocumentMeta extends DocumentPayload {
   contentBase: string;
 }
@@ -68,7 +70,12 @@ export function createLocalTransport({
         bytes as Uint8Array<ArrayBuffer>,
         'application/octet-stream',
       );
-      if (!res.ok) throw new Error(`update failed (${res.status})`);
+      if (!res.ok) {
+        const failure = await res.json().catch(() => null);
+        if (res.status === 413 && failure?.code === 'storage_quota_exceeded')
+          throw new DocumentQuotaError('Storage quota exceeded');
+        throw new Error(`update failed (${res.status})`);
+      }
     },
     async comment(op) {
       const res = await post('comments', JSON.stringify(op), 'application/json');

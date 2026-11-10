@@ -132,6 +132,8 @@
     "agentPlaceholder": "Comment for the agent…",
     "noComments": "No comments yet. Select text to comment.",
     "toc": "Contents",
+    "quotaExceeded": "Storage quota exceeded. Changes are not saved.",
+    "quotaRecovery": "Free up storage or ask an administrator to raise your quota. This page will retry automatically. Changes are only kept in this page; do not refresh or close it.",
     "notSynced": "Not synced, retrying",
     "readOnlyHistory": "Read-only · comparing history",
     "originalDeleted": "Original text deleted",
