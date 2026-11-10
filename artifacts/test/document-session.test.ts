@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -519,14 +518,14 @@ test('prepared remote document preserves a concurrent human edit already in the 
 test('a failed snapshot write can be retried without poisoning later flushes', async () => {
   const { file, snapshotFile } = setup('<doc><p>first</p></doc>');
   const session = await open(file, snapshotFile);
-  const rename = fsPromises.rename.bind(fsPromises);
+  const rename = fs.renameSync.bind(fs);
   let fail = true;
-  const spy = vi.spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
     if (to === snapshotFile && fail) { fail = false; throw new Error('temporary storage failure'); }
     return rename(from, to);
   });
   try {
-    await expect(session.flush()).rejects.toThrow('temporary storage failure');
+    await expect(session.flush()).rejects.toThrow('Document could not be saved');
   } finally { spy.mockRestore(); }
   await session.flush();
   expect(fs.statSync(snapshotFile).size).toBeGreaterThan(0);
@@ -592,13 +591,13 @@ test('failed quiesce restores autosave and permits a later quiesce', async () =>
   const { file, snapshotFile } = setup('<doc><p>before</p></doc>');
   const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 5 });
   sessions.push(session);
-  const rename = fsPromises.rename.bind(fsPromises);
+  const rename = fs.renameSync.bind(fs);
   let failed = false;
-  const spy = vi.spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
     if (to === file && !failed) { failed = true; throw new Error('disk unavailable'); }
     return rename(from, to);
   });
-  await expect(session.quiesce()).rejects.toThrow('disk unavailable');
+  await expect(session.quiesce()).rejects.toThrow('Document could not be saved');
   spy.mockRestore();
   await vi.waitFor(() => expect(read(file)).toContain('id="'));
   const resume = await session.quiesce();
@@ -639,4 +638,71 @@ test('quota rejection and snapshot installation failure preserve document state 
   expect(events.map(event => event.type)).toEqual(['update', 'saved']);
   await session.flush();
   expect(read(file)).toContain('one, saved transactionally');
+});
+
+test('background flush rolls back both files when snapshot installation fails and acknowledges only the retry', async () => {
+  const { file, snapshotFile } = setup('<doc><p>one</p></doc>');
+  const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 60_000 });
+  sessions.push(session);
+  await session.flush();
+  const oldXml = read(file);
+  const oldSnapshot = fs.readFileSync(snapshotFile);
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => $findText($getRoot(), 'one')!.setTextContent('pending background edit'), { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }));
+  binding.dispose();
+  const events: DocumentEvent[] = [];
+  session.subscribe(event => events.push(event));
+  const rename = fs.renameSync.bind(fs);
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((source, target) => {
+    if (target === snapshotFile && String(source).endsWith('.tmp')) throw new Error('snapshot disk failure');
+    rename(source, target);
+  });
+  try {
+    await expect(session.flush()).rejects.toThrow('Document could not be saved');
+    expect(read(file)).toBe(oldXml);
+    expect(fs.readFileSync(snapshotFile)).toEqual(oldSnapshot);
+    expect(events.filter(event => event.type === 'saved')).toEqual([]);
+    expect(JSON.stringify(session.state())).toContain('pending background edit');
+  } finally { spy.mockRestore(); }
+  await session.flush();
+  expect(read(file)).toContain('pending background edit');
+  expect(events.filter(event => event.type === 'saved')).toHaveLength(1);
+  const restored = new LoroDoc();
+  restored.import(fs.readFileSync(snapshotFile));
+  const restoredEditor = createDocumentHeadlessEditor();
+  const restoredBinding = createLoroBinding(restoredEditor, restored);
+  try { expect(restoredEditor.getEditorState().toJSON()).toEqual(session.state()); }
+  finally { restoredBinding.dispose(); }
+});
+
+test('invalid external XML preserves pending collaborative edits in a recovery snapshot', async () => {
+  const { file, snapshotFile } = setup('<doc><p>one</p></doc>');
+  const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 60_000 });
+  sessions.push(session);
+  await session.flush();
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => $findText($getRoot(), 'one')!.setTextContent('recover this edit'), { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }));
+  binding.dispose();
+  fs.writeFileSync(file, '<doc><invalid');
+  session.onFileText('<doc><invalid');
+  const events: DocumentEvent[] = [];
+  session.subscribe(event => events.push(event));
+  await session.flush();
+  expect(read(file)).toBe('<doc><invalid');
+  expect(events.filter(event => event.type === 'saved')).toEqual([]);
+  await session.close();
+  sessions = sessions.filter(item => item !== session);
+  const reopened = await open(file, snapshotFile);
+  expect(reopened.outcome().kind).toBe('rejected');
+  expect(JSON.stringify(reopened.state())).toContain('recover this edit');
 });

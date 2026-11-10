@@ -267,7 +267,6 @@ export async function createDocumentSession(
   let pausedWrite = false;
   let disposed = false;
   let snapshotDirty = true;
-  let snapshotWriting = Promise.resolve();
   let writing = Promise.resolve();
   let playing = Promise.resolve();
   let revision = 0;
@@ -332,53 +331,87 @@ export async function createDocumentSession(
     });
   };
 
-  const saveSnapshot = async () => {
-    if (!snapshotDirty) return snapshotWriting;
-    const version = versionKey();
-    snapshotDirty = false;
-    if (version === persistedVersion && persistedSnapshotSignature !== null &&
-        snapshotSignature(snapshotFile) === persistedSnapshotSignature) return snapshotWriting;
-    const bytes = loro.export({ mode: 'snapshot' });
-    const persist = async () => {
-      await writeAtomic(snapshotFile, bytes);
-      persistedVersion = version;
-      persistedSnapshotSignature = snapshotSignature(snapshotFile);
+  const persistDocument = (xml: string, snapshot: Uint8Array, admit?: CommentAdmission) => {
+    const size = (target: string) => {
+      try { return fsSync.statSync(target).size; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
     };
-    snapshotWriting = snapshotWriting.then(persist, persist);
-    try { await snapshotWriting; }
-    catch (error) { snapshotDirty = true; throw error; }
+    admit?.(Buffer.byteLength(xml) - size(file) + snapshot.byteLength - size(snapshotFile));
+    const content = createPreparedStateFiles(path.dirname(file), [{ file, data: xml }]);
+    const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), [{ file: snapshotFile, data: snapshot }]);
+    try {
+      content.stage(); state.stage();
+      content.commit(); state.commit();
+    } catch (error) {
+      const errors: unknown[] = [error];
+      for (const transaction of [state, content]) {
+        try { transaction.abort(); } catch (rollback) { errors.push(rollback); }
+      }
+      throw new DocumentPersistenceError('Document could not be saved. Please retry.', { cause: errors.length > 1 ? new AggregateError(errors, 'Document save rollback failed') : error });
+    }
+    return () => { content.finalize(); state.finalize(); };
   };
 
   const write = async () => {
     clearTimeout(writeTimer);
     writeTimer = undefined;
-    if (outcome.kind === 'rejected' || streaming > 0) return;
-    const onDisk = await readText(file);
+    if (streaming > 0) return;
+    if (outcome.kind === 'rejected') {
+      // Preserve recoverable collaborative edits without overwriting invalid
+      // externally supplied XML or acknowledging that source as saved.
+      const version = versionKey();
+      if (version !== persistedVersion || persistedSnapshotSignature === null ||
+          snapshotSignature(snapshotFile) !== persistedSnapshotSignature) {
+        const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile),
+          [{ file: snapshotFile, data: loro.export({ mode: 'snapshot' }) }]);
+        state.stage();
+        try { state.commit(); }
+        catch (error) {
+          try { state.abort(); }
+          catch (rollback) { throw new AggregateError([error, rollback], 'Document recovery snapshot rollback failed'); }
+          throw error;
+        }
+        persistedVersion = version;
+        persistedSnapshotSignature = snapshotSignature(snapshotFile);
+        state.finalize();
+      }
+      snapshotDirty = false;
+      return;
+    }
+    let onDisk: string | null;
+    try { onDisk = fsSync.readFileSync(file, 'utf8'); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      onDisk = null;
+    }
     if (onDisk !== null && onDisk !== lastFileText) {
       onFileText(onDisk);
       return;
     }
     const current = editor.getEditorState().toJSON();
     const stamped = stampBlockIds(current);
-    if (stamped !== current && JSON.stringify(stamped) !== JSON.stringify(current)) {
+    if (stamped !== current && JSON.stringify(stamped) !== JSON.stringify(current))
       editor.update(() => $reconcileRoot(stamped.root as never), { discrete: true });
-    }
     const text = serializeDocument(editor.getEditorState().toJSON());
-    if (text !== lastFileText) {
-      // Narrows, not closes, the window where an agent write lands between our read and our rename.
-      const beforeRename = await readText(file);
-      if (beforeRename !== null && beforeRename !== lastFileText) {
-        onFileText(beforeRename);
-        return;
-      }
-      await writeAtomic(file, text);
-      lastFileText = text;
-      lastGoodText = text;
-      remember(text);
-      emit({ type: 'saved' });
+    const version = versionKey();
+    const changed = text !== lastFileText;
+    if (!changed && version === persistedVersion && persistedSnapshotSignature !== null &&
+        snapshotSignature(snapshotFile) === persistedSnapshotSignature) {
+      snapshotDirty = false;
+      return;
     }
+    // No asynchronous gap between capturing the matching XML/snapshot pair and
+    // installing it. A failure keeps both disk files and the saved acknowledgement unchanged.
     snapshotDirty = true;
-    await saveSnapshot();
+    const finalize = persistDocument(text, loro.export({ mode: 'snapshot' }));
+    persistedVersion = version;
+    persistedSnapshotSignature = snapshotSignature(snapshotFile);
+    lastFileText = text;
+    lastGoodText = text;
+    remember(text);
+    snapshotDirty = false;
+    finalize();
+    if (changed) emit({ type: 'saved' });
   };
 
   const flush = (): Promise<void> => {
@@ -399,7 +432,7 @@ export async function createDocumentSession(
 
   const startSnapshotTimer = () => {
     snapshotTimer = setInterval(
-      () => void saveSnapshot().catch((err) => log(messageOf(err))),
+      () => void flush().catch((err) => log(messageOf(err))),
       options.snapshotIntervalMs ?? 5000,
     );
     snapshotTimer.unref();
@@ -470,23 +503,7 @@ export async function createDocumentSession(
         snapshot = candidate.export({ mode: 'snapshot' });
         update = candidate.export({ mode: 'update', from });
       } finally { candidateBinding.dispose(); }
-      const size = (target: string) => {
-        try { return fsSync.statSync(target).size; }
-        catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
-      };
-      admit?.(Buffer.byteLength(xml) - size(file) + snapshot.byteLength - size(snapshotFile));
-      const content = createPreparedStateFiles(path.dirname(file), [{ file, data: xml }]);
-      const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), [{ file: snapshotFile, data: snapshot }]);
-      try {
-        content.stage(); state.stage();
-        content.commit(); state.commit();
-      } catch (error) {
-        const errors: unknown[] = [error];
-        for (const transaction of [state, content]) {
-          try { transaction.abort(); } catch (rollback) { errors.push(rollback); }
-        }
-        throw new DocumentPersistenceError('Document could not be saved. Please retry.', { cause: errors.length > 1 ? new AggregateError(errors, 'Document save rollback failed') : error });
-      }
+      const finalize = persistDocument(xml, snapshot, admit);
       binding.import(update);
       revision++;
       persistedVersion = versionKey();
@@ -495,12 +512,12 @@ export async function createDocumentSession(
       lastGoodText = xml;
       remember(xml);
       snapshotDirty = false;
-      content.finalize(); state.finalize();
+      finalize();
       emit({ type: 'update', bytes: update });
       emit({ type: 'saved' });
     },
     onFileText,
-    readyForRemoteUpload: async () => { await flush(); await activitySaved; await snapshotWriting; },
+    readyForRemoteUpload: async () => { await flush(); await activitySaved; },
     prepareRemoteText: (text) => {
       if (streaming > 0 || outcome.kind === 'rejected') throw new Error('Document is not ready for upload');
       const target = parseDocument(text);
@@ -583,7 +600,6 @@ export async function createDocumentSession(
       snapshotTimer = undefined;
       try {
         await flush();
-        await snapshotWriting;
         await activitySaved;
         let released = false;
         return () => {
@@ -600,7 +616,6 @@ export async function createDocumentSession(
     close: async () => {
       clearInterval(snapshotTimer);
       await flush();
-      await saveSnapshot();
       await activitySaved;
       binding.dispose();
       listeners.clear();
