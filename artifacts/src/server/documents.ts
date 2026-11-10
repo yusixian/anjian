@@ -64,6 +64,7 @@ interface RegistryOptions {
   root: string;
   stateDir: string;
   timing?: DocumentTiming;
+  enqueueWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
 }
 
 const diagramWarnings = (session: DocumentSession) =>
@@ -122,6 +123,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       snapshotFile: path.join(options.stateDir, 'document', id, 'doc.loro'),
       stateRoot: options.stateDir,
       ...options.timing,
+      enqueueWrite: options.enqueueWrite ? work => options.enqueueWrite!(id, work) : undefined,
       log: options.log,
     });
     try {

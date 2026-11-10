@@ -118,3 +118,37 @@ test('recording quota recovery resumes media validation without editing the orig
     expect(fs.readFileSync(path.join(artifacts, 'artboard/recording/pages/clip.webm'), 'utf8')).toBe('original recording bytes');
   } finally { warning.mockRestore(); await hub.close(); }
 }, 40_000);
+
+test('document autosave defers normalization at zero quota and recovers without another edit', async () => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  const original = '<doc><p>readable while storage is full</p></doc>';
+  writeDocument(artifacts, 'draft', { 'doc.xml': original });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') });
+  registerProject(paths.projects, project);
+  const settings = createStorageSettings(paths.home);
+  settings.setSharedLimit(0);
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1',
+    ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test',
+    viewerDir: temp.viewer, runtimeDir: temp.runtime });
+  try {
+    const origin = `http://127.0.0.1:${hub.port}`;
+    const response = await fetch(origin + '/api/document/draft/state');
+    expect(response.status).toBe(200);
+    expect((await response.json()).snapshot).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 700));
+    const source = path.join(artifacts, 'document/draft/doc.xml');
+    const snapshot = path.join(artifacts, '.state/document/draft/doc.loro');
+    expect(fs.readFileSync(source, 'utf8')).toBe(original);
+    expect(fs.existsSync(snapshot)).toBe(false);
+    settings.setSharedLimit(1024 * 1024);
+    await vi.waitFor(() => expect(fs.existsSync(snapshot)).toBe(true), { timeout: 8000, interval: 100 });
+    expect(fs.readFileSync(source, 'utf8')).toContain('readable while storage is full');
+    expect(fs.readFileSync(source, 'utf8')).toContain('id="');
+  } finally {
+    settings.setSharedLimit(1024 * 1024);
+    warning.mockRestore();
+    await hub.close();
+  }
+}, 12_000);

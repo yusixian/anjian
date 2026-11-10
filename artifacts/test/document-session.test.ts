@@ -731,3 +731,35 @@ test.each(['valid', 'invalid'] as const)('flush admission includes activity and 
   if (kind === 'invalid') expect(read(file)).toBe(external);
   else expect(read(file)).toContain('two');
 });
+
+test('queued background saves use current state, obey admission and stop while paused or closed', async () => {
+  const { file, snapshotFile } = setup('<doc><p>one</p></doc>');
+  const writes: Array<(admit: (delta: number) => void) => void> = [];
+  const session = await createDocumentSession({
+    file, snapshotFile, writeDelayMs: 5,
+    enqueueWrite: work => { writes.push(work); },
+  });
+  sessions.push(session);
+  await vi.waitFor(() => expect(writes.length).toBeGreaterThan(0));
+  const original = read(file);
+  expect(() => writes[0]!(() => { throw new Error('quota'); })).toThrow('quota');
+  expect(read(file)).toBe(original);
+  expect(fs.existsSync(snapshotFile)).toBe(false);
+  fs.writeFileSync(file, '<doc><p>latest external edit</p></doc>');
+  session.onFileText(read(file));
+  await session.settled();
+  writes[0]!(() => {});
+  expect(read(file)).toContain('latest external edit');
+  expect(fs.existsSync(snapshotFile)).toBe(true);
+  const resume = await session.quiesce();
+  let admitted = false;
+  writes[0]!(() => { admitted = true; });
+  expect(admitted).toBe(false);
+  resume();
+  await session.close();
+  sessions = sessions.filter(item => item !== session);
+  fs.rmSync(snapshotFile);
+  writes[0]!(() => { admitted = true; });
+  expect(admitted).toBe(false);
+  expect(fs.existsSync(snapshotFile)).toBe(false);
+});

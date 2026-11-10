@@ -35,6 +35,7 @@ export interface DocumentSessionOptions {
   snapshotFile: string;
   snapshotIntervalMs?: number;
   writeDelayMs?: number;
+  enqueueWrite?: (work: (admit: CommentAdmission) => void) => void;
 }
 
 export interface DocumentSession {
@@ -349,7 +350,7 @@ export async function createDocumentSession(
     return () => { content.finalize(); state.finalize(); };
   };
 
-  const write = async (admit?: CommentAdmission) => {
+  const write = (admit?: CommentAdmission) => {
     clearTimeout(writeTimer);
     writeTimer = undefined;
     if (streaming > 0) return;
@@ -409,19 +410,28 @@ export async function createDocumentSession(
     return writing.then(() => (streaming > 0 || writeTimer ? flush(admit) : undefined));
   };
 
+  const enqueueBackgroundWrite = () => {
+    if (disposed || paused) return;
+    if (options.enqueueWrite) {
+      options.enqueueWrite(admit => {
+        if (!disposed && !paused) write(admit);
+      });
+    } else void flush().catch(err => log(`autosave failed: ${messageOf(err)}`));
+  };
+
   function scheduleWrite() {
     snapshotDirty = true;
     clearTimeout(writeTimer);
     if (paused) { pausedWrite = true; writeTimer = undefined; return; }
     writeTimer = setTimeout(
-      () => void flush().catch((err) => log(`autosave failed: ${messageOf(err)}`)),
+      () => { writeTimer = undefined; enqueueBackgroundWrite(); },
       writeDelayMs,
     );
   }
 
   const startSnapshotTimer = () => {
     snapshotTimer = setInterval(
-      () => void flush().catch((err) => log(messageOf(err))),
+      enqueueBackgroundWrite,
       options.snapshotIntervalMs ?? 5000,
     );
     snapshotTimer.unref();

@@ -185,6 +185,7 @@ export function createServerContext(options: ServerOptions) {
     root,
     stateDir,
     timing: options.documentTiming,
+    enqueueWrite: (id, work) => backgroundWrites.enqueue(`document/${id}`, work),
     broadcast,
     names,
     onWarningsChange: (id) => {
