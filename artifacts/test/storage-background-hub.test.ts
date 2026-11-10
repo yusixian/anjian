@@ -152,3 +152,36 @@ test('document autosave defers normalization at zero quota and recovers without 
     await hub.close();
   }
 }, 12_000);
+
+test('document comments remain readable at zero quota and normalize after capacity recovery', async () => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  const original = JSON.stringify({ threads: [{ anchor: { blockId: 'p', quote: '' },
+    messages: [{ author: 'agent', text: 'Keep this comment readable' }] }] });
+  writeDocument(artifacts, 'draft', { 'doc.xml': '<doc><p id="p">Text</p></doc>', 'comments.json': original });
+  const file = path.join(artifacts, 'document/draft/comments.json');
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') });
+  registerProject(paths.projects, project);
+  const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1',
+    ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test',
+    viewerDir: temp.viewer, runtimeDir: temp.runtime });
+  try {
+    const response = await fetch(`http://127.0.0.1:${hub.port}/api/document/draft/state`);
+    expect(response.status).toBe(200);
+    const { comments } = await response.json();
+    expect(comments.threads[0].messages[0]).toMatchObject({ text: 'Keep this comment readable', id: expect.any(String) });
+    await vi.waitFor(() => expect(warning).toHaveBeenCalled(), { timeout: 3000 });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+    settings.setSharedLimit(1024 * 1024);
+    // No subsequent GET or file edit: the existing background task must retry.
+    await vi.waitFor(() => expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(comments),
+      { timeout: 35_000, interval: 100 });
+  } finally {
+    settings.setSharedLimit(1024 * 1024);
+    await hub.close();
+    warning.mockRestore();
+  }
+}, 40_000);

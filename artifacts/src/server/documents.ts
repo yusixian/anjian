@@ -65,6 +65,7 @@ interface RegistryOptions {
   stateDir: string;
   timing?: DocumentTiming;
   enqueueWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
+  enqueueCommentWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
 }
 
 const diagramWarnings = (session: DocumentSession) =>
@@ -96,9 +97,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       store = createCommentStore(
         path.join(options.root, 'document', id, 'comments.json'),
         options.names,
-        undefined, undefined, admit,
+        undefined, undefined, admit, !!options.enqueueCommentWrite,
       );
       commentStores.set(id, store);
+      if (!admit) queueCommentSync(id);
     }
     return store;
   };
@@ -111,10 +113,15 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   const syncComments = (id: string, admit?: CommentAdmission) => {
     const store = commentStore(id, admit);
     const before = JSON.stringify(store.warnings());
-    if (!store.sync(admit)) return;
+    const changed = store.sync(admit);
+    if (!admit) queueCommentSync(id);
+    if (!changed) return;
     pushComments(id);
     if (JSON.stringify(store.warnings()) !== before) options.onWarningsChange(id);
   };
+  const queueCommentSync = (id: string) => options.enqueueCommentWrite?.(id, admit => {
+    if (!closing && !quiescing) syncComments(id, admit);
+  });
 
   const create = async (id: string) => {
     if (!fs.existsSync(docFile(id))) return null;

@@ -186,6 +186,7 @@ export function createServerContext(options: ServerOptions) {
     stateDir,
     timing: options.documentTiming,
     enqueueWrite: (id, work) => backgroundWrites.enqueue(`document/${id}`, work),
+    enqueueCommentWrite: (id, work) => backgroundWrites.enqueue(`document-comments/${id}`, work),
     broadcast,
     names,
     onWarningsChange: (id) => {

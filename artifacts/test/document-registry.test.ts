@@ -66,3 +66,35 @@ test('maintenance refreshes admission after each document and resumes after a la
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('comment reads and watcher updates defer writes to an admitted queue', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-comment-queue-'));
+  const file = path.join(root, 'document', 'draft', 'comments.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const raw = (text: string) => JSON.stringify({ threads: [
+    { anchor: { blockId: 'p', quote: '' }, messages: [{ author: 'agent', text }] },
+  ] });
+  fs.writeFileSync(file, raw('first'));
+  let queued: ((admit: (delta: number) => void) => void) | undefined;
+  const registry = createDocumentRegistry({
+    root, stateDir: path.join(root, '.state'), broadcast: () => {}, onWarningsChange: () => {},
+    enqueueCommentWrite: (_id, work) => { queued = work; },
+  });
+  try {
+    expect(registry.comments('draft').threads[0]!.messages[0]!.text).toBe('first');
+    expect(fs.readFileSync(file, 'utf8')).toBe(raw('first'));
+    expect(() => queued!(() => { throw new Error('full'); })).toThrow('full');
+    fs.writeFileSync(file, raw('latest'));
+    registry.commentsChanged('draft');
+    const latest = structuredClone(registry.comments('draft'));
+    expect(latest.threads.some(t => t.messages.some(m => m.text === 'latest'))).toBe(true);
+    expect(fs.readFileSync(file, 'utf8')).toBe(raw('latest'));
+    queued!(() => {});
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(latest);
+    fs.writeFileSync(file, raw('after close'));
+    registry.commentsChanged('draft');
+    await registry.close();
+    queued!(() => { throw new Error('closed callback'); });
+    expect(fs.readFileSync(file, 'utf8')).toBe(raw('after close'));
+  } finally { await registry.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});

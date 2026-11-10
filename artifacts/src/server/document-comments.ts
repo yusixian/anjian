@@ -141,8 +141,9 @@ export function createCommentStore(
   now = () => new Date().toISOString(),
   newId = () => nanoid(10),
   admit?: CommentAdmission,
+  deferNormalization = false,
 ): CommentStore {
-  return createStore(file, documentRules, names, now, newId, admit);
+  return createStore(file, documentRules, names, now, newId, admit, undefined, deferNormalization);
 }
 
 export function createStore<F, H, G>(
@@ -153,11 +154,13 @@ export function createStore<F, H, G>(
   newId = () => nanoid(10),
   initialAdmission?: CommentAdmission,
   persist?: (next: F, admit?: CommentAdmission) => void,
+  deferNormalization = false,
 ): Store<F, H, G> {
   let current = rules.empty();
   let lastSeen: string | null = null;
   let warnings: string[] = [];
   let loaded = false;
+  let normalizationPending = false;
 
   const write = (next: F, admit?: CommentAdmission) => {
     const text = `${JSON.stringify(next, null, 2)}\n`;
@@ -171,6 +174,7 @@ export function createStore<F, H, G>(
     }
     current = next;
     lastSeen = text;
+    normalizationPending = false;
   };
 
   const sync = (admit?: CommentAdmission) => {
@@ -180,7 +184,11 @@ export function createStore<F, H, G>(
     } catch {
       return false;
     }
-    if (text === lastSeen) return false;
+    if (text === lastSeen) {
+      if (!normalizationPending || !admit) return false;
+      write(current, admit);
+      return true;
+    }
     let merged: { file: F; warnings: string[] };
     try {
       const incoming = parseComments(text);
@@ -188,13 +196,21 @@ export function createStore<F, H, G>(
       merged = rules.merge(base, incoming, 'agent', now(), newId, names.agent());
     } catch (err) {
       lastSeen = text;
+      normalizationPending = false;
       warnings = [
         `comments.json is not valid: ${(err as Error).message} (left as written; fix it)`,
       ];
       return true;
     }
-    if (`${JSON.stringify(merged.file, null, 2)}\n` !== text) write(merged.file, admit);
-    else { current = merged.file; lastSeen = text; }
+    const needsWrite = `${JSON.stringify(merged.file, null, 2)}\n` !== text;
+    if (needsWrite && (!deferNormalization || admit)) write(merged.file, admit);
+    else {
+      // Reads expose merged comments without using normalization to bypass quota.
+      // Retain generated IDs so a later admitted save publishes the same threads.
+      current = merged.file;
+      lastSeen = text;
+      normalizationPending = needsWrite;
+    }
     warnings = merged.warnings;
     return true;
   };

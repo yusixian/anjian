@@ -165,3 +165,35 @@ test.each([[], ['other', 'b1'], ['b1', 'b1'], ['b1', 42], ['b1', '']])(
     ).toBeNull();
   },
 );
+
+test('deferred normalization keeps readable stable IDs and retries only with admission', () => {
+  const { file } = savedFile();
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  raw.threads[0].messages.push({ author: 'agent', text: 'pending normalization' });
+  const original = JSON.stringify(raw);
+  fs.writeFileSync(file, original);
+  const store = createCommentStore(file, names('Codex'), undefined, undefined, undefined, true);
+  const view = structuredClone(store.current());
+  expect(view.threads[0]!.messages.at(-1)).toMatchObject({ text: 'pending normalization', id: expect.any(String) });
+  expect(fs.readFileSync(file, 'utf8')).toBe(original);
+  expect(store.sync()).toBe(false);
+  expect(() => store.sync(() => { throw new Error('quota'); })).toThrow('quota');
+  expect(store.current()).toEqual(view);
+  expect(fs.readFileSync(file, 'utf8')).toBe(original);
+  const deltas: number[] = [];
+  expect(store.sync(delta => { deltas.push(delta); })).toBe(true);
+  expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(view);
+  expect(deltas).toEqual([fs.statSync(file).size - Buffer.byteLength(original)]);
+  expect(store.sync(() => { throw new Error('already saved'); })).toBe(false);
+});
+
+test('deferred normalization does not overwrite a later invalid external file', () => {
+  const { file } = savedFile();
+  fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8'))));
+  const store = createCommentStore(file, names('Codex'), undefined, undefined, undefined, true);
+  fs.writeFileSync(file, '{unfinished');
+  expect(store.sync()).toBe(true);
+  expect(store.warnings()).toHaveLength(1);
+  expect(store.sync(() => { throw new Error('must not write'); })).toBe(false);
+  expect(fs.readFileSync(file, 'utf8')).toBe('{unfinished');
+});
