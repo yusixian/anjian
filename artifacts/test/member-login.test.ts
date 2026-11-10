@@ -92,3 +92,31 @@ test('invited members enter isolated workspaces and cannot read owner or other m
   expect((await f.request('/api/hub/artifacts', again.cookie)).status).toBe(200);
   expect(f.hub.projects().filter((p) => p.dir === alice.project)).toHaveLength(1);
 });
+
+test('storage settings isolate personal credentials and reserve shared settings for Owner', async () => {
+  const f = await fixture();
+  const alice = await f.join('alice', 2);
+  const bob = await f.join('bob', 3);
+  const settings = { endpoint: 'https://objects.example', bucket: 'private-bucket', region: 'auto', prefix: 'files', forcePathStyle: true };
+  const credentials = { accessKeyId: 'alice-key', secretAccessKey: 'alice-secret' };
+  const saved = await f.request('/api/storage', alice.cookie, { action: 'save', settings, credentials, scope: 'github:3' });
+  expect(saved.status).toBe(200);
+  const result = await saved.json();
+  expect(result.profile.scope).toBe('github:2');
+  expect(result.backend).toBe('local');
+  expect(result.tested).toBe(false);
+  expect(JSON.stringify(result)).not.toContain('alice-secret');
+  const own = await (await f.request('/api/storage', alice.cookie)).json();
+  expect(own.configured).toBe(true);
+  expect(own.profile.credentialsConfigured).toBe(true);
+  expect(JSON.stringify(own)).not.toContain('alice-key');
+  expect((await (await f.request('/api/storage', bob.cookie)).json()).configured).toBe(false);
+  expect((await f.request('/api/storage?scope=github:2', bob.cookie)).status).toBe(403);
+  expect((await f.request('/api/storage?scope=shared', alice.cookie)).status).toBe(403);
+  expect((await f.request('/api/storage?scope=shared', alice.cookie, { action: 'save', settings, credentials })).status).toBe(403);
+  expect((await f.request('/api/storage?scope=shared', f.ownerCookie, { action: 'limit', bytes: 1024 })).status).toBe(200);
+  const shared = await (await f.request('/api/storage?scope=shared', f.ownerCookie)).json();
+  expect(shared.sharedLimitBytes).toBe(1024);
+  expect(shared.configured).toBe(false);
+  expect((await f.request('/api/storage', '')).status).toBe(403);
+});

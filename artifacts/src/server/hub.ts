@@ -24,6 +24,8 @@ import { createContentAccess } from './content-access';
 import { createMemberStore } from './member-store';
 import { createMemberApi } from './member-api';
 import { createMemberWorkspace } from './member-workspace';
+import { createStorageSettings } from './storage/settings';
+import { createStorageApi } from './storage/api';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
@@ -567,6 +569,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     },
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
+  const storageApi = createStorageApi({ settings: createStorageSettings(options.paths.home), origin, principal: projectAccess.principal, readBody });
   const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
   const publicShares = createPublicShare({ store: shares, origin,
@@ -600,6 +603,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await browserAuth(req, res, url)) return;
       if (await shareApi(req, res, url)) return;
       if (await memberApi(req, res, url)) return;
+      if (await storageApi(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
