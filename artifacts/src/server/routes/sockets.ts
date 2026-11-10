@@ -17,7 +17,7 @@ export const clientSocketRoute: UpgradeRoute<ServerContext> = {
     });
     const forget = () => {
       ctx.clients.delete(socket);
-      ctx.selections.drop(socket);
+      ctx.inputs.run(socket, () => ctx.selections.drop(socket));
     };
     socket.on('end', () => {
       forget();

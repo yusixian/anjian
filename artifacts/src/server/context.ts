@@ -19,6 +19,7 @@ import type { createGitHubAuth, GitHubConfig } from './github-auth';
 import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
+import { createDeferredInputs } from './deferred-inputs';
 import { readHtml } from './html';
 import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
@@ -123,6 +124,7 @@ export function createServerContext(options: ServerOptions) {
   );
   selections.clearAll();
   const changeListeners: ChangeListener[] = [];
+  const inputs = createDeferredInputs();
   const activityListeners: (() => void)[] = [];
   const startedAt = Date.now();
   const touch = () => {
@@ -167,7 +169,7 @@ export function createServerContext(options: ServerOptions) {
     names,
     evidenceHash: recordings.evidenceHash,
   });
-  const listeningTimer = setInterval(() => boardComments.refreshListening(), 3000);
+  const listeningTimer = setInterval(() => inputs.run('listening', () => boardComments.refreshListening()), 3000);
   listeningTimer.unref();
   const documents = createDocumentRegistry({
     root,
@@ -395,6 +397,7 @@ export function createServerContext(options: ServerOptions) {
     runtimeOf,
     clients,
     selections,
+    inputs,
     changeListeners,
     activityListeners,
     messageListeners,

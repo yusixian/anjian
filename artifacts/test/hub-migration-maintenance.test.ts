@@ -7,7 +7,7 @@ import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageMigration } from '../src/server/storage/migration';
 import { tempRoot, writeHtml } from './helpers';
 
-test('Hub prepares migration only after mounted project writers finish closing', async () => {
+test('Hub prepares migration after writers drain and retains the mounted editor', async () => {
   const temp = tempRoot();
   const home = path.join(temp.root, 'home');
   const project = path.join(fs.realpathSync(temp.root), 'project');
@@ -25,22 +25,26 @@ test('Hub prepares migration only after mounted project writers finish closing',
     const profile = settings.save('shared', { endpoint: 'https://objects.example', bucket: 'private-bucket', region: 'auto', prefix: 'files', forcePathStyle: true }, { accessKeyId: 'test-id', secretAccessKey: 'test-secret' });
     settings.recordTest('shared', profile.id, { ok: true, checkedAt: Date.now(), steps: { write: true, read: true, delete: true } });
     const mounted = await hub.mountOf(project);
-    const close = mounted.close;
-    const closed = vi.fn(async () => {
+    const close = vi.spyOn(mounted, 'close');
+    const quiesce = mounted.quiesce;
+    let entered = false;
+    mounted.quiesce = (work) => quiesce(async () => {
+      entered = true;
       await waiting;
-      await close();
       fs.writeFileSync(path.join(artifacts, 'html/sample/index.html'), 'the final persisted revision');
+      return work();
     });
-    mounted.close = closed;
     const origin = `http://localhost:${hub.port}`;
     let responded = false;
     const preparing = fetch(`${origin}/api/storage/migrations?scope=shared`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'prepare', profileId: profile.id }) }).then(async (response) => { responded = true; expect(response.status).toBe(201); return response.json(); });
-    await vi.waitFor(() => expect(closed).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(entered).toBe(true));
     expect(responded).toBe(false);
     release();
     const { job } = await preparing;
     expect(job.state).toBe('prepared');
+    expect(close).not.toHaveBeenCalled();
+    expect(await hub.mountOf(project)).toBe(mounted);
     // The persisted job can still inspect the same source after the drain; the old bytes were not captured.
     const engine = createStorageMigration(home, { resolveProfile: settings.resolve });
     const summary = await engine.status('shared', job.id);

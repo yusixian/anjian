@@ -25,12 +25,15 @@ import { createBoardRequestHandler, serveContent } from './routes/content';
 import { HTTP_ROUTES, UPGRADE_ROUTES } from './routes/index';
 import { dispatchHttp, dispatchUpgrade } from './routes/table';
 import { writeJsonAtomic } from './state';
+import { rejectUpgrade } from './ws';
 
 export type { ArtifactPayload, MountSettings, ServerOptions } from './context';
 
 export interface ArtifactsServer {
   boardPort: number;
   close: () => Promise<void>;
+  /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
+  quiesce: <T>(work: () => Promise<T>) => Promise<T>;
   contentToken: string;
   handlePrivateContent: (req: http.IncomingMessage, res: http.ServerResponse, rest: string, mode: 'main' | 'board') => void;
   handleBoardRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
@@ -70,7 +73,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   let stopping = false;
   const requests = new Set<Promise<unknown>>();
   const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    if (stopping) { send(res, 503, 'Project is being updated; retry shortly'); return; }
+    if (stopping || ctx.inputs.paused) { res.setHeader('Retry-After', '1'); send(res, 503, 'Project is being updated; retry shortly'); return; }
     req.setTimeout(15_000, () => req.destroy());
     const request = browserAuth(req, res, new URL(req.url ?? '/', 'http://artifacts.local'))
       .then((handled) => { if (!handled) return dispatchHttp(HTTP_ROUTES, req, res, ctx); })
@@ -89,6 +92,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
 
   const handleUpgrade = (req: http.IncomingMessage, socket: Duplex) => {
     if (stopping) socket.destroy();
+    else if (ctx.inputs.paused) rejectUpgrade(socket, 503, 'Service Unavailable');
     else dispatchUpgrade(UPGRADE_ROUTES, req, socket, ctx);
   };
   server.on('upgrade', handleUpgrade);
@@ -113,7 +117,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
 
   const handleBoardRequest = createBoardRequestHandler(ctx);
   const guardedBoardRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    if (stopping) { send(res, 503, 'Project is being updated; retry shortly'); return; }
+    if (stopping || ctx.inputs.paused) { send(res, 503, 'Project is being updated; retry shortly'); return; }
     handleBoardRequest(req, res);
   };
   const boardServer = http.createServer(guardedBoardRequest);
@@ -167,6 +171,43 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   });
 
   const watcher = watchArtifacts(ctx);
+  let maintenance: Promise<unknown> = Promise.resolve();
+  const quiesce = <T>(work: () => Promise<T>): Promise<T> => {
+    const current = maintenance.catch(() => undefined).then(async () => {
+      if (stopping) throw new Error('Project is stopping');
+      const resumeInputs = ctx.inputs.pause();
+      const sockets = [...clients];
+      const resume: Array<() => void> = [() => {
+        const failures: unknown[] = [];
+        try { resumeInputs(); } catch (error) { failures.push(error); }
+        for (const socket of sockets) {
+          try { if (!socket.destroyed) socket.resume(); } catch (error) { failures.push(error); }
+        }
+        if (failures.length) throw new AggregateError(failures, 'Project inputs did not resume completely');
+      }];
+      const failures: unknown[] = [];
+      let value: T | undefined;
+      try {
+        for (const socket of sockets) socket.pause();
+        const requestsDone = await Promise.allSettled([...requests]);
+        const errors = requestsDone.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map((result) => result.reason);
+        if (errors.length) throw new AggregateError(errors, 'Project requests did not finish');
+        resume.push(await ctx.recordings.quiesce());
+        resume.push(await ctx.documents.quiesce());
+        value = await work();
+      } catch (error) { failures.push(error); }
+      finally {
+        for (const release of resume.reverse()) {
+          try { release(); } catch (error) { failures.push(error); }
+        }
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length) throw new AggregateError(failures, 'Project maintenance failed');
+      return value as T;
+    });
+    maintenance = current;
+    return current;
+  };
   const completedCloseSteps = new Set<string>();
   let closePromise: Promise<void> | null = null;
   let closed = false;
@@ -184,6 +225,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     if (closePromise) return closePromise;
     stopping = true;
     const run = async () => {
+      await maintenance.catch(() => undefined);
       const failures: unknown[] = [];
       const step = async (name: string, action: () => void | Promise<void>) => {
         if (completedCloseSteps.has(name)) return;
@@ -236,7 +278,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     handleUpgrade,
     handleBoardRequest: guardedBoardRequest,
     handlePrivateContent: (req, res, rest, mode) => {
-      if (stopping) send(res, 503, 'Project is being updated; retry shortly');
+      if (stopping || ctx.inputs.paused) send(res, 503, 'Project is being updated; retry shortly');
       else serveContent(ctx, res, rest, req.headers.range, mode);
     },
     liveClients: () => clients.size,
@@ -279,6 +321,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     },
     onActivity: (listener) => ctx.activityListeners.push(listener),
     close,
+    quiesce,
   };
 }
 

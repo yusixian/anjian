@@ -48,6 +48,7 @@ export function createVerifyRecordings(options: Options) {
   const pendingCleanup = new Set<string>();
   let running: Promise<void> | undefined;
   let closed = false;
+  let paused = false;
   const current = (job: Job) =>
     !closed && jobs.get(job.key) === job && !job.controller.signal.aborted;
   const notify = (job: Job) => {
@@ -137,7 +138,7 @@ export function createVerifyRecordings(options: Options) {
     }
   }
   function pump() {
-    if (running || closed) return;
+    if (running || closed || paused) return;
     const job = queue.shift();
     if (!job) return;
     if (!current(job)) {
@@ -239,6 +240,32 @@ export function createVerifyRecordings(options: Options) {
       }
       if (overrides.size) overrides.set('canvas.json', Buffer.from(JSON.stringify(payload.canvas)));
       return overrides;
+    },
+    async quiesce(): Promise<() => void> {
+      if (closed || paused) throw new Error('Recording preparation is already closed or paused');
+      paused = true;
+      let released = false;
+      const resume = () => {
+        if (released) return;
+        released = true;
+        paused = false;
+        pump();
+      };
+      try {
+        await running;
+        const failures: unknown[] = [];
+        for (const directory of pendingCleanup) {
+          try {
+            fs.rmSync(directory, { recursive: true, force: true });
+            pendingCleanup.delete(directory);
+          } catch (error) { failures.push(error); }
+        }
+        if (failures.length) throw new AggregateError(failures, 'Recording preparation did not quiesce completely');
+        return resume;
+      } catch (error) {
+        resume();
+        throw error;
+      }
     },
     async close() {
       closed = true;

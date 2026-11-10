@@ -40,6 +40,7 @@ export interface DocumentSession {
   agentActiveAt: () => number;
   close: () => Promise<void>;
   flush: () => Promise<void>;
+  quiesce: () => Promise<() => void>;
   importUpdate: (bytes: Uint8Array, features?: readonly string[]) => void;
   lineage: () => string;
   onFileText: (text: string) => void;
@@ -258,6 +259,10 @@ export async function createDocumentSession(
   }
 
   let writeTimer: NodeJS.Timeout | undefined;
+  let snapshotTimer: NodeJS.Timeout | undefined;
+  let paused = false;
+  let pausedWrite = false;
+  let disposed = false;
   let snapshotDirty = true;
   let snapshotWriting = Promise.resolve();
   let writing = Promise.resolve();
@@ -382,17 +387,27 @@ export async function createDocumentSession(
   function scheduleWrite() {
     snapshotDirty = true;
     clearTimeout(writeTimer);
+    if (paused) { pausedWrite = true; writeTimer = undefined; return; }
     writeTimer = setTimeout(
       () => void flush().catch((err) => log(`autosave failed: ${messageOf(err)}`)),
       writeDelayMs,
     );
   }
 
-  const snapshotTimer = setInterval(
-    () => void saveSnapshot().catch((err) => log(messageOf(err))),
-    options.snapshotIntervalMs ?? 5000,
-  );
-  snapshotTimer.unref();
+  const startSnapshotTimer = () => {
+    snapshotTimer = setInterval(
+      () => void saveSnapshot().catch((err) => log(messageOf(err))),
+      options.snapshotIntervalMs ?? 5000,
+    );
+    snapshotTimer.unref();
+  };
+  const resume = () => {
+    if (!paused || disposed) return;
+    paused = false;
+    startSnapshotTimer();
+    if (pausedWrite) { pausedWrite = false; scheduleWrite(); }
+  };
+  startSnapshotTimer();
   scheduleWrite();
 
   return {
@@ -500,6 +515,29 @@ export async function createDocumentSession(
     agentActiveAt: () => agentActiveAt,
     settled: () => playing,
     flush,
+    quiesce: async () => {
+      if (paused || disposed) throw new Error('Document session is already paused or closed');
+      paused = true;
+      clearTimeout(writeTimer);
+      writeTimer = undefined;
+      clearInterval(snapshotTimer);
+      snapshotTimer = undefined;
+      try {
+        await flush();
+        await snapshotWriting;
+        await activitySaved;
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          resume();
+        };
+      } catch (error) {
+        pausedWrite = true;
+        resume();
+        throw error;
+      }
+    },
     close: async () => {
       clearInterval(snapshotTimer);
       await flush();
@@ -507,6 +545,7 @@ export async function createDocumentSession(
       await activitySaved;
       binding.dispose();
       listeners.clear();
+      disposed = true;
     },
   };
 }

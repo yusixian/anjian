@@ -32,6 +32,7 @@ export interface DocumentRegistry {
   ) => { threadId: string; messageId?: string };
   applyCommentOp: (id: string, op: HumanOp) => CommentsFile;
   close: () => Promise<void>;
+  quiesce: () => Promise<() => void>;
   comments: (id: string) => CommentsFile;
   commentWarnings: (id: string) => string[];
   commentsChanged: (id: string) => void;
@@ -78,6 +79,7 @@ function outcomeWarnings(outcome: DocumentOutcome): string[] {
 
 export function createDocumentRegistry(options: RegistryOptions): DocumentRegistry {
   let closing = false;
+  let quiescing = false;
   let closePromise: Promise<void> | null = null;
   const sessions = new Map<string, Promise<DocumentSession | null>>();
   const incompleteSetups = new Map<string, DocumentSession>();
@@ -167,6 +169,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   const open = (id: string) => {
     if (closing || incompleteSetups.has(id)) return Promise.resolve(null);
     let session = sessions.get(id);
+    if (quiescing && !session) return Promise.resolve(null);
     if (!session) {
       session = create(id).catch((err) => {
         try { options.log?.(`document ${id} could not open: ${(err as Error).message}`); }
@@ -184,11 +187,12 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   return {
     open,
     fileChanged: (id) => {
+      if (quiescing) return;
       const known = sessions.has(id);
       void open(id).then((session) => {
         if (!session || !known) return;
         fs.readFile(docFile(id), 'utf8', (err, text) => {
-          if (!err && !closing) session.onFileText(text);
+          if (!err && !closing && !quiescing) session.onFileText(text);
         });
       });
     },
@@ -214,6 +218,43 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       return threads.map(forAgent);
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
+    quiesce: async () => {
+      if (closing || quiescing) throw new Error('Documents are already closing or paused');
+      quiescing = true;
+      const resumes: Array<() => void> = [];
+      const releaseAll = (): unknown[] => {
+        const failures: unknown[] = [];
+        try {
+          for (const resume of resumes) {
+            try { resume(); } catch (error) { failures.push(error); }
+          }
+        } finally { quiescing = false; }
+        return failures;
+      };
+      try {
+        const opened = await Promise.allSettled([...sessions.values()]);
+        const failures: unknown[] = opened.filter((result) => result.status === 'rejected').map((result) => result.reason);
+        const active = opened.flatMap((result) => result.status === 'fulfilled' && result.value ? [result.value] : []);
+        active.push(...incompleteSetups.values());
+        const drained = await Promise.allSettled(active.map((session) => session.quiesce()));
+        for (const result of drained) {
+          if (result.status === 'fulfilled') resumes.push(result.value);
+          else failures.push(result.reason);
+        }
+        if (failures.length) throw new AggregateError(failures, 'Documents did not quiesce completely');
+        let resumed = false;
+        return () => {
+          if (resumed) return;
+          resumed = true;
+          const failures = releaseAll();
+          if (failures.length) throw new AggregateError(failures, 'Documents did not resume completely');
+        };
+      } catch (error) {
+        const failures = releaseAll();
+        if (failures.length) throw new AggregateError([error, ...failures], 'Documents did not quiesce or resume completely');
+        throw error;
+      }
+    },
     close: () => {
       closing = true;
       if (closePromise) return closePromise;

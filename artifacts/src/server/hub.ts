@@ -551,6 +551,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       mounts.delete(project);
       ready.delete(project);
     }, work, () => { index.rescan(); });
+  const quiesceProject = <T>(project: string, work: () => Promise<T>): Promise<T> =>
+    suspension.suspend(project, async () => {}, async () => {
+      const mounted = mounts.get(project);
+      return mounted ? (await mounted).quiesce(work) : work();
+    }, () => { index.rescan(); });
   const trashApi = createHubTrash({
     projects: visibleProjects,
     artifacts: (req) => visibleArtifacts(req).artifacts,
@@ -622,7 +627,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           throw new Error('Migration project ownership changed');
         for (const project of projects) assertAvailable(project);
       };
-      return withProjectMaintenance(projects, suspendProject, async () => {
+      return withProjectMaintenance(projects, quiesceProject, async () => {
         const result = await work();
         check();
         return result;

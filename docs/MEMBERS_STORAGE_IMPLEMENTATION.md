@@ -175,3 +175,12 @@
 - 隔离 Chrome + 真实临时服务器验证桌面键入→204→源文件检查→刷新，再用手机视口刷新读取，确认无横向溢出与脚本错误；手机截图已人工核对。证据 `/tmp/anjian-durability-browser-f3HoAH/`、日志 `/tmp/anjian-durability-browser.log`。前两次脚本在协作编辑器加载前操作未触发请求，不能算通过；最终脚本等待加载并点击具体段落键入后通过。此轮没有验证手机编辑入口、生产或真实 S3 服务。
 - **尚未接入 Hub：** 活动 dirty 目前会被 summary 计为 recovery pending，不能直接在 mountOf 前调用后继续沿用 available 判定。下一步须区分本次运行已保护的写入区间与重启待恢复状态，并实现保持会话的 quiesce（暂停新 HTTP/WS/watcher 写、等待在途请求、flush 全部文档与录制），以 owner 全根计划执行 checkpoint。挂载初始化、GET 引发的游标/状态、WS、录制、后台 watcher 均会落盘；外部 Agent 直写需要整个运行期持续 dirty，不能依靠事后 watcher 通知。共享 orphan snapshots 属于 shared 本身，需要独立覆盖，不能只同步成员根后声称完整。
 - 本轮仅本地实现与验证。全入口额度、持续同步、GUI 启用切换和生产部署仍未完成。
+
+## 保持编辑会话的运行期暂停边界
+
+- 应用新增 `quiesce(work)`：暂停新 HTTP 请求（503 + Retry-After）与新 WebSocket 握手，暂停现有 socket 的输入但保持连接，等待已接收请求结束，再暂停录制队列与文档自动保存、等待在途任务与 XML/Loro/activity 保存完成后执行 work。完成或失败均逐项恢复，关闭应用会等待正在进行的维护，排队维护不能越过关闭状态。
+- 外部 watcher 事件在暂停期间合并保留，恢复后处理；socket 断开引起的 selection 文件清理、listening 定时通知也延后。录制保留排队任务，等待当前任务及临时文件清理；文档保留 session 身份，等待已有 open 和全部会话。每轮 release 只生效一次，旧 release 不会解除新一轮暂停；部分 release 抛错仍尝试其他会话并清理暂停状态。
+- Hub 的迁移准备继续遵循全局队列→稳定项目锁→挂载暂停顺序，但改用 quiesce，不再 close/remount。回收站保留原关闭式维护。调用方仍须排除直接 remote mutation；外部文件本身不受锁控制，迁移/同步仍要验证来源。
+- 12 文件 103 项整合测试及全应用构建通过，日志 `/tmp/anjian-quiesce-final.log`；类型检查与 diff 检查通过。覆盖真实 HTTP/WS 暂停、原连接恢复、已有请求先完成、watcher 失败后重放、迁移保留挂载、文档/录制排空与失败恢复、上传和回收站兼容。分工实现后主代理复核修复了旧 release 跨轮影响与部分释放异常；实现者另做应用接线静态复核，不宣称独立全量审查。
+- 隔离 Chrome + 真实临时服务器走通文档打开→准备迁移→保持同一 WebSocket→继续编辑并确认204时源文件已保存→桌面/手机刷新。无脚本错误或横向溢出，手机截图人工核对。证据 `/tmp/anjian-quiesce-browser-agNxCJ/`，日志 `/tmp/anjian-quiesce-browser.log`。测试配置人为标记连接成功，仅用于本地 prepare 扫描，不调用外部 S3，不证明真实连接测试或上传成功。
+- 下一步仍需 Hub 活动写入区间与恢复状态分离：S3-active owner 挂载前持久 markDirty，运行中完整 owner 来源 checkpoint 使用 keepDirty，失败保留本地和可重试状态；shared 自身的 orphan snapshot 范围也要覆盖。尚未接入定期/变更触发同步、全入口额度与 GUI 激活，未推送部署，Goal 继续。

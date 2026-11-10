@@ -561,3 +561,46 @@ test('unchanged document repairs a missing or replaced snapshot on flush', async
   await session.flush();
   expect(fs.readFileSync(snapshotFile).equals(original)).toBe(true);
 });
+
+test('quiesce keeps the session alive and defers autosaves until resume', async () => {
+  const { file, snapshotFile } = setup('<doc><p>before</p></doc>');
+  const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 5, snapshotIntervalMs: 5 });
+  sessions.push(session);
+  const resume = await session.quiesce();
+  expect(fs.existsSync(snapshotFile)).toBe(true);
+  await expect(session.quiesce()).rejects.toThrow('already paused');
+  const peer = new LoroDoc(); peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => $findText($getRoot(), 'before')!.setTextContent('after'), { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }));
+  binding.dispose();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(read(file)).not.toContain('after');
+  resume();
+  await vi.waitFor(() => expect(read(file)).toContain('after'));
+  await session.flush();
+  expect(fs.existsSync(snapshotFile)).toBe(true);
+  const secondResume = await session.quiesce();
+  resume();
+  await expect(session.quiesce()).rejects.toThrow('already paused');
+  secondResume();
+});
+
+test('failed quiesce restores autosave and permits a later quiesce', async () => {
+  const { file, snapshotFile } = setup('<doc><p>before</p></doc>');
+  const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 5 });
+  sessions.push(session);
+  const rename = fsPromises.rename.bind(fsPromises);
+  let failed = false;
+  const spy = vi.spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+    if (to === file && !failed) { failed = true; throw new Error('disk unavailable'); }
+    return rename(from, to);
+  });
+  await expect(session.quiesce()).rejects.toThrow('disk unavailable');
+  spy.mockRestore();
+  await vi.waitFor(() => expect(read(file)).toContain('id="'));
+  const resume = await session.quiesce();
+  resume();
+});
