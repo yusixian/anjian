@@ -604,3 +604,39 @@ test('failed quiesce restores autosave and permits a later quiesce', async () =>
   const resume = await session.quiesce();
   resume();
 });
+
+test('quota rejection and snapshot installation failure preserve document state before retry', async () => {
+  const { file, snapshotFile } = setup('<doc><p>one</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.readyForRemoteUpload();
+  const peer = new LoroDoc(); peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => $findText($getRoot(), 'one')!.setTextContent('one, saved transactionally'), { discrete: true });
+  const update = peer.export({ mode: 'update', from }); binding.dispose();
+  const oldXml = read(file); const oldSnapshot = fs.readFileSync(snapshotFile);
+  const oldState = session.state(); const events: DocumentEvent[] = [];
+  session.subscribe(event => events.push(event));
+  expect(() => session.saveUpdate(update, [], () => { throw new Error('quota exceeded'); })).toThrow('quota exceeded');
+  expect(read(file)).toBe(oldXml);
+  expect(fs.readFileSync(snapshotFile)).toEqual(oldSnapshot);
+  expect(session.state()).toEqual(oldState); expect(events).toEqual([]);
+  const rename = fs.renameSync.bind(fs);
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((source, target) => {
+    if (target === snapshotFile && String(source).endsWith('.tmp')) throw new Error('snapshot write failed');
+    rename(source, target);
+  });
+  try { expect(() => session.saveUpdate(update)).toThrow('Document could not be saved'); }
+  finally { spy.mockRestore(); }
+  expect(read(file)).toBe(oldXml);
+  expect(fs.readFileSync(snapshotFile)).toEqual(oldSnapshot);
+  expect(session.state()).toEqual(oldState); expect(events).toEqual([]);
+  let delta = 0;
+  session.saveUpdate(update, [], bytes => { delta = bytes; });
+  expect(read(file)).toContain('one, saved transactionally');
+  expect(delta).toBe(fs.statSync(file).size + fs.statSync(snapshotFile).size - Buffer.byteLength(oldXml) - oldSnapshot.byteLength);
+  expect(events.map(event => event.type)).toEqual(['update', 'saved']);
+  await session.flush();
+  expect(read(file)).toContain('one, saved transactionally');
+});

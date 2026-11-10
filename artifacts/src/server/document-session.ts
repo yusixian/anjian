@@ -14,6 +14,7 @@ import { decodeImportBlobMeta, LoroDoc, type OpId } from 'loro-crdt';
 import { DOCUMENT_FEATURES } from '../shared/document-features';
 import { boxDrawingDiagrams, parseDocument, serializeDocument, stampBlockIds } from './document-codec';
 import { createDocumentHeadlessEditor } from './document-headless';
+import type { CommentAdmission } from './document-comments';
 import { createPreparedStateFiles } from './storage/prepared-files';
 
 export type DocumentOutcome =
@@ -42,6 +43,7 @@ export interface DocumentSession {
   flush: () => Promise<void>;
   quiesce: () => Promise<() => void>;
   importUpdate: (bytes: Uint8Array, features?: readonly string[]) => void;
+  saveUpdate: (bytes: Uint8Array, features?: readonly string[], admit?: CommentAdmission) => void;
   lineage: () => string;
   onFileText: (text: string) => void;
   prepareRemoteText: (text: string) => PreparedRemoteDocument;
@@ -109,6 +111,7 @@ export function prepareNewRemoteDocument(text: string, snapshotFile: string, sta
 const WRITTEN_LIMIT = 50;
 
 export class OutdatedClient extends Error {}
+export class DocumentPersistenceError extends Error {}
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -410,35 +413,91 @@ export async function createDocumentSession(
   startSnapshotTimer();
   scheduleWrite();
 
+  const validateUpdate = (bytes: Uint8Array, features: readonly string[]) => {
+    const undeclared = DOCUMENT_FEATURES.filter((feature) => !features.includes(feature));
+    const types = undeclared.length
+      ? editor.getEditorState().read(
+          () =>
+            new Set(
+              $getRoot()
+                .getChildren()
+                .map((block) => block.getType()),
+            ),
+        )
+      : new Set<string>();
+    const missing = undeclared.filter((feature) => types.has(feature));
+    // A viewer that cannot build these nodes reconciles them away and sends that deletion back.
+    if (missing.length)
+      throw new OutdatedClient(
+        `this page cannot show <${missing.join('>, <')}> blocks; reload the page`,
+      );
+    const probe = loro.fork();
+    probe.import(bytes);
+    if (probe.getTree(TREE_NAME).roots().length > 1)
+      throw new Error('update belongs to a different document; reload the page');
+  };
+
   return {
     snapshot: () => loro.export({ mode: 'snapshot' }),
     state: () => editor.getEditorState().toJSON(),
     lineage: () => loro.getTree(TREE_NAME).roots()[0]?.id ?? '',
     importUpdate: (bytes, features = []) => {
-      const undeclared = DOCUMENT_FEATURES.filter((feature) => !features.includes(feature));
-      const types = undeclared.length
-        ? editor.getEditorState().read(
-            () =>
-              new Set(
-                $getRoot()
-                  .getChildren()
-                  .map((block) => block.getType()),
-              ),
-          )
-        : new Set<string>();
-      const missing = undeclared.filter((feature) => types.has(feature));
-      // A viewer that cannot build these nodes reconciles them away and sends that deletion back.
-      if (missing.length)
-        throw new OutdatedClient(
-          `this page cannot show <${missing.join('>, <')}> blocks; reload the page`,
-        );
-      const probe = loro.fork();
-      probe.import(bytes);
-      if (probe.getTree(TREE_NAME).roots().length > 1)
-        throw new Error('update belongs to a different document; reload the page');
+      validateUpdate(bytes, features);
       binding.import(bytes);
       emit({ type: 'update', bytes });
       scheduleWrite();
+    },
+    saveUpdate: (bytes, features = [], admit) => {
+      if (streaming > 0 || outcome.kind === 'rejected' || writeTimer || snapshotDirty)
+        throw new Error('Document is not ready to save; retry after flushing');
+      validateUpdate(bytes, features);
+      if (fsSync.readFileSync(file, 'utf8') !== lastFileText)
+        throw new Error('Document source changed; retry after flushing');
+      const candidate = loro.fork();
+      const candidateEditor = createDocumentHeadlessEditor();
+      const candidateBinding = createLoroBinding(candidateEditor, candidate);
+      let xml: string;
+      let snapshot: Uint8Array;
+      let update: Uint8Array;
+      try {
+        const from = candidate.oplogVersion();
+        candidateBinding.import(bytes);
+        const before = candidateEditor.getEditorState().toJSON();
+        const stamped = stampBlockIds(before);
+        if (JSON.stringify(stamped) !== JSON.stringify(before))
+          candidateEditor.update(() => $reconcileRoot(stamped.root as never), { discrete: true });
+        xml = serializeDocument(candidateEditor.getEditorState().toJSON());
+        snapshot = candidate.export({ mode: 'snapshot' });
+        update = candidate.export({ mode: 'update', from });
+      } finally { candidateBinding.dispose(); }
+      const size = (target: string) => {
+        try { return fsSync.statSync(target).size; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
+      };
+      admit?.(Buffer.byteLength(xml) - size(file) + snapshot.byteLength - size(snapshotFile));
+      const content = createPreparedStateFiles(path.dirname(file), [{ file, data: xml }]);
+      const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), [{ file: snapshotFile, data: snapshot }]);
+      try {
+        content.stage(); state.stage();
+        content.commit(); state.commit();
+      } catch (error) {
+        const errors: unknown[] = [error];
+        for (const transaction of [state, content]) {
+          try { transaction.abort(); } catch (rollback) { errors.push(rollback); }
+        }
+        throw new DocumentPersistenceError('Document could not be saved. Please retry.', { cause: errors.length > 1 ? new AggregateError(errors, 'Document save rollback failed') : error });
+      }
+      binding.import(update);
+      revision++;
+      persistedVersion = versionKey();
+      persistedSnapshotSignature = snapshotSignature(snapshotFile);
+      lastFileText = xml;
+      lastGoodText = xml;
+      remember(xml);
+      snapshotDirty = false;
+      content.finalize(); state.finalize();
+      emit({ type: 'update', bytes: update });
+      emit({ type: 'saved' });
     },
     onFileText,
     readyForRemoteUpload: async () => { await flush(); await activitySaved; await snapshotWriting; },

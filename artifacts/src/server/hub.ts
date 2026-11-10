@@ -806,7 +806,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }
       const mounted = await route(req, url, pathname);
       if (!mounted) send(res, 404, 'Not found');
-      else if (req.method === 'POST' && /^\/api\/(?:agent\/)?(?:document|artboard)\/[^/]+\/comments$/.test(pathname)) {
+      else if (req.method === 'POST' && /^\/api\/(?:(?:agent\/)?(?:document|artboard)\/[^/]+\/comments|document\/[^/]+\/update)$/.test(pathname)) {
         const project = path.resolve(mounted.root, '../..');
         if (!projectAccess.authorized(req, project) || !originAllowed(policy, req.headers.origin) ||
           !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) { send(res, 403, 'Forbidden'); return; }
@@ -814,7 +814,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           const current = await route(req, url, pathname);
           if (!current || current.root !== mounted.root) { send(res, 403, 'Project access changed'); return; }
           const admit = await prepare();
-          await withRequestStorageAdmission(req, admit, () => current.handleRequest(req, res));
+          await withRequestStorageAdmission(req, admit, () => current.handleRequest(req, res), prepare);
         }));
       }
       else mounted.handleRequest(req, res);

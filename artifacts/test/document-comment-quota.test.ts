@@ -1,3 +1,7 @@
+import { LoroDoc } from 'loro-crdt';
+import { createLoroBinding } from '@haklex/rich-collab-loro';
+import { $getRoot, $isElementNode, $isTextNode } from 'lexical';
+import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -57,4 +61,38 @@ test('Hub enforces document comment quota before saving or broadcasting, without
   const edited = await post(route, { op: 'edit', threadId: comments.threads[0].id, messageId: comments.threads[0].messages[0].id, text: 'shorter' });
   expect(edited.status, await edited.clone().text()).toBe(200);
   expect(JSON.parse(fs.readFileSync(file, 'utf8')).threads[0].messages[0].text).toBe('shorter');
+});
+
+
+test('Hub rejects document content before live import and accepts the same update after quota is raised', async () => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  writeDocument(artifacts, 'doc', { 'doc.xml': '<doc><p id="b1">hello</p></doc>' });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') }); registerProject(paths.projects, project);
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime }); hubs.push(hub);
+  const mount = await hub.mountOf(project);
+  const origin = `http://127.0.0.1:${hub.port}`;
+  const state = await (await fetch(origin + '/api/document/doc/state')).json();
+  const peer = new LoroDoc(); peer.import(Buffer.from(state.snapshot, 'base64'));
+  const editor = createDocumentHeadlessEditor(); const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => {
+    const paragraph = $getRoot().getFirstChild();
+    if (!$isElementNode(paragraph)) throw new Error('Expected paragraph');
+    const text = paragraph.getFirstChild();
+    if (!$isTextNode(text)) throw new Error('Expected text');
+    text.setTextContent('hello quota guarded document');
+  }, { discrete: true });
+  const update = peer.export({ mode: 'update', from }); binding.dispose();
+  const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
+  const messages: unknown[] = []; mount.onMessage(message => { if (message.type === 'doc-update') messages.push(message); });
+  const post = () => fetch(origin + '/api/document/doc/update', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/octet-stream' }, body: Buffer.from(update) });
+  const denied = await post(); expect(denied.status, await denied.clone().text()).toBe(413);
+  expect(messages).toEqual([]);
+  const file = path.join(artifacts, 'document/doc/doc.xml');
+  expect(fs.readFileSync(file, 'utf8')).not.toContain('quota guarded');
+  settings.setSharedLimit(1024 * 1024);
+  const saved = await post(); expect(saved.status, await saved.clone().text()).toBe(204);
+  expect(messages).toHaveLength(1);
+  expect(fs.readFileSync(file, 'utf8')).toContain('hello quota guarded document');
 });

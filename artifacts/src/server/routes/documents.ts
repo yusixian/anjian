@@ -4,11 +4,12 @@ import { DOCUMENT_FEATURES_HEADER } from '../../shared/document-features';
 import { resolveArtifactDir } from '../artifacts';
 import type { ServerContext } from '../context';
 import { asHumanOp } from '../document-comments';
-import { OutdatedClient } from '../document-session';
+import { DocumentPersistenceError, OutdatedClient } from '../document-session';
 import { send, sendJson } from '../http';
 import { MAX_DOCUMENT_UPDATE } from '../limits';
 import { readCommentBody } from './comments';
-import { requestStorageAdmission } from '../storage/request-admission';
+import { RemoteTransferError } from '../remote-transfer';
+import { refreshRequestStorageAdmission, requestStorageAdmission } from '../storage/request-admission';
 import type { HttpRoute } from './table';
 
 const API_DOCUMENT_STATE_ROUTE = /^\/api\/document\/([^/]+)\/state$/;
@@ -80,9 +81,20 @@ async function serveDocumentUpdate(
     return;
   }
   try {
-    session.importUpdate(new Uint8Array(Buffer.concat(chunks)), features);
+    await session.readyForRemoteUpload();
+    await refreshRequestStorageAdmission(req);
+  } catch {
+    sendJson(res, 503, { error: 'Document could not be saved. Please retry.' });
+    return;
+  }
+  if (sourceRejected()) {
+    sendJson(res, 409, { error: 'Document source changed to invalid content. Repair it and retry.' });
+    return;
+  }
+  try {
+    session.saveUpdate(new Uint8Array(Buffer.concat(chunks)), features, requestStorageAdmission(req));
   } catch (err) {
-    sendJson(res, err instanceof OutdatedClient ? 409 : 400, { error: (err as Error).message });
+    sendJson(res, err instanceof RemoteTransferError ? err.status : err instanceof OutdatedClient ? 409 : err instanceof DocumentPersistenceError ? 503 : 400, { error: (err as Error).message, ...(err instanceof RemoteTransferError ? { code: err.code } : {}) });
     return;
   }
   try {

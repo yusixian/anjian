@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 
@@ -179,25 +178,21 @@ describe('live document', () => {
     editor.update(() => $findText($getRoot(), 'one')!.setTextContent('durable change'), { discrete: true });
     const bytes = Buffer.from(peer.export({ mode: 'update', from }));
     const target = docFile(root, 'relay');
-    let release!: () => void; let entered = false; let responded = false;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const rename = fsPromises.rename.bind(fsPromises);
-    const spy = vi.spyOn(fsPromises, 'rename').mockImplementation(async (source, destination) => {
-      if (destination === target) {
+    let entered = false; let responded = false;
+    const rename = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+      if (destination === target && String(source).endsWith('.tmp')) {
         entered = true;
-        await gate;
+        expect(responded).toBe(false);
         if (fail) throw new Error('private disk failure detail');
       }
       return rename(source, destination);
     });
     const headers = { Cookie: cookie(server), Origin: base(server) };
     const uploading = post(`${base(server)}/api/document/relay/update`, bytes, headers).then((result) => { responded = true; return result; });
-    try {
-      await vi.waitFor(() => expect(entered).toBe(true));
-      expect(responded).toBe(false);
-    } finally { release(); }
     const response = await uploading;
     spy.mockRestore(); binding.dispose();
+    expect(entered).toBe(true);
     expect(response.status).toBe(fail ? 503 : 204);
     expect(response.body).not.toContain('private disk');
     if (fail) expect((await post(`${base(server)}/api/document/relay/update`, bytes, headers)).status).toBe(204);
