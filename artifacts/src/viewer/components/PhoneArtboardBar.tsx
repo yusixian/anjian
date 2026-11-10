@@ -95,7 +95,7 @@ export function PhoneArtboardBar({ title, pages, page, onPageChange, actions, li
   return (
     <header data-chrome {...stylex.props(styles.bar)}>
       <LibraryLink />
-      <span {...stylex.props(styles.title)}>{title}</span>
+      {title && <span {...stylex.props(styles.title)}>{title}</span>}
       <PageSwitcher page={page} pages={pages} onPageChange={onPageChange} />
       <span {...stylex.props(styles.spacer)} />
       {live === undefined ? null : (

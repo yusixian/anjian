@@ -339,7 +339,7 @@ export function PhoneArtboard({
         live={readOnly ? undefined : live}
         page={page}
         pages={canvas?.pages ?? []}
-        title={canvas?.title || id}
+        title={readOnly ? '' : canvas?.title || id}
         onPageChange={changePage}
       />
       <div
