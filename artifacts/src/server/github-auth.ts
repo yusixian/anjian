@@ -60,6 +60,7 @@ interface GitHubAuthOptions {
   cookieName: string;
   fetch?: typeof fetch;
   members?: ReturnType<typeof createMemberStore>;
+  prepareMember?: (identity: Principal) => Promise<void>;
 }
 
 function callbackOrigin(origin: string): string {
@@ -76,7 +77,7 @@ function validReturnTo(value: string): boolean {
     !/[\\\x00-\x20\x7f]/.test(value);
 }
 
-export function createGitHubAuth({ config, token, origin, cookieName, members, fetch: request = fetch }: GitHubAuthOptions) {
+export function createGitHubAuth({ config, token, origin, cookieName, members, prepareMember, fetch: request = fetch }: GitHubAuthOptions) {
   const publicOrigin = callbackOrigin(origin);
   const callbackUrl = `${publicOrigin}${CALLBACK_PATH}`;
   const secure = publicOrigin.startsWith('https:');
@@ -193,12 +194,18 @@ export function createGitHubAuth({ config, token, origin, cookieName, members, f
         const githubId = user.id as number;
         let member: Principal | null = null;
         if (githubId !== config.ownerId) {
-          if (members && flow.invitation && typeof user.login === 'string') {
+          member = members?.principal(githubId) ?? null;
+          if (!member && members && flow.invitation && typeof user.login === 'string') {
             try { member = members.accept({ id: githubId, login: user.login }, flow.invitation); }
             catch { throw new GitHubAuthError('denied', '邀请已失效或账号不匹配，请联系邀请人。'); }
-          } else member = members?.principal(githubId) ?? null;
+          }
           if (!member || member.role !== 'member')
             throw new GitHubAuthError('denied', '此 GitHub 账号尚未获得案间访问权限。');
+        }
+        if (member) {
+          await prepareMember?.(member);
+          if (!members?.principal(githubId, member.sessionVersion))
+            throw new GitHubAuthError('denied', '成员访问权限已失效。');
         }
         const seconds = flow.remember ? REMEMBER_SECONDS : SESSION_SECONDS;
         const session: Session = { ...(member ? { githubId, sessionVersion: member.sessionVersion } : { ownerId: config.ownerId }), expires: now() + seconds, nonce: random() };

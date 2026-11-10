@@ -23,6 +23,7 @@ import { createBrowserAuth } from './browser-auth';
 import { createContentAccess } from './content-access';
 import { createMemberStore } from './member-store';
 import { createMemberApi } from './member-api';
+import { createMemberWorkspace } from './member-workspace';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
@@ -158,7 +159,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
 
   const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
   const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
-  const github = githubConfig ? createGitHubAuth({ config: githubConfig, token: options.token, origin, cookieName: `anjian_artifacts_${port}`, fetch: options.fetch }) : undefined;
+  const github = githubConfig ? createGitHubAuth({ config: githubConfig, token: options.token, origin, cookieName: `anjian_artifacts_${port}`, members, prepareMember: (identity) => prepareMember(identity), fetch: options.fetch }) : undefined;
 
   const projectId = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
   const remoteProjects = () => ordered().map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
@@ -381,9 +382,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const route = async (req: http.IncomingMessage, url: URL, pathname: string) => {
     const project =
       headerProject(req, url) ??
+      (pathname.startsWith('/api/') ? refererProject(req) : null) ??
       projectForPath(pathname) ??
       refererProject(req) ??
-      ordered()[0]?.dir ??
+      visibleProjects(req)[0] ??
       null;
     if (!project) return null;
     const identity = projectAccess.principal(req, url);
@@ -419,6 +421,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       return entry;
     });
   };
+
+  const prepareMember = createMemberWorkspace({ home: options.paths.home, members, register });
 
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
@@ -564,7 +568,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
   const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
-  const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized, github });
+  const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
   const publicShares = createPublicShare({ store: shares, origin,
     previewOrigin: options.boardOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${boardPort}`,
     viewerDir: options.viewerDir, runtimeDir: options.runtimeDir, registered });
@@ -604,6 +608,18 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         else await trashApi(req, res, url.pathname);
         return;
       }
+      if (url.pathname === '/api/account') {
+        const identity = projectAccess.principal(req, url);
+        if (!identity || !originAllowed(policy, req.headers.origin) ||
+            !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
+          sendJson(res, 403, { error: 'Forbidden' }); return;
+        }
+        if (req.method !== 'GET') { send(res, 405, 'Method not allowed'); return; }
+        const member = identity.role === 'member' ? members.list().members.find((item) => item.id === identity.id) : null;
+        sendJson(res, 200, { role: identity.role, login: member?.login ?? 'Owner',
+          ...(member ? { quotaBytes: member.quotaBytes } : {}) });
+        return;
+      }
       if (url.pathname === '/api/status') {
         if (!authorized(req, url)) send(res, 403, 'Forbidden: agent calls need ?key=');
         else sendJson(res, 200, { ...status(), url: fromAgent(req, url) ? status().url : `${origin}/` });
@@ -629,9 +645,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const devicePage = pathname === '/devices' || pathname === '/connect';
-      if (devicePage || (ordered().length === 0 && req.method === 'GET' && !pathname.startsWith('/api/'))) {
+      if (devicePage || (visibleProjects(req).length === 0 && req.method === 'GET' && !pathname.startsWith('/api/'))) {
         if (req.method !== 'GET') { send(res, 405, 'Method not allowed'); return; }
-        if (!authorized(req, url) || !originAllowed(policy, req.headers.origin) ||
+        if (!authenticated(req, url) || !originAllowed(policy, req.headers.origin) ||
             !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
           send(res, 403, 'Forbidden'); return;
         }

@@ -8,6 +8,40 @@ import { StatusPanel } from './StatusPanel';
 
 export function StatusPill({ onProjectsChanged }: { onProjectsChanged?: () => void }) {
   const { t } = useTranslation();
+  const [account, setAccount] = useState<{ role: 'owner' | 'member'; login: string } | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/account', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        // Standalone local servers have no member accounts.
+        if (response.status === 404) return { role: 'owner' as const, login: 'Owner' };
+        if (!response.ok) return null;
+        return await response.json() as { role: 'owner' | 'member'; login: string };
+      })
+      .then((value) => { if (!controller.signal.aborted) setAccount(value); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+  if (!account) return null;
+  if (account.role === 'owner') return <ServerStatusPill onProjectsChanged={onProjectsChanged} />;
+  return (
+    <div {...stylex.props(styles.anchor)}>
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        void fetch('/logout', { method: 'POST' }).then((response) => {
+          if (response.ok) location.assign('/login?signedOut=1');
+        });
+      }}>
+        <button type="submit" {...stylex.props(styles.pill)}>
+          {account.login}<span {...stylex.props(styles.separator)}>·</span>{t('server.signOut')}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ServerStatusPill({ onProjectsChanged }: { onProjectsChanged?: () => void }) {
+  const { t } = useTranslation();
   const { status, offline, refresh } = useHubStatus();
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
