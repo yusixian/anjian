@@ -29,6 +29,7 @@ export type InspectorInput = Extract<
 >;
 interface Options {
   enabled: boolean;
+  readOnly?: boolean;
   mode?: 'select' | 'comment';
   onInput: (boardId: string, input: InspectorInput) => void;
   playing: ReadonlySet<string>;
@@ -438,7 +439,7 @@ export function useInspector(options: Options) {
     (property: InspectorProperty, value: string) => {
       const { state, options } = current.current;
       const selection = state.selection;
-      if (!selection || !options.enabled || options.playing.has(selection.boardId)) return;
+      if (!selection || !options.enabled || options.readOnly || options.playing.has(selection.boardId)) return;
       const session = state.frames[selection.boardId]?.session;
       if (!session) return;
       send(selection.boardId, { action: 'style', id: selection.node.id, property, value, session });
@@ -447,6 +448,7 @@ export function useInspector(options: Options) {
     [send],
   );
   const reset = useCallback(() => {
+    if (current.current.options.readOnly) return;
     for (const boardId of registered.current.keys()) send(boardId, { action: 'reset' });
     setState((previous) => ({ ...previous, revision: previous.revision + 1 }));
   }, [send]);

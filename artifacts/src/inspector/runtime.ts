@@ -12,6 +12,7 @@ export function installInspector(
   properties: readonly string[],
   commentCursor = 'crosshair',
   pointerCursor = 'default',
+  readOnly = false,
 ) {
   const doc = win.document;
   const session = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -410,6 +411,14 @@ export function installInspector(
   const onMessage = (event: MessageEvent) => {
     if (event.source !== win.parent || event.data?.type !== 'anjian:inspect') return;
     const data = event.data;
+    /* Published frames accept only inspection commands, even from their parent window. */
+    if (readOnly && !(
+      data.action === 'enable' || data.action === 'disable' ||
+      (data.action === 'mode' && data.mode === 'select') ||
+      data.action === 'cancel-drag' || data.action === 'select' ||
+      data.action === 'track' || data.action === 'leaves' ||
+      data.action === 'describe' || data.action === 'hover'
+    )) return;
     if (data.action === 'enable') {
       if (typeof data.connection !== 'string' || !data.connection || data.connection.length > 128)
         return;

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { SharePage } from '../src/viewer/share/SharePage';
 
-vi.mock('../src/viewer/components/Canvas', () => ({ Canvas: () => <div>Published canvas</div> }));
+const authorView = vi.hoisted(() => ({ props: {} as Record<string, unknown> }));
+vi.mock('../src/viewer/layouts/ArtboardView', () => ({ ArtboardView: (props: Record<string, unknown>) => { authorView.props = props; return <div>Shared author workbench</div>; } }));
 
 const token = 'a'.repeat(43);
 let host: HTMLElement;
@@ -96,22 +97,18 @@ test('document resource base does not redirect refresh requests to the preview o
   } finally { base.remove(); }
 });
 
-test('canvas pinch cancels browser zoom and changes canvas scale only', async () => {
+test('public artboards use the author workbench with inspection and no write callbacks', async () => {
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify({
     ...fixture, type: 'artboard',
     canvas: { version: 1, pages: [{ id: 'p', name: 'Page' }], boards: {}, activePage: 'p' },
     layout: { pages: { p: { bounds: { minX: 0, minY: 0, maxX: 500, maxY: 500 }, groups: {}, notes: {} } } },
   })));
   await render();
-  const canvas = host.querySelector('.share-canvas')!;
-  const before = host.querySelector('.share-zoom span')!.textContent;
-  const pinch = new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, clientX: 100, clientY: 100, bubbles: true, cancelable: true });
-  // happy-dom's WheelEvent omits MouseEvent modifier fields.
-  Object.defineProperties(pinch, { ctrlKey: { value: true }, clientX: { value: 100 }, clientY: { value: 100 } });
-  await act(async () => { canvas.dispatchEvent(pinch); });
-  expect(pinch.defaultPrevented).toBe(true);
-  expect(host.querySelector('.share-zoom span')!.textContent).not.toBe(before);
-  const outside = new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true });
-  host.querySelector('.share-header')!.dispatchEvent(outside);
-  expect(outside.defaultPrevented).toBe(false);
+  expect(host.textContent).toContain('Shared author workbench');
+  expect(authorView.props.readOnly).toBe(true);
+  expect(authorView.props.artifact).toBeNull();
+  expect(authorView.props.live).toBe(false);
+  expect(authorView.props.send).toBeUndefined();
+  expect(authorView.props.comment).toBeUndefined();
+  expect(authorView.props.contentBase).toBe(fixture.contentBase);
 });

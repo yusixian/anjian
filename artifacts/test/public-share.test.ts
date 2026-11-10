@@ -89,7 +89,7 @@ test('trash/restore and project unregister do not revive public access', async (
 
 test('artboard/document data projection omits private state and rejects unknown preview host', async () => {
   const { h, project, root, req, owner } = await setup();
-  writeArtboard(root, 'board', { version: 1, title: 'Board', pages: [{ id: 'p', name: 'Page' }], boards: { a: { page: 'p', file: 'pages/p/a.html', x: 0, y: 0, w: 300, h: 200 } } }, { 'pages/p/a.html': '<html><head></head><body>Board</body></html>' });
+  writeArtboard(root, 'board', { version: 1, title: 'Board', pages: [{ id: 'p', name: 'Page' }], boards: { a: { page: 'p', file: 'pages/p/a.html', x: 0, y: 0, w: 300, h: 200, interactive: true, trim: true } } }, { 'pages/p/a.html': '<html><head></head><body>Board</body></html>' });
   fs.mkdirSync(path.join(root, 'document/doc'), { recursive: true });
   fs.writeFileSync(path.join(root, 'document/doc/doc.xml'), '<doc><h1>Hello</h1><p>Public body</p></doc>');
   for (const [type, id] of [['artboard', 'board'], ['document', 'doc']]) {
@@ -100,6 +100,18 @@ test('artboard/document data projection omits private state and rejects unknown 
     expect(data.type).toBe(type); expect(data.comments).toBeUndefined(); expect(data.project).toBeUndefined();
     expect(JSON.stringify(data)).not.toContain(project); expect(data.expiresAt).toBeNull();
     expect((await req(new URL(data.contentBase).pathname + (type === 'document' ? 'doc.xml' : 'canvas.json'), {}, true)).status).toBe(404);
+    if (type === 'artboard') {
+      expect(data.canvas.boards.a).toMatchObject({ interactive: true, trim: true });
+      const board = await req(new URL(data.contentBase).pathname + 'pages/p/a.html', {}, true);
+      const html = await board.text();
+      expect(board.status).toBe(200);
+      expect(board.headers.get('content-security-policy')).toContain(`connect-src ${data.contentBase}`);
+      expect(board.headers.get('content-security-policy')).toContain('sandbox allow-scripts');
+      expect(html).toContain('anjian:inspect');
+      expect(html).toContain('anjian:board:capture');
+      expect(html).not.toContain('anjian:tweaks');
+      expect(html).not.toContain(project);
+    }
     const foreign = await fetch(`http://127.0.0.1:${h.boardPort}${new URL(data.contentBase).pathname}index.html`, { headers: { Host: 'evil.example' } });
     expect(foreign.status).toBe(403);
   }

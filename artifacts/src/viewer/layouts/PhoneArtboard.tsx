@@ -1,5 +1,7 @@
+import { ActionIcon } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
+import { ScanSearch } from 'lucide-react';
 import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -23,8 +25,11 @@ import { useBoardLifecycle } from '../hooks/useBoardLifecycle';
 import { useBoardOrigin } from '../hooks/useBoardOrigin';
 import { useChoices } from '../hooks/useChoices';
 import { useCulledBoards } from '../hooks/useCulledBoards';
+import { useInspector } from '../hooks/useInspector';
 import { usePanZoom } from '../hooks/usePanZoom';
 import { useVerdicts } from '../hooks/useVerdicts';
+import { t } from '../i18n';
+import { InspectorPanel } from '../inspector/InspectorPanel';
 import type { BoardCommentsState } from '../lib/board-comments';
 import {
   openingQuestion,
@@ -85,6 +90,7 @@ interface Props {
   id: string;
   layout: CanvasLayout | null;
   live?: boolean;
+  readOnly?: boolean;
   loaded: boolean;
   pending: string[];
   versions: Record<string, number>;
@@ -110,9 +116,22 @@ export function PhoneArtboard({
   comment,
   comments,
   actions,
+  readOnly = false,
 }: Props) {
-  const { viewportRef, worldRef, overlayRef, view, viewNow, size, gesturing, fit, handlers } =
-    usePanZoom('hand');
+  const {
+    viewportRef,
+    worldRef,
+    overlayRef,
+    view,
+    viewNow,
+    size,
+    gesturing,
+    fit,
+    handlers,
+    wheelAt,
+    panBy,
+  } = usePanZoom('hand');
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
   const [snap, setSnap] = useState(SHEET_PEEK);
   const [open, setOpen] = useState<string | null>(null);
@@ -167,6 +186,23 @@ export function PhoneArtboard({
   const notes = Object.entries(canvas?.notes ?? {}).filter(([, n]) => n.page === page);
   const pendingBoards = useMemo(() => new Set(pending), [pending]);
   const source = useBoardOrigin({ contentBase, boardOrigin, boardPort, boardPath });
+  const inspector = useInspector({
+    enabled: readOnly && inspectorOpen,
+    readOnly,
+    playing: NOTHING,
+    onInput: (boardId, input) => {
+      const board = canvas?.boards[boardId];
+      if (!board) return;
+      if (input.type === 'anjian:inspect:wheel') {
+        const now = viewNow();
+        wheelAt({
+          ...input,
+          x: now.x + (board.x + input.x) * now.k,
+          y: now.y + (board.y + input.y) * now.k,
+        });
+      } else if (input.type === 'anjian:inspect:pan') panBy(input.deltaX, input.deltaY);
+    },
+  });
   const waiting = useMemo(
     () => (source ? pendingBoards : new Set(boards.map(([board]) => board))),
     [source, pendingBoards, boards],
@@ -180,6 +216,23 @@ export function PhoneArtboard({
     active: NOTHING,
     gesturing,
   });
+  const frameRef = useMemo(() => {
+    const refs = new Map<string, (element: HTMLIFrameElement | null) => void>();
+    return (boardId: string) => {
+      if (!refs.has(boardId))
+        refs.set(boardId, (element) => {
+          if (readOnly) inspector.refFor(boardId)(element);
+          lifecycle.frameRef(boardId)(element);
+        });
+      return refs.get(boardId)!;
+    };
+  }, [readOnly, inspector.refFor, lifecycle.frameRef]);
+  const frameLoaded = useCallback(
+    (boardId: string) => {
+      if (readOnly) inspector.loaded(boardId);
+    },
+    [readOnly, inspector.loaded],
+  );
   const culled = useCulledBoards(boards, view, size);
   const stale = useMemo(() => new Set(comments?.stale ?? []), [comments]);
   const verdicts = useVerdicts({
@@ -195,7 +248,7 @@ export function PhoneArtboard({
     page,
     threads: comments?.comments.threads ?? NO_THREADS,
     listening: comments?.listening === true,
-    comment: live === false ? undefined : comment,
+    comment: readOnly || live === false ? undefined : comment,
   });
   const chose = Object.fromEntries(
     list.flatMap((q) => {
@@ -267,10 +320,23 @@ export function PhoneArtboard({
         : openQuestion.boards;
 
   return (
-    <div {...stylex.props(styles.root)}>
+    <div {...stylex.props(styles.root)} style={readOnly ? { position: 'absolute' } : undefined}>
       <PhoneArtboardBar
-        actions={actions}
-        live={live}
+        actions={
+          <>
+            {actions}
+            {readOnly && (
+              <ActionIcon
+                aria-label={t('inspector.label')}
+                icon={ScanSearch}
+                size="small"
+                title={t('inspector.label')}
+                onClick={() => setInspectorOpen(true)}
+              />
+            )}
+          </>
+        }
+        live={readOnly ? undefined : live}
         page={page}
         pages={canvas?.pages ?? []}
         title={canvas?.title || id}
@@ -292,15 +358,15 @@ export function PhoneArtboard({
             <Canvas
               agent={agent}
               boardBase={source?.base}
-              boardSandbox={source?.sandbox}
+              boardSandbox={readOnly ? 'allow-scripts' : source?.sandbox}
               boards={boards}
               contentBase={contentBase}
               culled={culled}
-              frameLoaded={noLoad}
-              frameRef={lifecycle.frameRef}
+              frameLoaded={readOnly ? frameLoaded : noLoad}
+              frameRef={frameRef}
               gesturing={gesturing}
               images={lifecycle.images}
-              inspecting={false}
+              inspecting={readOnly && inspectorOpen}
               live={live}
               notes={notes}
               pending={waiting}
@@ -315,13 +381,13 @@ export function PhoneArtboard({
             <Labels
               allBoards={allBoards}
               boards={boards}
-              choices={choices.active ? choices : undefined}
+              choices={!readOnly && choices.active ? choices : undefined}
               contentBase={contentBase}
               groups={groups}
               overlayRef={overlayRef}
               pending={pendingBoards}
               playing={NOTHING}
-              verdicts={verdicts}
+              verdicts={readOnly ? undefined : verdicts}
               versions={versions}
               view={view}
               onExpand={setOpen}
@@ -338,7 +404,7 @@ export function PhoneArtboard({
         )}
         {list.length > 0 ? (
           <div data-chrome {...stylex.props(styles.dock)}>
-            {choices.current && (
+            {!readOnly && choices.current && (
               <SubmitBar
                 agent={agent}
                 bottom={SHEET_PEEK + 12}
@@ -369,17 +435,37 @@ export function PhoneArtboard({
       {open && openBoard ? (
         <PhoneBoard
           board={openBoard}
-          choice={choices.boardChoice(open)}
+          choice={readOnly ? undefined : choices.boardChoice(open)}
+          contained={readOnly}
           id={open}
           origin={origin}
-          sandbox={isMediaBoard(openBoard) ? undefined : source?.sandbox}
+          sandbox={
+            isMediaBoard(openBoard) ? undefined : readOnly ? 'allow-scripts' : source?.sandbox
+          }
           siblings={siblings}
           src={`${isMediaBoard(openBoard) ? contentBase : (source?.base ?? contentBase)}${openBoard.file}?v=${versions[openBoard.file] ?? 0}`}
-          onChoose={() => choices.choose(open)}
+          onChoose={readOnly ? undefined : () => choices.choose(open)}
           onClose={() => setOpen(null)}
           onOpen={setOpen}
         />
       ) : null}
+      {readOnly && inspectorOpen && (
+        <InspectorPanel
+          boards={boards}
+          change={inspector.change}
+          enabled={true}
+          frames={inspector.frames}
+          fullScreen
+          hoverNode={inspector.hoverNode}
+          playing={NOTHING}
+          readOnly
+          reset={inspector.reset}
+          select={inspector.select}
+          selection={inspector.selection}
+          targets={inspector.targets}
+          onClose={() => setInspectorOpen(false)}
+        />
+      )}
     </div>
   );
 }

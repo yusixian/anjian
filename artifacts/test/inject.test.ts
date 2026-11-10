@@ -87,6 +87,18 @@ describe('injectRuntime', () => {
     expect(() => new Function(code)).not.toThrow();
   });
 
+  test('published artboard injects inspection and capture without tweak controls', () => {
+    const html = injectRuntime('<html><head></head><body>Shared board</body></html>', {
+      readOnlyInspector: true,
+    });
+    const code = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    expect(() => new Function(code)).not.toThrow();
+    expect(code).toContain('anjian:inspect');
+    expect(code).toContain('anjian:board:capture');
+    expect(code).not.toContain('anjian:tweaks');
+    expect(code).not.toContain('anjian:restore');
+  });
+
   test('without <head>, the script goes after the doctype and <html> so the page stays in standards mode', () => {
     expect(
       injectRuntime('<!DOCTYPE html><meta charset=utf-8><title>x</title><p>y').startsWith(

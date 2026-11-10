@@ -141,6 +141,7 @@ const styles = stylex.create({
 interface Props {
   board: BoardSpec;
   choice?: BoardChoice | null;
+  contained?: boolean;
   id: string;
   onChoose?: () => void;
   onClose: () => void;
@@ -166,6 +167,7 @@ function hold(el: Element | null, keyframes: Keyframe[], options: KeyframeAnimat
 export function PhoneBoard({
   id,
   board,
+  contained = false,
   sandbox = 'allow-scripts',
   src,
   siblings,
@@ -392,7 +394,7 @@ export function PhoneBoard({
   }
 
   return (
-    <div data-phone-board {...stylex.props(styles.overlay)}>
+    <div data-phone-board {...stylex.props(styles.overlay)} style={contained ? { position: 'absolute' } : undefined}>
       <div
         ref={backdrop}
         {...stylex.props(styles.backdrop)}

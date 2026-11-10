@@ -3,8 +3,10 @@ import type { SerializedEditorState } from 'lexical';
 
 import { ANJIAN_MARK_BODY, ANJIAN_MARK_VIEWBOX } from '../../shared/brand';
 import type { ArtifactType, CanvasLayout, CanvasSpec } from '../../shared/types';
-import { Canvas } from '../components/Canvas';
-import { fitView, zoomAround, type View } from '../lib/view';
+
+const ArtboardView = lazy(() =>
+  import('../layouts/ArtboardView').then(({ ArtboardView }) => ({ default: ArtboardView })),
+);
 
 const PublicDocument = lazy(() =>
   import('./PublicDocument').then(({ PublicDocument }) => ({ default: PublicDocument })),
@@ -28,14 +30,12 @@ const texts = {
     brand: '案间', readOnly: '公开分享 · 只读', published: '发布于', expires: '链接到期',
     loading: '正在加载分享…', unavailable: '此分享暂时无法访问', unavailableHelp: '链接可能已失效，或分享者已关闭访问。',
     retry: '重试', offline: '连接中断，内容可能已经更新。请重试。', noContent: '发布内容暂不可用。',
-    page: '页面', actual: '原始尺寸', fit: '适合屏幕', zoomIn: '放大', zoomOut: '缩小', expand: '展开画板', boardList: '查看单张画板', close: '返回画布',
     snapshot: '这是一份发布快照；作者后续修改不会自动公开。',
   },
   en: {
     brand: 'Anjian', readOnly: 'Public share · Read only', published: 'Published', expires: 'Link expires',
     loading: 'Loading share…', unavailable: 'This share is unavailable', unavailableHelp: 'The link may have expired or been closed by its owner.',
     retry: 'Retry', offline: 'Connection interrupted. Content may have changed. Please retry.', noContent: 'Published content is unavailable.',
-    page: 'Page', actual: 'Actual size', fit: 'Fit to screen', zoomIn: 'Zoom in', zoomOut: 'Zoom out', expand: 'Expand board', boardList: 'View individual boards', close: 'Back to canvas',
     snapshot: 'This is a published snapshot; later edits are not automatically public.',
   },
 } as const;
@@ -43,175 +43,6 @@ const texts = {
 function shareBase(pathname: string) {
   const match = /^\/s\/([A-Za-z0-9_-]{32,64})\/?$/.exec(pathname);
   return match ? `/s/${match[1]}` : null;
-}
-
-const none = new Set<string>();
-const noRef = () => () => undefined;
-const noLoad = () => undefined;
-
-function ExpandedBoard({ url, board, copy }: {
-  url: string;
-  board: NonNullable<SharePayload['canvas']>['boards'][string];
-  copy: typeof texts.zh | typeof texts.en;
-}) {
-  const body = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: innerWidth, height: innerHeight - 110 });
-  const [actual, setActual] = useState(false);
-  useEffect(() => {
-    const el = body.current!;
-    const measure = () => setSize({ width: el.clientWidth, height: el.clientHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  const scale = actual ? 1 : Math.max(0.01, Math.min(1, (size.width - 32) / board.w, (size.height - 32) / board.h));
-  return <>
-    <div className="share-expanded-tools">
-      <button type="button" aria-pressed={!actual} onClick={() => setActual(false)}>{copy.fit}</button>
-      <button type="button" aria-pressed={actual} onClick={() => setActual(true)}>{copy.actual}</button>
-      <span>{Math.round(scale * 100)}%</span>
-    </div>
-    <div ref={body} className="share-expanded-body">
-      <div className="share-expanded-content" style={{ width: board.w * scale, height: board.h * scale }}>
-        <div style={{ width: board.w, height: board.h, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          {board.type === 'image' ? <img src={url} alt={board.title ?? ''} /> : board.type === 'video' ? <video controls src={url} /> : <iframe title={board.title ?? copy.expand} sandbox="allow-scripts" referrerPolicy="no-referrer" src={url} />}
-        </div>
-      </div>
-    </div>
-  </>;
-}
-
-function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | typeof texts.en }) {
-  const canvas = data.canvas;
-  const layout = data.layout;
-  const [page, setPage] = useState(() => canvas?.activePage ?? canvas?.pages[0]?.id ?? '');
-  const [viewport, setViewport] = useState({ width: innerWidth, height: Math.max(1, innerHeight - 112) });
-  const [view, setView] = useState<View>({ x: 0, y: 0, k: 1 });
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const stage = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; y: number } | null>(null);
-  const close = useRef<HTMLButtonElement>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const current = stage.current;
-    if (!current) return;
-    const observer = new ResizeObserver(() => setViewport({ width: current.clientWidth, height: current.clientHeight }));
-    observer.observe(current);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    const current = stage.current;
-    if (!current) return;
-    const wheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const rect = current.getBoundingClientRect();
-      const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? current.clientHeight : 1;
-      const dx = event.deltaX * factor;
-      const dy = event.deltaY * factor;
-      if (event.ctrlKey || event.metaKey)
-        setView((old) => zoomAround(old, Math.exp(-dy * 0.01), event.clientX - rect.left, event.clientY - rect.top));
-      else setView((old) => ({ ...old, x: old.x - dx, y: old.y - dy }));
-    };
-    // React's passive wheel listener cannot cancel the browser's trackpad pinch zoom.
-    current.addEventListener('wheel', wheel, { passive: false });
-    return () => current.removeEventListener('wheel', wheel);
-  }, []);
-  const bounds = layout?.pages[page]?.bounds;
-  const fit = useCallback(() => {
-    if (bounds) setView(fitView(bounds, viewport, { top: 24, right: 24, bottom: 24, left: 24 }));
-  }, [bounds, viewport]);
-  useEffect(() => { fit(); }, [fit]);
-  useEffect(() => {
-    if (canvas && !canvas.pages.some((entry) => entry.id === page))
-      setPage(canvas.activePage ?? canvas.pages[0]?.id ?? '');
-  }, [canvas, page]);
-  useEffect(() => {
-    if (!expanded) return;
-    close.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); setExpanded(null); }
-      if (event.key === 'Tab') {
-        const controls = Array.from(close.current?.closest('[role="dialog"]')?.querySelectorAll<HTMLElement>('button, iframe, video') ?? []);
-        const first = controls[0];
-        const last = controls.at(-1);
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-      }
-    };
-    addEventListener('keydown', onKey);
-    return () => { removeEventListener('keydown', onKey); returnFocus.current?.focus(); };
-  }, [expanded]);
-  if (!canvas || !layout || !bounds) return <div className="share-message">{copy.noContent}</div>;
-  const boards = Object.entries(canvas.boards).filter(([, spec]) => spec.page === page);
-  const selected = expanded ? canvas.boards[expanded] : null;
-  const selectedFile = selected && (selected.type === 'image' || selected.type === 'video' ? selected.src : selected.file);
-  const url = selectedFile ? `${data.contentBase}${selectedFile}` : null;
-  return (
-    <>
-      <div className="share-artboard-toolbar">
-        <label>{copy.page}
-          <select aria-label={copy.page} value={page} onChange={(event) => setPage(event.target.value)}>
-            {canvas.pages.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-          </select>
-        </label>
-        <div className="share-zoom">
-          <button type="button" aria-label={copy.zoomOut} onClick={() => setView((old) => zoomAround(old, 0.8, viewport.width / 2, viewport.height / 2))}>−</button>
-          <span aria-label={`${Math.round(view.k * 100)}%`}>{Math.round(view.k * 100)}%</span>
-          <button type="button" aria-label={copy.zoomIn} onClick={() => setView((old) => zoomAround(old, 1.25, viewport.width / 2, viewport.height / 2))}>+</button>
-          <button type="button" onClick={fit}>{copy.fit}</button>
-        </div>
-      </div>
-      <div
-        ref={stage}
-        className="share-canvas"
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          drag.current = { x: event.clientX, y: event.clientY };
-          event.currentTarget.setPointerCapture(event.pointerId);
-        }}
-        onPointerMove={(event) => {
-          if (!drag.current) return;
-          const dx = event.clientX - drag.current.x;
-          const dy = event.clientY - drag.current.y;
-          drag.current = { x: event.clientX, y: event.clientY };
-          setView((old) => ({ ...old, x: old.x + dx, y: old.y + dy }));
-        }}
-        onPointerUp={() => { drag.current = null; }}
-        onPointerCancel={() => { drag.current = null; }}
-      >
-        <Canvas
-          boards={boards}
-          notes={Object.entries(canvas.notes ?? {}).filter(([, note]) => note.page === page)}
-          view={view}
-          contentBase={data.contentBase}
-          versions={data.versions ?? {}}
-          pending={none}
-          playing={none}
-          replays={{}}
-          inspecting={false}
-          frameRef={noRef}
-          frameLoaded={noLoad}
-          boardSandbox="allow-scripts"
-        />
-      </div>
-      <div className="share-board-list" aria-label={copy.boardList}>
-        <span className="share-board-list-label">{copy.boardList}</span>
-        {boards.map(([id, board]) => (
-          <button key={id} type="button" onClick={(event) => { returnFocus.current = event.currentTarget; setExpanded(id); }} aria-label={`${copy.expand}：${board.title ?? id}`}>
-            {board.title ?? id}
-          </button>
-        ))}
-      </div>
-      {selected && url && (
-        <div className="share-expanded" role="dialog" aria-modal="true" aria-label={selected.title ?? expanded ?? copy.expand}>
-          <div className="share-expanded-head"><strong>{selected.title ?? expanded}</strong><button ref={close} type="button" onClick={() => setExpanded(null)}>{copy.close}</button></div>
-          <ExpandedBoard key={url} url={url} board={selected} copy={copy} />
-        </div>
-      )}
-    </>
-  );
 }
 
 export function SharePage() {
@@ -256,7 +87,7 @@ export function SharePage() {
   }, [copy, data, lang]);
   const date = (stamp: number) => new Date(stamp).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US');
   return (
-    <div className="share-page">
+    <div className={`share-page${data?.type === 'artboard' ? ' share-workbench' : ''}`}>
       <header className="share-header">
         <span className="share-brand"><svg aria-hidden="true" viewBox={ANJIAN_MARK_VIEWBOX} dangerouslySetInnerHTML={{ __html: ANJIAN_MARK_BODY }} />{copy.brand}</span>
         <span className="share-readonly">{copy.readOnly}</span>
@@ -266,7 +97,25 @@ export function SharePage() {
           <div className="share-info"><div><strong>{data.title}</strong><small>{copy.published} {date(data.publishedAt)}{data.expiresAt ? ` · ${copy.expires} ${date(data.expiresAt)}` : ''}</small></div><span>{copy.readOnly}</span></div>
           {state === 'offline' && <div className="share-alert" role="alert">{copy.offline} <button type="button" onClick={() => void load()}>{copy.retry}</button></div>}
           <main className="share-main">
-            {data.type === 'artboard' ? <Artboard data={data} copy={copy} /> : data.type === 'html' ? (
+            {data.type === 'artboard' ? (
+              <Suspense fallback={<div className="share-message">{copy.loading}</div>}>
+                <div className="share-artboard">
+                  <ArtboardView
+                    readOnly
+                    id="public-share"
+                    artifact={null}
+                    live={false}
+                    loaded
+                    canvas={data.canvas ?? null}
+                    layout={data.layout ?? null}
+                    versions={data.versions ?? {}}
+                    warnings={[]}
+                    pending={[]}
+                    contentBase={data.contentBase}
+                  />
+                </div>
+              </Suspense>
+            ) : data.type === 'html' ? (
               <iframe className="share-html" title={data.title} src={`${data.contentBase}index.html`} sandbox="allow-scripts" referrerPolicy="no-referrer" />
             ) : data.state ? (
               <Suspense fallback={<div className="share-message">{copy.loading}</div>}><PublicDocument key={data.contentBase} contentBase={data.contentBase} state={data.state} /></Suspense>

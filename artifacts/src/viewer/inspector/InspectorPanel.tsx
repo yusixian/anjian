@@ -29,6 +29,8 @@ interface Props extends Pick<
   enabled: boolean;
   onClose: () => void;
   playing: ReadonlySet<string>;
+  fullScreen?: boolean;
+  readOnly?: boolean;
 }
 const tabs = ['Properties', 'Code', 'Tweaks'] as const;
 
@@ -44,8 +46,11 @@ export const InspectorPanel = memo(function InspectorPanel({
   reset,
   enabled,
   onClose,
+  fullScreen = false,
+  readOnly = false,
 }: Props) {
   const [tab, setTab] = useState<(typeof tabs)[number]>('Properties');
+  const visibleTabs = readOnly ? tabs.filter((name) => name !== 'Tweaks') : tabs;
   const [copyStatus, setCopyStatus] = useState('');
   const node = selection?.node;
   const tweaks = Object.entries(frames).flatMap(([boardId, frame]) =>
@@ -64,19 +69,28 @@ export const InspectorPanel = memo(function InspectorPanel({
       setCopyStatus(t('inspector.copyFailed'));
     }
   };
-  const panelClass = [stylex.props(styles.panel).className, 'anjian-inspector']
+  const panelClass = [stylex.props(styles.panel).className, 'anjian-inspector', readOnly && 'anjian-inspector-readonly']
     .filter(Boolean)
     .join(' ');
   return (
     <IconProvider config={{ 'aria-hidden': true }}>
-      <aside data-chrome aria-label={t('inspector.label')} className={panelClass}>
+      <aside
+        data-chrome
+        aria-label={t('inspector.label')}
+        className={panelClass}
+        style={
+          fullScreen
+            ? { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 100 }
+            : undefined
+        }
+      >
         <TabsRoot
           size="small"
           style={{ display: 'contents' }}
           value={tab}
           variant="rounded"
           onValueChange={(value) => {
-            if (tabs.includes(value as typeof tab)) setTab(value as typeof tab);
+            if (visibleTabs.some((name) => name === value)) setTab(value as typeof tab);
           }}
         >
           <header {...stylex.props(styles.header)}>
@@ -87,7 +101,7 @@ export const InspectorPanel = memo(function InspectorPanel({
               style={{ alignSelf: 'center' }}
             >
               <TabsIndicator />
-              {tabs.map((name) => (
+              {visibleTabs.map((name) => (
                 <TabsTab key={name} style={{ position: 'relative' }} value={name}>
                   {t(`inspector.tab.${name}`)}
                   {name === 'Tweaks' && tweaks.length > 0 && (
@@ -160,10 +174,15 @@ export const InspectorPanel = memo(function InspectorPanel({
                   change={change}
                   key={`${selection!.boardId}:${frames[selection!.boardId]?.session}:${node.id}`}
                   node={node}
+                  readOnly={readOnly}
                 />
               ) : (
                 <p {...stylex.props(styles.empty)}>
-                  {!enabled ? t('inspector.closeExpanded') : t('inspector.pickElement')}
+                  {!enabled
+                    ? t('inspector.closeExpanded')
+                    : fullScreen
+                      ? t('inspector.pickLayer')
+                      : t('inspector.pickElement')}
                 </p>
               )}
             </TabsPanel>
@@ -201,48 +220,56 @@ export const InspectorPanel = memo(function InspectorPanel({
                 <p {...stylex.props(styles.empty)}>{t('inspector.selectForCode')}</p>
               )}
             </TabsPanel>
-            <TabsPanel value="Tweaks" {...stylex.props(styles.panelBodyPanel)}>
-              <section {...stylex.props(styles.section)}>
-                <h2 {...stylex.props(styles.sectionTitle)}>
-                  {t('inspector.sessionChanges')}{' '}
-                  <span {...stylex.props(styles.count)}>{tweaks.length}</span>
-                </h2>
-                <p {...stylex.props(styles.hint)}>{t('inspector.changesApply')}</p>
-                <div {...stylex.props(styles.tweaks)}>
-                  {tweaks.map((tweak) => (
-                    <div
-                      key={`${tweak.boardId}:${tweak.id}:${tweak.property}`}
-                      {...stylex.props(styles.tweak)}
-                    >
-                      <span {...stylex.props(styles.tweakLabel)}>
-                        {boards.find(([id]) => id === tweak.boardId)?.[1].title || tweak.boardId} ·{' '}
-                        {tweak.name}
-                      </span>
-                      <code {...stylex.props(styles.tweakCode)}>
-                        {tweak.property}: {tweak.value}
-                      </code>
-                    </div>
-                  ))}
-                </div>
-                {!tweaks.length && <p {...stylex.props(styles.hint)}>{t('inspector.noChanges')}</p>}
-                <Button
-                  block
-                  disabled={!tweaks.length}
-                  icon={RotateCcw}
-                  size="small"
-                  onClick={reset}
-                >
-                  {t('inspector.resetPreview')}
-                </Button>
-              </section>
-            </TabsPanel>
+            {!readOnly && (
+              <TabsPanel value="Tweaks" {...stylex.props(styles.panelBodyPanel)}>
+                <section {...stylex.props(styles.section)}>
+                  <h2 {...stylex.props(styles.sectionTitle)}>
+                    {t('inspector.sessionChanges')}{' '}
+                    <span {...stylex.props(styles.count)}>{tweaks.length}</span>
+                  </h2>
+                  <p {...stylex.props(styles.hint)}>{t('inspector.changesApply')}</p>
+                  <div {...stylex.props(styles.tweaks)}>
+                    {tweaks.map((tweak) => (
+                      <div
+                        key={`${tweak.boardId}:${tweak.id}:${tweak.property}`}
+                        {...stylex.props(styles.tweak)}
+                      >
+                        <span {...stylex.props(styles.tweakLabel)}>
+                          {boards.find(([id]) => id === tweak.boardId)?.[1].title || tweak.boardId} ·{' '}
+                          {tweak.name}
+                        </span>
+                        <code {...stylex.props(styles.tweakCode)}>
+                          {tweak.property}: {tweak.value}
+                        </code>
+                      </div>
+                    ))}
+                  </div>
+                  {!tweaks.length && (
+                    <p {...stylex.props(styles.hint)}>{t('inspector.noChanges')}</p>
+                  )}
+                  <Button
+                    block
+                    disabled={!tweaks.length}
+                    icon={RotateCcw}
+                    size="small"
+                    onClick={reset}
+                  >
+                    {t('inspector.resetPreview')}
+                  </Button>
+                </section>
+              </TabsPanel>
+            )}
           </div>
           <footer {...stylex.props(styles.footer)}>
             <Circle aria-hidden fill="currentColor" size={5} {...stylex.props(styles.statusDot)} />
-            {tweaks.length
-              ? t('inspector.previewChanges', { count: tweaks.length })
-              : t('inspector.liveInspection')}
-            <span {...stylex.props(styles.footerNote)}>{t('inspector.previewOnly')}</span>
+            {readOnly
+              ? t('inspector.readOnly')
+              : tweaks.length
+                ? t('inspector.previewChanges', { count: tweaks.length })
+                : t('inspector.liveInspection')}
+            {!readOnly && (
+              <span {...stylex.props(styles.footerNote)}>{t('inspector.previewOnly')}</span>
+            )}
           </footer>
         </TabsRoot>
       </aside>

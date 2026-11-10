@@ -10,6 +10,7 @@ import { styles } from './styles';
 interface Props {
   change: (property: InspectorProperty, value: string) => void;
   node: InspectorSelection;
+  readOnly?: boolean;
 }
 const numeric = (value: string) =>
   Number.isFinite(parseFloat(value)) ? Math.round(parseFloat(value) * 100) / 100 : 0;
@@ -59,6 +60,7 @@ function NumberField({
   property,
   node,
   change,
+  readOnly,
   unit = 'px',
   max,
   min = 0,
@@ -77,6 +79,7 @@ function NumberField({
   const input = (
     <InputNumber
       controls={false}
+      disabled={readOnly}
       id={controlId}
       max={max}
       min={min}
@@ -110,6 +113,7 @@ function Choice({
   values,
   node,
   change,
+  readOnly,
 }: Props & { label: string; property: InspectorProperty; values: [string, ReactNode][] }) {
   const controlId = useId();
   const value = node.css[property];
@@ -120,6 +124,7 @@ function Choice({
     <Field controlId={controlId} label={label}>
       <Select
         id={controlId}
+        disabled={readOnly}
         options={options(available)}
         size="small"
         style={{ width: '100%' }}
@@ -132,8 +137,8 @@ function Choice({
   );
 }
 
-export function Properties({ node, change }: Props) {
-  const props = { node, change };
+export function Properties({ node, change, readOnly = false }: Props) {
+  const props = { node, change, readOnly };
   const widthSizing = useId();
   const heightSizing = useId();
   const [shadow, setShadow] = useState(node.css['box-shadow']);
@@ -154,6 +159,7 @@ export function Properties({ node, change }: Props) {
               <Select
                 className={stylex.props(styles.sizeModeChild).className}
                 id={widthSizing}
+                disabled={readOnly}
                 size="small"
                 value={node.widthMode}
                 options={options([
@@ -187,6 +193,7 @@ export function Properties({ node, change }: Props) {
               <Select
                 className={stylex.props(styles.sizeModeChild).className}
                 id={heightSizing}
+                disabled={readOnly}
                 size="small"
                 value={node.heightMode}
                 options={options([
@@ -242,6 +249,7 @@ export function Properties({ node, change }: Props) {
           <>
             <Field label={t('inspector.direction')}>
               <Segmented
+                disabled={readOnly}
                 block
                 size="small"
                 value={node.css['flex-direction']}
@@ -266,6 +274,7 @@ export function Properties({ node, change }: Props) {
             </Field>
             <Field label={t('inspector.align')}>
               <Segmented
+                disabled={readOnly}
                 block
                 aria-label={t('inspector.align')}
                 size="small"
@@ -287,6 +296,7 @@ export function Properties({ node, change }: Props) {
         <h2 {...stylex.props(styles.sectionTitle)}>{t('inspector.appearance')}</h2>
         <Field label={t('inspector.fill')}>
           <ColorPicker
+            disabled={readOnly}
             alpha
             recent={false}
             size="small"
@@ -359,6 +369,7 @@ export function Properties({ node, change }: Props) {
                 />
                 <Field label={t('inspector.color')}>
                   <ColorPicker
+                    disabled={readOnly}
                     alpha
                     recent={false}
                     size="small"
@@ -376,6 +387,7 @@ export function Properties({ node, change }: Props) {
             children: (
               <Field label={t('inspector.shadow')}>
                 <Input
+                  disabled={readOnly}
                   aria-label={t('inspector.shadow')}
                   size="small"
                   value={shadow}

@@ -117,10 +117,10 @@ const UI_META = /<meta[^>]+name=["']anjian-ui["'][^>]*>/i;
 
 export function injectRuntime(
   html: string,
-  options: { uiRuntimeUrl?: string; embedded?: boolean; inspector?: boolean } = {},
+  options: { uiRuntimeUrl?: string; embedded?: boolean; inspector?: boolean; readOnlyInspector?: boolean } = {},
 ): string {
-  const inspect = options.inspector
-    ? `;(${installTweaks.toString().replaceAll('\n', ' ')})(window,${tweakTools.toString().replaceAll('\n', ' ')});(${installInspector.toString().replaceAll('\n', ' ')})(window,${JSON.stringify(INSPECTOR_PROPERTIES)},${JSON.stringify(COMMENT_CURSOR)},${JSON.stringify(POINTER_CURSOR)});;(${installSnapshot.toString().replaceAll('\n', ' ')})(window,${serializeBoard.toString().replaceAll('\n', ' ')});`
+  const inspect = options.inspector || options.readOnlyInspector
+    ? `${options.readOnlyInspector ? '' : `;(${installTweaks.toString().replaceAll('\n', ' ')})(window,${tweakTools.toString().replaceAll('\n', ' ')});`};(${installInspector.toString().replaceAll('\n', ' ')})(window,${JSON.stringify(INSPECTOR_PROPERTIES)},${JSON.stringify(COMMENT_CURSOR)},${JSON.stringify(POINTER_CURSOR)},${options.readOnlyInspector === true});;(${installSnapshot.toString().replaceAll('\n', ' ')})(window,${serializeBoard.toString().replaceAll('\n', ' ')});`
     : '';
   const tag = `${options.embedded ? EMBEDDED_STYLE : ''}<script>${inspect || RUNTIME_LINE}</script>`;
   const ui =

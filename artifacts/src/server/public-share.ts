@@ -6,6 +6,7 @@ import { computeLayout } from '../shared/geometry';
 import type { CanvasSpec } from '../shared/types';
 import { parseDocument } from './document-codec';
 import { mimeOf, send } from './http';
+import { injectRuntime } from './inject';
 import type { createShareStore, ShareRecord } from './share-store';
 import { allowInlineScripts } from './viewer-page';
 
@@ -47,7 +48,9 @@ function payload(options: Options, record: ShareRecord) {
       if (!relativeFile(resource) || !resource.startsWith('pages/') || !options.store.file(record, resource)) throw new Error('Missing board');
       const encoded = resource.split('/').map(encodeURIComponent).join('/');
       return [id, { file: encoded, ...(board.type ? { type: board.type, src: encoded } : {}),
-        page: board.page, x: board.x, y: board.y, w: board.w, h: board.h, title: board.title }];
+        page: board.page, x: board.x, y: board.y, w: board.w, h: board.h, title: board.title,
+        ...(typeof board.interactive === 'boolean' ? { interactive: board.interactive } : {}),
+        ...(typeof board.trim === 'boolean' ? { trim: board.trim } : {}) }];
     }));
     const canvas: CanvasSpec = { version: 1, title: record.title, pages: source.pages.map(({ id, name }) => ({ id, name })),
       activePage: source.activePage, boards, notes: source.notes,
@@ -118,13 +121,14 @@ export function createPublicShare(options: Options) {
       if (!file || !fs.existsSync(file) || !fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink()) { deny(); return true; }
       const size = fs.statSync(file).size;
       if (!allowed(record.token, size)) { throttled(); return true; }
-      if (preview) csp = `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' ${contentBase} ${runtimeBase}; style-src 'unsafe-inline' ${contentBase}; img-src ${contentBase} data: blob:; media-src ${contentBase} blob:; font-src ${contentBase} data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${options.origin}`;
+      if (preview) csp = `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' ${contentBase} ${runtimeBase}; style-src 'unsafe-inline' ${contentBase}; img-src ${contentBase} data: blob:; media-src ${contentBase} blob:; font-src ${contentBase} data:; connect-src ${record.type === 'artboard' ? contentBase : "'none'"}; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${options.origin}`;
       const headers = { ...baseHeaders, 'Content-Type': mimeOf(file), 'Content-Security-Policy': csp,
         ...(preview ? { 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' } : {}) };
       if (req.method === 'HEAD') { send(res, 200, '', { ...headers, 'Content-Length': String(size) }); return true; }
       let data = fs.readFileSync(file);
       if (preview && path.extname(file).toLowerCase() === '.html') {
         let html = data.toString('utf8');
+        if (record.type === 'artboard') html = injectRuntime(html, { readOnlyInspector: true });
         const scripts = `<script defer src="${runtimeBase}anjian-icons.js"></script><script defer src="${runtimeBase}anjian-ui.js"></script>`;
         html = html.replace(/<head(?:\s[^>]*)?>/i, (tag) => `${tag}${scripts}`);
         data = Buffer.from(html);

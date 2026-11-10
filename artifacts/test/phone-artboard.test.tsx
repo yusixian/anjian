@@ -167,6 +167,28 @@ test('opens on the question the agent focused, with no selection tools or inspec
   expect(host!.textContent).toContain('mobile-comments');
 });
 
+test('a read-only phone share keeps canvas gestures and opens the author inspector on demand', async () => {
+  await mount(canvas, layout, { readOnly: true });
+  const frame = host!.querySelector('iframe')!;
+  const sent: { action?: string }[] = [];
+  vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((message) => sent.push(message));
+
+  expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+  expect(frame.style.pointerEvents).toBe('none');
+  await act(async () => frame.dispatchEvent(new Event('load')));
+  expect(sent.some((message) => message.action === 'enable')).toBe(false);
+
+  await act(async () => labelled('Inspector').click());
+  expect(host!.querySelector('aside[aria-label="Inspector"]')).not.toBeNull();
+  expect(sent.some((message) => message.action === 'enable')).toBe(true);
+  expect(host!.textContent).toContain('Choose a layer above');
+
+  await act(async () => labelled('Close inspector').click());
+  expect(host!.querySelector('aside[aria-label="Inspector"]')).toBeNull();
+  expect(sent.at(-1)?.action).toBe('disable');
+  expect(frame.style.pointerEvents).toBe('none');
+});
+
 const labelled = (label: string) =>
   host!.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
 

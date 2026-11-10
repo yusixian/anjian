@@ -104,6 +104,7 @@ export type ArtboardViewProps = Omit<
   artifact: string | null;
   live?: boolean;
   actions?: ReactNode;
+  readOnly?: boolean;
   send?: (message: SelectionMessage) => void;
   comments?: BoardCommentsState | null;
   comment?: (op: BoardHumanOp) => Promise<BoardCommentsState>;
@@ -133,6 +134,7 @@ function DesktopArtboard({
   comments,
   comment,
   actions,
+  readOnly = false,
 }: ArtboardViewProps) {
   const [tool, setTool] = useState<Tool>('select');
   const {
@@ -154,7 +156,7 @@ function DesktopArtboard({
     panning,
     setSpaceHeld,
   } = usePanZoom(tool);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(readOnly);
   const [debug] = useState(() => new URLSearchParams(location.search).has('debug'));
   const [commentsTab, setCommentsTab] = useState<CommentsTab>('open');
   const pageBounds = (id: string | null) => (id && layout?.pages[id]?.bounds) || null;
@@ -193,12 +195,13 @@ function DesktopArtboard({
     setParameterBoard((current) => (current === id ? null : id));
   };
   const selectionEnabled = tool === 'select' && !expanded && !panning;
-  const commentTool = tool === 'comment';
+  const commentTool = !readOnly && tool === 'comment';
   const inspectorEnabled = !expanded && (tool === 'select' || commentTool || inspectorOpen);
   const inspector = useInspector({
     enabled: inspectorEnabled,
     mode: commentTool ? 'comment' : 'select',
     playing,
+    readOnly,
     onInput: (boardId, input) => {
       const board = canvas?.boards[boardId];
       if (!board) return;
@@ -224,10 +227,16 @@ function DesktopArtboard({
       else if (input.down) onKey(input);
     },
   });
-  useSelectionSync({ artifact, boards: canvas?.boards, live, inspector, send });
+  useSelectionSync({
+    artifact: readOnly ? null : artifact,
+    boards: canvas?.boards,
+    live: readOnly ? false : live,
+    inspector,
+    send: readOnly ? undefined : send,
+  });
   const boardComments = useBoardComments({
     comments,
-    comment,
+    comment: readOnly ? undefined : comment,
     page,
     boards: canvas?.boards ?? {},
     inspector,
@@ -238,7 +247,7 @@ function DesktopArtboard({
     threads: boardComments.threads,
     stale: boardComments.stale,
     versions,
-    comment,
+    comment: readOnly ? undefined : comment,
   });
   const choices = useChoices({
     canvas,
@@ -246,7 +255,7 @@ function DesktopArtboard({
     page,
     threads: boardComments.threads,
     listening: comments?.listening === true,
-    comment: live === false ? undefined : comment,
+    comment: readOnly || live === false ? undefined : comment,
   });
   const rejectAt = verdicts.rejecting ? verdicts.origin(verdicts.rejecting) : null;
   const nextVerify = () => {
@@ -257,8 +266,8 @@ function DesktopArtboard({
     if (rect) fit({ minX: rect.x, minY: rect.y, maxX: rect.x + rect.w, maxY: rect.y + rect.h });
   };
   const changeTool = (next: Tool) => {
-    if (next === 'comment' && !comment) return;
-    if (next === 'comment' && tool === 'select') boardComments.commentSelection();
+    if (next === 'comment' && (readOnly || !comment)) return;
+    if (next === 'comment' && tool === 'select' && !readOnly) boardComments.commentSelection();
     if (next !== 'comment') boardComments.close();
     setTool(next);
   };
@@ -356,6 +365,7 @@ function DesktopArtboard({
   const parameterState = parameterBoard ? parameters.states[parameterBoard] : undefined;
   const parameterSpec = parameterBoard ? allBoards[parameterBoard] : undefined;
   const panel = (anchored: boolean) =>
+    !readOnly &&
     parameterBoard &&
     parameterState &&
     parameterSpec &&
@@ -435,19 +445,19 @@ function DesktopArtboard({
     return (id: string) => {
       if (!refs.has(id))
         refs.set(id, (element) => {
-          parameters.refFor(id)(element);
+          if (!readOnly) parameters.refFor(id)(element);
           inspector.refFor(id)(element);
           lifecycle.frameRef(id)(element);
         });
       return refs.get(id)!;
     };
-  }, [parameters.refFor, inspector.refFor, lifecycle.frameRef]);
+  }, [parameters.refFor, inspector.refFor, lifecycle.frameRef, readOnly]);
   const frameLoaded = useCallback(
     (id: string) => {
-      parameters.loaded(id);
+      if (!readOnly) parameters.loaded(id);
       inspector.loaded(id);
     },
-    [parameters.loaded, inspector.loaded],
+    [parameters.loaded, inspector.loaded, readOnly],
   );
 
   return (
@@ -523,7 +533,7 @@ function DesktopArtboard({
             <Canvas
               agent={agent}
               boardBase={source?.base}
-              boardSandbox={source?.sandbox}
+              boardSandbox={readOnly ? 'allow-scripts' : source?.sandbox}
               boards={boards}
               contentBase={contentBase}
               culled={culled}
@@ -548,22 +558,22 @@ function DesktopArtboard({
               activeParameters={parameterBoard}
               allBoards={allBoards}
               boards={boards}
-              choices={choices.active ? choices : undefined}
+              choices={!readOnly && choices.active ? choices : undefined}
               contentBase={contentBase}
               groups={groups}
               overlayRef={overlayRef}
-              parameters={parameterEntries}
+              parameters={readOnly ? {} : parameterEntries}
               pending={pendingBoards}
               playing={playing}
-              verdicts={verdicts}
+              verdicts={readOnly ? undefined : verdicts}
               versions={versions}
               view={view}
               onExpand={setExpanded}
               onReplay={(id) => setReplays((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }))}
-              onToggleParameters={toggleParameters}
+              onToggleParameters={readOnly ? undefined : toggleParameters}
               onTogglePlay={(id) => setPlaying((current) => togglePlaying(current, id))}
             />
-            {verdicts.rejecting && rejectAt && (
+            {!readOnly && verdicts.rejecting && rejectAt && (
               <div ref={overlayRef} {...stylex.props(styles.anchor, styles.rejectAnchor)}>
                 <RejectComposer
                   group={verdicts.rejecting}
@@ -653,7 +663,7 @@ function DesktopArtboard({
             {loaded ? (warnings[0] ?? t('chrome.waitingCanvas')) : t('common.connecting')}
           </div>
         )}
-        {choices.current && !expanded && (
+        {!readOnly && choices.current && !expanded && (
           <SubmitBar
             agent={agent}
             canAct={choices.canAct}
@@ -664,7 +674,7 @@ function DesktopArtboard({
           />
         )}
         <TopLeftBar
-          commenting={!!comment}
+          commenting={!readOnly && !!comment}
           page={page}
           pages={pages}
           tool={tool}
@@ -674,8 +684,8 @@ function DesktopArtboard({
         <TopRightBar
           actions={actions}
           inspectorOpen={inspectorOpen}
-          live={live}
-          verify={verdicts.progress}
+          live={readOnly ? undefined : live}
+          verify={readOnly ? undefined : verdicts.progress}
           warnings={warnings}
           zoom={view.k}
           onActualSize={() => zoomTo(1)}
@@ -693,14 +703,20 @@ function DesktopArtboard({
         {expanded && expandedBoard && expandedReady && (
           <ExpandedBoard
             board={expandedBoard}
-            frameRef={parameters.refFor(expanded, 'expanded')}
+            frameRef={readOnly ? undefined : parameters.refFor(expanded, 'expanded')}
             id={expanded}
             interactive={expandedBoard.interactive === true}
-            parameters={parameterBoard === expanded ? panel(false) : undefined}
-            sandbox={isMediaBoard(expandedBoard) ? undefined : source?.sandbox}
+            parameters={!readOnly && parameterBoard === expanded ? panel(false) : undefined}
+            sandbox={
+              isMediaBoard(expandedBoard)
+                ? undefined
+                : readOnly
+                  ? 'allow-scripts'
+                  : source?.sandbox
+            }
             src={`${isMediaBoard(expandedBoard) ? contentBase : (source?.base ?? contentBase)}${expandedBoard.file}?v=${versions[expandedBoard.file] ?? 0}`}
             parameterAction={
-              parameterEntries[expanded] !== undefined ? (
+              !readOnly && parameterEntries[expanded] !== undefined ? (
                 <IconProvider config={{ 'aria-hidden': true }}>
                   <Button
                     aria-expanded={parameterBoard === expanded}
@@ -715,7 +731,9 @@ function DesktopArtboard({
               ) : undefined
             }
             onClose={() => setExpanded(null)}
-            onFrameLoad={() => parameters.loaded(expanded, 'expanded')}
+            onFrameLoad={() => {
+              if (!readOnly) parameters.loaded(expanded, 'expanded');
+            }}
           />
         )}
       </div>
@@ -745,6 +763,7 @@ function DesktopArtboard({
           selection={inspector.selection}
           targets={inspector.targets}
           onClose={closeInspector}
+          readOnly={readOnly}
         />
       )}
     </div>

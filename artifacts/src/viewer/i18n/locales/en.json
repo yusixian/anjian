@@ -248,6 +248,8 @@
     "lastSelected": "Properties show the last selected element.",
     "closeExpanded": "Close the expanded preview to inspect elements.",
     "pickElement": "Click an element on the canvas or choose a layer to inspect its properties.",
+    "pickLayer": "Choose a layer above to inspect its properties.",
+    "readOnly": "Read-only inspection",
     "computedCss": "Computed CSS",
     "copy": "Copy",
     "fromDom": "From the live DOM. Source files stay unchanged.",

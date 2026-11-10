@@ -237,6 +237,8 @@
     "lastSelected": "属性显示最后选中的元素。",
     "closeExpanded": "关掉展开的预览后才能检查元素。",
     "pickElement": "点画布上的元素，或在图层里选一个，查看它的属性。",
+    "pickLayer": "在上方选一个图层，查看它的属性。",
+    "readOnly": "只读检查",
     "computedCss": "计算后的 CSS",
     "copy": "复制",
     "fromDom": "取自实时 DOM，源文件不变。",

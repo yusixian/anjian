@@ -10,3 +10,16 @@
 .anjian-inspector .lobe-input-number__suffix {
   color: var(--lobe-color-text-secondary);
 }
+
+/* Disabled controls remain non-editable in a public share, but their values must remain legible. */
+.anjian-inspector-readonly :is(:disabled, [aria-disabled="true"], [data-disabled]) {
+  opacity: 1 !important;
+  color: var(--lobe-color-text-secondary) !important;
+  -webkit-text-fill-color: var(--lobe-color-text-secondary) !important;
+}
+
+.anjian-inspector-readonly :is(:disabled, [aria-disabled="true"], [data-disabled]) :is(input, span, button) {
+  opacity: 1 !important;
+  color: var(--lobe-color-text-secondary) !important;
+  -webkit-text-fill-color: var(--lobe-color-text-secondary) !important;
+}
