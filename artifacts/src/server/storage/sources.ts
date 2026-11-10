@@ -28,6 +28,8 @@ export interface MigrationSourceOptions {
   sharedOwner?: (owner: string) => boolean;
   /** Internal runtime checkpoint: select one owner's roots without requiring other owners' caches. */
   owner?: string;
+  /** Recovery must never recreate a missing resource root as an empty source. */
+  requireExisting?: boolean;
 }
 
 export interface MigrationSourcePlan {
@@ -107,9 +109,9 @@ export async function planMigrationSources(scope: string, options: MigrationSour
   for (const [project, owner] of projects) {
     if (!includeOwner(owner)) continue;
     const base = path.join(project, '.anjian');
-    await directory(base, true);
+    await directory(base, !options.requireExisting);
     for (const [name, kind] of [['artifacts', 'artifacts'], ['.trash', 'trash']] as const) {
-      const file = await directory(path.join(base, name), true);
+      const file = await directory(path.join(base, name), !options.requireExisting);
       selected.push({ directory: file, kind, owner });
     }
   }

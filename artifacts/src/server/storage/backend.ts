@@ -292,7 +292,7 @@ export function createStorageBackend(home: string, deps: Dependencies) {
       });
     },
     /** Checkpoint a complete scope or all roots of one owner under its writer barrier. */
-    async checkpoint(scope: string, sources: MigrationRoot[], guard: () => Promise<void>, owner?: string, options: { keepDirty?: boolean } = {}) {
+    async checkpoint(scope: string, sources: MigrationRoot[], guard: () => Promise<void>, owner?: string, options: { keepDirty?: boolean; requireExistingRoots?: boolean } = {}) {
       checkScope(scope);
       if (options.keepDirty && owner === undefined) fail('scope_conflict');
       if (owner !== undefined) {
@@ -301,6 +301,17 @@ export function createStorageBackend(home: string, deps: Dependencies) {
       }
       return exclusive(async () => {
         const state = read(); const binding = state.bindings[scope] ?? fail('not_active');
+        if (options.requireExistingRoots) {
+          if (owner !== undefined && (pending.has(scope) || readIntents().some((intent) => intent.owner === undefined && outstandingIntent(intent, scope, binding)))) fail('scope_conflict');
+          const known = state.roots.filter((root) => root.scope === scope && (owner === undefined || root.owner === owner));
+          for (const root of known) {
+            const source = sources.find((item) => item.directory === root.directory);
+            if (!source || source.owner !== root.owner || source.kind !== root.kind ||
+              JSON.stringify([...(source.exclude ?? [])].sort()) !== JSON.stringify([...(root.exclude ?? [])].sort())) fail('source_changed');
+            const stat = await fsp.lstat(root.directory);
+            if (!stat.isDirectory() || stat.isSymbolicLink()) fail('source_changed');
+          }
+        }
         const pendingSet = owner === undefined ? pending : pendingOwners;
         const pendingKey = owner === undefined ? scope : `${scope}/${owner}`;
         pendingSet.add(pendingKey);

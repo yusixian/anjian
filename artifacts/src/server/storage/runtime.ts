@@ -11,8 +11,8 @@ const same = (a: Binding | null, b: Binding | null) => a?.scope === b?.scope && 
 export function createStorageRuntime(options: {
   backend: Pick<Backend, 'bindingFor' | 'ownersFor' | 'summary' | 'markDirty' | 'checkpoint'>;
   owners: () => string[];
-  maintain: <T>(owner: string, work: () => Promise<T>) => Promise<T>;
-  plan: (owner: string, scope: string) => Promise<MigrationSourcePlan>;
+  maintain: <T>(owner: string, work: () => Promise<T>, recovering?: boolean) => Promise<T>;
+  plan: (owner: string, scope: string, recovering?: boolean) => Promise<MigrationSourcePlan>;
   intervalMs?: number;
   now?: () => number;
 }) {
@@ -91,8 +91,37 @@ export function createStorageRuntime(options: {
     const lease = live(owner);
     return { state: lease?.state ?? (ownerPending(owner) ? 'recovery' : 'pending'), lastSyncedAt: lease?.lastSyncedAt ?? null };
   };
+  const recover = (owner: string, authorize: () => void): Promise<void> => {
+    if (stopping) return Promise.reject(new Error('Storage runtime is stopping'));
+    if (syncing.has(owner) || arming.has(owner)) return Promise.reject(new Error('Storage operation is running'));
+    const task = Promise.resolve().then(() => options.maintain(owner, async () => {
+      authorize();
+      const active = binding(owner);
+      if (!active || live(owner)) throw new Error('Storage does not require recovery');
+      const plan = await options.plan(owner, active.scope, true);
+      if (plan.scope !== active.scope || plan.roots.some((root) => root.owner !== owner)) throw new Error('Storage ownership changed');
+      const guard = async () => {
+        authorize();
+        if (stopping || !same(active, binding(owner))) throw new Error('Storage binding changed');
+        const current = await options.plan(owner, active.scope, true);
+        if (current.scope !== plan.scope || current.fingerprint !== plan.fingerprint) throw new Error('Storage sources changed');
+      };
+      await guard();
+      // The user explicitly chose the retained local tree. Preserve deletions within
+      // existing roots, verify every uploaded object, and arm before reopening writers.
+      await options.backend.checkpoint(active.scope, plan.roots, guard, owner, { keepDirty: true, requireExistingRoots: true });
+      leases.set(owner, { binding: active, state: 'ready', lastSyncedAt: now() });
+    }, true));
+    syncing.set(owner, task);
+    void task.then(() => syncing.delete(owner), () => syncing.delete(owner));
+    return task;
+  };
   return {
     arm,
+    recover,
+    async recoverScope(scope: string, authorize: () => void) {
+      for (const owner of scopeOwners(scope)) if (ownerPending(owner)) await recover(owner, authorize);
+    },
     ownerPending,
     scopePending: (scope: string) => scopeOwners(scope).some(ownerPending),
     changed(owner: string) { const lease = live(owner); if (lease && lease.state !== 'syncing') lease.state = 'pending'; },

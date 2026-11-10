@@ -51,6 +51,7 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [operation, setOperation] = useState('');
+  const [confirmRecovery, setConfirmRecovery] = useState(false);
   const lock = useRef(false);
   const url = `/api/storage?scope=${scope}`;
   const request = useCallback(async <T,>(body?: object, signal?: AbortSignal): Promise<T> => {
@@ -94,13 +95,14 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     void run({ action: 'save', settings, ...((!data?.profile || replacing) ? { credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey, ...(credentials.sessionToken ? { sessionToken: credentials.sessionToken } : {}) } } : {}) }, () => { setCredentials(emptyCredentials); setNotice(t('storage.saved')); });
   };
   const updateSyncStatus = (next: Summary) => setData((old) => old ? { ...old, sync: next.sync, recoveryPending: next.recoveryPending } : next);
-  const syncNow = async () => {
-    if (lock.current || data?.recoveryPending || data?.sync?.state === 'recovery') return;
+  const syncNow = async (recovering = false) => {
+    if (lock.current || (recovering ? !confirmRecovery : data?.recoveryPending || data?.sync?.state === 'recovery')) return;
     lock.current = true; setBusy(true); setOperation('sync'); onBusy(true); setError(''); setNotice('');
     try {
-      await request({ action: 'sync' });
+      await request(recovering ? { action: 'recover-local', confirm: 'use-retained-local-files' } : { action: 'sync' });
       updateSyncStatus(await request<Summary>());
-      setNotice(t('storage.sync.completed'));
+      setNotice(t(recovering ? 'storage.recovery.completed' : 'storage.sync.completed'));
+      setConfirmRecovery(false);
     } catch (failure) {
       setError((failure as Error).message);
       try { updateSyncStatus(await request<Summary>()); } catch { /* Keep the action error visible if status refresh also fails. */ }
@@ -110,7 +112,13 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
   const sync = data?.backend === 's3' ? data.sync : undefined;
   return <>
     <div {...stylex.props(styles.preview)}><strong>{t(data?.backend === 's3' ? 'storage.s3' : 'storage.local')}</strong><p {...stylex.props(styles.rowMeta)}>{t(data?.backend === 's3' ? 'storage.s3Help' : 'storage.localHelp')}</p></div>
-    {(data?.recoveryPending || sync?.state === 'recovery') && <p role="alert" {...stylex.props(styles.status, styles.error)}>{t('storage.recoveryPending')}</p>}
+    {(data?.recoveryPending || sync?.state === 'recovery') && <section {...stylex.props(styles.preview)} aria-label={t('storage.recovery.title')}>
+      <h2 {...stylex.props(styles.dialogTitle)}>{t('storage.recovery.title')}</h2>
+      <p role="alert" {...stylex.props(styles.error)}>{t('storage.recoveryPending')}</p>
+      <p {...stylex.props(styles.rowMeta)}>{t('storage.recovery.help')}</p>
+      <label {...stylex.props(styles.projectOption)}><input type="checkbox" checked={confirmRecovery} disabled={busy} onChange={(event) => setConfirmRecovery(event.target.checked)} {...stylex.props(styles.check)} />{t('storage.recovery.confirm')}</label>
+      <Button disabled={busy || !confirmRecovery} loading={busy && operation === 'sync'} onClick={() => void syncNow(true)}>{t('storage.recovery.action')}</Button>
+    </section>}
     {sync && !data?.recoveryPending && sync.state !== 'recovery' && <section {...stylex.props(styles.preview)} aria-label={t('storage.sync.title')}>
       <strong>{t('storage.sync.title')}</strong>
       <p role={sync.state === 'error' ? 'alert' : 'status'} {...stylex.props(styles.rowMeta, sync.state === 'error' && styles.error)}>{sync.state === 'ready' ? sync.lastSyncedAt ? t('storage.sync.ready', { time: new Date(sync.lastSyncedAt).toLocaleString(i18n.language) }) : t('storage.sync.readyUnknown') : t(`storage.sync.${sync.state}`)}</p>

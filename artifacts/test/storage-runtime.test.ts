@@ -72,3 +72,26 @@ test('periodic synchronization coalesces work and close waits for the in-flight 
   expect(f.checkpoint).toHaveBeenCalledTimes(1);
   await expect(f.runtime.arm('owner')).rejects.toThrow('stopping');
 });
+
+test('recovery rechecks authority and only grants a live lease after a successful verified checkpoint', async () => {
+  const f = fixture(); f.dirty();
+  const authorize = vi.fn();
+  f.checkpoint.mockRejectedValueOnce(new Error('verification failed'));
+  await expect(f.runtime.recover('owner', authorize)).rejects.toThrow('verification');
+  expect(f.runtime.ownerPending('owner')).toBe(true);
+  await f.runtime.recover('owner', authorize);
+  expect(f.checkpoint).toHaveBeenLastCalledWith('shared', [], expect.any(Function), 'owner', { keepDirty: true, requireExistingRoots: true });
+  expect(f.plan).toHaveBeenCalledWith('owner', 'shared', true);
+  expect(f.runtime.ownerPending('owner')).toBe(false);
+  expect(authorize.mock.calls.length).toBeGreaterThan(2);
+  await f.runtime.close();
+});
+
+test('revoked recovery authority cannot reopen a pending space', async () => {
+  const f = fixture(); f.dirty();
+  const authorize = vi.fn().mockImplementationOnce(() => {}).mockImplementation(() => { throw new Error('revoked'); });
+  await expect(f.runtime.recover('owner', authorize)).rejects.toThrow('revoked');
+  expect(f.checkpoint).not.toHaveBeenCalled();
+  expect(f.runtime.ownerPending('owner')).toBe(true);
+  await f.runtime.close();
+});

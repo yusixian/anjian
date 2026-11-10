@@ -668,9 +668,16 @@
     "personal": "My S3",
     "memberQuota": "Current shared quota: {{amount}} GiB",
     "local": "Current storage: server disk",
-    "recoveryPending": "Storage recovery is incomplete for this space. Access to its artifacts is paused and existing files are preserved. Ask the administrator to check the storage connection and pending recovery records.",
+    "recoveryPending": "Storage recovery is pending, so artifact access is paused. Existing server files are retained.",
     "s3": "Current storage: S3 (server cache)",
     "s3Help": "This space is bound to S3. Files are accessed through the server cache, and existing files are preserved.",
+    "recovery": {
+      "title": "Restore storage access",
+      "help": "Upload and verify the retained server files, preserving their edits and deletions. Older versions will not overwrite local files. Missing resource directories stop recovery; restore those directories first. Shared storage recovers pending spaces individually and can be retried after failure.",
+      "confirm": "Use the retained server files as the source of truth",
+      "action": "Verify and restore access",
+      "completed": "Storage access restored."
+    },
     "sync": {
       "title": "Runtime sync",
       "local": "No sync status is available yet.",

@@ -13,6 +13,7 @@ export function createStorageApi(options: {
   recoveryPending?: (scope: string) => boolean;
   syncStatus?: (scope: string) => ReturnType<ReturnType<typeof createStorageRuntime>['status']>;
   synchronize?: (scope: string) => Promise<void>;
+  recover?: (scope: string, authorize: () => void) => Promise<void>;
   origin: string;
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
@@ -56,7 +57,14 @@ export function createStorageApi(options: {
       if (!current || current.id !== identity.id || current.sessionVersion !== identity.sessionVersion || current.role !== identity.role) {
         sendJson(res, 403, { error: '登录状态已变化。' }); return true;
       }
-      if (body.action === 'sync' && options.synchronize) {
+      if (body.action === 'recover-local' && body.confirm === 'use-retained-local-files' && options.recover) {
+        await options.recover(scope, () => {
+          const latest = options.principal(req, url);
+          if (!latest || latest.id !== identity.id || latest.sessionVersion !== identity.sessionVersion || latest.role !== identity.role)
+            throw new Error('Session changed');
+        });
+        sendJson(res, 200, { sync: options.syncStatus?.(scope) });
+      } else if (body.action === 'sync' && options.synchronize) {
         await options.synchronize(scope);
         const latest = options.principal(req, url);
         if (!latest || latest.id !== identity.id || latest.sessionVersion !== identity.sessionVersion || latest.role !== identity.role) {

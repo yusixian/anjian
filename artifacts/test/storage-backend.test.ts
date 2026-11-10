@@ -409,3 +409,18 @@ test('one quiesced retry settles a live checkpoint whose pointer publication fai
   expect(await f.create().restore()).toEqual({ conflicts: [], pendingScopes: [], failures: [] });
   expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('new');
 });
+
+test('local recovery cannot omit a previously committed root and preserves local file deletions', async () => {
+  const f = fixture(); f.write('keep.txt', 'original'); f.write('deleted.txt', 'old');
+  const root = { ...f.root, owner: 'owner' };
+  await f.activate('shared', [root]);
+  const backend = f.create(); await backend.markDirty('owner', guard);
+  await expect(backend.checkpoint('shared', [], guard, 'owner', { keepDirty: true, requireExistingRoots: true })).rejects.toMatchObject({ code: 'source_changed' });
+  expect(backend.summary('shared', 'owner').pending).toBe(true);
+  fs.unlinkSync(path.join(f.source, 'deleted.txt')); f.write('keep.txt', 'local edit');
+  await backend.checkpoint('shared', [root], guard, 'owner', { keepDirty: true, requireExistingRoots: true });
+  expect(fs.existsSync(path.join(f.source, 'deleted.txt'))).toBe(false);
+  expect(fs.readFileSync(path.join(f.source, 'keep.txt'), 'utf8')).toBe('local edit');
+  expect([...f.remote.values()].some((data) => data.toString() === 'local edit')).toBe(true);
+  expect(backend.summary('shared', 'owner').pending).toBe(true);
+});

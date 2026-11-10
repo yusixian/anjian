@@ -90,4 +90,26 @@ test('provider failure retains local edits and live access, while restart requir
   expect(await (await f.request(restarted, '/api/storage?scope=personal')).json()).toMatchObject({ recoveryPending: true, sync: { state: 'recovery' } });
   await expect(restarted.mountOf(f.project)).rejects.toThrow('存储尚未恢复');
   expect(fs.readFileSync(source, 'utf8')).toContain('keep local');
+  expect((await f.request(restarted, '/api/storage?scope=personal', { action: 'recover-local' })).status).toBe(400);
+  const recovery = { action: 'recover-local', confirm: 'use-retained-local-files' };
+  remote.fail = true;
+  expect((await f.request(restarted, '/api/storage?scope=personal', recovery)).status).toBe(503);
+  await expect(restarted.mountOf(f.project)).rejects.toThrow('存储尚未恢复');
+  remote.fail = false;
+  expect((await f.request(restarted, '/api/storage?scope=personal', recovery)).status).toBe(200);
+  expect(await (await f.request(restarted, '/api/storage?scope=personal')).json()).toMatchObject({ recoveryPending: false, sync: { state: 'ready' } });
+  expect((await f.request(restarted, '/html/sample')).status).toBe(200);
+});
+
+test('recovery refuses a missing resource directory without recreating it', async () => {
+  const f = await fixture(); const hub = await f.start();
+  await hub.mountOf(f.project);
+  expect((await f.request(hub, '/api/storage?scope=personal', { action: 'sync' })).status).toBe(200);
+  await hub.close(); hubs.splice(hubs.indexOf(hub), 1);
+  fs.renameSync(f.artifacts, f.artifacts + '-retained');
+  const restarted = await f.start();
+  const result = await f.request(restarted, '/api/storage?scope=personal', { action: 'recover-local', confirm: 'use-retained-local-files' });
+  expect(result.status).toBe(503);
+  expect(fs.existsSync(f.artifacts)).toBe(false);
+  await expect(restarted.mountOf(f.project)).rejects.toThrow('存储尚未恢复');
 });

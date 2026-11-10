@@ -151,8 +151,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   await storageBackend.restore();
   const storageRuntime = createStorageRuntime({ backend: storageBackend,
     owners: () => [...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)), ...members.storageProjects().map(({ owner }) => owner)],
-    maintain: (owner, work) => maintainRuntime(owner, work),
-    plan: (owner, scope) => planRuntime(owner, scope),
+    maintain: (owner, work, recovering) => maintainRuntime(owner, work, recovering),
+    plan: (owner, scope, recovering) => planRuntime(owner, scope, recovering),
   });
   const recoveryPending = (owner: string) => owner === 'shared'
     ? storageRuntime.scopePending('shared') : storageRuntime.ownerPending(owner);
@@ -622,16 +622,17 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     ...ordered().filter(({ dir }) => members.projectOwner(dir) === owner).map(({ dir }) => dir),
     ...members.storageProjects().filter((entry) => entry.owner === owner).map(({ dir }) => dir),
   ])].sort();
-  const maintainRuntime = <T>(owner: string, work: () => Promise<T>) => writeQuota.exclusive(async () => {
+  const maintainRuntime = <T>(owner: string, work: () => Promise<T>, recovering = false) => writeQuota.exclusive(async () => {
     const projects = runtimeProjects(owner);
     const guard = () => {
       if (JSON.stringify(projects) !== JSON.stringify(runtimeProjects(owner))) throw new Error('Storage project ownership changed');
-      for (const project of projects) assertAvailable(project);
+      if (!recovering) for (const project of projects) assertAvailable(project);
     };
     return withProjectMaintenance(projects, quiesceProject, work, guard);
   });
-  const planRuntime = (owner: string, scope: string) => planMigrationSources(scope, {
+  const planRuntime = (owner: string, scope: string, recovering = false) => planMigrationSources(scope, {
     owner,
+    requireExisting: recovering,
     projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
     snapshotsRoot: path.join(storageHome, 'shares/snapshots'), snapshots: shares.storageSnapshots,
     sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
@@ -640,6 +641,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const storageApi = createStorageApi({ settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
     syncStatus: (owner) => owner === 'shared' ? storageRuntime.scopeStatus('shared') : storageRuntime.status(owner),
     synchronize: (owner) => owner === 'shared' ? storageRuntime.syncScope('shared') : storageRuntime.sync(owner),
+    recover: (owner, authorize) => owner === 'shared' ? storageRuntime.recoverScope('shared', authorize) : storageRuntime.recover(owner, authorize),
     backend: (owner) => {
       const scope = owner === 'shared' ? 'shared' : storageBackend.scopeFor(owner);
       return scope === null ? 'local' : storageBackend.summary(scope).backend;
