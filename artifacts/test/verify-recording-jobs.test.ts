@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { checkText } from '../src/cli/check';
+import { RemoteTransferError } from '../src/server/remote-transfer';
 import { readCanvas } from '../src/server/state';
 import { createVerifyRecordings } from '../src/server/verify-recordings';
 import { writeArtboard } from './helpers';
@@ -22,12 +23,12 @@ const canvas = {
   groups: { g: { boards: ['clip'], verify: true } },
 };
 const result = { status: 'trimmed' as const, duration: 10, start: 3, end: 7, removed: 6 };
-function fixture(prepare: NonNullable<Parameters<typeof createVerifyRecordings>[0]['prepare']>, withWriteQuota?: Parameters<typeof createVerifyRecordings>[0]['withWriteQuota']) {
+function fixture(prepare: NonNullable<Parameters<typeof createVerifyRecordings>[0]['prepare']>, withWriteQuota?: Parameters<typeof createVerifyRecordings>[0]['withWriteQuota'], retryMs?: number) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-jobs-'));
   roots.push(root);
   const dir = writeArtboard(root, 'one', canvas, { 'pages/clip.webm': 'first capture' });
   const stateDir = path.join(root, '.state');
-  const manager = createVerifyRecordings({ stateDir, stableMs: 10, onChange: () => {}, prepare, withWriteQuota });
+  const manager = createVerifyRecordings({ stateDir, stableMs: 10, onChange: () => {}, prepare, withWriteQuota, retryMs });
   managers.push(manager);
   const read = () => manager.project('one', dir, readCanvas(dir));
   return { root, dir, stateDir, manager, read };
@@ -92,9 +93,10 @@ test('a durable content cache survives a restart and avoids re-encoding the same
 });
 
 test('failed preparation falls back once and exposes a non-blocking check warning', async () => {
-  const f = fixture(async () => {
+  const prepare = vi.fn(async () => {
     throw new Error('ffmpeg unavailable');
   });
+  const f = fixture(prepare, undefined, 30);
   let ready = f.read();
   await vi.waitFor(() => {
     ready = f.read();
@@ -109,6 +111,8 @@ test('failed preparation falls back once and exposes a non-blocking check warnin
   expect(checkText({ type: 'checked', artifact: 'artboard/one', ...ready })).toContain(
     'warning: recording clip:',
   );
+  await new Promise(resolve => setTimeout(resolve, 80));
+  expect(prepare).toHaveBeenCalledTimes(1);
   expect(f.read().recordings).toEqual(ready.recordings);
 });
 
@@ -164,4 +168,56 @@ test('recording metadata installation failure rolls back the prepared clip', asy
     for (const dir of fs.readdirSync(cache)) expect(fs.readdirSync(path.join(cache, dir))).toEqual([]);
     expect(fs.readFileSync(path.join(f.dir, 'pages/clip.webm'), 'utf8')).toBe('first capture');
   } finally { spy.mockRestore(); }
+});
+
+test('quota recovery retries without a file edit and avoids encoding while the known result cannot fit', async () => {
+  let capacity = 32;
+  let checks = 0;
+  const prepare = vi.fn(async (_input: string, output: string) => {
+    fs.writeFileSync(output, 'x'.repeat(4096));
+    return result;
+  });
+  const f = fixture(prepare, async work => work(delta => {
+    checks++;
+    if (delta > capacity) throw new RemoteTransferError(413, 'storage_quota_exceeded', 'quota');
+  }), 30);
+  await vi.waitFor(() => expect(f.read().recordings!.clip!.status).toBe('original'));
+  await vi.waitFor(() => expect(checks).toBeGreaterThanOrEqual(4));
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(f.read().pending).toEqual([]);
+  capacity = 8192;
+  await vi.waitFor(() => expect(f.read().recordings!.clip!.status).toBe('ready'));
+  expect(prepare).toHaveBeenCalledTimes(2);
+  expect(fs.readFileSync(path.join(f.dir, 'pages/clip.webm'), 'utf8')).toBe('first capture');
+});
+
+test.each(['resume', 'close'] as const)('quota retries respect maintenance and %s', async action => {
+  let capacity = 0;
+  let checks = 0;
+  const prepare = vi.fn(async (_input: string, output: string) => {
+    fs.writeFileSync(output, 'prepared');
+    return result;
+  });
+  const f = fixture(prepare, async work => work(delta => {
+    checks++;
+    if (delta > capacity) throw new RemoteTransferError(413, 'storage_quota_exceeded', 'quota');
+  }), 30);
+  await vi.waitFor(() => expect(f.read().recordings!.clip!.status).toBe('original'));
+  const resume = await f.manager.quiesce();
+  const before = checks;
+  capacity = 8192;
+  await new Promise(resolve => setTimeout(resolve, 80));
+  expect(checks).toBe(before);
+  expect(prepare).not.toHaveBeenCalled();
+  if (action === 'close') {
+    await f.manager.close();
+    resume();
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(checks).toBe(before);
+    expect(prepare).not.toHaveBeenCalled();
+  } else {
+    resume();
+    await vi.waitFor(() => expect(f.read().recordings!.clip!.status).toBe('ready'));
+    expect(prepare).toHaveBeenCalledTimes(1);
+  }
 });

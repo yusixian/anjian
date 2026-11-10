@@ -5,12 +5,13 @@ import path from 'node:path';
 
 import type { CanvasPayload, RecordingState } from '../shared/types';
 import { resolveBoardFile } from './paths';
+import { RemoteTransferError } from './remote-transfer';
 import { trimRecording, type TrimResult } from './recording-trim';
 import type { CommentAdmission } from './document-comments';
 import { createPreparedStateFiles } from './storage/prepared-files';
 
 // Bump when the preparation policy changes; source bytes + policy identify a
-// durable cache entry. Failed jobs are retried after a restart or source edit.
+// durable cache entry. Quota failures retry; media failures wait for a restart or edit.
 const POLICY = 'idle-ends-v1';
 const STABLE_MS = 750;
 const digest = (data: Buffer | string) => crypto.createHash('sha256').update(data).digest('hex');
@@ -24,6 +25,7 @@ interface Cached {
 }
 interface Job {
   artifact: string;
+  admissionBytes?: number;
   controller: AbortController;
   file: string;
   hash?: string;
@@ -40,6 +42,7 @@ interface Options {
   // The processor is also a boundary for alternative local media backends.
   prepare?: typeof trimRecording;
   stableMs?: number;
+  retryMs?: number;
   stateDir: string;
 }
 
@@ -130,11 +133,15 @@ export function createVerifyRecordings(options: Options) {
       }
       if (!cached) {
         if (!await admitted(job, admit => {
-          admit(bytes.byteLength);
+          admit(Math.max(bytes.byteLength, job.admissionBytes ?? 0));
           temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-recording-prepare-'));
           temporaryDirectories.add(temporary);
           fs.writeFileSync(path.join(temporary, 'capture'), bytes);
         })) return;
+        if (job.state.status !== 'processing') {
+          job.state = { status: 'processing' };
+          notify(job);
+        }
         const input = path.join(temporary!, 'capture');
         const prepared = path.join(temporary!, 'clip.mp4');
         const result = await active(() => (options.prepare ?? trimRecording)(input, prepared, job.controller.signal));
@@ -161,7 +168,8 @@ export function createVerifyRecordings(options: Options) {
             try { return fs.statSync(file).size; }
             catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
           };
-          admit(planned.reduce((sum, entry) => sum + Buffer.byteLength(entry.data) - size(entry.file), 0));
+          job.admissionBytes = planned.reduce((sum, entry) => sum + Buffer.byteLength(entry.data) - size(entry.file), 0);
+          admit(job.admissionBytes);
           const transaction = createPreparedStateFiles(options.stateDir, planned);
           transaction.stage();
           try { transaction.commit(); }
@@ -194,6 +202,14 @@ export function createVerifyRecordings(options: Options) {
         status: 'original',
         warning: `Using the original recording: ${(error as Error).message}`,
       };
+      if (error instanceof RemoteTransferError && error.code === 'storage_quota_exceeded') {
+        job.timer = setTimeout(() => {
+          if (!current(job)) return;
+          queue.push(job);
+          pump();
+        }, options.retryMs ?? 30_000);
+        job.timer.unref?.();
+      }
       notify(job);
     } finally {
       if (temporary) {

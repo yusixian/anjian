@@ -84,7 +84,7 @@ test('WebSocket selection writes respect quota and remove obsolete Agent context
   } finally { ws.socket?.destroy(); warning.mockRestore(); await hub.close(); }
 });
 
-test('recording preparation at zero quota keeps the source and avoids creating a cache', async () => {
+test('recording quota recovery resumes media validation without editing the original', async () => {
   const temp = tempRoot(); const root = fs.realpathSync(temp.root);
   const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
   writeArtboard(artifacts, 'recording', { version: 1, pages: [{ id: 'p', name: 'P' }],
@@ -105,6 +105,16 @@ test('recording preparation at zero quota keeps the source and avoids creating a
       expect(data.canvas.boards.clip.file).toBe('pages/clip.webm');
     }, { timeout: 3000 });
     expect(fs.existsSync(path.join(artifacts, '.state/recordings'))).toBe(false);
+    const restoredAt = Date.now();
+    createStorageSettings(paths.home).setSharedLimit(1024 * 1024);
+    await vi.waitFor(async () => {
+      const data = await (await fetch(origin + '/api/artifacts/artboard/recording')).json();
+      expect(data.recordings.clip.status).toBe('original');
+      // This fixture is intentionally not media: reaching ffprobe proves the
+      // quota retry entered preparation without replacing or editing the source.
+      expect(data.recordings.clip.warning).toContain('ffprobe');
+    }, { timeout: 35_000, interval: 100 });
+    expect(Date.now() - restoredAt).toBeGreaterThan(20_000);
     expect(fs.readFileSync(path.join(artifacts, 'artboard/recording/pages/clip.webm'), 'utf8')).toBe('original recording bytes');
   } finally { warning.mockRestore(); await hub.close(); }
-});
+}, 40_000);
