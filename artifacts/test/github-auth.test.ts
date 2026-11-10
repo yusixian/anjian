@@ -1,10 +1,16 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type http from 'node:http';
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { createGitHubAuth, type GitHubConfig, readGitHubConfig } from '../src/server/github-auth';
 
+import { createMemberStore } from '../src/server/member-store';
+
+const homes: string[] = [];
 const config: GitHubConfig = { clientId: 'client-id', clientSecret: 'client-secret', ownerId: 1234 };
 const token = 'server-master-key';
 const origin = 'https://anjian.example';
@@ -18,7 +24,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-09T00:00:00Z'));
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true }); });
 
 function fixture(overrides: Partial<Parameters<typeof createGitHubAuth>[0]> = {}) {
   const fetch = vi.fn<typeof globalThis.fetch>();
@@ -185,4 +191,65 @@ test('logout clears both GitHub session and pending flow cookies with matching s
     `${cookieName}_github_state=; HttpOnly; SameSite=Lax; Path=/; Secure; Max-Age=0`,
   ]);
   expect(auth.clearStateCookie()).toBe(auth.clearCookie()[1]);
+});
+
+
+function membersFixture() {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-oauth-members-'));
+  homes.push(home);
+  const members = createMemberStore(home, config.ownerId);
+  const base = fixture({ members });
+  const login = async (id: number, invitation?: string) => {
+    const flow = base.auth.start('/', true, invitation);
+    const callback = new URL('/auth/github/callback', origin);
+    callback.searchParams.set('state', new URL(flow.location).searchParams.get('state')!);
+    callback.searchParams.set('code', 'member-code');
+    base.fetch.mockResolvedValueOnce(json({ access_token: 'provider-token', token_type: 'bearer' }))
+      .mockResolvedValueOnce(json({ id, login: `user-${id}` }));
+    const result = await base.auth.callback(request(pair(flow.cookie)), callback);
+    return pair(result.cookies[1]!);
+  };
+  return { ...base, members, login };
+}
+
+test('an invited member receives a distinct identity, never legacy administrator authority', async () => {
+  const { auth, members, login } = membersFixture();
+  const invite = members.invite({ id: 44, login: 'user-44' }, 2048);
+  const cookie = await login(44, invite.token);
+  expect(auth.principal(cookie)).toMatchObject({ role: 'member', id: 'github:44', githubId: 44 });
+  expect(auth.authorized(cookie)).toBe(false);
+  expect(decodeCookie(cookie)).not.toHaveProperty('ownerId');
+  expect(fixture().auth.principal(cookie)).toBeNull();
+  expect(auth.principal(await login(44))).toMatchObject({ role: 'member' });
+  expect(auth.authorized(await login(config.ownerId))).toBe(true);
+});
+
+test('member sessions are invalidated on suspension and do not revive after reactivation', async () => {
+  const { auth, members, login } = membersFixture();
+  const cookie = await login(44, members.invite({ id: 44, login: 'user-44' }, 0).token);
+  members.update('github:44', { status: 'suspended' });
+  expect(auth.principal(cookie)).toBeNull();
+  await expect(login(44)).rejects.toMatchObject({ code: 'denied' });
+  members.update('github:44', { status: 'active' });
+  expect(auth.principal(cookie)).toBeNull();
+  expect(auth.principal(await login(44))).toMatchObject({ role: 'member', sessionVersion: 2 });
+});
+
+test('wrong-account and revoked invitations cannot bootstrap a member session', async () => {
+  const { members, login } = membersFixture();
+  const invite = members.invite({ id: 44, login: 'user-44' }, 1024);
+  await expect(login(45, invite.token)).rejects.toMatchObject({ code: 'denied' });
+  expect(members.list().members).toHaveLength(0);
+  members.revokeInvitation(invite.id);
+  await expect(login(44, invite.token)).rejects.toMatchObject({ code: 'denied' });
+  await expect(login(44)).rejects.toMatchObject({ code: 'denied' });
+});
+
+test('invitation is bound to the signed flow and never sent to GitHub', () => {
+  const { auth, members } = membersFixture();
+  const invite = members.invite({ id: 44, login: 'user-44' }, 1024);
+  const flow = auth.start('/', false, invite.token);
+  expect(decodeCookie(flow.cookie).invitation).toBe(invite.token);
+  expect(flow.location).not.toContain(invite.token);
+  expect(() => auth.start('/', false, 'invalid')).toThrow('邀请链接无效');
 });

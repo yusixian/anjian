@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type http from 'node:http';
 
 import { parseCookies, safeEqual } from './http';
+import type { createMemberStore, Principal } from './member-store';
 
 const FLOW_SECONDS = 10 * 60;
 const SESSION_SECONDS = 24 * 60 * 60;
@@ -40,10 +41,13 @@ interface Flow {
   returnTo: string;
   remember: boolean;
   expires: number;
+  invitation?: string;
 }
 
 interface Session {
-  ownerId: number;
+  ownerId?: number;
+  githubId?: number;
+  sessionVersion?: number;
   expires: number;
   nonce: string;
 }
@@ -54,6 +58,7 @@ interface GitHubAuthOptions {
   origin: string;
   cookieName: string;
   fetch?: typeof fetch;
+  members?: ReturnType<typeof createMemberStore>;
 }
 
 function callbackOrigin(origin: string): string {
@@ -70,7 +75,7 @@ function validReturnTo(value: string): boolean {
     !/[\\\x00-\x20\x7f]/.test(value);
 }
 
-export function createGitHubAuth({ config, token, origin, cookieName, fetch: request = fetch }: GitHubAuthOptions) {
+export function createGitHubAuth({ config, token, origin, cookieName, members, fetch: request = fetch }: GitHubAuthOptions) {
   const publicOrigin = callbackOrigin(origin);
   const callbackUrl = `${publicOrigin}${CALLBACK_PATH}`;
   const secure = publicOrigin.startsWith('https:');
@@ -119,9 +124,24 @@ export function createGitHubAuth({ config, token, origin, cookieName, fetch: req
     }
   };
 
+  const principal = (header: string | undefined): Principal | null => {
+    const session = unseal('session', parseCookies(header)[sessionName]) as Session | null;
+    if (!session || typeof session.expires !== 'number' || session.expires <= now() ||
+        typeof session.nonce !== 'string' || session.nonce.length !== 43) return null;
+    // Existing signed Owner sessions remain valid; members never use the legacy owner field.
+    if (session.ownerId === config.ownerId || session.githubId === config.ownerId)
+      return { id: 'owner', role: 'owner', githubId: config.ownerId, sessionVersion: 0 };
+    if (session.ownerId !== undefined || !Number.isSafeInteger(session.githubId) ||
+        !Number.isSafeInteger(session.sessionVersion) || Number(session.sessionVersion) < 0) return null;
+    return members?.principal(session.githubId!, session.sessionVersion) ?? null;
+  };
+
   return {
-    start(returnTo: string, remember: boolean): { location: string; cookie: string } {
+    principal,
+    start(returnTo: string, remember: boolean, invitation?: string): { location: string; cookie: string } {
       if (!validReturnTo(returnTo)) throw new Error('登录后的返回地址无效。');
+      if (invitation !== undefined && !/^[A-Za-z0-9_-]{43}$/.test(invitation))
+        throw new Error('邀请链接无效。');
       cleanup();
       const state = random();
       const verifier = random();
@@ -135,7 +155,7 @@ export function createGitHubAuth({ config, token, origin, cookieName, fetch: req
       url.searchParams.set('code_challenge', challenge);
       url.searchParams.set('code_challenge_method', 'S256');
       url.searchParams.set('allow_signup', 'false');
-      const flow: Flow = { state, verifier, returnTo, remember, expires };
+      const flow: Flow = { state, verifier, returnTo, remember, expires, ...(invitation ? { invitation } : {}) };
       return { location: url.toString(), cookie: cookie(flowName, seal('flow', flow), 'Lax', FLOW_SECONDS) };
     },
 
@@ -167,10 +187,20 @@ export function createGitHubAuth({ config, token, origin, cookieName, fetch: req
         const user = await fetchJson('https://api.github.com/user', {
           headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${result.access_token}`, 'User-Agent': 'Anjian' },
         });
-        if (!Number.isSafeInteger(user.id) || user.id !== config.ownerId)
-          throw new GitHubAuthError('denied', '此 GitHub 账号尚未获得案间访问权限。');
+        if (!Number.isSafeInteger(user.id) || Number(user.id) <= 0)
+          throw new GitHubAuthError('denied', 'GitHub 账号信息无效。');
+        const githubId = user.id as number;
+        let member: Principal | null = null;
+        if (githubId !== config.ownerId) {
+          if (members && flow.invitation && typeof user.login === 'string') {
+            try { member = members.accept({ id: githubId, login: user.login }, flow.invitation); }
+            catch { throw new GitHubAuthError('denied', '邀请已失效或账号不匹配，请联系邀请人。'); }
+          } else member = members?.principal(githubId) ?? null;
+          if (!member || member.role !== 'member')
+            throw new GitHubAuthError('denied', '此 GitHub 账号尚未获得案间访问权限。');
+        }
         const seconds = flow.remember ? REMEMBER_SECONDS : SESSION_SECONDS;
-        const session: Session = { ownerId: config.ownerId, expires: now() + seconds, nonce: random() };
+        const session: Session = { ...(member ? { githubId, sessionVersion: member.sessionVersion } : { ownerId: config.ownerId }), expires: now() + seconds, nonce: random() };
         return {
           cookies: [clear(flowName, 'Lax'), cookie(sessionName, seal('session', session), 'Lax', flow.remember ? seconds : undefined)],
           returnTo: flow.returnTo,
@@ -184,10 +214,8 @@ export function createGitHubAuth({ config, token, origin, cookieName, fetch: req
     },
 
     authorized(header: string | undefined): boolean {
-      const session = unseal('session', parseCookies(header)[sessionName]) as Session | null;
-      return Boolean(session && session.ownerId === config.ownerId &&
-        typeof session.expires === 'number' && session.expires > now() &&
-        typeof session.nonce === 'string' && session.nonce.length === 43);
+      // Legacy callers mean instance administrator, not merely a signed-in user.
+      return principal(header)?.role === 'owner';
     },
 
     clearCookie(): string[] {
