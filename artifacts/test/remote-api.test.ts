@@ -404,3 +404,33 @@ test('scoped CLI document comments cannot bypass shared quota through forwarding
   expect((await post()).status).toBe(200);
   expect(JSON.parse(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).threads).toHaveLength(1);
 });
+
+test('board human, agent and CLI choice operations share quota admission', async () => {
+  const fx = await fixture(); const { headers } = await fx.login();
+  const dir = path.join(fx.alpha, '.anjian/artifacts/artboard/board-budget'); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'a.html'), '<p>Option A</p>');
+  fs.writeFileSync(path.join(dir, 'canvas.json'), JSON.stringify({ version: 1, pages: [{ id: 'p', name: 'P' }],
+    boards: { a: { file: 'a.html', page: 'p', x: 0, y: 0, w: 200, h: 100 } },
+    groups: { q: { boards: ['a'], choose: true } }, notes: { r: { page: 'p', kind: 'title', x: 0, y: -400, text: 'Round' } } }));
+  const remote = `/api/remote/projects/${fx.id(fx.alpha)}/agent/artboard/board-budget/comments`;
+  const settings = createStorageSettings(fx.home); settings.setSharedLimit(0);
+  const cli = (body: object) => fx.request(remote, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const human = await fx.request(`/api/artboard/board-budget/comments?key=${MASTER}`, { method: 'POST', headers: { Origin: fx.origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'create', anchor: { page: 'p', board: 'a', x: 1, y: 1 }, text: 'human quota' }) });
+  expect(human.status, await human.clone().text()).toBe(413);
+  const direct = await fx.request(`/api/agent/artboard/board-budget/comments?key=${MASTER}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'add', board: 'a', text: 'agent quota' }) });
+  expect(direct.status, await direct.clone().text()).toBe(413);
+  expect((await cli({ op: 'choose', group: 'q', board: 'a' })).status).toBe(413);
+  const file = path.join(dir, 'comments.json'); expect(fs.existsSync(file)).toBe(false);
+  settings.setSharedLimit(1024 * 1024);
+  expect((await cli({ op: 'choose', group: 'q', board: 'a' })).status).toBe(200);
+  const before = fs.readFileSync(file, 'utf8');
+  settings.setSharedLimit(0);
+  const denied = await cli({ op: 'submit', round: 'r', submit: true });
+  expect(denied.status, await denied.clone().text()).toBe(413);
+  expect(fs.readFileSync(file, 'utf8')).toBe(before);
+  settings.setSharedLimit(1024 * 1024);
+  expect((await cli({ op: 'submit', round: 'r', submit: true })).status).toBe(200);
+  expect(JSON.parse(fs.readFileSync(file, 'utf8')).threads).toHaveLength(2);
+});

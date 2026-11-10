@@ -152,6 +152,7 @@ export function createStore<F, H, G>(
   now = () => new Date().toISOString(),
   newId = () => nanoid(10),
   initialAdmission?: CommentAdmission,
+  persist?: (next: F, admit?: CommentAdmission) => void,
 ): Store<F, H, G> {
   let current = rules.empty();
   let lastSeen: string | null = null;
@@ -160,11 +161,14 @@ export function createStore<F, H, G>(
 
   const write = (next: F, admit?: CommentAdmission) => {
     const text = `${JSON.stringify(next, null, 2)}\n`;
-    let previous = 0;
-    try { previous = fs.statSync(file).size; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    admit?.(Buffer.byteLength(text) - previous);
-    writeJsonAtomic(file, next);
+    if (persist) persist(next, admit);
+    else {
+      let previous = 0;
+      try { previous = fs.statSync(file).size; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      admit?.(Buffer.byteLength(text) - previous);
+      writeJsonAtomic(file, next);
+    }
     current = next;
     lastSeen = text;
   };

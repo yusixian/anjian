@@ -120,14 +120,16 @@ async function serveAgentBoardComments(
       if (fields.op === 'choose') {
         if (!isId(fields.group) || (fields.board !== null && !isId(fields.board)))
           throw new Error('choose needs {group, board} with board a board id or null');
-        sendJson(res, 200, boardComments.agentChoose(id, fields.group, fields.board, agent));
+        sendJson(res, 200, boardComments.agentChoose(id, fields.group, fields.board, agent, requestStorageAdmission(req)));
       } else {
         if (!isId(fields.round) || typeof fields.submit !== 'boolean')
           throw new Error('submit needs {round, submit: true | false}');
-        sendJson(res, 200, boardComments.agentSubmit(id, fields.round, fields.submit, agent));
+        sendJson(res, 200, boardComments.agentSubmit(id, fields.round, fields.submit, agent, requestStorageAdmission(req)));
       }
     } catch (err) {
-      sendJson(res, 400, { error: (err as Error).message });
+      sendJson(res, err instanceof RemoteTransferError ? err.status : 400, {
+        ...(err instanceof RemoteTransferError ? { code: err.code } : {}), error: (err as Error).message,
+      });
     }
     return;
   }
@@ -149,9 +151,11 @@ async function serveAgentBoardComments(
     return;
   }
   try {
-    sendJson(res, 200, boardComments.applyAgent(id, op, agent));
+    sendJson(res, 200, boardComments.applyAgent(id, op, agent, requestStorageAdmission(req)));
   } catch (err) {
-    sendJson(res, 400, { error: (err as Error).message });
+    sendJson(res, err instanceof RemoteTransferError ? err.status : 400, {
+      ...(err instanceof RemoteTransferError ? { code: err.code } : {}), error: (err as Error).message,
+    });
   }
 }
 

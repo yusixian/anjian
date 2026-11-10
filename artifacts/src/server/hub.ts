@@ -806,7 +806,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }
       const mounted = await route(req, url, pathname);
       if (!mounted) send(res, 404, 'Not found');
-      else if (req.method === 'POST' && /^\/api\/(?:agent\/)?document\/[^/]+\/comments$/.test(pathname)) {
+      else if (req.method === 'POST' && /^\/api\/(?:agent\/)?(?:document|artboard)\/[^/]+\/comments$/.test(pathname)) {
         const project = path.resolve(mounted.root, '../..');
         if (!projectAccess.authorized(req, project) || !originAllowed(policy, req.headers.origin) ||
           !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) { send(res, 403, 'Forbidden'); return; }

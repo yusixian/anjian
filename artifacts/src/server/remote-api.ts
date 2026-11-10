@@ -90,7 +90,7 @@ export function createRemoteApi(options: Options) {
           if (admit) await withRequestStorageAdmission(req, admit, () => mounted.handleRequest(req, res));
           else await mounted.handleRequest(req, res);
         };
-        if (type === 'document' && agentMatch[4] === 'comments' && options.upload)
+        if (agentMatch[4] === 'comments' && options.upload)
           await options.upload(project.dir, (prepare) => withProjectMutation(project.dir, () => forward(prepare)));
         else await forward();
         return true;

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { asBoardHumanOp, createBoardCommentRegistry } from '../src/server/board-comments';
 
@@ -43,8 +43,9 @@ function project(extraNotes: Record<string, unknown> = {}) {
       `<html><body>${board}</body></html>`,
     );
   const stateDir = path.join(root, '.state');
-  const registry = createBoardCommentRegistry({ root, stateDir, broadcast: () => {} });
-  return { dir, registry, stateDir };
+  const sent: unknown[] = [];
+  const registry = createBoardCommentRegistry({ root, stateDir, broadcast: (message) => sent.push(message) });
+  return { dir, registry, stateDir, sent };
 }
 
 const human = (anchor: Record<string, unknown>, text = 'x') =>
@@ -191,4 +192,37 @@ test('a human cannot delete, reopen or resolve a choice record', () => {
   ];
   for (const op of ops)
     expect(() => registry.apply('pick', asBoardHumanOp(op)!)).toThrow(/choice record/);
+});
+
+
+test('choice admission covers both comment and round bytes before either file is created', () => {
+  const { dir, registry, stateDir, sent } = project();
+  const comments = path.join(dir, 'comments.json'); const rounds = path.join(stateDir, 'artboard/pick/rounds.json');
+  expect(() => registry.agentChoose('pick', 'q1', 'q1-a', undefined, () => { throw new Error('quota exceeded'); })).toThrow('quota');
+  expect(fs.existsSync(comments)).toBe(false); expect(fs.existsSync(rounds)).toBe(false);
+  expect(sent).toHaveLength(0);
+  let charged = 0;
+  registry.agentChoose('pick', 'q1', 'q1-a', undefined, (delta) => { charged += delta; });
+  expect(charged).toBe(fs.statSync(comments).size + fs.statSync(rounds).size);
+  expect(sent).toHaveLength(1);
+});
+
+test('round installation failure rolls back comment files and memory before broadcasting', () => {
+  const { dir, registry, stateDir, sent } = project();
+  registry.agentChoose('pick', 'q1', 'q1-a');
+  const comments = path.join(dir, 'comments.json'); const rounds = path.join(stateDir, 'artboard/pick/rounds.json');
+  const before = [fs.readFileSync(comments, 'utf8'), fs.readFileSync(rounds, 'utf8')];
+  const messages = sent.length;
+  const rename = fs.renameSync;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    if (String(to) === rounds && String(from).endsWith('.tmp')) throw new Error('round write failed');
+    return rename(from, to);
+  });
+  try { expect(() => registry.agentChoose('pick', 'q1', 'q1-b')).toThrow('round write failed'); }
+  finally { spy.mockRestore(); }
+  expect([fs.readFileSync(comments, 'utf8'), fs.readFileSync(rounds, 'utf8')]).toEqual(before);
+  expect(registry.groups('pick').find((group) => group.id === 'q1')).toMatchObject({ choice: 'q1-a' });
+  expect(sent).toHaveLength(messages);
+  registry.agentChoose('pick', 'q1', 'q1-b');
+  expect(registry.groups('pick').find((group) => group.id === 'q1')).toMatchObject({ choice: 'q1-b' });
 });

@@ -5,6 +5,8 @@ import { asBoardHumanOp } from '../board-comments';
 import type { ServerContext } from '../context';
 import { sendJson } from '../http';
 import { MAX_COMMENT_OP } from '../limits';
+import { requestStorageAdmission } from '../storage/request-admission';
+import { RemoteTransferError } from '../remote-transfer';
 import type { HttpRoute } from './table';
 
 const API_BOARD_COMMENTS_ROUTE = /^\/api\/artboard\/([^/]+)\/comments$/;
@@ -44,9 +46,11 @@ async function serveBoardComments(
     return;
   }
   try {
-    sendJson(res, 200, ctx.boardComments.apply(id, op));
+    sendJson(res, 200, ctx.boardComments.apply(id, op, requestStorageAdmission(req)));
   } catch (err) {
-    sendJson(res, 400, { error: (err as Error).message });
+    sendJson(res, err instanceof RemoteTransferError ? err.status : 400, {
+      ...(err instanceof RemoteTransferError ? { code: err.code } : {}), error: (err as Error).message,
+    });
   }
 }
 
