@@ -24,7 +24,7 @@ export function WorkbenchHeader({ title, onProjectsChanged }: { title: string; o
           onClick={() => void setViewerLanguage(i18n.language === 'zh' ? 'en' : 'zh')}
         >
           <Languages aria-hidden="true" size={14} />
-          <span>{i18n.language === 'zh' ? '中文' : 'English'}</span>
+          <span {...stylex.props(styles.languageLabel)}>{i18n.language === 'zh' ? '中文' : 'English'}</span>
         </button>
         <StatusPill onProjectsChanged={onProjectsChanged} />
       </div>

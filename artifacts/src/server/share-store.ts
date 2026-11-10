@@ -170,6 +170,7 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     project: string,
     artifact: ShareArtifact,
     settings: { expiresInDays?: 1 | 7 | 30 | null; title: string },
+    admit?: (bytes: number) => void,
   ) => {
     const key = keyOf(project, artifact);
     if (![1, 7, 30, null, undefined].includes(settings.expiresInDays) ||
@@ -200,6 +201,8 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     const usage = Object.values(old.records).reduce((sum, entry) => sum + entry.bytes, 0) - (previous?.bytes ?? 0);
     if (identity.bytes + usage > maxBytes)
       throw new ShareStoreError(413, 'share_storage_full', 'Public share storage is full');
+    // Reserve the entire new snapshot: the old one must remain available until publication succeeds.
+    admit?.(identity.bytes);
     const directory = path.join(snapshots, identity.snapshotId);
     fs.mkdirSync(directory, { mode: 0o700 });
     try {

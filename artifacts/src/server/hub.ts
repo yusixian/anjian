@@ -27,7 +27,7 @@ import { createMemberWorkspace } from './member-workspace';
 import { createStorageSettings } from './storage/settings';
 import { createStorageApi } from './storage/api';
 import { createStorageUsage } from './storage/usage';
-import { createUploadQuota } from './storage/quota';
+import { createStorageQuota } from './storage/quota';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
@@ -576,7 +576,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     snapshots: () => shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: members.projectOwner(project) })),
   });
   const settings = createStorageSettings(options.paths.home);
-  const upload = createUploadQuota({
+  const writeQuota = createStorageQuota({
     owner: members.projectOwner,
     measure: usage.measure,
     limits: (owner) => ({
@@ -584,14 +584,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       personal: owner === 'owner' ? null : members.list().members.find((member) => member.id === owner)?.quotaBytes ?? 0,
     }),
   });
-  const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload });
+  const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload: writeQuota });
   const storageApi = createStorageApi({ settings, usage, origin, principal: projectAccess.principal, readBody });
   const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
   const publicShares = createPublicShare({ store: shares, origin,
     previewOrigin: options.boardOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${boardPort}`,
     viewerDir: options.viewerDir, runtimeDir: options.runtimeDir, registered });
-  const shareApi = createHubShare({ store: shares, origin, authorized: authenticated, readBody,
+  const shareApi = createHubShare({ store: shares, origin, authorized: authenticated, readBody, publish: writeQuota,
     resolve: (req, input) => {
       if (typeof input.type !== 'string' || typeof input.id !== 'string' ||
           (input.project !== undefined && typeof input.project !== 'string')) return null;

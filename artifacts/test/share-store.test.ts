@@ -182,3 +182,18 @@ test('removing a registered project closes all of its shares durably', () => {
   expect(createShareStore(f.home).find(first.token)).toBeNull();
   expect(f.store.revokeProject(f.project)).toBe(0);
 });
+
+test('publication admission reserves the new snapshot and leaves the old share intact on rejection', () => {
+  const f = fixture();
+  const old = f.store.publish(f.project, f.artifact, { title: 'Original' });
+  fs.writeFileSync(path.join(f.source, f.primary), 'second version');
+  let reserved = -1;
+  expect(() => f.store.publish(f.project, f.artifact, { title: 'Replacement' }, (bytes) => {
+    reserved = bytes;
+    throw new ShareStoreError(413, 'storage_quota_exceeded', 'quota');
+  })).toThrowError(expect.objectContaining({ code: 'storage_quota_exceeded' }));
+  expect(reserved).toBe(Buffer.byteLength('second version'));
+  expect(f.store.find(old.token)?.snapshotDir).toBe(old.snapshotDir);
+  expect(fs.readFileSync(path.join(old.snapshotDir, f.primary), 'utf8')).toBe('first version');
+  expect(fs.readdirSync(path.join(f.home, 'shares/snapshots'))).toEqual([path.basename(old.snapshotDir)]);
+});

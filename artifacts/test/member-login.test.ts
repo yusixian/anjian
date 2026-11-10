@@ -164,3 +164,27 @@ test('storage configuration remains available when usage cannot be safely scanne
   expect(result.configured).toBe(false);
   expect(result.backend).toBe('local');
 });
+
+test('share publication uses the project member quota and permits revocation while over quota', async () => {
+  const f = await fixture();
+  const alice = await f.join('alice', 2);
+  writeHtml(path.join(alice.project, '.anjian/artifacts'), 'shared', { 'index.html': '<h1>Alice</h1>' });
+  const url = new URL(await f.hub.linkFor(alice.project, 'html', 'shared')).pathname;
+  const action = (action: string) => f.request('/api/hub/share', alice.cookie,
+    { action, type: 'html', id: 'shared', expiresInDays: 7 }, url);
+  expect((await f.request('/api/hub/members', f.ownerCookie, { action: 'update', id: 'github:2', quotaBytes: 0 })).status).toBe(200);
+  const denied = await action('publish');
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  const ownerUrl = new URL(await f.hub.linkFor(fs.realpathSync(f.ownerProject), 'html', 'private')).pathname;
+  expect((await f.request('/api/hub/share', f.ownerCookie,
+    { action: 'publish', type: 'html', id: 'private', expiresInDays: 7 }, ownerUrl)).status).toBe(200);
+  await f.request('/api/hub/members', f.ownerCookie, { action: 'update', id: 'github:2', quotaBytes: 1024 * 1024 });
+  const published = await action('publish'); expect(published.status).toBe(200);
+  const publicUrl = new URL((await published.json()).share.url).pathname;
+  await f.request('/api/hub/members', f.ownerCookie, { action: 'update', id: 'github:2', quotaBytes: 0 });
+  expect((await action('publish')).status).toBe(413);
+  expect((await f.request(`${publicUrl}/data`, '')).status).toBe(200);
+  expect((await action('revoke')).status).toBe(200);
+  expect((await f.request(`${publicUrl}/data`, '')).status).toBe(404);
+});

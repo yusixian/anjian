@@ -547,6 +547,7 @@
     "revokeImpact": "The old link will stop working. The artifact and its comments remain. Copies already saved by visitors cannot be recalled.",
     "rotateConfirmTitle": "Reset the sharing link?",
     "rotateImpact": "The old link will stop working. Send the new link to visitors. The published content stays the same.",
+    "quotaExceeded": "Not enough storage. Publishing needs room for a complete new snapshot. The old snapshot stays until publication succeeds. Free up space and try again.",
     "actionUnconfirmed": "Sharing status has been refreshed. Check the link and status before continuing.",
     "actionUnknown": "The result is not confirmed. Retry loading before you publish or turn off sharing again."
   },

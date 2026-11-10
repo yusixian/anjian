@@ -92,12 +92,20 @@ async function getShare(type: ArtifactType, id: string, project?: string): Promi
   return response.json() as Promise<ShareResponse>;
 }
 
+class ShareQuotaError extends Error {}
+
 async function changeShare(type: ArtifactType, id: string, action: Action, expiry: Expiry | undefined, project?: string): Promise<ShareResponse> {
   const response = await fetch('/api/hub/share', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
     body: JSON.stringify({ type, id, project, action, expiresInDays: expiry }),
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 413) {
+      const failure = await response.json().catch(() => null);
+      if (failure?.code === 'storage_quota_exceeded') throw new ShareQuotaError();
+    }
+    throw new Error(`HTTP ${response.status}`);
+  }
   return response.json() as Promise<ShareResponse>;
 }
 
@@ -156,14 +164,14 @@ export function ShareButton({ type, id, project, card = false }: {
       setData(next);
       setUncertain(false);
       setConfirm(null);
-    } catch {
+    } catch (failure) {
       // The server may have committed a change before its response was lost.
       // Re-read status before offering the action again.
       try {
         setData(await getShare(type, id, project));
         setUncertain(false);
         setConfirm(null);
-        setError(t('share.actionUnconfirmed'));
+        setError(t(failure instanceof ShareQuotaError ? 'share.quotaExceeded' : 'share.actionUnconfirmed'));
       } catch {
         setUncertain(true);
         setError(t('share.actionUnknown'));

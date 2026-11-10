@@ -1,7 +1,7 @@
 import { RemoteTransferError } from '../remote-transfer';
 
-/** Serializes remote upload admission across projects; other writers must join this boundary. */
-export function createUploadQuota(options: {
+/** Serializes uploads and snapshot publication across projects; other writers must join this boundary. */
+export function createStorageQuota(options: {
   owner: (project: string) => string;
   measure: (owner: string) => Promise<{ shared: number; personal: number }>;
   limits: (owner: string) => { shared: number | null; personal: number | null };

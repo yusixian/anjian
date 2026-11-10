@@ -2,10 +2,13 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { startHub, type Hub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
+import { createStorageSettings } from '../src/server/storage/settings';
+import { createStorageUsage } from '../src/server/storage/usage';
+import { readRemoteArtifact } from '../src/server/remote-transfer';
 import { tempRoot, writeArtboard } from './helpers';
 
 const hubs: Hub[] = [];
@@ -147,4 +150,54 @@ test('private capability paths preserve relative resources without reopening leg
   expect(content.status).toBe(200); expect(await content.text()).toContain('Private board');
   await h.remove(project);
   expect((await req(base + 'index.html')).status).toBe(404);
+});
+
+
+test('instance quota rejects first publication and replacement without changing public content', async () => {
+  const { home, root, req, action } = await setup();
+  const settings = createStorageSettings(home);
+  settings.setSharedLimit(0);
+  const denied = await action('publish');
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.readdirSync(path.join(home, 'shares/snapshots'))).toEqual([]);
+  settings.setSharedLimit(100 * 1024 * 1024);
+  const published = await action('publish'); expect(published.status).toBe(200);
+  const first = await published.json();
+  const link = new URL(first.share.url).pathname;
+  const data = await (await req(`${link}/data`)).json();
+  const content = new URL(data.contentBase).pathname;
+  fs.writeFileSync(path.join(root, 'html/demo/index.html'), '<html>replacement</html>');
+  settings.setSharedLimit(0);
+  const replacement = await action('publish'); expect(replacement.status).toBe(413);
+  expect((await replacement.json()).code).toBe('storage_quota_exceeded');
+  expect(await (await req(`${content}index.html`, {}, true)).text()).toContain('Original');
+  expect((await req(`${link}/data`)).status).toBe(200);
+  expect((await action('revoke')).status).toBe(200);
+  expect((await req(`${link}/data`)).status).toBe(404);
+});
+
+
+test('concurrent publications in different projects cannot both consume the remaining shared capacity', async () => {
+  const f = await setup();
+  const other = temp();
+  const source = path.join(other, '.anjian/artifacts/html/other');
+  fs.mkdirSync(source, { recursive: true }); fs.writeFileSync(path.join(source, 'index.html'), '<h1>Other</h1>');
+  await f.h.register(other);
+  await f.h.linkFor(f.project, 'html', 'demo');
+  await f.h.linkFor(other, 'html', 'other');
+  await vi.waitFor(() => {
+    expect(fs.existsSync(path.join(f.root, '.state/html/demo/warnings.json'))).toBe(true);
+    expect(fs.existsSync(path.join(other, '.anjian/artifacts/.state/html/other/warnings.json'))).toBe(true);
+  });
+  const usage = createStorageUsage({ projects: () => [f.project, other].map((dir) => ({ dir, owner: 'owner' })),
+    snapshotsRoot: path.join(f.home, 'shares/snapshots'), snapshots: () => [] });
+  const bytes = (project: string, id: string) => Object.values(readRemoteArtifact(project, `html/${id}`).files)
+    .reduce((sum, encoded) => sum + Buffer.from(encoded, 'base64').length, 0);
+  createStorageSettings(f.home).setSharedLimit((await usage.measure('owner')).shared + Math.max(bytes(f.project, 'demo'), bytes(other, 'other')));
+  const results = await Promise.all([f.action('publish'), f.req('/api/hub/share', {
+    method: 'POST', headers: f.owner, body: JSON.stringify({ project: other, type: 'html', id: 'other', action: 'publish', expiresInDays: 7 }),
+  })]);
+  expect(results.map((response) => response.status).sort()).toEqual([200, 413]);
+  expect(fs.readdirSync(path.join(f.home, 'shares/snapshots'))).toHaveLength(1);
 });

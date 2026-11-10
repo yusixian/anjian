@@ -13,6 +13,7 @@ interface Options {
   resolve: (req: http.IncomingMessage, input: Record<string, unknown>) => ShareTarget | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
   settle: (target: ShareTarget) => Promise<void>;
+  publish?: <T>(project: string, work: (prepare: () => Promise<(bytes: number) => void>) => Promise<T>) => Promise<T>;
 }
 
 export function createHubShare(options: Options) {
@@ -39,7 +40,7 @@ export function createHubShare(options: Options) {
     const target = options.resolve(req, input);
     if (!target) { sendJson(res, 404, { error: '作品不存在，请刷新后重试。' }); return true; }
     try {
-      const result = await withProjectMutation(target.project, async () => {
+      const perform = (prepare?: () => Promise<(bytes: number) => void>) => withProjectMutation(target.project, async () => {
         if (!allowed(req, url) || !options.resolve(req, input)) throw new Error('作品或登录状态已变化，请刷新后重试。');
         if (req.method === 'GET') return options.store.status(target.project, target);
         if (input.action === 'revoke') { options.store.revoke(target.project, target); return null; }
@@ -49,12 +50,22 @@ export function createHubShare(options: Options) {
         await options.settle(target);
         if (!allowed(req, url) || options.resolve(req, input)?.project !== target.project)
           throw new Error('作品归属或登录状态已变化，请重新登录。');
-        return options.store.publish(target.project, target, { title: target.title, expiresInDays: input.expiresInDays as 1 | 7 | 30 | null | undefined });
+        options.store.cleanupExpired();
+        const admit = await prepare?.();
+        if (!allowed(req, url) || options.resolve(req, input)?.project !== target.project)
+          throw new Error('作品归属或登录状态已变化，请重新登录。');
+        return options.store.publish(target.project, target, { title: target.title, expiresInDays: input.expiresInDays as 1 | 7 | 30 | null | undefined }, admit);
       });
+      const result = req.method === 'POST' && input.action === 'publish' && options.publish
+        ? await options.publish(target.project, perform) : await perform();
       sendJson(res, 200, response(target, result));
     } catch (error) {
       // Never leak server paths or underlying filesystem messages to the browser.
       const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 409;
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'storage_quota_exceeded') {
+        sendJson(res, 413, { code: 'storage_quota_exceeded', error: '存储额度不足。发布需要容纳一份完整的新快照，成功后才会释放旧快照；请释放空间后重试。' });
+        return true;
+      }
       sendJson(res, status, { error: status === 413 ? '分享快照超过容量限制，请减少资源后重试。' : '分享操作未完成。请刷新状态后重试，原有分享不会因发布失败而替换。' });
     }
     return true;

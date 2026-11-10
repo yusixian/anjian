@@ -21,6 +21,7 @@ let root: Root;
 let current: { url: string; publishedAt: number; expiresAt: number | null } | null;
 let failNext = false;
 let failRead = false;
+let quotaNext = false;
 const posts: Record<string, unknown>[] = [];
 
 beforeEach(() => {
@@ -29,6 +30,7 @@ beforeEach(() => {
   current = null;
   failNext = false;
   failRead = false;
+  quotaNext = false;
   posts.length = 0;
   host = document.createElement('div');
   document.body.append(host);
@@ -41,6 +43,7 @@ beforeEach(() => {
     if (url === '/api/hub/share' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>;
       posts.push(body);
+      if (quotaNext) { quotaNext = false; return new Response(JSON.stringify({ code: 'storage_quota_exceeded' }), { status: 413 }); }
       if (failNext) { failNext = false; failRead = true; throw new Error('lost connection'); }
       if (body.action === 'revoke') current = null;
       else current = { url: '/s/published-share', publishedAt: Date.now(), expiresAt: Date.now() + 7 * 86400_000 };
@@ -97,4 +100,17 @@ test('ambiguous failed revoke blocks repeat until status can be read again', asy
   expect(posts).toHaveLength(1);
   expect(button('Turn off sharing').disabled).toBe(true);
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('not confirmed');
+});
+
+
+test('quota rejection explains temporary snapshot space and preserves the existing share', async () => {
+  current = { url: '/s/published-share', publishedAt: Date.now(), expiresAt: null };
+  await render();
+  await click(document.querySelector<HTMLButtonElement>('button[aria-label="Share"]')!);
+  quotaNext = true;
+  await click(button('Update shared version'));
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Not enough storage');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('complete new snapshot');
+  expect(document.body.textContent).toContain('/s/published-share');
+  expect(button('Turn off sharing').disabled).toBe(false);
 });

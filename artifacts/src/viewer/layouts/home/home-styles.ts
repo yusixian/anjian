@@ -24,7 +24,7 @@ export const styles = stylex.create({
     'borderBottomStyle': 'solid',
     'borderBottomColor': cssVar.colorBorderSecondary,
     'backgroundColor': cssVar.colorBgContainer,
-    '@media (max-width: 700px)': { paddingInline: 16 },
+    '@media (max-width: 700px)': { paddingInline: 16, gap: 8 },
   },
   breadcrumb: { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, fontSize: 12 },
   logo: {
@@ -43,7 +43,11 @@ export const styles = stylex.create({
     '@media (max-width: 700px)': { maxWidth: 140 },
   },
   slash: { color: cssVar.colorTextTertiary, fontSize: 17, fontWeight: 300 },
-  topbarEnd: { display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 },
+  topbarEnd: {
+    'display': 'flex', 'alignItems': 'center', 'gap': 14, 'flexShrink': 0,
+    '@media (max-width: 700px)': { gap: 8 },
+  },
+  languageLabel: { display: { default: 'inline', '@media (max-width: 480px)': 'none' } },
   languageButton: {
     display: 'inline-flex',
     alignItems: 'center',
