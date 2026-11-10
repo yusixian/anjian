@@ -97,3 +97,29 @@ test('cancelled GitHub authorization preserves the original pairing target for r
   expect(response.body).toContain('GitHub 授权已取消');
   expect(response.body).toContain('value="/connect?code=PAIR-CODE"');
 });
+
+test('invitation login carries the token only in the local form and sealed flow, including retry', async () => {
+  const temp = tempRoot();
+  const server = await startArtifactsServer({ root: temp.root, viewerDir: temp.viewer,
+    host: '0.0.0.0', urlHost: 'localhost', github, fetch: provider });
+  close.push(server.close);
+  const base = `http://localhost:${server.port}`;
+  const invitation = 'a'.repeat(43);
+  const page = await get(base + '/login?invite=' + invitation);
+  expect(page.status).toBe(200);
+  expect(page.body).toContain(`name="invitation" value="${invitation}"`);
+  expect(page.body).toContain('管理员邀请');
+  const start = await fetch(base + '/auth/github', { method: 'POST', redirect: 'manual', headers: { Origin: base },
+    body: new URLSearchParams({ invitation, returnTo: '/' }) });
+  expect(start.status).toBe(303);
+  expect(start.headers.get('location')).not.toContain(invitation);
+  const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+  const cancelled = await get(base + '/auth/github/callback?error=access_denied&state=' + state,
+    { Cookie: start.headers.getSetCookie()[0]!.split(';')[0]! });
+  expect(cancelled.status).toBe(401);
+  expect(cancelled.body).toContain(`name="invitation" value="${invitation}"`);
+  expect((await get(base + '/login?invite=invalid')).status).toBe(400);
+  const invalid = await fetch(base + '/auth/github', { method: 'POST', redirect: 'manual', headers: { Origin: base },
+    body: new URLSearchParams({ invitation: 'invalid', returnTo: '/' }) });
+  expect(invalid.status).toBe(400);
+});

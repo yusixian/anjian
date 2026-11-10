@@ -18,6 +18,7 @@ export interface GitHubConfig {
 
 export class GitHubAuthError extends Error {
   returnTo?: string;
+  invitation?: string;
 
   constructor(readonly code: 'expired' | 'denied' | 'provider', message: string) {
     super(message);
@@ -209,6 +210,7 @@ export function createGitHubAuth({ config, token, origin, cookieName, members, f
         const safeError = error instanceof GitHubAuthError
           ? error : new GitHubAuthError('provider', 'GitHub 登录服务暂不可用，请稍后重试。');
         safeError.returnTo = flow.returnTo;
+        safeError.invitation = flow.invitation;
         throw safeError;
       }
     },
