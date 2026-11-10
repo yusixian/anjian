@@ -9,7 +9,7 @@ import { startHub, type Hub } from '../src/server/hub';
 import { machinePaths, registerProject } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { createCommentStore } from '../src/server/document-comments';
-import { tempRoot, writeDocument } from './helpers';
+import { tempRoot, writeArtboard, writeDocument } from './helpers';
 
 const hubs: Hub[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const hub of hubs.splice(0)) await hub.close(); });
@@ -95,4 +95,35 @@ test('Hub rejects document content before live import and accepts the same updat
   const saved = await post(); expect(saved.status, await saved.clone().text()).toBe(204);
   expect(messages).toHaveLength(1);
   expect(fs.readFileSync(file, 'utf8')).toContain('hello quota guarded document');
+});
+
+
+test.each(['document', 'artboard'] as const)('unread %s cursor growth is admitted before consuming comments', async type => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  if (type === 'document') writeDocument(artifacts, 'cursor', { 'doc.xml': '<doc><p id="b1">hello</p></doc>' });
+  else writeArtboard(artifacts, 'cursor', { version: 1, pages: [{ id: 'p', name: 'P' }], boards: { a: { file: 'pages/a.html', page: 'p', x: 0, y: 0, w: 100, h: 100 } } }, { 'pages/a.html': '<html><body>Board</body></html>' });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') }); registerProject(paths.projects, project);
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime }); hubs.push(hub);
+  const origin = `http://127.0.0.1:${hub.port}`;
+  const post = (url: string, body: object) => fetch(origin + url, { method: 'POST', headers: { ...(!url.startsWith('/api/agent/') ? { Origin: origin } : {}), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const created = await post(`/api/${type}/cursor/comments`, type === 'document' ? op : { op: 'create', anchor: { page: 'p', board: 'a', x: 1, y: 1 }, text: 'new comment' });
+  expect(created.status, await created.clone().text()).toBe(200);
+  const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
+  const route = `/api/agent/${type}/cursor/comments?key=${"a".repeat(48)}`;
+  const list = { op: 'list', agent: 'Quota reader' };
+  const denied = await post(route, list);
+  expect(denied.status, await denied.clone().text()).toBe(413);
+  const file = path.join(artifacts, '.state', type, 'cursor', 'comment-cursors.json');
+  expect(fs.existsSync(file)).toBe(false);
+  const all = await post(route, { ...list, all: true });
+  expect(all.status, await all.clone().text()).toBe(200);
+  expect((await all.json()).threads).toHaveLength(1);
+  expect(fs.existsSync(file)).toBe(false);
+  settings.setSharedLimit(1024 * 1024);
+  const retry = await post(route, list);
+  expect(retry.status, await retry.clone().text()).toBe(200);
+  expect((await retry.json()).threads).toHaveLength(1);
+  expect(fs.existsSync(file)).toBe(true);
+  expect((await (await post(route, list)).json()).threads).toHaveLength(0);
 });

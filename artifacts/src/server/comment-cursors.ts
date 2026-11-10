@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { writeJsonAtomic } from './state';
+import type { CommentAdmission } from './document-comments';
+import { writeCommentFiles } from './storage/comment-files';
 
 export const cursorsFile = (stateDir: string, id: string, type = 'document') =>
   path.join(stateDir, type, id, 'comment-cursors.json');
@@ -24,11 +25,11 @@ export function createCommentCursors(stateDir: string, type = 'document') {
   return {
     get: (id: string, agent: string): string | null =>
       read(cursorsFile(stateDir, id, type))[agent] ?? null,
-    set: (id: string, agent: string, stamp: string) => {
+    set: (id: string, agent: string, stamp: string, admit?: CommentAdmission) => {
       const file = cursorsFile(stateDir, id, type);
       const all = read(file);
       if (all[agent] === stamp) return;
-      writeJsonAtomic(file, { ...all, [agent]: stamp });
+      writeCommentFiles(stateDir, [{ file, value: { ...all, [agent]: stamp } }], admit);
     },
   };
 }

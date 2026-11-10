@@ -97,7 +97,7 @@ export interface Store<F, H, G> {
   apply: (op: H, admit?: CommentAdmission) => F;
   applyAgent: (op: G, name?: string, admit?: CommentAdmission) => { file: F; threadId: string; messageId?: string };
   current: () => F;
-  sync: () => boolean;
+  sync: (admit?: CommentAdmission) => boolean;
   warnings: () => string[];
 }
 export type CommentAdmission = (deltaBytes: number) => void;

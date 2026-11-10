@@ -434,3 +434,24 @@ test('board human, agent and CLI choice operations share quota admission', async
   expect((await cli({ op: 'submit', round: 'r', submit: true })).status).toBe(200);
   expect(JSON.parse(fs.readFileSync(file, 'utf8')).threads).toHaveLength(2);
 });
+
+test('CLI unread cursor writes cannot bypass storage quota', async () => {
+  const fx = await fixture(); const { headers } = await fx.login();
+  const dir = path.join(fx.alpha, '.anjian/artifacts/document/cursor-budget'); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'doc.xml'), '<doc><p id="b1">Review</p></doc>');
+  const human = await fx.request(`/api/document/cursor-budget/comments?key=${MASTER}`, {
+    method: 'POST', headers: { Origin: fx.origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'create', blockId: 'b1', quote: 'Review', text: 'Please review' }),
+  });
+  expect(human.status, await human.clone().text()).toBe(200);
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/agent/document/cursor-budget/comments`;
+  const settings = createStorageSettings(fx.home); settings.setSharedLimit(0);
+  const post = () => fx.request(route, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'list' }) });
+  const denied = await post(); expect(denied.status, await denied.clone().text()).toBe(413);
+  const file = path.join(fx.alpha, '.anjian/artifacts/.state/document/cursor-budget/comment-cursors.json');
+  expect(fs.existsSync(file)).toBe(false);
+  settings.setSharedLimit(1024 * 1024);
+  const retry = await post(); expect(retry.status, await retry.clone().text()).toBe(200);
+  expect((await retry.json()).threads).toHaveLength(1);
+  expect((await (await post()).json()).threads).toHaveLength(0);
+});

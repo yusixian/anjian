@@ -54,7 +54,7 @@ async function serveAgentComments(
     sendJson(res, 200, {
       type: 'comments',
       artifact: `document/${id}`,
-      threads: documents.listComments(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true),
+      threads: documents.listComments(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true, requestStorageAdmission(req)),
     });
     return;
   }
@@ -105,7 +105,7 @@ async function serveAgentBoardComments(
   const fields = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const agent = agentName(fields);
   if (fields.op === 'list') {
-    const threads = boardComments.list(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true);
+    const threads = boardComments.list(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true, requestStorageAdmission(req));
     sendJson(res, 200, {
       type: 'comments',
       artifact: `artboard/${id}`,

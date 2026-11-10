@@ -401,8 +401,8 @@ export function createBoardCommentRegistry(options: Options) {
       roundViews(choiceContext(dirOf(id)), store(id).current().threads).map(
         ({ boards: _boards, ...round }) => round,
       ),
-    list: (id: string, agent: string, all: boolean) => {
-      const changed = store(id).sync();
+    list: (id: string, agent: string, all: boolean, admit?: CommentAdmission) => {
+      const changed = store(id, admit).sync(admit);
       if (changed) push(id);
       const file = store(id).current();
       const format = forAgent(id, new Set(stale(id)));
@@ -412,7 +412,7 @@ export function createBoardCommentRegistry(options: Options) {
           .filter((t) => comment(t) && !t.messages.every((m) => m.deleted))
           .map(format);
       const { threads, newest } = unreadThreads(file, cursors.get(id, agent));
-      if (newest) cursors.set(id, agent, newest);
+      if (newest) cursors.set(id, agent, newest, admit);
       return threads.filter(comment).map(format);
     },
     groups: (id: string) => {

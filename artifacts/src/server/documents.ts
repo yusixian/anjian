@@ -38,7 +38,7 @@ export interface DocumentRegistry {
   commentWarnings: (id: string) => string[];
   commentsChanged: (id: string) => void;
   fileChanged: (id: string) => void;
-  listComments: (id: string, agent: string, all: boolean) => AgentThread[];
+  listComments: (id: string, agent: string, all: boolean, admit?: CommentAdmission) => AgentThread[];
   open: (id: string) => Promise<DocumentSession | null>;
   warnings: (id: string) => string[];
 }
@@ -106,10 +106,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       artifact: `document/${id}`,
       comments: commentStore(id).current(),
     });
-  const syncComments = (id: string) => {
-    const store = commentStore(id);
+  const syncComments = (id: string, admit?: CommentAdmission) => {
+    const store = commentStore(id, admit);
     const before = JSON.stringify(store.warnings());
-    if (!store.sync()) return;
+    if (!store.sync(admit)) return;
     pushComments(id);
     if (JSON.stringify(store.warnings()) !== before) options.onWarningsChange(id);
   };
@@ -211,12 +211,12 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       pushComments(id);
       return { threadId, ...(messageId ? { messageId } : {}) };
     },
-    listComments: (id, agent, all) => {
-      syncComments(id);
+    listComments: (id, agent, all, admit) => {
+      syncComments(id, admit);
       const file = commentStore(id).current();
       if (all) return file.threads.filter((t) => !t.messages.every((m) => m.deleted)).map(forAgent);
       const { threads, newest } = unreadThreads(file, cursors.get(id, agent));
-      if (newest) cursors.set(id, agent, newest);
+      if (newest) cursors.set(id, agent, newest, admit);
       return threads.map(forAgent);
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
