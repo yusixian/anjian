@@ -2,9 +2,56 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { startHub } from '../src/server/hub';
-import { machinePaths, registerProject } from '../src/server/machine';
+import { machinePaths, readProjects, registerProject } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { tempRoot, writeDocument } from './helpers';
+
+test('project removal preserves registration and live documents when saving exceeds quota', async () => {
+  const temp = tempRoot();
+  const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project');
+  const artifacts = path.join(project, '.anjian/artifacts');
+  const original = '<doc><p>keep until saved</p></doc>';
+  writeDocument(artifacts, 'draft', { 'doc.xml': original });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') });
+  registerProject(paths.projects, project);
+  const settings = createStorageSettings(paths.home);
+  settings.setSharedLimit(0);
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1',
+    ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test',
+    viewerDir: temp.viewer, runtimeDir: temp.runtime });
+  try {
+    const origin = `http://127.0.0.1:${hub.port}`;
+    expect((await fetch(origin + '/api/document/draft/state')).status).toBe(200);
+    const before = hub.mounted();
+    const projects = readProjects(paths.projects);
+    expect(before).toHaveLength(1);
+    await expect(hub.remove(project)).rejects.toMatchObject({
+      errors: [expect.objectContaining({ code: 'storage_quota_exceeded' })],
+    });
+    expect(hub.mounted()).toEqual(before);
+    expect(readProjects(paths.projects)).toEqual(projects);
+    expect((await fetch(origin + '/api/document/draft/state')).status).toBe(200);
+    const file = path.join(artifacts, 'document/draft/doc.xml');
+    const snapshot = path.join(artifacts, '.state/document/draft/doc.loro');
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+    expect(fs.existsSync(snapshot)).toBe(false);
+    const limit = await fetch(origin + '/api/storage?scope=shared', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'limit', bytes: 1024 * 1024 }),
+    });
+    expect(limit.status).toBe(200);
+    await hub.remove(project);
+    expect(hub.projects()).toEqual([]);
+    expect(hub.mounted()).toEqual([]);
+    expect(readProjects(paths.projects)).toEqual([]);
+    expect(fs.readFileSync(file, 'utf8')).toContain('keep until saved');
+    expect(fs.statSync(snapshot).size).toBeGreaterThan(0);
+  } finally {
+    settings.setSharedLimit(1024 * 1024);
+    await hub.close();
+  }
+});
 
 test('Hub retains a quota-rejected closing mount and saves it on a later close retry', async () => {
   const temp = tempRoot();

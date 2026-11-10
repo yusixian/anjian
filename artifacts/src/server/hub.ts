@@ -477,17 +477,23 @@ export async function startHub(options: HubOptions): Promise<Hub> {
 
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
-    return withProjectMutation(real, async () => {
+    return writeQuota(real, prepare => withProjectMutation(real, () => suspension.suspend(real, async () => {
       assertAvailable(real);
-      shares.revokeProject(real);
-      removeProject(projectsFile, real);
-      index.rescan();
-      fs.rmSync(infoFileOf(real), { force: true });
       const pending = mounts.get(real);
+      if (pending) {
+        const mounted = await pending;
+        // Refuse before stopping the live project, so storage settings and
+        // pending document edits remain available for recovery.
+        await mounted.quiesce(async () => {}, prepare);
+        await mounted.close(prepare);
+      }
       mounts.delete(real);
       ready.delete(real);
-      await (await pending)?.close();
-    });
+    }, () => {
+      shares.revokeProject(real);
+      removeProject(projectsFile, real);
+      fs.rmSync(infoFileOf(real), { force: true });
+    }, () => { index.rescan(); })));
   };
 
   const logTail = (project: string | null) => {
