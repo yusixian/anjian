@@ -33,6 +33,7 @@ export interface DocumentRegistry {
   applyCommentOp: (id: string, op: HumanOp) => CommentsFile;
   close: () => Promise<void>;
   comments: (id: string) => CommentsFile;
+  commentWarnings: (id: string) => string[];
   commentsChanged: (id: string) => void;
   fileChanged: (id: string) => void;
   listComments: (id: string, agent: string, all: boolean) => AgentThread[];
@@ -181,6 +182,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       });
     },
     comments: (id) => commentStore(id).current(),
+    commentWarnings: (id) => commentStore(id).warnings(),
     commentsChanged: syncComments,
     applyCommentOp: (id, op) => {
       const file = commentStore(id).apply(op);

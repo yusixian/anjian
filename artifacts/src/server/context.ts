@@ -18,13 +18,13 @@ import { ensureConfig } from './config';
 import type { createGitHubAuth, GitHubConfig } from './github-auth';
 import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
-import { createDynamicBlocks } from './dynamic-blocks';
+import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
 import { readHtml } from './html';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
 import { createSelectionStore } from './selection';
 import { socketAuthorized } from './socket-access';
-import { readCanvas, writeArtifactState } from './state';
+import { artifactStateWarnings, readCanvas, writeArtifactState } from './state';
 import { createVerifyRecordings } from './verify-recordings';
 import { textFrame } from './ws';
 
@@ -250,6 +250,45 @@ export function createServerContext(options: ServerOptions) {
     }
     return payload;
   };
+  const prepareDocumentMetadata = (id: string, xml: string, preparedWarnings: string[], files: string[]) => {
+    const urls = dynamicUrls(xml);
+    const uploaded = new Set(files);
+    const file = path.join(stateDir, 'document', id, 'warnings.json');
+    let previous = 0;
+    let previousContents: string | null = null;
+    try {
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Unsafe document warning state');
+      previousContents = fs.readFileSync(file, 'utf8');
+      previous = Buffer.byteLength(previousContents);
+      const parsed: unknown = JSON.parse(previousContents);
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { warnings?: unknown }).warnings) ||
+          !(parsed as { warnings: unknown[] }).warnings.every((warning) => typeof warning === 'string'))
+        throw new Error('Invalid document warning state');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    // The upload rewrites every managed asset, so the dynamic runtime states reset.
+    // The staged file is the same JSON the watcher writes after the document opens.
+    const warnings = [...preparedWarnings, ...documents.commentWarnings(id),
+      ...urls.filter((url) => !uploaded.has(url)).map((url) => `${url} not found`)];
+    const value = artifactStateWarnings({ warnings }, {
+      dynamic: Object.fromEntries(urls.map((url) => [url, { ran: false }])),
+    });
+    const data = `${JSON.stringify(value, null, 2)}\n`;
+    return {
+      file,
+      data,
+      delta: Buffer.byteLength(data) - previous,
+      validate: () => {
+        try {
+          if (fs.readFileSync(file, 'utf8') !== previousContents) throw new Error('Document warning state changed during upload');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || previousContents !== null) throw error;
+        }
+      },
+    };
+  };
   const refreshState = (ref: ArtifactRef, dir: string) => {
     signatures.set(`${ref.type}/${ref.id}`, artifactSignature(dir, ref.type));
     return writeState(ref, dir);
@@ -307,6 +346,7 @@ export function createServerContext(options: ServerOptions) {
     artifactMeta,
     signatures,
     writeState,
+    prepareDocumentMetadata,
     refreshState,
   };
   return ctx;

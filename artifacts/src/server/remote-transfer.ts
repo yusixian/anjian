@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { mintArtifactId } from '../shared/ids';
 import { structuralWarnings } from '../shared/validate';
 import { parseDocument } from './document-codec';
 
@@ -229,6 +230,14 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
   return files;
 }
 
+export function decodeDocumentUpload(incoming: RemoteArtifactWrite): { source: string; files: string[] } {
+  if (!incoming || (incoming.baseRevision !== null &&
+      (typeof incoming.baseRevision !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(incoming.baseRevision))))
+    throw invalid('baseRevision must be null or a sha256 revision');
+  const files = decodeManifest('document', incoming.files);
+  return { source: utf8.decode(files.get('doc.xml')!), files: [...files.keys()] };
+}
+
 function copyPreservingState(source: string, target: string) {
   fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: true });
 }
@@ -247,6 +256,8 @@ export function writeRemoteArtifact(
   projectDir: string,
   artifact: string,
   incoming: RemoteArtifactWrite,
+  admit?: (deltaBytes: number) => void,
+  prepared?: { xml: string; stateDeltaBytes: number; validate: () => void; stage: () => void; abort: () => void; commit: () => void; finalize: () => void },
 ): RemoteArtifactSnapshot {
   const { dir, parent, type } = pathsFor(projectDir, artifact);
   if (!incoming || (incoming.baseRevision !== null &&
@@ -259,13 +270,27 @@ export function writeRemoteArtifact(
   if (incoming.baseRevision !== revision)
     throw new RemoteTransferError(409, 'revision_conflict', 'remote artifact changed; pull before pushing again');
 
-  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
-  // A dot-prefixed sibling stays outside artifact enumeration while files are prepared.
-  const staging = fs.mkdtempSync(path.join(parent, '.remote-staging-'));
-  const backup = `${staging}.old`;
+  if (prepared) {
+    if (type !== 'document') throw invalid('document preparation requires a document');
+    files.set('doc.xml', Buffer.from(prepared.xml));
+  }
+  const identityFile = path.join(dir, '.artifact-id');
+  const identity = fs.existsSync(identityFile) ? null : `${mintArtifactId()}\n`;
+
+  const bytes = (values: Map<string, Buffer>) => [...values.values()].reduce((sum, value) => sum + value.length, 0);
+  if (bytes(files) > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB after document merge');
+  admit?.(bytes(files) - bytes(current) + (prepared?.stateDeltaBytes ?? 0) + (identity ? Buffer.byteLength(identity) : 0));
+
+  let staging: string | undefined;
+  let backup: string | undefined;
   let oldMoved = false;
   let installed = false;
   try {
+    prepared?.stage();
+    fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+    // A dot-prefixed sibling stays outside artifact enumeration while files are prepared.
+    staging = fs.mkdtempSync(path.join(parent, '.remote-staging-'));
+    backup = `${staging}.old`;
     if (exists) {
       assertTreeSafe(dir);
       copyPreservingState(dir, staging);
@@ -276,6 +301,8 @@ export function writeRemoteArtifact(
       fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
       fs.writeFileSync(target, data, { mode: 0o600, flag: 'wx' });
     }
+    if (identity) fs.writeFileSync(path.join(staging, '.artifact-id'), identity, { mode: 0o600, flag: 'wx' });
+    prepared?.validate();
     // All mutations below are synchronous: file watchers cannot observe the temporary swap.
     if (exists) {
       fs.renameSync(dir, backup);
@@ -283,17 +310,31 @@ export function writeRemoteArtifact(
     }
     fs.renameSync(staging, dir);
     installed = true;
+    prepared?.commit();
   } catch (err) {
-    if (oldMoved && !installed) fs.renameSync(backup, dir);
+    let stateError: unknown;
+    let sourceError: unknown;
+    try { prepared?.abort(); }
+    catch (error) { stateError = error; }
+    try {
+      if (installed && prepared) {
+        fs.rmSync(dir, { recursive: true, force: true });
+        installed = false;
+      }
+      if (oldMoved && !installed && backup) fs.renameSync(backup, dir);
+    } catch (error) { sourceError = error; }
+    if (stateError || sourceError)
+      throw new AggregateError([err, stateError, sourceError].filter(Boolean), 'Remote artifact rollback failed');
     throw err;
   } finally {
-    if (!installed && fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
+    if (!installed && staging && fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
   }
   // An old backup is safe to leave for manual cleanup if removal fails after installation.
-  if (oldMoved) {
+  if (oldMoved && backup) {
     try {
       fs.rmSync(backup, { recursive: true, force: true });
     } catch {}
   }
+  prepared?.finalize();
   return snapshot(files, digest(files));
 }

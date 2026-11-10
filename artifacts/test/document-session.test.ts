@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -7,11 +8,12 @@ import { allHeadlessNodes } from '@haklex/rich-headless';
 import { createHeadlessEditor } from '@lexical/headless';
 import { $getRoot, $isElementNode, $isTextNode, type LexicalNode, type TextNode } from 'lexical';
 import { LoroDoc } from 'loro-crdt';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 import {
   createDocumentSession,
+  prepareNewRemoteDocument,
   type DocumentEvent,
   type DocumentSession,
 } from '../src/server/document-session';
@@ -433,4 +435,129 @@ test('an agent that removes a block it added earlier removes it', async () => {
   session.onFileText(removed);
   await session.flush();
   expect(read(file)).not.toContain('temporary section');
+});
+
+test('prepared remote edit counts the exact persisted XML and collaboration delta', async () => {
+  const { file, snapshotFile } = setup('<doc><p>first</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const before = fs.statSync(file).size + fs.statSync(snapshotFile).size;
+  const activityFile = path.join(path.dirname(snapshotFile), 'agent-active');
+  const planned = session.prepareRemoteText('<doc><p>other</p></doc>');
+  const projected = Buffer.byteLength(planned.xml) - fs.statSync(file).size + planned.stateDeltaBytes;
+  planned.validate();
+  planned.stage();
+  fs.writeFileSync(file, planned.xml);
+  planned.commit();
+  await session.flush();
+  const actual = fs.statSync(file).size + fs.statSync(snapshotFile).size + fs.statSync(activityFile).size;
+  expect(actual - before).toBe(projected);
+  expect(fs.readFileSync(file, 'utf8')).toContain('other');
+});
+
+test('prepared remote edit becomes invalid after another collaboration update', async () => {
+  const { file, snapshotFile } = setup('<doc><p>first</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const planned = session.prepareRemoteText('<doc><p>other</p></doc>');
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => $findText($getRoot(), 'first')!.setTextContent('human edit'), { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }));
+  binding.dispose();
+  expect(() => planned.validate()).toThrow('changed during upload');
+});
+
+
+test('first remote document keeps its prepared collaboration size on initial open', async () => {
+  const { file, snapshotFile } = setup('<doc><p>placeholder</p></doc>');
+  fs.rmSync(file);
+  const planned = prepareNewRemoteDocument('<doc><p>new</p></doc>', snapshotFile);
+  planned.stage();
+  fs.writeFileSync(file, planned.xml);
+  planned.commit();
+  expect(fs.statSync(snapshotFile).size).toBe(planned.stateDeltaBytes);
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  expect(fs.statSync(snapshotFile).size).toBe(planned.stateDeltaBytes);
+  expect(fs.readFileSync(file, 'utf8')).toBe(planned.xml);
+});
+
+test('prepared remote document preserves a concurrent human edit already in the live session', async () => {
+  const { file, snapshotFile } = setup('<doc><p>first</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const base = fs.readFileSync(file, 'utf8');
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  editor.update(() => $findText($getRoot(), 'first')!.setTextContent('human edit'), { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }));
+  binding.dispose();
+  await session.flush();
+  const beforeBytes = fs.statSync(file).size + fs.statSync(snapshotFile).size;
+  const planned = session.prepareRemoteText(base.replace('</doc>', '<p>agent edit</p></doc>'));
+  const projectedDelta = Buffer.byteLength(planned.xml) - fs.statSync(file).size + planned.stateDeltaBytes;
+  planned.stage();
+  fs.writeFileSync(file, planned.xml);
+  planned.commit();
+  await session.flush();
+  const xml = fs.readFileSync(file, 'utf8');
+  expect(xml).toContain('human edit');
+  expect(xml).toContain('agent edit');
+  const activityFile = path.join(path.dirname(snapshotFile), 'agent-active');
+  const afterBytes = fs.statSync(file).size + fs.statSync(snapshotFile).size + fs.statSync(activityFile).size;
+  expect(afterBytes - beforeBytes).toBeLessThanOrEqual(projectedDelta);
+});
+
+
+test('a failed snapshot write can be retried without poisoning later flushes', async () => {
+  const { file, snapshotFile } = setup('<doc><p>first</p></doc>');
+  const session = await open(file, snapshotFile);
+  const rename = fsPromises.rename.bind(fsPromises);
+  let fail = true;
+  const spy = vi.spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+    if (to === snapshotFile && fail) { fail = false; throw new Error('temporary storage failure'); }
+    return rename(from, to);
+  });
+  try {
+    await expect(session.flush()).rejects.toThrow('temporary storage failure');
+  } finally { spy.mockRestore(); }
+  await session.flush();
+  expect(fs.statSync(snapshotFile).size).toBeGreaterThan(0);
+});
+
+test('a throwing document subscriber does not roll back the committed remote edit', async () => {
+  const { file, snapshotFile } = setup('<doc><p>before</p></doc>');
+  const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 5, log: () => { throw new Error('logger failed'); } });
+  sessions.push(session);
+  await session.flush();
+  const unsubscribe = session.subscribe(() => { throw new Error('observer failed'); });
+  const planned = session.prepareRemoteText('<doc><p>after</p></doc>');
+  planned.stage();
+  fs.writeFileSync(file, planned.xml);
+  planned.commit();
+  planned.finalize();
+  unsubscribe();
+  await session.flush();
+  expect(fs.readFileSync(file, 'utf8')).toContain('after');
+});
+
+
+test('unchanged document repairs a missing or replaced snapshot on flush', async () => {
+  const { file, snapshotFile } = setup('<doc><p>first</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const original = fs.readFileSync(snapshotFile);
+  fs.rmSync(snapshotFile);
+  await session.flush();
+  expect(fs.readFileSync(snapshotFile).equals(original)).toBe(true);
+  fs.writeFileSync(snapshotFile, Buffer.alloc(original.length, 0));
+  await session.flush();
+  expect(fs.readFileSync(snapshotFile).equals(original)).toBe(true);
 });

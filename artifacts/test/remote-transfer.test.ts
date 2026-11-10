@@ -146,3 +146,48 @@ test('metadata-only directories remain absent until source is uploaded', () => {
   expect(readRemoteArtifact(root, 'document/plan')).toEqual({ revision: null, files: {} });
   expect(write(root, 'document/plan', null, { 'doc.xml': encode('<doc><p>first</p></doc>') }).revision).toMatch(/^sha256:/);
 });
+
+
+test('restores the previous document if prepared state commit fails', () => {
+  const root = project();
+  const original = write(root, 'document/rollback', null, { 'doc.xml': encode('<doc><p>old</p></doc>') });
+  let aborted = false;
+  expect(() => writeRemoteArtifact(root, 'document/rollback', {
+    baseRevision: original.revision, files: { 'doc.xml': encode('<doc><p>new</p></doc>') },
+  }, undefined, {
+    xml: '<doc><p>new</p></doc>', stateDeltaBytes: 20,
+    validate: () => undefined, stage: () => undefined,
+    abort: () => { aborted = true; },
+    commit: () => { throw new Error('snapshot could not be committed'); },
+    finalize: () => undefined,
+  })).toThrow('snapshot could not be committed');
+  expect(aborted).toBe(true);
+  expect(readRemoteArtifact(root, 'document/rollback')).toEqual(original);
+});
+
+test('restores source even when prepared state cleanup also fails', () => {
+  const root = project();
+  const original = write(root, 'document/rollback-abort', null, { 'doc.xml': encode('<doc><p>old</p></doc>') });
+  expect(() => writeRemoteArtifact(root, 'document/rollback-abort', {
+    baseRevision: original.revision, files: { 'doc.xml': encode('<doc><p>new</p></doc>') },
+  }, undefined, {
+    xml: '<doc><p>new</p></doc>', stateDeltaBytes: 0,
+    validate: () => undefined, stage: () => undefined,
+    abort: () => { throw new Error('cleanup failed'); },
+    commit: () => { throw new Error('commit failed'); },
+    finalize: () => undefined,
+  })).toThrow('Remote artifact rollback failed');
+  expect(readRemoteArtifact(root, 'document/rollback-abort')).toEqual(original);
+});
+
+test('charges a new artifact identity before the first upload, without needing a prior GET', () => {
+  const root = project();
+  const source = '<p>first upload</p>';
+  let admitted = -1;
+  writeRemoteArtifact(root, 'html/new-identity', { baseRevision: null, files: { 'index.html': encode(source) } },
+    (bytes) => { admitted = bytes; });
+  const dir = path.join(root, '.anjian/artifacts/html/new-identity');
+  const identity = fs.statSync(path.join(dir, '.artifact-id')).size;
+  expect(identity).toBeGreaterThan(0);
+  expect(admitted).toBe(Buffer.byteLength(source) + identity);
+});

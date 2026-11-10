@@ -7,7 +7,7 @@ import { withProjectMutation } from './project-mutations';
 import { ArtifactTrashError, assertArtifactNotTrashed } from './artifact-trash';
 import { setRemoteDevice } from './remote-identity';
 import { RemoteCursorError, type createRemoteEvents } from './remote-events';
-import { readRemoteArtifact, RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
+import { decodeDocumentUpload, readRemoteArtifact, RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
 
 interface Device { id: string; name: string; projects: string[] }
 interface Project { id: string; name: string; dir: string }
@@ -17,6 +17,7 @@ interface Options {
   mount: (dir: string) => Promise<MountedProject>;
   events: ReturnType<typeof createRemoteEvents>;
   token: string;
+  upload?: <T>(project: string, work: (prepare: () => Promise<(deltaBytes: number) => void>) => Promise<T>) => Promise<T>;
 }
 const MAX_BODY = 46 * 1024 * 1024;
 const ARTIFACT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/artifacts\/(document|artboard|html)\/([a-z0-9][a-z0-9-]*)$/;
@@ -93,23 +94,31 @@ export function createRemoteApi(options: Options) {
         sendJson(res, 415, { error: 'Expected application/json' }); return true;
       }
       const body = req.method === 'PUT' ? await readBody(req) : null;
-      const result = await withProjectMutation(project.dir, async () => {
+      const perform = (prepare?: () => Promise<(deltaBytes: number) => void>) => withProjectMutation(project.dir, async () => {
         assertArtifactNotTrashed(project.dir, type, id);
         const mounted = await options.mount(project.dir);
         if (type === 'document') await mounted.settleDocument(id);
         if (!options.authenticate(req)?.projects.includes(project.id))
           throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
+        const decoded = req.method === 'PUT' && type === 'document' ? decodeDocumentUpload(body) : undefined;
+        const prepared = decoded
+          ? await mounted.prepareDocumentUpload(id, decoded.source, decoded.files) : undefined;
+        const admit = await prepare?.();
+        if (!options.authenticate(req)?.projects.includes(project.id))
+          throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
         let snapshot = req.method === 'PUT'
-          ? writeRemoteArtifact(project.dir, artifact, body)
+          ? writeRemoteArtifact(project.dir, artifact, body, admit, prepared)
           : readRemoteArtifact(project.dir, artifact);
-        if (req.method === 'PUT' && type === 'document') {
-          await mounted.settleDocument(id, Buffer.from(snapshot.files['doc.xml']!, 'base64').toString('utf8'));
+        if (prepared) {
+          await mounted.settleDocument(id);
           snapshot = readRemoteArtifact(project.dir, artifact);
         }
         const link = new URL(mounted.linkFor(type, id));
         link.searchParams.delete('key');
         return { ...snapshot, url: link.href };
       });
+      const result = req.method === 'PUT' && options.upload
+        ? await options.upload(project.dir, perform) : await perform();
       sendJson(res, 200, result);
     } catch (error) {
       if (error instanceof RemoteCursorError) sendJson(res, 410, { code: 'cursor_expired', error: error.message });

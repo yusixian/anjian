@@ -11,6 +11,7 @@ import { type ArtifactRef, isArtifactLocator, listArtifacts } from './artifacts'
 import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
 import { createGitHubAuth, readGitHubConfig } from './github-auth';
+import { prepareNewRemoteDocument, type PreparedRemoteDocument } from './document-session';
 import {
   type ArtifactPayload,
   type ChangeListener,
@@ -38,6 +39,7 @@ export interface ArtifactsServer {
   liveClients: () => number;
   onMessage: (listener: (message: ServerMessage) => void) => void;
   settleDocument: (id: string, source?: string) => Promise<void>;
+  prepareDocumentUpload: (id: string, source: string, files: string[]) => Promise<PreparedRemoteDocument>;
   onActivity: (listener: () => void) => void;
   onArtifactChange: (listener: ChangeListener) => void;
   port: number;
@@ -186,6 +188,26 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       if (source !== undefined) session.onFileText(source);
       await session.settled();
       await session.flush();
+    },
+    prepareDocumentUpload: async (id, source, files) => {
+      const session = await ctx.documents.open(id);
+      if (session) {
+        await session.readyForRemoteUpload();
+        const prepared = session.prepareRemoteText(source);
+        const metadata = ctx.prepareDocumentMetadata(id, prepared.xml, prepared.warnings, files);
+        prepared.stateDeltaBytes += metadata.delta;
+        prepared.addStateFile(metadata.file, metadata.data);
+        const validate = prepared.validate;
+        prepared.validate = () => { validate(); metadata.validate(); };
+        return prepared;
+      }
+      const prepared = prepareNewRemoteDocument(source, path.join(stateDir, 'document', id, 'doc.loro'));
+      const metadata = ctx.prepareDocumentMetadata(id, prepared.xml, prepared.warnings, files);
+      prepared.stateDeltaBytes += metadata.delta;
+      prepared.addStateFile(metadata.file, metadata.data);
+      const validate = prepared.validate;
+      prepared.validate = () => { validate(); metadata.validate(); };
+      return prepared;
     },
     resolve: (type, idOrAddress) => {
       if (!isArtifactLocator(idOrAddress)) return null;

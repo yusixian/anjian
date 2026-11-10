@@ -61,3 +61,12 @@ test('does not follow a linked metadata directory or accept conflicting owners',
   f.projects.push({ dir: f.projects[0]!.dir, owner: 'github:4' });
   await expect(f.usage.read('shared')).rejects.toThrow('Conflicting');
 });
+
+test('upload accounting bypasses the display cache and returns one inventory for both limits', async () => {
+  const f = fixture();
+  f.put('alice/.anjian/artifacts/html/a/index.html', 5);
+  expect((await f.usage.read('shared')).total).toBe(5);
+  f.put('alice/.anjian/artifacts/html/a/index.html', 11);
+  f.put('bob/.anjian/.trash/retained/source', 7);
+  expect(await f.usage.measure('github:2')).toEqual({ shared: 18, personal: 11 });
+});

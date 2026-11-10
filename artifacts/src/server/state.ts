@@ -120,10 +120,19 @@ export function writeArtifactState(
       ...(payload.layout ?? { pages: {} }),
     });
   }
-  writeJsonAtomic(path.join(dir, 'warnings.json'), {
+  writeJsonAtomic(path.join(dir, 'warnings.json'), artifactStateWarnings(payload, extra, checkedAt));
+}
+
+/** Shared serializer for the persisted warnings state and pre-write byte admission. */
+export function artifactStateWarnings(
+  payload: { warnings: string[]; pending?: string[] },
+  extra: Record<string, unknown> = {},
+  checkedAt = new Date().toISOString(),
+) {
+  return {
     checkedAt,
     warnings: payload.warnings,
     ...(payload.pending ? { pending: payload.pending } : {}),
     ...extra,
-  });
+  };
 }

@@ -90,6 +90,10 @@ export function createStorageUsage(options: {
     return { total: { ...total, checkedAt: now() }, owners };
   };
   return {
+    async measure(owner: string) {
+      const inventory = await scan();
+      return { shared: inventory.total.total, personal: inventory.owners.get(owner)?.total ?? 0 };
+    },
     async read(scope: string): Promise<UsageReport> {
       if (!cached || now() - cached.total.checkedAt >= 5_000) {
         if (!pending) pending = scan();

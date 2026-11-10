@@ -27,6 +27,7 @@ import { createMemberWorkspace } from './member-workspace';
 import { createStorageSettings } from './storage/settings';
 import { createStorageApi } from './storage/api';
 import { createStorageUsage } from './storage/usage';
+import { createUploadQuota } from './storage/quota';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
@@ -569,13 +570,22 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       return projects.every((id) => available.has(id));
     },
   });
-  const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
   const usage = createStorageUsage({
     projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
     snapshotsRoot: path.join(options.paths.home, 'shares/snapshots'),
     snapshots: () => shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: members.projectOwner(project) })),
   });
-  const storageApi = createStorageApi({ settings: createStorageSettings(options.paths.home), usage, origin, principal: projectAccess.principal, readBody });
+  const settings = createStorageSettings(options.paths.home);
+  const upload = createUploadQuota({
+    owner: members.projectOwner,
+    measure: usage.measure,
+    limits: (owner) => ({
+      shared: settings.summary('shared').sharedLimitBytes ?? null,
+      personal: owner === 'owner' ? null : members.list().members.find((member) => member.id === owner)?.quotaBytes ?? 0,
+    }),
+  });
+  const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload });
+  const storageApi = createStorageApi({ settings, usage, origin, principal: projectAccess.principal, readBody });
   const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
   const publicShares = createPublicShare({ store: shares, origin,

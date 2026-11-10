@@ -4,10 +4,14 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
+import { createStorageSettings } from '../src/server/storage/settings';
+import { createStorageUsage } from '../src/server/storage/usage';
+import * as documentSession from '../src/server/document-session';
+import type { PreparedRemoteDocument } from '../src/server/document-session';
 import { tempRoot } from './helpers';
 
 const MASTER = 'm'.repeat(48);
@@ -178,4 +182,137 @@ test('feedback cursor replays comments after the Hub restarts', async () => {
   expect(replay.status).toBe(200);
   const after = await replay.json() as { events: { type: string; artifact: string }[] };
   expect(after.events.some((event) => event.type === 'doc-comments' && event.artifact === 'document/feedback')).toBe(true);
+});
+
+
+test('shared quota rejects HTTP uploads before replacing source files and reads fresh usage', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const settings = createStorageSettings(fx.home);
+  const put = (id: string, baseRevision: string | null, text: string) => fx.request(
+    `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/html/${id}`, {
+      method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseRevision, files: { 'index.html': encode(text) } }),
+    });
+  const first = await put('quota', null, '<h1>original</h1>');
+  expect(first.status).toBe(200);
+  const { revision } = await first.json();
+  settings.setSharedLimit(0);
+  const denied = await put('quota', revision, '<h1>original plus additional content</h1>');
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.readFileSync(path.join(fx.alpha, '.anjian/artifacts/html/quota/index.html'), 'utf8')).toBe('<h1>original</h1>');
+  expect((await put('new', null, 'hello')).status).toBe(413);
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/html/new'))).toBe(false);
+  expect((await put('quota', revision, 'small')).status).toBe(200);
+});
+
+
+test('first document upload counts its generated collaboration snapshot before writing', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const xml = '<doc><p>new document</p></doc>';
+  const settings = createStorageSettings(fx.home);
+  settings.setSharedLimit(Buffer.byteLength(xml));
+  const response = await fx.request(`/api/remote/projects/${fx.id(fx.alpha)}/artifacts/document/new-doc`, {
+    method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseRevision: null, files: { 'doc.xml': encode(xml) } }),
+  });
+  expect(response.status).toBe(413);
+  expect((await response.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/document/new-doc'))).toBe(false);
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/.state/document/new-doc/doc.loro'))).toBe(false);
+});
+
+test('document edit counts collaboration growth and keeps original XML and snapshot when denied', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/document/limited`;
+  const put = (baseRevision: string | null, xml: string) => fx.request(route, {
+    method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseRevision, files: { 'doc.xml': encode(xml) } }),
+  });
+  const initial = await put(null, '<doc><p>first</p></doc>');
+  expect(initial.status).toBe(200);
+  const { revision } = await initial.json() as { revision: string };
+  const xmlFile = path.join(fx.alpha, '.anjian/artifacts/document/limited/doc.xml');
+  const snapshotFile = path.join(fx.alpha, '.anjian/artifacts/.state/document/limited/doc.loro');
+  const previousXml = fs.readFileSync(xmlFile);
+  const previousSnapshot = fs.readFileSync(snapshotFile);
+  const usage = createStorageUsage({
+    projects: () => [{ dir: fx.alpha, owner: 'owner' }, { dir: fx.beta, owner: 'owner' }],
+    snapshotsRoot: path.join(fx.home, 'shares/snapshots'), snapshots: () => [],
+  });
+  createStorageSettings(fx.home).setSharedLimit((await usage.measure('owner')).shared + 1);
+  const denied = await put(revision, '<doc><p>other</p></doc>');
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.readFileSync(xmlFile).equals(previousXml)).toBe(true);
+  expect(fs.readFileSync(snapshotFile).equals(previousSnapshot)).toBe(true);
+});
+
+
+test('first document succeeds with a conservative XML and snapshot budget and no later uncharged growth', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/document/boundary`;
+  const xml = '<doc><p>boundary</p></doc>';
+  const usage = createStorageUsage({
+    projects: () => [{ dir: fx.alpha, owner: 'owner' }, { dir: fx.beta, owner: 'owner' }],
+    snapshotsRoot: path.join(fx.home, 'shares/snapshots'), snapshots: () => [],
+  });
+  // Ensure the mounted project metadata is present in the baseline.
+  expect((await fx.request(route, { headers })).status).toBe(200);
+  await vi.waitFor(() => expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/.state/document/boundary/warnings.json'))).toBe(true));
+  const before = (await usage.measure('owner')).shared;
+  let planned: PreparedRemoteDocument | undefined;
+  let limit = 0;
+  const original = documentSession.prepareNewRemoteDocument;
+  const spy = vi.spyOn(documentSession, 'prepareNewRemoteDocument').mockImplementation((source, file) => {
+    planned = original(source, file);
+    queueMicrotask(() => {
+      limit = before + Buffer.byteLength(planned!.xml) + planned!.stateDeltaBytes;
+      createStorageSettings(fx.home).setSharedLimit(limit);
+    });
+    return planned;
+  });
+  let response: Response;
+  try {
+    response = await fx.request(route, {
+      method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseRevision: null, files: { 'doc.xml': encode(xml) } }),
+    });
+  } finally { spy.mockRestore(); }
+  expect(planned).toBeDefined();
+  expect(response.status).toBe(200);
+  const actual = (await usage.measure('owner')).shared;
+  expect(actual).toBeLessThanOrEqual(limit);
+  const doc = path.join(fx.alpha, '.anjian/artifacts/document/boundary/doc.xml');
+  expect(fs.existsSync(doc)).toBe(true);
+  // The admitted state delta also includes replacing warnings.json, so compare total usage above.
+});
+
+test('first document upload persists its warning state before acknowledgement and the next quota scan', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/document/metadata`;
+  const put = (baseRevision: string | null, xml: string) => fx.request(route, {
+    method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseRevision, files: { 'doc.xml': encode(xml) } }),
+  });
+  const first = await put(null, '<doc><p>first</p></doc>');
+  expect(first.status).toBe(200);
+  const { revision } = await first.json() as { revision: string };
+  const warnings = path.join(fx.alpha, '.anjian/artifacts/.state/document/metadata/warnings.json');
+  const identity = path.join(fx.alpha, '.anjian/artifacts/document/metadata/.artifact-id');
+  expect(fs.statSync(warnings).size).toBeGreaterThan(0);
+  expect(fs.statSync(identity).size).toBeGreaterThan(0);
+  const usage = createStorageUsage({
+    projects: () => [{ dir: fx.alpha, owner: 'owner' }, { dir: fx.beta, owner: 'owner' }],
+    snapshotsRoot: path.join(fx.home, 'shares/snapshots'), snapshots: () => [],
+  });
+  createStorageSettings(fx.home).setSharedLimit((await usage.measure('owner')).shared);
+  const denied = await put(revision, '<doc><p>other</p></doc>');
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
 });
