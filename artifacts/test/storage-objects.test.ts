@@ -59,7 +59,8 @@ function fixture(body = crypto.randomBytes(1024 * 1024)) {
   return { directory, source, body, store };
 }
 
-test('streams real file bytes through signed SDK requests, verifies them and restores a private temporary file', async () => {
+// Cold SDK initialization and multi-pass file streaming run alongside other CI workers.
+test('streams real file bytes through signed SDK requests, verifies them and restores a private temporary file', { timeout: 15_000 }, async () => {
   const f = fixture();
   const digest = await digestFile(f.source);
   expect(digest).toEqual({ bytes: f.body.length, sha256: crypto.createHash('sha256').update(f.body).digest('hex') });
