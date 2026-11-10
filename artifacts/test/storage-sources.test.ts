@@ -121,3 +121,12 @@ test('runtime exclusions match exact project state files and process temporary v
   for (const file of ['.state/.artifact-id', '.state/artboard/a/comments.json', '.state/recordings/a.mp4', '.state/server-info.backup', '.state/server-info.abc.tmp', 'document/a/server-info', '.state/nested/server-info'])
     expect(isRuntimeLocalArtifactStateFile(file)).toBe(false);
 });
+
+test('prepares projects before the first share without creating an empty snapshots cache', async () => {
+  const f = fixture();
+  f.project('project', 'owner');
+  fs.rmSync(path.join(f.home, 'shares'), { recursive: true });
+  const plan = await planMigrationSources('owner', f.options);
+  expect(plan.roots.map((root) => root.kind).sort()).toEqual(['artifacts', 'trash']);
+  expect(fs.existsSync(f.options.snapshotsRoot)).toBe(false);
+});

@@ -626,6 +626,26 @@
     "invalidQuota": "请输入非负的容量，最多保留三位小数。"
   },
   "storage": {
+    "migration": {
+      "title": "迁移任务",
+      "help": "先复制现有文件到已测试的 S3 并校验完整性。原文件会保留，复制完成不会自动切换存储。",
+      "prepare": "准备迁移",
+      "refresh": "刷新任务",
+      "testFirst": "请先保存配置并通过连接测试。",
+      "empty": "还没有迁移任务。",
+      "prepared": "等待复制",
+      "copying": "正在复制与校验",
+      "interrupted": "复制已中断",
+      "verified": "校验通过",
+      "failed": "复制未完成",
+      "progress": "已校验 {{done}} / {{total}} 个文件 · {{size}} MiB",
+      "previousProfile": "此任务使用创建时保存的配置版本。",
+      "sourceChanged": "源文件已变化，请重新准备迁移任务。已有复制内容保留。",
+      "copyFailed": "复制或校验失败。请检查存储连接后重试，已完成的文件会重新校验。",
+      "verifiedHelp": "文件副本已校验，存储尚未切换。启用迁移切换的功能仍待完成。",
+      "copy": "复制并校验",
+      "retry": "继续复制"
+    },
     "title": "存储设置",
     "description": "配置实例共享存储或自己的 S3。凭据加密保存在服务器，页面不回显。",
     "shared": "实例共享",

@@ -30,6 +30,8 @@ import { createStorageApi } from './storage/api';
 import { createStorageUsage } from './storage/usage';
 import { createStorageQuota } from './storage/quota';
 import { createStorageMigration } from './storage/migration';
+import { createStorageMigrationApi } from './storage/migration-api';
+import { planMigrationSources } from './storage/sources';
 import { createStorageBackend } from './storage/backend';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
@@ -604,6 +606,17 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       return scope === null ? 'local' : storageBackend.summary(scope).backend;
     },
   });
+  const migrationApi = createStorageMigrationApi({ migration, settings, origin, principal: projectAccess.principal, readBody,
+    plan: async (scope) => {
+      if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
+      return planMigrationSources(scope, {
+        projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
+        snapshotsRoot: path.join(options.paths.home, 'shares/snapshots'),
+        snapshots: shares.storageSnapshots,
+        sharedOwner: (owner) => storageBackend.scopeFor(owner) !== owner,
+      });
+    },
+  });
   const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
   const publicShares = createPublicShare({ store: shares, origin,
@@ -638,6 +651,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await shareApi(req, res, url)) return;
       if (await memberApi(req, res, url)) return;
       if (await storageApi(req, res, url)) return;
+      if (await migrationApi(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
@@ -786,6 +800,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       closing = true;
       clearInterval(trashCleanup);
       remoteAuth.close();
+      await migrationApi.close();
       const stopped = [front, board].map(
         (server) => new Promise((resolve) => server.close(resolve)),
       );

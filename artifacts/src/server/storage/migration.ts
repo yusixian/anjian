@@ -12,6 +12,8 @@ const SCOPE = /^(shared|owner|github:[1-9]\d*)$/;
 const ROOT_ID = /^[a-z][a-z0-9_-]{0,63}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
+const MAX_JOBS_PER_SCOPE = 200;
+const RECENT_JOBS = 20;
 const activeScopes = new Set<string>();
 
 export type MigrationState = 'prepared' | 'copying' | 'verified' | 'failed';
@@ -210,11 +212,43 @@ export function createStorageMigration(home: string, deps: Dependencies) {
     if (!profile || profile.id !== id || profile.scope !== scope) throw new StorageMigrationError('profile_changed', '存储配置版本与迁移记录不一致。');
     return profile;
   };
+  const jobIds = async (scope: string) => {
+    const directory = directoryFor(store, scope);
+    let entries: import('node:fs').Dirent[];
+    try {
+      for (const parent of [storage, store, directory]) {
+        const stat = await fs.lstat(parent);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) invalid('迁移目录无效。');
+      }
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    }
+    const ids: string[] = [];
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // Atomic manifest replacement in progress.
+      if (!entry.isFile() || !entry.name.endsWith('.json') || !UUID.test(entry.name.slice(0, -5))) return corrupt();
+      ids.push(entry.name.slice(0, -5));
+    }
+    return ids;
+  };
   return {
+    async list(scope: string): Promise<MigrationSummary[]> {
+      validScope(scope);
+      const ids = await jobIds(scope);
+      if (ids.length > MAX_JOBS_PER_SCOPE) return corrupt();
+      const jobs: MigrationSummary[] = [];
+      for (const id of ids) jobs.push(summary(await load(manifestFile(store, scope, id), scope, id)));
+      return jobs.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt || b.id.localeCompare(a.id)).slice(0, RECENT_JOBS);
+    },
     async prepare(scope: string, profileId: string, roots: MigrationRoot[]): Promise<MigrationSummary> {
       validScope(scope); validId(profileId);
       return exclusive(scope, async () => {
         if (!Array.isArray(roots) || roots.length === 0) invalid('必须指定源目录。');
+        if ((await jobIds(scope)).length >= MAX_JOBS_PER_SCOPE)
+          invalid('此存储空间的迁移记录已达上限，请先联系管理员归档旧记录。');
         const profile = await resolve(scope, profileId);
         const ids = new Set<string>(); const directories: string[] = []; const canonicalRoots: MigrationRoot[] = [];
         for (const root of roots) {
@@ -247,38 +281,50 @@ export function createStorageMigration(home: string, deps: Dependencies) {
         return summary(manifest);
       });
     },
-    async resume(scope: string, id: string): Promise<MigrationSummary> {
+    async resume(scope: string, id: string, guard?: (roots: readonly MigrationRoot[]) => void | Promise<void>): Promise<MigrationSummary> {
       validScope(scope); validId(id);
       return exclusive(scope, async () => {
         const file = manifestFile(store, scope, id);
         const m = await load(file, scope, id);
+        const checkGuard = () => guard?.(m.roots);
         const profile = await resolve(scope, m.profileId);
         if (profileFingerprint(profile) !== m.profileFingerprint) throw new StorageMigrationError('profile_changed', '存储配置版本内容已变化。');
         const objects = createObjects(profile, profile.credentials, m.id);
         const persist = async () => { m.updatedAt = Date.now(); await save(file, m); };
         try {
+          await checkGuard();
           await checkTree(m);
+          await checkGuard();
           m.state = 'copying'; m.error = null; await persist();
           for (const entry of m.files) {
             const expected = objects.reference(entry.digest);
             if (entry.object) {
               if (entry.object.key !== expected.key) return corrupt();
-              try { entry.object = await objects.verify(entry.object); await persist(); continue; }
+              await checkGuard();
+              try { entry.object = await objects.verify(entry.object); }
               catch { entry.object = undefined; await persist(); }
+              await checkGuard();
+              if (entry.object) { await persist(); continue; }
             }
             const root = m.roots.find((item) => item.id === entry.rootId)!;
             const source = path.join(root.directory, entry.relative);
             let digest: FileDigest;
+            await checkGuard();
             try { digest = await digestFile(source); } catch { return sourceChanged(); }
             if (!equalDigest(digest, entry.digest)) return sourceChanged();
+            await checkGuard();
             const object = await objects.upload(source, entry.digest);
+            await checkGuard();
             if (object.key !== expected.key || !equalDigest(object, entry.digest)) throw new StorageMigrationError('verification_failed', '上传校验结果与迁移记录不一致。');
             // A second local hash detects replacements between pre-upload inspection and upload.
             try { digest = await digestFile(source); } catch { return sourceChanged(); }
             if (!equalDigest(digest, entry.digest)) return sourceChanged();
+            await checkGuard();
             entry.object = object; await persist();
           }
+          await checkGuard();
           await checkTree(m);
+          await checkGuard();
           m.state = 'verified'; m.error = null; await persist();
           return summary(m);
         } catch (error) {

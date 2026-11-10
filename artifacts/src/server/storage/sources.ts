@@ -69,7 +69,10 @@ export async function planMigrationSources(scope: string, options: MigrationSour
     for (let j = i + 1; j < projectDirs.length; j++)
       if (overlaps(projectDirs[i]!, projectDirs[j]!)) invalid();
 
-  const snapshotsRoot = await directory(options.snapshotsRoot);
+  const snapshotsRoot = canonicalInput(options.snapshotsRoot);
+  let hasSnapshots = true;
+  try { await directory(snapshotsRoot); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; hasSnapshots = false; }
   if (projectDirs.some((project) => overlaps(project, snapshotsRoot))) invalid();
   const indexed = new Map<string, string>();
   for (const snapshot of options.snapshots()) {
@@ -105,7 +108,7 @@ export async function planMigrationSources(scope: string, options: MigrationSour
       selected.push({ directory: file, kind, owner });
     }
   }
-  for (const name of (await fs.readdir(snapshotsRoot)).sort()) {
+  for (const name of (hasSnapshots ? await fs.readdir(snapshotsRoot) : []).sort()) {
     const file = path.join(snapshotsRoot, name);
     if (!SNAPSHOT.test(name)) invalid();
     await directory(file);

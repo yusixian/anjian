@@ -1,6 +1,7 @@
 import { Button } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { StorageMigration } from './StorageMigration';
 import { useAccount } from '../../hooks/useAccount';
 import { useTranslation } from '../../i18n';
 import { deviceStyles as styles } from '../devices/device-styles';
@@ -124,6 +125,7 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
         {test.cleanupKey && <><p {...stylex.props(styles.rowMeta)}>{t('storage.cleanup')}</p><code {...stylex.props(styles.code)}>{test.cleanupKey}</code></>}
         {test.ok && <p {...stylex.props(styles.rowMeta)}>{t('storage.notMigrated')}</p>}
       </section>}
+      <StorageMigration scope={scope} profileId={data.profile?.id} enabled={Boolean(test?.ok) && !dirty} disabled={busy || Boolean(data.recoveryPending)} onBusy={onBusy} />
       {scope === 'shared' && <form {...stylex.props(styles.form)} onSubmit={(event) => {
         event.preventDefault();
         const bytes = data.sharedLimitBytes !== null && data.sharedLimitBytes !== undefined && limit === String(data.sharedLimitBytes / GIB) ? data.sharedLimitBytes : Math.round(Number(limit) * GIB);

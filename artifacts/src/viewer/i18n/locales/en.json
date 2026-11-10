@@ -642,6 +642,26 @@
     "invalidQuota": "Enter a non-negative capacity with up to three decimal places."
   },
   "storage": {
+    "migration": {
+      "title": "Migration jobs",
+      "help": "Copy existing files to the tested S3 storage and verify their integrity. Original files are preserved. Completing a copy does not switch storage.",
+      "prepare": "Prepare migration",
+      "refresh": "Refresh jobs",
+      "testFirst": "Save the configuration and pass the connection test first.",
+      "empty": "No migration jobs yet.",
+      "prepared": "Ready to copy",
+      "copying": "Copying and verifying",
+      "interrupted": "Copy interrupted",
+      "verified": "Verification passed",
+      "failed": "Copy incomplete",
+      "progress": "{{done}} / {{total}} files verified · {{size}} MiB",
+      "previousProfile": "This job uses the configuration version saved when it was created.",
+      "sourceChanged": "Source files have changed. Prepare a new migration job. Existing copies are retained.",
+      "copyFailed": "Copy or verification failed. Check the storage connection and retry. Completed files will be verified again.",
+      "verifiedHelp": "File copies have been verified. Storage has not switched; activation is not available yet.",
+      "copy": "Copy and verify",
+      "retry": "Resume copy"
+    },
     "title": "Storage settings",
     "description": "Configure shared storage or your own S3. Credentials are encrypted on the server and never displayed.",
     "shared": "Instance shared",
