@@ -8,11 +8,11 @@ import { scanStorageRoot, type MigrationRoot, type MigrationProfile, type create
 
 type Migration = ReturnType<typeof createStorageMigration>;
 type Activation = Awaited<ReturnType<Migration['verifiedReferences']>>;
-interface Binding { profileId: string; namespace: string; activatedAt: number; sequence: number }
+interface Binding { profileId: string; namespace: string; activatedAt: number; sequence: number; owners?: Record<string, number> }
 interface FileEntry { relative: string; digest: FileDigest; object: StoredObject }
 interface Root extends MigrationRoot { scope: string; directories: string[]; files: FileEntry[] }
 interface State { version: 1; generation: string; bindings: Record<string, Binding>; roots: Root[] }
-interface Intent { version: 1; id: string; scope: string; sequence: number; binding: Binding; roots: Root[] }
+interface Intent { version: 1; id: string; scope: string; owner?: string; sequence: number; binding: Binding; roots: Root[] }
 interface Dependencies {
   migration: Pick<Migration, 'verifiedReferences'>;
   resolveProfile(scope: string, id: string): MigrationProfile | Promise<MigrationProfile>;
@@ -65,6 +65,10 @@ function validate(state: State) {
   for (const [scope, binding] of Object.entries(state.bindings)) {
     if (!SCOPE.test(scope) || !binding || !UUID.test(binding.profileId) || !UUID.test(binding.namespace) || !Number.isSafeInteger(binding.activatedAt) || !Number.isSafeInteger(binding.sequence) || binding.sequence < 0) fail('invalid_binding');
   }
+  for (const binding of Object.values(state.bindings)) {
+    if (binding.owners !== undefined && (!binding.owners || typeof binding.owners !== 'object' || Array.isArray(binding.owners) ||
+      Object.entries(binding.owners).some(([owner, sequence]) => !SCOPE.test(owner) || !Number.isSafeInteger(sequence) || sequence < 0))) fail('invalid_binding');
+  }
   const ids = new Set<string>(); const directories: string[] = [];
   for (const root of state.roots) {
     if (!root || !/^[a-z][a-z0-9_-]{0,63}$/.test(root.id) || ids.has(root.id) || !state.bindings[root.scope] ||
@@ -97,13 +101,15 @@ export function createStorageBackend(home: string, deps: Dependencies) {
   const root = path.join(storage, 'bindings'); directory(root);
   const revisions = path.join(root, 'revisions'); directory(revisions);
   const intents = path.join(root, 'intents'); directory(intents);
+  const archive = path.join(intents, 'settled'); directory(archive);
   const pointer = path.join(root, 'active.json');
   const objects = deps.createObjects ?? createS3Objects;
   const pending = new Set<string>();
+  const pendingOwners = new Set<string>();
   const checkScope = (scope: string) => { if (!SCOPE.test(scope)) fail('invalid_binding'); };
   const read = (): State => {
     try {
-      for (const dir of [storage, root, revisions, intents]) {
+      for (const dir of [storage, root, revisions, intents, archive]) {
         const stat = fs.lstatSync(dir); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('invalid_binding');
       }
       try { fs.lstatSync(pointer); } catch (error) {
@@ -145,7 +151,7 @@ export function createStorageBackend(home: string, deps: Dependencies) {
     try {
       const result: Intent[] = [];
       for (const name of fs.readdirSync(intents)) {
-        if (name.startsWith('.')) continue;
+        if (name.startsWith('.') || name === 'settled') continue;
         if (!name.endsWith('.json') || !UUID.test(name.slice(0, -5))) fail('invalid_binding');
         const file = path.join(intents, name); regular(file);
         const { checksum: recorded, ...data } = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -154,7 +160,8 @@ export function createStorageBackend(home: string, deps: Dependencies) {
             !Number.isSafeInteger(intent.sequence) || intent.sequence <= 0 ||
             recorded !== crypto.createHash('sha256').update(JSON.stringify(intent)).digest('hex')) fail('invalid_binding');
         validate({ version: 1, generation: intent.id, bindings: { [intent.scope]: intent.binding }, roots: intent.roots });
-        if (intent.roots.some((item) => item.scope !== intent.scope)) fail('invalid_binding');
+        if (intent.roots.some((item) => item.scope !== intent.scope) ||
+            intent.owner !== undefined && (!SCOPE.test(intent.owner) || intent.scope !== 'shared' && intent.owner !== intent.scope || intent.roots.some((item) => item.owner !== intent.owner))) fail('invalid_binding');
         result.push(intent);
       }
       return result;
@@ -165,21 +172,34 @@ export function createStorageBackend(home: string, deps: Dependencies) {
     if (Buffer.byteLength(content) > MAX_INDEX) fail('invalid_binding');
     atomic(path.join(intents, `${intent.id}.json`), content, false);
   };
-  const publicSummary = (state: State, scope: string) => {
+  const outstandingIntent = (intent: Intent, scope: string, binding: Binding | undefined) => intent.scope === scope &&
+    intent.binding.namespace === binding?.namespace && (intent.owner === undefined ? intent.sequence > binding.sequence :
+      intent.binding.sequence === binding.sequence && intent.sequence > (binding.owners?.[intent.owner] ?? 0));
+  const archiveSettled = (state: State) => {
+    // Keep object provenance for accounting/cleanup without rescanning settled history on every write.
+    try {
+      for (const intent of readIntents()) {
+        if (!outstandingIntent(intent, intent.scope, state.bindings[intent.scope]))
+          fs.renameSync(path.join(intents, `${intent.id}.json`), path.join(archive, `${intent.id}.json`));
+      }
+      syncDirectory(intents); syncDirectory(archive);
+    } catch { /* The active pointer already committed; remaining intents are safe to retry archiving. */ }
+  };
+  const publicSummary = (state: State, scope: string, owner?: string) => {
     const binding = state.bindings[scope];
     return { backend: binding ? 's3' as const : 'local' as const,
       ...(binding ? { profileId: binding.profileId, activatedAt: binding.activatedAt } : {}),
-      bytes: state.roots.filter((item) => item.scope === scope).reduce((sum, item) => sum + item.files.reduce((size, file) => size + file.digest.bytes, 0), 0),
-      pending: pending.has(scope) || readIntents().some((intent) => intent.scope === scope &&
-        intent.binding.namespace === binding?.namespace && intent.sequence > binding.sequence) };
+      bytes: state.roots.filter((item) => item.scope === scope && (owner === undefined || item.owner === owner)).reduce((sum, item) => sum + item.files.reduce((size, file) => size + file.digest.bytes, 0), 0),
+      pending: pending.has(scope) || (owner === undefined ? [...pendingOwners].some((key) => key.startsWith(scope + '/')) : pendingOwners.has(`${scope}/${owner}`)) ||
+        readIntents().some((intent) => (owner === undefined || intent.owner === undefined || intent.owner === owner) && outstandingIntent(intent, scope, binding)) };
   };
-  const replaceRoots = (state: State, scope: string, roots: Root[], transfer: boolean) => {
+  const replaceRoots = (state: State, scope: string, roots: Root[], transfer: boolean, owner?: string) => {
     const incoming = new Set(roots.map((item) => item.id));
     for (const item of roots) {
       const old = state.roots.find((entry) => entry.id === item.id);
-      if (old && (old.directory !== item.directory || (!transfer && old.scope !== scope))) fail('scope_conflict');
+      if (old && (old.directory !== item.directory || (!transfer && (old.scope !== scope || owner !== undefined && old.owner !== owner)))) fail('scope_conflict');
     }
-    state.roots = [...state.roots.filter((item) => item.scope !== scope && !incoming.has(item.id)), ...roots];
+    state.roots = [...state.roots.filter((item) => (item.scope !== scope || owner !== undefined && item.owner !== owner) && !incoming.has(item.id)), ...roots];
     validate(state);
   };
   const checkTree = async (roots: Root[]) => {
@@ -203,7 +223,7 @@ export function createStorageBackend(home: string, deps: Dependencies) {
     save({ version: 1, generation: crypto.randomUUID(), bindings: {}, roots: [] });
   }
   return {
-    summary(scope: string) { checkScope(scope); return publicSummary(read(), scope); },
+    summary(scope: string, owner?: string) { checkScope(scope); if (owner !== undefined) checkScope(owner); return publicSummary(read(), scope, owner); },
     scopeFor(owner: string): string | null {
       checkScope(owner); const state = read();
       return state.bindings[owner] ? owner : state.bindings.shared ? 'shared' : null;
@@ -220,18 +240,39 @@ export function createStorageBackend(home: string, deps: Dependencies) {
         const roots: Root[] = plan.roots.map((entry) => ({ ...entry, scope,
           files: plan.files.filter((file) => file.rootId === entry.id).map(({ relative, digest, object }) => ({ relative, digest, object })) }));
         await checkTree(roots); await guard(plan);
-        replaceRoots(state, scope, roots, true); save(state); pending.delete(scope);
+        if (scope !== 'shared' && state.bindings.shared) {
+          const shared = state.bindings.shared;
+          const oldRoots = state.roots.filter((entry) => entry.scope === 'shared' && entry.owner === scope);
+          if (oldRoots.some((entry) => !roots.some((root) => root.id === entry.id))) fail('scope_conflict');
+          const outstanding = readIntents().filter((intent) => outstandingIntent(intent, 'shared', shared));
+          if (oldRoots.length && outstanding.some((intent) => intent.owner === undefined)) fail('scope_conflict');
+          const sequence = Math.max(shared.owners?.[scope] ?? 0, ...outstanding.filter((intent) => intent.owner === scope).map((intent) => intent.sequence));
+          shared.owners = { ...shared.owners, [scope]: sequence };
+        }
+        replaceRoots(state, scope, roots, true); save(state); archiveSettled(state); pending.delete(scope);
+        for (const key of pendingOwners) if (key.startsWith(scope + '/') || scope !== 'shared' && key === `shared/${scope}`) pendingOwners.delete(key);
         return publicSummary(state, scope);
       });
     },
-    /** Checkpoint a complete scope under its writer barrier; unchanged payloads retain immutable references. */
-    async checkpoint(scope: string, sources: MigrationRoot[], guard: () => Promise<void>) {
+    /** Checkpoint a complete scope or all roots of one owner under its writer barrier. */
+    async checkpoint(scope: string, sources: MigrationRoot[], guard: () => Promise<void>, owner?: string) {
       checkScope(scope);
+      if (owner !== undefined) {
+        checkScope(owner);
+        if (scope !== 'shared' && scope !== owner || sources.some((source) => source.owner !== owner)) fail('scope_conflict');
+      }
       return exclusive(async () => {
         const state = read(); const binding = state.bindings[scope] ?? fail('not_active');
-        pending.add(scope);
-        const store = await client(scope, binding);
+        const pendingSet = owner === undefined ? pending : pendingOwners;
+        const pendingKey = owner === undefined ? scope : `${scope}/${owner}`;
+        pendingSet.add(pendingKey);
+        const sequence = (owner === undefined ? binding.sequence : binding.owners?.[owner] ?? 0) + 1;
+        // Record the dirty range even when profile resolution or scanning fails before uploads.
+        saveIntent({ version: 1, id: crypto.randomUUID(), scope, ...(owner !== undefined ? { owner } : {}), sequence, binding: { ...binding }, roots: [] });
+        let store: Awaited<ReturnType<typeof client>> | undefined;
         try {
+          const resolved = await client(scope, binding);
+          store = resolved;
           const roots: Root[] = [];
           for (const source of sources) {
             if (state.roots.some((item) => item.id === source.id && item.scope !== scope)) fail('scope_conflict');
@@ -239,15 +280,14 @@ export function createStorageBackend(home: string, deps: Dependencies) {
             const old = state.roots.find((item) => item.id === source.id && item.scope === scope);
             const files: FileEntry[] = snapshot.files.map((entry) => {
               const before = old?.files.find((item) => item.relative === entry.relative);
-              const object = before && same(before.digest, entry.digest) && before.object.key === store.reference(entry.digest).key
-                ? before.object : store.reference(entry.digest);
+              const object = before && same(before.digest, entry.digest) && before.object.key === resolved.reference(entry.digest).key
+                ? before.object : resolved.reference(entry.digest);
               return { relative: entry.relative, digest: entry.digest, object };
             });
             roots.push({ ...source, scope, directories: snapshot.directories, files });
           }
-          const sequence = binding.sequence + 1;
-          const intent: Intent = { version: 1, id: crypto.randomUUID(), scope, sequence, binding: { ...binding }, roots };
-          validate({ ...state, roots: [...state.roots.filter((item) => item.scope !== scope), ...roots] });
+          const intent: Intent = { version: 1, id: crypto.randomUUID(), scope, ...(owner !== undefined ? { owner } : {}), sequence, binding: { ...binding }, roots };
+          validate({ ...state, roots: [...state.roots.filter((item) => item.scope !== scope || owner !== undefined && item.owner !== owner), ...roots] });
           await guard();
           saveIntent(intent);
           for (const entry of roots) {
@@ -262,13 +302,16 @@ export function createStorageBackend(home: string, deps: Dependencies) {
             }
           }
           await checkTree(roots); await guard();
-          replaceRoots(state, scope, roots, false); binding.sequence = sequence;
-          save(state); pending.delete(scope);
+          replaceRoots(state, scope, roots, false, owner);
+          if (owner === undefined) { binding.sequence = sequence; binding.owners = {}; }
+          else binding.owners = { ...binding.owners, [owner]: sequence };
+          save(state); archiveSettled(state); pendingSet.delete(pendingKey);
+          if (owner === undefined) for (const key of pendingOwners) if (key.startsWith(scope + '/')) pendingOwners.delete(key);
           return publicSummary(state, scope);
         } catch (error) {
           if (error instanceof StorageBackendError) throw error;
           return fail('unavailable');
-        } finally { store.close(); }
+        } finally { store?.close(); }
       });
     },
     /** Hydrates missing files only. Changed local files are retained and reported for explicit retry/recovery. */
@@ -277,62 +320,73 @@ export function createStorageBackend(home: string, deps: Dependencies) {
         const state = read();
         const conflicts: Array<{ scope: string; rootId: string; relative: string }> = [];
         const pendingScopes: string[] = [];
-        const failures: Array<{ scope: string; code: StorageBackendError['code'] }> = [];
+        const affectedOwners: Array<{ scope: string; owner: string }> = [];
+        const failures: Array<{ scope: string; owner?: string; code: StorageBackendError['code'] }> = [];
         const outstanding = readIntents();
+        pending.clear(); pendingOwners.clear();
         for (const [scope, binding] of Object.entries(state.bindings)) {
-          if (outstanding.some((intent) => intent.scope === scope && intent.binding.namespace === binding.namespace && intent.sequence > binding.sequence)) {
+          if (outstanding.some((intent) => intent.owner === undefined && outstandingIntent(intent, scope, binding))) {
             // Missing paths may be intentional deletions in the uncommitted plan, not lost cache.
             pending.add(scope); pendingScopes.push(scope); continue;
           }
+          const skippedOwners = new Set(outstanding.filter((intent) => intent.owner !== undefined && outstandingIntent(intent, scope, binding)).map((intent) => intent.owner!));
+          for (const owner of skippedOwners) { pendingOwners.add(`${scope}/${owner}`); affectedOwners.push({ scope, owner }); }
           let store: Awaited<ReturnType<typeof client>> | undefined;
           try {
             store = await client(scope, binding);
-            for (const entry of state.roots.filter((item) => item.scope === scope)) {
-              // Refuse replaced ancestors instead of following them into a different workspace.
-              const chain: string[] = []; let current = entry.directory;
-              while (path.dirname(current) !== current) { chain.unshift(current); current = path.dirname(current); }
-              for (const dir of chain) {
-                try { const stat = await fsp.lstat(dir); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('invalid_binding'); }
-                catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; await fsp.mkdir(dir, { mode: 0o700 }); }
+            for (const entry of state.roots.filter((item) => item.scope === scope && !skippedOwners.has(item.owner!))) {
+              try {
+                // Refuse replaced ancestors instead of following them into a different workspace.
+                const chain: string[] = []; let current = entry.directory;
+                while (path.dirname(current) !== current) { chain.unshift(current); current = path.dirname(current); }
+                for (const dir of chain) {
+                  try { const stat = await fsp.lstat(dir); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('invalid_binding'); }
+                  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; await fsp.mkdir(dir, { mode: 0o700 }); }
+                }
+                for (const relativeDir of entry.directories.slice(1)) {
+                  const target = path.join(entry.directory, relativeDir);
+                  try { const stat = await fsp.lstat(target); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('invalid_binding'); }
+                  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; await fsp.mkdir(target, { mode: 0o700 }); }
+                }
+                for (const file of entry.files) {
+                  if (file.object.key !== store.reference(file.digest).key) fail('invalid_binding');
+                  const target = path.join(entry.directory, file.relative);
+                  try {
+                    const local = await digestFile(target);
+                    if (!same(local, file.digest)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
+                    continue;
+                  } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+                  const temporary = await store.download(file.object, path.dirname(target));
+                  try { await fsp.link(temporary, target); syncDirectory(path.dirname(target)); }
+                  catch (error) {
+                    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+                    if (!same(await digestFile(target), file.digest)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
+                  } finally { await fsp.rm(temporary, { force: true }); }
+                }
+                const snapshot = await scanStorageRoot(entry);
+                const known = new Map(entry.files.map((file) => [file.relative, file.digest]));
+                const seen = new Set<string>();
+                for (const file of snapshot.files) {
+                  seen.add(file.relative);
+                  if (!known.has(file.relative) || !same(known.get(file.relative)!, file.digest)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
+                }
+                for (const file of entry.files) if (!seen.has(file.relative)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
+                const dirs = new Set(entry.directories);
+                for (const dir of snapshot.directories) if (!dirs.has(dir)) conflicts.push({ scope, rootId: entry.id, relative: dir + '/' });
+                const presentDirs = new Set(snapshot.directories);
+                for (const dir of entry.directories) if (!presentDirs.has(dir)) conflicts.push({ scope, rootId: entry.id, relative: dir + '/' });
+              } catch (error) {
+                if (entry.owner !== undefined) pendingOwners.add(`${scope}/${entry.owner}`); else pending.add(scope);
+                failures.push({ scope, ...(entry.owner !== undefined ? { owner: entry.owner } : {}), code: error instanceof StorageBackendError ? error.code : 'unavailable' });
               }
-              for (const relativeDir of entry.directories.slice(1)) {
-                const target = path.join(entry.directory, relativeDir);
-                try { const stat = await fsp.lstat(target); if (!stat.isDirectory() || stat.isSymbolicLink()) fail('invalid_binding'); }
-                catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; await fsp.mkdir(target, { mode: 0o700 }); }
+              if (conflicts.some((item) => item.scope === scope && item.rootId === entry.id)) {
+                if (entry.owner !== undefined) pendingOwners.add(`${scope}/${entry.owner}`); else pending.add(scope);
               }
-              for (const file of entry.files) {
-                if (file.object.key !== store.reference(file.digest).key) fail('invalid_binding');
-                const target = path.join(entry.directory, file.relative);
-                try {
-                  const local = await digestFile(target);
-                  if (!same(local, file.digest)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
-                  continue;
-                } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-                const temporary = await store.download(file.object, path.dirname(target));
-                try { await fsp.link(temporary, target); syncDirectory(path.dirname(target)); }
-                catch (error) {
-                  if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-                  if (!same(await digestFile(target), file.digest)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
-                } finally { await fsp.rm(temporary, { force: true }); }
-              }
-              const snapshot = await scanStorageRoot(entry);
-              const known = new Map(entry.files.map((file) => [file.relative, file.digest]));
-              const seen = new Set<string>();
-              for (const file of snapshot.files) {
-                seen.add(file.relative);
-                if (!known.has(file.relative) || !same(known.get(file.relative)!, file.digest)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
-              }
-              for (const file of entry.files) if (!seen.has(file.relative)) conflicts.push({ scope, rootId: entry.id, relative: file.relative });
-              const dirs = new Set(entry.directories);
-              for (const dir of snapshot.directories) if (!dirs.has(dir)) conflicts.push({ scope, rootId: entry.id, relative: dir + '/' });
-              const presentDirs = new Set(snapshot.directories);
-              for (const dir of entry.directories) if (!presentDirs.has(dir)) conflicts.push({ scope, rootId: entry.id, relative: dir + '/' });
             }
-            if (conflicts.some((item) => item.scope === scope)) pending.add(scope); else pending.delete(scope);
           } catch (error) { pending.add(scope); failures.push({ scope, code: error instanceof StorageBackendError ? error.code : 'unavailable' }); }
           finally { store?.close(); }
         }
-        return { conflicts: [...new Map(conflicts.map((item) => [JSON.stringify(item), item])).values()], pendingScopes, failures };
+        return { conflicts: [...new Map(conflicts.map((item) => [JSON.stringify(item), item])).values()], pendingScopes, failures, ...(affectedOwners.length ? { pendingOwners: affectedOwners } : {}) };
       });
     },
   };

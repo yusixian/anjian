@@ -92,7 +92,7 @@ test('failed checkpoint retains its intent, old pointer and local edits; success
   fs.rmSync(f.source, { recursive: true }); await f.create().restore();
   expect(fs.existsSync(path.join(f.source, 'remove'))).toBe(false);
   expect(fs.readFileSync(path.join(f.source, 'keep'), 'utf8')).toBe('new content');
-  expect(fs.readdirSync(path.join(f.home, 'storage/bindings/intents')).length).toBe(2);
+  expect(fs.readdirSync(path.join(f.home, 'storage/bindings/intents/settled')).length).toBe(4);
 });
 
 test('guard rejection cannot publish uploads or lose local deletions after restart', async () => {
@@ -172,4 +172,85 @@ test('failed pointer replacement keeps the previous committed revision usable an
   expect(f.create().summary('shared')).toMatchObject({ bytes: 5, pending: true });
   await f.create().checkpoint('shared', [f.root], guard);
   expect(f.create().summary('shared')).toMatchObject({ bytes: 9, pending: false });
+});
+
+test('member checkpoints preserve other shared roots and cannot settle another member failure', async () => {
+  const f = fixture();
+  const alice: MigrationRoot = { ...f.root, owner: 'github:2' };
+  const bob: MigrationRoot = { id: 'bob', directory: path.join(f.home, 'bob'), kind: 'artifacts', owner: 'github:3' };
+  fs.mkdirSync(bob.directory); fs.writeFileSync(path.join(bob.directory, 'index'), 'bob old');
+  f.write('index', 'alice old'); f.write('deleted', 'must stay deleted');
+  await f.activate('shared', [alice, bob]);
+  fs.unlinkSync(path.join(f.source, 'deleted')); f.write('index', 'alice new');
+  f.failUpload(true);
+  await expect(f.create().checkpoint('shared', [alice], guard, 'github:2')).rejects.toMatchObject({ code: 'unavailable' });
+  f.failUpload(false);
+  fs.writeFileSync(path.join(bob.directory, 'index'), 'bob new');
+  await f.create().checkpoint('shared', [bob], guard, 'github:3');
+  fs.rmSync(bob.directory, { recursive: true });
+  const result = await f.create().restore();
+  expect(result).toMatchObject({ conflicts: [], pendingScopes: [], failures: [], pendingOwners: [{ scope: 'shared', owner: 'github:2' }] });
+  expect(fs.readFileSync(path.join(bob.directory, 'index'), 'utf8')).toBe('bob new');
+  expect(fs.existsSync(path.join(f.source, 'deleted'))).toBe(false);
+  expect(f.create().summary('shared').pending).toBe(true);
+  await f.create().checkpoint('shared', [alice], guard, 'github:2');
+  expect(f.create().summary('shared').pending).toBe(false);
+  fs.rmSync(f.source, { recursive: true });
+  await f.create().restore();
+  expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('alice new');
+  expect(fs.readFileSync(path.join(bob.directory, 'index'), 'utf8')).toBe('bob new');
+  expect(fs.existsSync(path.join(f.source, 'deleted'))).toBe(false);
+});
+
+test('member checkpoint rejects foreign roots and full checkpoint supersedes pending member intents', async () => {
+  const f = fixture(); const alice = { ...f.root, owner: 'github:2' };
+  f.write('index', 'old'); await f.activate('shared', [alice]);
+  await expect(f.create().checkpoint('shared', [alice], guard, 'github:3')).rejects.toMatchObject({ code: 'scope_conflict' });
+  f.write('index', 'new'); f.failUpload(true);
+  await expect(f.create().checkpoint('shared', [alice], guard, 'github:2')).rejects.toMatchObject({ code: 'unavailable' });
+  f.failUpload(false);
+  await f.create().checkpoint('shared', [alice], guard);
+  expect(f.create().summary('shared').pending).toBe(false);
+  fs.rmSync(f.source, { recursive: true });
+  expect(await f.create().restore()).toEqual({ conflicts: [], pendingScopes: [], failures: [] });
+  expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('new');
+});
+
+test('restoration attributes a bad object to its owner and continues other members', async () => {
+  const f = fixture(); const alice = { ...f.root, owner: 'github:2' };
+  const bob = { id: 'bob', directory: path.join(f.home, 'bob'), owner: 'github:3' };
+  fs.mkdirSync(bob.directory); fs.writeFileSync(path.join(bob.directory, 'b'), 'bob');
+  f.write('a', 'alice'); await f.activate('shared', [alice, bob]);
+  for (const [key, value] of f.remote) if (value.toString() === 'alice') f.remote.delete(key);
+  fs.rmSync(f.source, { recursive: true }); fs.rmSync(bob.directory, { recursive: true });
+  const backend = f.create(); const result = await backend.restore();
+  expect(result.failures).toEqual([{ scope: 'shared', owner: 'github:2', code: 'unavailable' }]);
+  expect(fs.readFileSync(path.join(bob.directory, 'b'), 'utf8')).toBe('bob');
+  expect(backend.summary('shared', 'github:2').pending).toBe(true);
+  expect(backend.summary('shared', 'github:3').pending).toBe(false);
+});
+
+test('verified move to personal storage retires the old shared member intent', async () => {
+  const f = fixture(); const alice = { ...f.root, owner: 'github:2' };
+  f.write('a', 'old'); await f.activate('shared', [alice]);
+  f.write('a', 'new'); f.failUpload(true);
+  await expect(f.create().checkpoint('shared', [alice], guard, 'github:2')).rejects.toMatchObject({ code: 'unavailable' });
+  f.failUpload(false); await f.activate('github:2', [alice]);
+  expect(f.create().summary('shared').pending).toBe(false);
+  fs.rmSync(f.source, { recursive: true });
+  expect(await f.create().restore()).toEqual({ conflicts: [], pendingScopes: [], failures: [] });
+  expect(fs.readFileSync(path.join(f.source, 'a'), 'utf8')).toBe('new');
+});
+
+test('pre-upload provider failure persists the dirty owner range across restart', async () => {
+  const f = fixture(); const alice = { ...f.root, owner: 'github:2' };
+  f.write('a', 'deleted intentionally'); await f.activate('shared', [alice]);
+  fs.unlinkSync(path.join(f.source, 'a')); f.failScope('shared');
+  await expect(f.create().checkpoint('shared', [alice], guard, 'github:2')).rejects.toMatchObject({ code: 'unavailable' });
+  f.failScope(); const backend = f.create();
+  expect((await backend.restore()).pendingOwners).toEqual([{ scope: 'shared', owner: 'github:2' }]);
+  expect(fs.existsSync(path.join(f.source, 'a'))).toBe(false);
+  await backend.checkpoint('shared', [alice], guard, 'github:2');
+  await backend.restore();
+  expect(backend.summary('shared', 'github:2').pending).toBe(false);
 });
