@@ -32,6 +32,7 @@ Dokploy 已完成源码镜像构建和 HTTPS 文档访问验证；推送 main �
 - [从源码构建和本地运行](docs/install.md)
 - [CLI 命令](docs/artifacts-cli.md)
 - [作品多选、回收站与恢复](docs/artifact-trash.md)
+- [公开只读分享](docs/public-sharing.md)
 - [通过 HTTPS 连接远程工作台](docs/remote-cli.md)
 - [Agent 远程操作指引](skills/artifacts/remote.md)（新会话接入见 [安装说明](docs/install.md#agent-集成)）
 - [Docker / Dokploy 自托管](docs/self-hosting.md)

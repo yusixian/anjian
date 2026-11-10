@@ -11,6 +11,9 @@ import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
 import { findTrashedArtifact, listTrash, recoverProjectTrash } from './artifact-trash';
 import { createHubTrash } from './hub-trash';
+import { createHubShare } from './hub-share';
+import { createPublicShare } from './public-share';
+import { createShareStore } from './share-store';
 import { serveHubViewer } from './hub-viewer';
 import { withProjectMutation } from './project-mutations';
 import { createArtifactIndex } from './artifact-index';
@@ -131,6 +134,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
 
   const ordered = () => readProjects(projectsFile).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   const registered = (dir: string) => ordered().some((entry) => entry.dir === dir);
+  const shares = createShareStore(options.paths.home);
   const index = createArtifactIndex(() => ordered().map((entry) => entry.dir), {
     rescanAfterMs: 0,
   });
@@ -369,6 +373,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
     return withProjectMutation(real, async () => {
+      shares.revokeProject(real);
       removeProject(projectsFile, real);
       index.rescan();
       fs.rmSync(infoFileOf(real), { force: true });
@@ -477,6 +482,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     readBody,
     suspend: suspendProject,
     deployment: loopback ? 'local' : 'self-hosted',
+    beforeMove: (project, artifact) => { shares.revoke(project, artifact); },
   });
   const trashCleanup = setInterval(() => {
     for (const project of ordered()) {
@@ -495,6 +501,23 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized, github });
+  const publicShares = createPublicShare({ store: shares, origin,
+    previewOrigin: options.boardOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${boardPort}`,
+    viewerDir: options.viewerDir, runtimeDir: options.runtimeDir, registered });
+  const shareApi = createHubShare({ store: shares, origin, authorized, readBody,
+    resolve: (req, input) => {
+      if (typeof input.type !== 'string' || typeof input.id !== 'string' ||
+          (input.project !== undefined && typeof input.project !== 'string')) return null;
+      const project = typeof input.project === 'string' ? input.project : refererProject(req);
+      if (project && !registered(project)) return null;
+      const matches = artifactList().artifacts.filter((a) => a.type === input.type &&
+        (a.id === input.id || a.url.split('/').pop() === input.id) && (!project || a.project === project));
+      return matches.length === 1 ? matches[0]! : null;
+    },
+    settle: async (target) => {
+      if (target.type === 'document') await (await mountOf(target.project)).settleDocument(target.id);
+    },
+  });
 
   front.on('request', (req, res) => {
     void (async () => {
@@ -503,7 +526,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
+      if (await publicShares(req, res, url)) return;
       if (await browserAuth(req, res, url)) return;
+      if (await shareApi(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
@@ -586,7 +611,15 @@ export async function startHub(options: HubOptions): Promise<Hub> {
 
   board.on('request', (req, res) => {
     void (async () => {
-      const pathname = decode(new URL(req.url ?? '/', 'http://board.local').pathname) ?? '/';
+      const url = new URL(req.url ?? '/', 'http://board.local');
+      if (url.pathname.startsWith('/s/')) {
+        const expected = options.boardOrigin ? new URL(options.boardOrigin).host : null;
+        if (expected ? req.headers.host?.toLowerCase() !== expected.toLowerCase() : !hostAllowed(policy, req.headers.host)) {
+          send(res, 403, 'Forbidden host'); return;
+        }
+        if (await publicShares(req, res, url, true)) return;
+      }
+      const pathname = decode(url.pathname) ?? '/';
       const boardRoute = routeBoardRequest(req, pathname);
       const project =
         boardRoute.kind === 'board'

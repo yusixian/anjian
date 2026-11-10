@@ -126,7 +126,7 @@ export function TopBar({
         <button type="button" onClick={onDone} {...stylex.props(styles.done)}>
           {t('common.done')}
         </button>
-      ) : compact ? null : (
+      ) : (
         actions
       )}
     </header>

@@ -28,6 +28,7 @@ export default defineConfig({
       input: {
         index: fileURLToPath(new URL('index.html', import.meta.url)),
         preview: fileURLToPath(new URL('preview.html', import.meta.url)),
+        share: fileURLToPath(new URL('share.html', import.meta.url)),
       },
       output: {
         entryFileNames: '[name].js',

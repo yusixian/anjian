@@ -55,11 +55,12 @@ export function LibraryLink() {
   );
 }
 
-export function LibraryBar() {
+export function LibraryBar({ actions }: { actions?: ReactNode }) {
   if (!useContext(LibraryContext)) return null;
   return (
     <header {...stylex.props(styles.bar)}>
       <LibraryLink />
+      {actions && <><span style={{ flex: 1 }} />{actions}</>}
     </header>
   );
 }

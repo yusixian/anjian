@@ -59,7 +59,7 @@ export function HtmlView({
 
   return (
     <div {...stylex.props(styles.root)}>
-      <LibraryBar />
+      <LibraryBar actions={actions} />
       {ready && src ? (
         <iframe
           allow="clipboard-write"
@@ -77,7 +77,6 @@ export function HtmlView({
             : 'Connecting…'}
         </div>
       )}
-      {actions}
       <WarningsBadge warnings={data?.warnings ?? []} />
     </div>
   );

@@ -6,6 +6,7 @@ import { type MouseEvent, useState } from 'react';
 import type { HubArtifact } from '../../../shared/hub';
 import { THUMBNAIL_PATH } from '../../../shared/thumbnail';
 import { ArtifactThumbnail } from '../../components/ArtifactThumbnail';
+import { ShareButton } from '../../components/ShareButton';
 import { TypeIcon } from '../../components/TypeIcon';
 import { useTranslation } from '../../i18n';
 import { relativeUpdatedAt } from '../../lib/artifact-list';
@@ -179,6 +180,7 @@ export function ArtifactCard({
           {selected && <Check aria-hidden="true" size={16} />}
         </button>
       )}
+      {!selectionMode && <ShareButton card type={artifact.type} id={artifact.id} project={artifact.project} />}
     </div>
   );
 }
