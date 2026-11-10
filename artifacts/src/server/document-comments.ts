@@ -94,12 +94,13 @@ export function asAgentOp(value: unknown): AgentOp | null {
 }
 
 export interface Store<F, H, G> {
-  apply: (op: H) => F;
-  applyAgent: (op: G, name?: string) => { file: F; threadId: string; messageId?: string };
+  apply: (op: H, admit?: CommentAdmission) => F;
+  applyAgent: (op: G, name?: string, admit?: CommentAdmission) => { file: F; threadId: string; messageId?: string };
   current: () => F;
   sync: () => boolean;
   warnings: () => string[];
 }
+export type CommentAdmission = (deltaBytes: number) => void;
 
 export type CommentStore = Store<CommentsFile, HumanOp, AgentOp>;
 
@@ -139,8 +140,9 @@ export function createCommentStore(
   names = noNames,
   now = () => new Date().toISOString(),
   newId = () => nanoid(10),
+  admit?: CommentAdmission,
 ): CommentStore {
-  return createStore(file, documentRules, names, now, newId);
+  return createStore(file, documentRules, names, now, newId, admit);
 }
 
 export function createStore<F, H, G>(
@@ -149,18 +151,25 @@ export function createStore<F, H, G>(
   names = noNames,
   now = () => new Date().toISOString(),
   newId = () => nanoid(10),
+  initialAdmission?: CommentAdmission,
 ): Store<F, H, G> {
   let current = rules.empty();
   let lastSeen: string | null = null;
   let warnings: string[] = [];
   let loaded = false;
 
-  const write = () => {
-    writeJsonAtomic(file, current);
-    lastSeen = fs.readFileSync(file, 'utf8');
+  const write = (next: F, admit?: CommentAdmission) => {
+    const text = `${JSON.stringify(next, null, 2)}\n`;
+    let previous = 0;
+    try { previous = fs.statSync(file).size; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    admit?.(Buffer.byteLength(text) - previous);
+    writeJsonAtomic(file, next);
+    current = next;
+    lastSeen = text;
   };
 
-  const sync = () => {
+  const sync = (admit?: CommentAdmission) => {
     let text: string;
     try {
       text = fs.readFileSync(file, 'utf8');
@@ -168,39 +177,40 @@ export function createStore<F, H, G>(
       return false;
     }
     if (text === lastSeen) return false;
-    lastSeen = text;
+    let merged: { file: F; warnings: string[] };
     try {
       const incoming = parseComments(text);
       const base = loaded ? current : rules.saved(incoming);
-      const merged = rules.merge(base, incoming, 'agent', now(), newId, names.agent());
-      current = merged.file;
-      warnings = merged.warnings;
-      if (`${JSON.stringify(current, null, 2)}\n` !== text) write();
+      merged = rules.merge(base, incoming, 'agent', now(), newId, names.agent());
     } catch (err) {
+      lastSeen = text;
       warnings = [
         `comments.json is not valid: ${(err as Error).message} (left as written; fix it)`,
       ];
+      return true;
     }
+    if (`${JSON.stringify(merged.file, null, 2)}\n` !== text) write(merged.file, admit);
+    else { current = merged.file; lastSeen = text; }
+    warnings = merged.warnings;
     return true;
   };
 
-  sync();
+  sync(initialAdmission);
   loaded = true;
   return {
     current: () => current,
     warnings: () => warnings,
     sync,
-    apply: (op) => {
-      sync();
-      current = rules.human(current, op, now(), newId, names.human());
-      write();
+    apply: (op, admit) => {
+      sync(admit);
+      const next = rules.human(current, op, now(), newId, names.human());
+      write(next, admit);
       return current;
     },
-    applyAgent: (op, name) => {
-      sync();
+    applyAgent: (op, name, admit) => {
+      sync(admit);
       const result = rules.agent(current, op, now(), newId, name ?? names.agent());
-      current = result.file;
-      write();
+      write(result.file, admit);
       return result;
     },
   };

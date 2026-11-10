@@ -8,6 +8,7 @@ import { OutdatedClient } from '../document-session';
 import { send, sendJson } from '../http';
 import { MAX_DOCUMENT_UPDATE } from '../limits';
 import { readCommentBody } from './comments';
+import { requestStorageAdmission } from '../storage/request-admission';
 import type { HttpRoute } from './table';
 
 const API_DOCUMENT_STATE_ROUTE = /^\/api\/document\/([^/]+)\/state$/;
@@ -39,7 +40,7 @@ async function serveDocumentComments(
     sendJson(res, 400, { error: 'not a comment op' });
     return;
   }
-  sendJson(res, 200, { comments: ctx.documents.applyCommentOp(id, op) });
+  sendJson(res, 200, { comments: ctx.documents.applyCommentOp(id, op, requestStorageAdmission(req)) });
 }
 
 async function serveDocumentUpdate(

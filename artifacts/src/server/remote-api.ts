@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { withRequestStorageAdmission } from './storage/request-admission';
 
 import type { ArtifactType } from '../shared/types';
 import type { MountedProject } from './app';
@@ -76,15 +77,22 @@ export function createRemoteApi(options: Options) {
         if (req.method !== 'POST' || (agentMatch[4] === 'comments' && type === 'html')) {
           sendJson(res, 405, { error: 'Method not allowed' }); return true;
         }
-        const mounted = await options.mount(project.dir);
-        if (!options.authenticate(req)?.projects.includes(project.id)) {
-          sendJson(res, 401, { error: '设备授权已撤销', code: 'unauthorized' }); return true;
-        }
-        // Only these two agent operations cross into the existing local API. Never forward a caller-selected route or project path.
-        req.url = `/api/agent/${artifact}/${agentMatch[4]}?key=${encodeURIComponent(options.token)}`;
-        delete req.headers['x-anjian-project'];
-        setRemoteDevice(req, device.id);
-        mounted.handleRequest(req, res);
+        const forward = async (prepare?: () => Promise<(delta: number) => void>) => {
+          const mounted = await options.mount(project.dir);
+          const admit = await prepare?.();
+          if (!options.authenticate(req)?.projects.includes(project.id)) {
+            sendJson(res, 401, { error: '设备授权已撤销', code: 'unauthorized' }); return;
+          }
+          // Forward only the fixed agent route, never caller-selected paths.
+          req.url = `/api/agent/${artifact}/${agentMatch[4]}?key=${encodeURIComponent(options.token)}`;
+          delete req.headers['x-anjian-project'];
+          setRemoteDevice(req, device.id);
+          if (admit) await withRequestStorageAdmission(req, admit, () => mounted.handleRequest(req, res));
+          else await mounted.handleRequest(req, res);
+        };
+        if (type === 'document' && agentMatch[4] === 'comments' && options.upload)
+          await options.upload(project.dir, (prepare) => withProjectMutation(project.dir, () => forward(prepare)));
+        else await forward();
         return true;
       }
       if (req.method !== 'GET' && req.method !== 'PUT') {

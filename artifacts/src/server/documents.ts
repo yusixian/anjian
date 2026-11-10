@@ -13,7 +13,7 @@ import type { ServerMessage } from '../shared/types';
 import { createCommentCursors } from './comment-cursors';
 import type { CommentNames } from './comment-names';
 import { boxDrawingDiagrams } from './document-codec';
-import { type CommentStore, createCommentStore } from './document-comments';
+import { type CommentAdmission, type CommentStore, createCommentStore } from './document-comments';
 import {
   createDocumentSession,
   type DocumentOutcome,
@@ -29,8 +29,9 @@ export interface DocumentRegistry {
     id: string,
     op: AgentOp,
     agent?: string,
+    admit?: CommentAdmission,
   ) => { threadId: string; messageId?: string };
-  applyCommentOp: (id: string, op: HumanOp) => CommentsFile;
+  applyCommentOp: (id: string, op: HumanOp, admit?: CommentAdmission) => CommentsFile;
   close: () => Promise<void>;
   quiesce: () => Promise<() => void>;
   comments: (id: string) => CommentsFile;
@@ -87,12 +88,13 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   const docFile = (id: string) => path.join(options.root, 'document', id, 'doc.xml');
   const commentStores = new Map<string, CommentStore>();
   const cursors = createCommentCursors(options.stateDir);
-  const commentStore = (id: string) => {
+  const commentStore = (id: string, admit?: CommentAdmission) => {
     let store = commentStores.get(id);
     if (!store) {
       store = createCommentStore(
         path.join(options.root, 'document', id, 'comments.json'),
         options.names,
+        undefined, undefined, admit,
       );
       commentStores.set(id, store);
     }
@@ -199,13 +201,13 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
     comments: (id) => commentStore(id).current(),
     commentWarnings: (id) => commentStore(id).warnings(),
     commentsChanged: syncComments,
-    applyCommentOp: (id, op) => {
-      const file = commentStore(id).apply(op);
+    applyCommentOp: (id, op, admit) => {
+      const file = commentStore(id, admit).apply(op, admit);
       pushComments(id);
       return file;
     },
-    applyAgentCommentOp: (id, op, agent) => {
-      const { threadId, messageId } = commentStore(id).applyAgent(op, agent);
+    applyAgentCommentOp: (id, op, agent, admit) => {
+      const { threadId, messageId } = commentStore(id, admit).applyAgent(op, agent, admit);
       pushComments(id);
       return { threadId, ...(messageId ? { messageId } : {}) };
     },

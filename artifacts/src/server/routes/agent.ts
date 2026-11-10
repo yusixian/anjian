@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import type http from 'node:http';
+import { requestStorageAdmission } from '../storage/request-admission';
+import { RemoteTransferError } from '../remote-transfer';
 import path from 'node:path';
 
 import { artifactKeyOf, artifactSignature, resolveArtifactDir } from '../artifacts';
@@ -79,9 +81,11 @@ async function serveAgentComments(
     }
   }
   try {
-    sendJson(res, 200, documents.applyAgentCommentOp(id, op, agent));
+    sendJson(res, 200, documents.applyAgentCommentOp(id, op, agent, requestStorageAdmission(req)));
   } catch (err) {
-    sendJson(res, 400, { error: (err as Error).message });
+    sendJson(res, err instanceof RemoteTransferError ? err.status : 400, {
+      ...(err instanceof RemoteTransferError ? { code: err.code } : {}), error: (err as Error).message,
+    });
   }
 }
 

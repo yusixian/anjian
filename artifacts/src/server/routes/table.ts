@@ -2,7 +2,8 @@ import type http from 'node:http';
 import type { Duplex } from 'node:stream';
 
 import { type AccessPolicy, hostAllowed, navigationAllowed, originAllowed } from '../access';
-import { send } from '../http';
+import { send, sendJson } from '../http';
+import { RemoteTransferError } from '../remote-transfer';
 import { rejectUpgrade } from '../ws';
 
 export interface RouteContext {
@@ -133,7 +134,10 @@ export async function dispatchHttp<C extends RouteContext>(
       try {
         await route.handle(req, res, ctx, { key, match, pathname, url });
       } catch (err) {
-        if (!res.headersSent) send(res, 500, `Artifacts error: ${(err as Error).message}`);
+        if (!res.headersSent) {
+          if (err instanceof RemoteTransferError) sendJson(res, err.status, { code: err.code, error: err.message });
+          else send(res, 500, `Artifacts error: ${(err as Error).message}`);
+        }
       }
       return true;
     }

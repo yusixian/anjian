@@ -37,7 +37,7 @@ export interface ArtifactsServer {
   contentToken: string;
   handlePrivateContent: (req: http.IncomingMessage, res: http.ServerResponse, rest: string, mode: 'main' | 'board') => void;
   handleBoardRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
-  handleRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
+  handleRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void | Promise<void>;
   handleUpgrade: (req: http.IncomingMessage, socket: Duplex, head?: Buffer) => void;
   linkFor: (type: ArtifactType, id: string) => string;
   liveClients: () => number;
@@ -80,6 +80,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       .catch((err: Error) => { if (!res.headersSent) send(res, 500, `Artifacts error: ${err.message}`); });
     requests.add(request);
     void request.then(() => requests.delete(request), () => requests.delete(request));
+    return request;
   };
 
   const server = http.createServer((req, res) => {
@@ -270,7 +271,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     linkFor,
     handleRequest: (req, res) => {
       try {
-        handleRequest(req, res);
+        return handleRequest(req, res);
       } catch (err) {
         if (!res.headersSent) send(res, 500, `Artifacts error: ${(err as Error).message}`);
       }

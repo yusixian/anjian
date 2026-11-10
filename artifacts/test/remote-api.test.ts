@@ -388,3 +388,19 @@ test('artboard generated layout and warnings are charged before a second creatio
   expect((await fx.request(`${route}first-board`, { headers })).status).toBe(200);
   expect(revision).toMatch(/^sha256:/);
 });
+
+test('scoped CLI document comments cannot bypass shared quota through forwarding', async () => {
+  const fx = await fixture(); const { headers } = await fx.login();
+  const dir = path.join(fx.alpha, '.anjian/artifacts/document/comment-budget'); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'doc.xml'), '<doc><p id="budget-block">Review</p></doc>');
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/agent/document/comment-budget/comments`;
+  const settings = createStorageSettings(fx.home); settings.setSharedLimit(0);
+  const post = () => fx.request(route, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'add', blockId: 'budget-block', text: 'blocked until capacity is available' }) });
+  const denied = await post();
+  expect(denied.status, await denied.clone().text()).toBe(413);
+  expect(fs.existsSync(path.join(dir, 'comments.json'))).toBe(false);
+  settings.setSharedLimit(1024 * 1024);
+  expect((await post()).status).toBe(200);
+  expect(JSON.parse(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).threads).toHaveLength(1);
+});
