@@ -384,3 +384,9 @@ GUI 保存并测试配置后，确认探针写入、读回和删除完成且测�
 桌面校验状态与 390px 手机启用/恢复状态均有截图，手机启用截图人工检查，无横向溢出或 pageerror。日志 /tmp/anjian-migration-real-browser-final.log；脚本 /tmp/anjian-migration-real-browser.mjs；截图 /tmp/anjian-migration-real-verified-desktop.png、/tmp/anjian-migration-real-active-mobile.png、/tmp/anjian-migration-real-recovered-mobile.png。测试替身首次因打包后的 SDK 命令类名变化而识别失败，修正替身后完整重跑通过，未修改应用行为。
 
 与上一节成员 GUI 证据合并后，主要配置与迁移 GUI 已完成真实应用服务验证；外部 GitHub/S3 仍使用测试替身。真实 S3 凭据未提供，保持待配置。最终交付审计、当前版本全量回归/CI与已授权部署尚未完成。
+
+## 发布准备（2026-11-11，尚未部署）
+
+提交 bf3554f94b1247e9eacfad3a8ecbd269161d8756 的标准完整构建、类型检查与全量测试通过：218 文件、1,774 项，耗时 110.31 秒，日志 /tmp/anjian-release-full.log。已推送 work/local-first 并通过 ls-remote 核验同一 SHA；Linux CI 为 42883667836，结果待确认。刷新远端时 main 仍为 6b6fd2ac839bdc4bfdb037b7aa3785c1180b8731，本分支无远端分叉。
+
+新增 [成员与存储使用说明](members-storage.md)，明确 GUI 操作顺序、共享额度与实际物理用量的区别、S3 启用后保留缓存、以及实例元数据仍需服务器备份。当前工具浏览器访问生产首页跳转登录页，已请求用户完成登录供发布后管理员验收；代码检查和发布准备不依赖该登录操作。
