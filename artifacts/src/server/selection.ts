@@ -15,7 +15,9 @@ import {
   type SelectionState,
   type SelectionTweak,
 } from '../shared/selection';
-import { writeJsonAtomic } from './state';
+import type { CommentAdmission } from './document-comments';
+import { RemoteTransferError } from './remote-transfer';
+import { writeJsonFiles } from './storage/json-files';
 
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -176,11 +178,12 @@ function readAnySelection(value: unknown) {
 export function createSelectionStore(
   stateDir: string,
   exists: (kind: Kind, id: string) => boolean,
+  enqueue?: (key: string, work: (admit: CommentAdmission) => void) => void,
 ) {
   const tabs = new Map<object, Tab>();
   let clock = 0;
   const fileOf = (kind: Kind, id: string) => path.join(stateDir, kind, id, 'selection.json');
-  const write = (kind: Kind, id: string) => {
+  const persist = (kind: Kind, id: string, admit?: CommentAdmission) => {
     let winner: Tab | undefined;
     for (const tab of tabs.values()) {
       if (tab.kind !== kind || tab.id !== id) continue;
@@ -191,13 +194,26 @@ export function createSelectionStore(
       )
         winner = tab;
     }
-    if (!winner?.state) fs.rmSync(fileOf(kind, id), { force: true });
-    else
-      writeJsonAtomic(fileOf(kind, id), {
-        artifact: `${kind}/${id}`,
-        updatedAt: new Date().toISOString(),
-        ...winner.state,
-      });
+    const file = fileOf(kind, id);
+    if (!winner?.state || !exists(kind, id)) fs.rmSync(file, { force: true });
+    else {
+      try {
+        writeJsonFiles(stateDir, [{ file, value: {
+          artifact: `${kind}/${id}`,
+          updatedAt: new Date().toISOString(),
+          ...winner.state,
+        } }], admit);
+      } catch (error) {
+        // A stale selection would direct the Agent at the wrong content. This file is ephemeral.
+        if (error instanceof RemoteTransferError && error.code === 'storage_quota_exceeded')
+          fs.rmSync(file, { force: true });
+        throw error;
+      }
+    }
+  };
+  const write = (kind: Kind, id: string) => {
+    if (enqueue) enqueue(`selection/${kind}/${id}`, admit => persist(kind, id, admit));
+    else persist(kind, id);
   };
   return {
     accept(socket: object, value: unknown) {

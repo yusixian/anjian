@@ -4,7 +4,7 @@ import { expect, test, vi } from 'vitest';
 import { startHub } from '../src/server/hub';
 import { machinePaths, registerProject } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
-import { tempRoot, waitFor, writeArtboard, writeHtml } from './helpers';
+import { openWs, sendWsText, tempRoot, waitFor, writeArtboard, writeHtml, writeDocument } from './helpers';
 
 test('background rounds retain the old file at quota and retry without another filesystem event', async () => {
   const temp = tempRoot(); const root = fs.realpathSync(temp.root);
@@ -59,4 +59,27 @@ test('zero quota defers generated metadata while live artifact checks remain ava
     await waitFor(() => fs.existsSync(file));
     expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toMatchObject({ warnings: [], ran: false });
   } finally { warning.mockRestore(); await hub.close(); }
+});
+
+
+test('WebSocket selection writes respect quota and remove obsolete Agent context', async () => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  writeDocument(artifacts, 'doc', { 'doc.xml': '<doc><p id="b">Selected content</p></doc>' });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') }); registerProject(paths.projects, project);
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime });
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const ws = await openWs(hub.port, { Origin: `http://127.0.0.1:${hub.port}` }, '/ws?at=/document/doc');
+  try {
+    const send = (quote: string) => sendWsText(ws.socket!, JSON.stringify({ type: 'selection', artifact: 'document/doc', tab: 'tab', human: true, quote, blockIds: ['b'], heading: '' }));
+    const file = path.join(artifacts, '.state/document/doc/selection.json');
+    send('old'); await waitFor(() => fs.existsSync(file));
+    const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
+    send('new selection requiring more space');
+    await waitFor(() => !fs.existsSync(file));
+    settings.setSharedLimit(1024 * 1024);
+    send('latest selection'); await waitFor(() => fs.existsSync(file));
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).quote).toBe('latest selection');
+    ws.socket?.destroy(); await waitFor(() => !fs.existsSync(file));
+  } finally { ws.socket?.destroy(); warning.mockRestore(); await hub.close(); }
 });

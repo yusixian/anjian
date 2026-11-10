@@ -124,6 +124,7 @@ export function createServerContext(options: ServerOptions) {
   const selections = createSelectionStore(
     stateDir,
     (kind, id) => resolveArtifactDir(root, kind, id) !== null,
+    (key, work) => backgroundWrites.enqueue(key, work),
   );
   selections.clearAll();
   const changeListeners: ChangeListener[] = [];
