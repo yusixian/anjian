@@ -53,7 +53,7 @@ function boardVersions(boardDir: string, canvas: CanvasSpec) {
   return { versions, writing };
 }
 
-export function readCanvas(boardDir: string): CanvasPayload {
+export function readCanvas(boardDir: string, artifactName = path.basename(boardDir)): CanvasPayload {
   const { raw, warning } = readRaw(boardDir);
   if (warning)
     return { canvas: null, warnings: [warning], pending: [], layout: null, versions: {} };
@@ -77,7 +77,7 @@ export function readCanvas(boardDir: string): CanvasPayload {
     delete canvas.writing;
     if (writing) canvas.writing = writing;
     const warnings = validateCanvas(canvas, (rel) => resolveBoardFile(boardDir, rel) !== null, {
-      artifact: path.basename(boardDir),
+      artifact: artifactName,
       pending,
       allowPending: true,
     });
@@ -115,12 +115,16 @@ export function writeArtifactState(
   const checkedAt = new Date().toISOString();
   const dir = path.join(stateDir, ref.type, ref.id);
   if (ref.type === 'artboard') {
-    writeJsonAtomic(path.join(dir, 'layout.json'), {
-      checkedAt,
-      ...(payload.layout ?? { pages: {} }),
-    });
+    writeJsonAtomic(path.join(dir, 'layout.json'), artifactLayoutState(payload.layout, checkedAt));
   }
   writeJsonAtomic(path.join(dir, 'warnings.json'), artifactStateWarnings(payload, extra, checkedAt));
+}
+
+export function artifactLayoutState(
+  layout: CanvasPayload['layout'] | undefined,
+  checkedAt = new Date().toISOString(),
+) {
+  return { checkedAt, ...(layout ?? { pages: {} }) };
 }
 
 /** Shared serializer for the persisted warnings state and pre-write byte admission. */

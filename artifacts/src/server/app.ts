@@ -12,6 +12,7 @@ import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
 import { createGitHubAuth, readGitHubConfig } from './github-auth';
 import { prepareNewRemoteDocument, type PreparedRemoteDocument } from './document-session';
+import type { PreparedStorageState } from './remote-transfer';
 import {
   type ArtifactPayload,
   type ChangeListener,
@@ -40,6 +41,7 @@ export interface ArtifactsServer {
   onMessage: (listener: (message: ServerMessage) => void) => void;
   settleDocument: (id: string, source?: string) => Promise<void>;
   prepareDocumentUpload: (id: string, source: string, files: string[]) => Promise<PreparedRemoteDocument>;
+  prepareArtifactUpload: (type: 'artboard' | 'html', id: string, stagedDir: string) => PreparedStorageState;
   onActivity: (listener: () => void) => void;
   onArtifactChange: (listener: ChangeListener) => void;
   port: number;
@@ -201,7 +203,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
         prepared.validate = () => { validate(); metadata.validate(); };
         return prepared;
       }
-      const prepared = prepareNewRemoteDocument(source, path.join(stateDir, 'document', id, 'doc.loro'));
+      const prepared = prepareNewRemoteDocument(source, path.join(stateDir, 'document', id, 'doc.loro'), stateDir);
       const metadata = ctx.prepareDocumentMetadata(id, prepared.xml, prepared.warnings, files);
       prepared.stateDeltaBytes += metadata.delta;
       prepared.addStateFile(metadata.file, metadata.data);
@@ -209,6 +211,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       prepared.validate = () => { validate(); metadata.validate(); };
       return prepared;
     },
+    prepareArtifactUpload: (type, id, stagedDir) => ctx.prepareArtifactMetadata(type, id, stagedDir),
     resolve: (type, idOrAddress) => {
       if (!isArtifactLocator(idOrAddress)) return null;
       return resolveArtifactAddress(root, type, idOrAddress)?.id ?? null;

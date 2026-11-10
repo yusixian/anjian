@@ -113,6 +113,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
     const session = await createDocumentSession({
       file: docFile(id),
       snapshotFile: path.join(options.stateDir, 'document', id, 'doc.loro'),
+      stateRoot: options.stateDir,
       ...options.timing,
       log: options.log,
     });

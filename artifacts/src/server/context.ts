@@ -20,11 +20,12 @@ import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
 import { readHtml } from './html';
+import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
 import { createSelectionStore } from './selection';
 import { socketAuthorized } from './socket-access';
-import { artifactStateWarnings, readCanvas, writeArtifactState } from './state';
+import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactState } from './state';
 import { createVerifyRecordings } from './verify-recordings';
 import { textFrame } from './ws';
 
@@ -289,6 +290,70 @@ export function createServerContext(options: ServerOptions) {
       },
     };
   };
+  const prepareArtifactMetadata = (type: 'artboard' | 'html', id: string, stagedDir: string) => {
+    let payload: CanvasPayload | HtmlPayload;
+    let extra: Record<string, unknown>;
+    let validateRuntime = () => undefined;
+    if (type === 'html') {
+      const html = readHtml(stagedDir, id);
+      const key = `${type}/${id}`;
+      const runtime = [...(runtimeWarnings.get(key) ?? [])];
+      const ran = ranVersions.get(key);
+      payload = { ...html, warnings: [...html.warnings, ...runtime.map((message) => `runtime: ${message}`)] };
+      extra = { ran: ran === html.version };
+      validateRuntime = () => {
+        if (JSON.stringify(runtimeWarnings.get(key) ?? []) !== JSON.stringify(runtime) || ranVersions.get(key) !== ran)
+          throw new Error('HTML runtime state changed during upload');
+      };
+    } else {
+      const canvas = readCanvas(stagedDir, id);
+      const eligible = new Set(Object.values(canvas.canvas?.groups ?? {})
+        .filter((group) => group.verify).flatMap((group) => group.boards));
+      const pending = new Set(canvas.pending);
+      const recordings: Record<string, { status: 'processing' }> = {};
+      for (const [boardId, board] of Object.entries(canvas.canvas?.boards ?? {})) {
+        if (board.type !== 'video' || board.trim === false || !eligible.has(boardId) ||
+            !canvas.versions[board.file]) continue;
+        recordings[boardId] = { status: 'processing' };
+        pending.add(boardId);
+      }
+      payload = { ...canvas, pending: [...pending].sort() };
+      extra = Object.keys(recordings).length ? { recordings } : {};
+    }
+    const checkedAt = new Date().toISOString();
+    const output: Array<{ file: string; data: string; previous: string | null }> = [];
+    const add = (name: string, value: unknown) => {
+      const file = path.join(stateDir, type, id, name);
+      let previous: string | null = null;
+      try {
+        const stat = fs.lstatSync(file);
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Unsafe artifact state');
+        previous = fs.readFileSync(file, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      output.push({ file, data: `${JSON.stringify(value, null, 2)}\n`, previous });
+    };
+    if (type === 'artboard') add('layout.json', artifactLayoutState((payload as CanvasPayload).layout, checkedAt));
+    add('warnings.json', artifactStateWarnings(payload, extra, checkedAt));
+    const state = createPreparedStateFiles(stateDir, [{ file: output[0]!.file, data: output[0]!.data }]);
+    for (const item of output.slice(1)) state.addStateFile(item.file, item.data);
+    return {
+      stateDeltaBytes: output.reduce((sum, item) => sum + Buffer.byteLength(item.data) -
+        (item.previous === null ? 0 : Buffer.byteLength(item.previous)), 0),
+      validate: () => {
+        validateRuntime();
+        for (const item of output) {
+          try {
+            if (fs.readFileSync(item.file, 'utf8') !== item.previous) throw new Error('Artifact state changed during upload');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || item.previous !== null) throw error;
+          }
+        }
+      },
+      stage: state.stage, abort: state.abort, commit: state.commit, finalize: state.finalize,
+    };
+  };
   const refreshState = (ref: ArtifactRef, dir: string) => {
     signatures.set(`${ref.type}/${ref.id}`, artifactSignature(dir, ref.type));
     return writeState(ref, dir);
@@ -347,6 +412,7 @@ export function createServerContext(options: ServerOptions) {
     signatures,
     writeState,
     prepareDocumentMetadata,
+    prepareArtifactMetadata,
     refreshState,
   };
   return ctx;

@@ -107,7 +107,8 @@ export function createRemoteApi(options: Options) {
         if (!options.authenticate(req)?.projects.includes(project.id))
           throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
         let snapshot = req.method === 'PUT'
-          ? writeRemoteArtifact(project.dir, artifact, body, admit, prepared)
+          ? writeRemoteArtifact(project.dir, artifact, body, admit, prepared,
+              type === 'document' ? undefined : (stagedDir) => mounted.prepareArtifactUpload(type, id, stagedDir))
           : readRemoteArtifact(project.dir, artifact);
         if (prepared) {
           await mounted.settleDocument(id);

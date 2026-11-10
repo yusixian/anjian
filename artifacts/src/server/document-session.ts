@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
-import crypto from 'node:crypto';
 import path from 'node:path';
 
 import {
@@ -15,6 +14,7 @@ import { decodeImportBlobMeta, LoroDoc, type OpId } from 'loro-crdt';
 import { DOCUMENT_FEATURES } from '../shared/document-features';
 import { boxDrawingDiagrams, parseDocument, serializeDocument, stampBlockIds } from './document-codec';
 import { createDocumentHeadlessEditor } from './document-headless';
+import { createPreparedStateFiles } from './storage/prepared-files';
 
 export type DocumentOutcome =
   | { kind: 'idle' }
@@ -29,6 +29,7 @@ export type DocumentEvent =
 
 export interface DocumentSessionOptions {
   file: string;
+  stateRoot?: string;
   log?: (line: string) => void;
   snapshotFile: string;
   snapshotIntervalMs?: number;
@@ -65,78 +66,6 @@ export interface PreparedRemoteDocument {
   finalize: () => void;
 }
 
-function stagedState(snapshotFile: string, snapshot: Uint8Array, activityFile?: string, activity?: string) {
-  const planned: Array<{ file: string; data: string | Uint8Array }> = [{ file: snapshotFile, data: snapshot }];
-  if (activityFile && activity !== undefined) planned.push({ file: activityFile, data: activity });
-  const entries: Array<{ file: string; temp: string; backup?: string; installed?: boolean }> = [];
-  // The source path is validated by remote-transfer. Check the state subtree without
-  // rejecting platform-owned aliases such as macOS /var -> /private/var.
-  const stateRoot = path.dirname(path.dirname(path.dirname(snapshotFile)));
-  const checkPath = (file: string) => {
-    let current = path.resolve(file);
-    while (current !== path.dirname(stateRoot)) {
-      try {
-        const stat = fsSync.lstatSync(current);
-        if (stat.isSymbolicLink()) throw new Error('Unsafe document state path');
-        if (current !== file && !stat.isDirectory()) throw new Error('Unsafe document state path');
-        if (current === file && !stat.isFile()) throw new Error('Unsafe document state path');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-      current = path.dirname(current);
-    }
-  };
-  const stageFile = (file: string, data: string | Uint8Array) => {
-    checkPath(file);
-    fsSync.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    checkPath(file);
-    const name = `${file}.${crypto.randomUUID()}.tmp`;
-    fsSync.writeFileSync(name, data, { flag: 'wx', mode: 0o600 });
-    entries.push({ file, temp: name });
-  };
-  const abort = () => {
-    for (const entry of [...entries].reverse()) {
-      if (entry.installed) fsSync.rmSync(entry.file, { force: true });
-      if (entry.backup && fsSync.existsSync(entry.backup)) fsSync.renameSync(entry.backup, entry.file);
-      fsSync.rmSync(entry.temp, { force: true });
-    }
-    entries.length = 0;
-  };
-  return {
-    addStateFile: (file: string, data: string | Uint8Array) => {
-      if (entries.length || planned.some((entry) => entry.file === file)) throw new Error('Document state already staged');
-      planned.push({ file, data });
-    },
-    stage: () => {
-      try {
-        for (const entry of planned) stageFile(entry.file, entry.data);
-      } catch (error) {
-        abort();
-        throw error;
-      }
-    },
-    abort,
-    commit: () => {
-      if (entries.length !== planned.length) throw new Error('Document state was not staged');
-      for (const entry of entries) {
-        if (fsSync.existsSync(entry.file)) {
-          entry.backup = `${entry.file}.${crypto.randomUUID()}.before`;
-          fsSync.renameSync(entry.file, entry.backup);
-        }
-        fsSync.renameSync(entry.temp, entry.file);
-        entry.installed = true;
-      }
-    },
-    finalize: () => {
-      for (const entry of entries) if (entry.backup) {
-        try { fsSync.rmSync(entry.backup, { force: true }); }
-        catch { /* Retain the previous state for recovery if cleanup fails. */ }
-      }
-      entries.length = 0;
-    },
-  };
-}
-
 function snapshotSignature(file: string): string | null {
   try {
     const stat = fsSync.lstatSync(file);
@@ -149,7 +78,7 @@ function snapshotSignature(file: string): string | null {
 }
 
 /** The first upload has no live session; prepare its initial collaboration state off disk. */
-export function prepareNewRemoteDocument(text: string, snapshotFile: string): PreparedRemoteDocument {
+export function prepareNewRemoteDocument(text: string, snapshotFile: string, stateRoot = path.dirname(snapshotFile)): PreparedRemoteDocument {
   const document = new LoroDoc();
   document.setRecordTimestamp(true);
   const editor = createDocumentHeadlessEditor();
@@ -166,7 +95,7 @@ export function prepareNewRemoteDocument(text: string, snapshotFile: string): Pr
   );
   const snapshot = document.export({ mode: 'snapshot' });
   binding.dispose();
-  const state = stagedState(snapshotFile, snapshot);
+  const state = createPreparedStateFiles(stateRoot, [{ file: snapshotFile, data: snapshot }]);
   return {
     xml, warnings, stateDeltaBytes: snapshot.byteLength,
     validate: () => {
@@ -529,7 +458,9 @@ export async function createDocumentSession(
         Buffer.byteLength(activity) - size(activityFile);
       const expectedRevision = revision;
       const expectedFrontiers = JSON.stringify(loro.frontiers());
-      const state = stagedState(snapshotFile, candidateSnapshot, activityFile, activity);
+      const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), [
+        { file: snapshotFile, data: candidateSnapshot }, { file: activityFile, data: activity },
+      ]);
       const validate = () => {
         if (revision !== expectedRevision || JSON.stringify(loro.frontiers()) !== expectedFrontiers ||
             streaming > 0 || outcome.kind === 'rejected') throw new Error('Document changed during upload');

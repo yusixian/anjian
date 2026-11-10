@@ -191,3 +191,39 @@ test('charges a new artifact identity before the first upload, without needing a
   expect(identity).toBeGreaterThan(0);
   expect(admitted).toBe(Buffer.byteLength(source) + identity);
 });
+
+test('generated state is calculated from staged source and included before any live mutation', () => {
+  const root = project();
+  const before = write(root, 'html/budget', null, { 'index.html': encode('a') });
+  let stagedState = false;
+  let checked = false;
+  expect(() => writeRemoteArtifact(root, 'html/budget', {
+    baseRevision: before.revision, files: { 'index.html': encode('ab') },
+  }, (delta) => {
+    checked = true;
+    expect(delta).toBe(101);
+    throw new RemoteTransferError(413, 'storage_quota_exceeded', 'quota');
+  }, undefined, (directory) => {
+    expect(fs.readFileSync(path.join(directory, 'index.html'), 'utf8')).toBe('ab');
+    return { stateDeltaBytes: 100, validate() {}, stage() { stagedState = true; }, abort() {}, commit() {}, finalize() {} };
+  })).toThrowError(expect.objectContaining({ code: 'storage_quota_exceeded' }));
+  expect(checked).toBe(true);
+  expect(stagedState).toBe(false);
+  expect(readRemoteArtifact(root, 'html/budget')).toEqual(before);
+  expect(fs.readdirSync(path.join(root, '.anjian/artifacts/html'))).toEqual(['budget']);
+});
+
+test('generated state commit failure restores both source and state', () => {
+  const root = project();
+  const before = write(root, 'html/rollback', null, { 'index.html': encode('old') });
+  const stateFile = path.join(root, 'state.json'); fs.writeFileSync(stateFile, 'old state');
+  expect(() => writeRemoteArtifact(root, 'html/rollback', {
+    baseRevision: before.revision, files: { 'index.html': encode('new') },
+  }, () => {}, undefined, () => ({
+    stateDeltaBytes: 0, validate() {}, stage() {},
+    commit() { fs.writeFileSync(stateFile, 'new state'); throw new Error('state install failed'); },
+    abort() { fs.writeFileSync(stateFile, 'old state'); }, finalize() {},
+  }))).toThrow('state install failed');
+  expect(readRemoteArtifact(root, 'html/rollback')).toEqual(before);
+  expect(fs.readFileSync(stateFile, 'utf8')).toBe('old state');
+});

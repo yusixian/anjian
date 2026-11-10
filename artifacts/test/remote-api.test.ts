@@ -316,3 +316,75 @@ test('first document upload persists its warning state before acknowledgement an
   expect(denied.status).toBe(413);
   expect((await denied.json()).code).toBe('storage_quota_exceeded');
 });
+
+test('HTML generated state is charged and persisted before a successful upload responds', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/html/first-html`;
+  const content = '<html><head><title>One</title></head><body>hello</body></html>';
+  const put = (name: string) => fx.request(`/api/remote/projects/${fx.id(fx.alpha)}/artifacts/html/${name}`, {
+    method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseRevision: null, files: { 'index.html': encode(content) } }),
+  });
+  expect((await put('first-html')).status).toBe(200);
+  const state = path.join(fx.alpha, '.anjian/artifacts/.state/html/first-html/warnings.json');
+  const identity = path.join(fx.alpha, '.anjian/artifacts/html/first-html/.artifact-id');
+  expect(JSON.parse(fs.readFileSync(state, 'utf8'))).toMatchObject({ warnings: [], ran: false });
+  const usage = createStorageUsage({
+    projects: () => [{ dir: fx.alpha, owner: 'owner' }, { dir: fx.beta, owner: 'owner' }],
+    snapshotsRoot: path.join(fx.home, 'shares/snapshots'), snapshots: () => [],
+  });
+  const before = (await usage.measure('owner')).shared;
+  createStorageSettings(fx.home).setSharedLimit(before + Buffer.byteLength(content) + fs.statSync(identity).size);
+  const denied = await put('second-html');
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/html/second-html'))).toBe(false);
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/.state/html/second-html/warnings.json'))).toBe(false);
+  expect((await fx.request(route, { headers })).status).toBe(200);
+});
+
+test('artboard generated layout and warnings are charged before a second creation', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/artboard/`;
+  const canvas = JSON.stringify({ version: 1, title: 'First', pages: [{ id: 'main', name: 'Main' }],
+    boards: { demo: { page: 'main', file: 'pages/main/demo.html', x: 0, y: 0, w: 640, h: 400 } } });
+  const html = '<html><body>board</body></html>';
+  const put = (id: string, baseRevision: string | null, spec = canvas) => fx.request(`${route}${id}`, {
+    method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseRevision, files: { 'canvas.json': encode(spec), 'pages/main/demo.html': encode(html) } }),
+  });
+  const created = await put('first-board', null);
+  expect(created.status).toBe(200);
+  const { revision } = await created.json() as { revision: string };
+  const stateDir = path.join(fx.alpha, '.anjian/artifacts/.state/artboard/first-board');
+  expect(fs.statSync(path.join(stateDir, 'layout.json')).size).toBeGreaterThan(0);
+  expect(fs.statSync(path.join(stateDir, 'warnings.json')).size).toBeGreaterThan(0);
+  const identitySize = fs.statSync(path.join(fx.alpha, '.anjian/artifacts/artboard/first-board/.artifact-id')).size;
+  const usage = createStorageUsage({
+    projects: () => [{ dir: fx.alpha, owner: 'owner' }, { dir: fx.beta, owner: 'owner' }],
+    snapshotsRoot: path.join(fx.home, 'shares/snapshots'), snapshots: () => [],
+  });
+  const before = (await usage.measure('owner')).shared;
+  createStorageSettings(fx.home).setSharedLimit(before + Buffer.byteLength(canvas) + Buffer.byteLength(html) + identitySize);
+  const denied = await put('second-board', null);
+  expect(denied.status).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/artboard/second-board'))).toBe(false);
+  expect(fs.existsSync(path.join(fx.alpha, '.anjian/artifacts/.state/artboard/second-board/layout.json'))).toBe(false);
+  const expandedLayout = JSON.stringify({ version: 1, title: 'Fir', pages: [{ id: 'main', name: 'Main' }],
+    boards: { demo: { page: 'main', file: 'pages/main/demo.html', x: 999, y: 0, w: 640, h: 400 } } });
+  expect(Buffer.byteLength(expandedLayout)).toBe(Buffer.byteLength(canvas));
+  const originalCanvas = fs.readFileSync(path.join(fx.alpha, '.anjian/artifacts/artboard/first-board/canvas.json'));
+  const originalLayout = fs.readFileSync(path.join(stateDir, 'layout.json'));
+  createStorageSettings(fx.home).setSharedLimit(before);
+  const deniedUpdate = await put('first-board', revision, expandedLayout);
+  expect(deniedUpdate.status).toBe(413);
+  expect((await deniedUpdate.json()).code).toBe('storage_quota_exceeded');
+  expect(fs.readFileSync(path.join(fx.alpha, '.anjian/artifacts/artboard/first-board/canvas.json')).equals(originalCanvas)).toBe(true);
+  expect(fs.readFileSync(path.join(stateDir, 'layout.json')).equals(originalLayout)).toBe(true);
+  // The first board and its generated metadata remain readable after rejection.
+  expect((await fx.request(`${route}first-board`, { headers })).status).toBe(200);
+  expect(revision).toMatch(/^sha256:/);
+});

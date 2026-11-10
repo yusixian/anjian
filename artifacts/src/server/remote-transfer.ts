@@ -251,13 +251,23 @@ function removeManaged(dir: string, type: 'document' | 'artboard' | 'html', pref
   }
 }
 
+export interface PreparedStorageState {
+  stateDeltaBytes: number;
+  validate: () => void;
+  stage: () => void;
+  abort: () => void;
+  commit: () => void;
+  finalize: () => void;
+}
+
 /** The caller must serialize writes for one artifact and flush any live document editor first. */
 export function writeRemoteArtifact(
   projectDir: string,
   artifact: string,
   incoming: RemoteArtifactWrite,
   admit?: (deltaBytes: number) => void,
-  prepared?: { xml: string; stateDeltaBytes: number; validate: () => void; stage: () => void; abort: () => void; commit: () => void; finalize: () => void },
+  prepared?: PreparedStorageState & { xml: string },
+  prepareStaged?: (directory: string) => PreparedStorageState,
 ): RemoteArtifactSnapshot {
   const { dir, parent, type } = pathsFor(projectDir, artifact);
   if (!incoming || (incoming.baseRevision !== null &&
@@ -279,14 +289,13 @@ export function writeRemoteArtifact(
 
   const bytes = (values: Map<string, Buffer>) => [...values.values()].reduce((sum, value) => sum + value.length, 0);
   if (bytes(files) > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB after document merge');
-  admit?.(bytes(files) - bytes(current) + (prepared?.stateDeltaBytes ?? 0) + (identity ? Buffer.byteLength(identity) : 0));
 
+  const states: PreparedStorageState[] = prepared ? [prepared] : [];
   let staging: string | undefined;
   let backup: string | undefined;
   let oldMoved = false;
   let installed = false;
   try {
-    prepared?.stage();
     fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
     // A dot-prefixed sibling stays outside artifact enumeration while files are prepared.
     staging = fs.mkdtempSync(path.join(parent, '.remote-staging-'));
@@ -302,7 +311,10 @@ export function writeRemoteArtifact(
       fs.writeFileSync(target, data, { mode: 0o600, flag: 'wx' });
     }
     if (identity) fs.writeFileSync(path.join(staging, '.artifact-id'), identity, { mode: 0o600, flag: 'wx' });
-    prepared?.validate();
+    if (prepareStaged) states.push(prepareStaged(staging));
+    admit?.(bytes(files) - bytes(current) + states.reduce((sum, state) => sum + state.stateDeltaBytes, 0) + (identity ? Buffer.byteLength(identity) : 0));
+    for (const state of states) state.stage();
+    for (const state of states) state.validate();
     // All mutations below are synchronous: file watchers cannot observe the temporary swap.
     if (exists) {
       fs.renameSync(dir, backup);
@@ -310,21 +322,22 @@ export function writeRemoteArtifact(
     }
     fs.renameSync(staging, dir);
     installed = true;
-    prepared?.commit();
+    for (const state of states) state.commit();
   } catch (err) {
-    let stateError: unknown;
+    const stateErrors: unknown[] = [];
     let sourceError: unknown;
-    try { prepared?.abort(); }
-    catch (error) { stateError = error; }
+    for (const state of [...states].reverse()) {
+      try { state.abort(); } catch (error) { stateErrors.push(error); }
+    }
     try {
-      if (installed && prepared) {
+      if (installed && states.length) {
         fs.rmSync(dir, { recursive: true, force: true });
         installed = false;
       }
       if (oldMoved && !installed && backup) fs.renameSync(backup, dir);
     } catch (error) { sourceError = error; }
-    if (stateError || sourceError)
-      throw new AggregateError([err, stateError, sourceError].filter(Boolean), 'Remote artifact rollback failed');
+    if (stateErrors.length || sourceError)
+      throw new AggregateError([err, ...stateErrors, sourceError].filter(Boolean), 'Remote artifact rollback failed');
     throw err;
   } finally {
     if (!installed && staging && fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
@@ -335,6 +348,6 @@ export function writeRemoteArtifact(
       fs.rmSync(backup, { recursive: true, force: true });
     } catch {}
   }
-  prepared?.finalize();
+  for (const state of states) state.finalize();
   return snapshot(files, digest(files));
 }
