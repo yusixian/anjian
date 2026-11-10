@@ -48,13 +48,11 @@ export function watchArtifacts(ctx: ServerContext) {
             documents.fileChanged(ref.id);
           if (ref.type === 'document' && changed.includes('comments.json'))
             documents.commentsChanged(ref.id);
-          if (ref.type === 'artboard' && changed.includes('comments.json'))
-            boardComments.sync(ref.id);
-          if (
-            ref.type === 'artboard' &&
-            (changed.some((file) => file !== 'comments.json') || changed.length === 0)
-          )
-            boardComments.boardsChanged(ref.id);
+          if (ref.type === 'artboard')
+            ctx.backgroundWrites.enqueue(`artboard/${ref.id}`, admit => {
+              boardComments.sync(ref.id, admit);
+              boardComments.boardsChanged(ref.id, admit);
+            });
           if (signatures.get(key) === artifactSignature(dir, ref.type)) continue;
           runtimeWarnings.delete(key);
           const payload = ctx.refreshState(ref, dir);

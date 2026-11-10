@@ -34,7 +34,6 @@ import { asHumanOp, createStore, isId, isText, type Store, type CommentAdmission
 import { writeCommentFiles } from './storage/comment-files';
 import { listeningOn } from './listening';
 import { resolveBoardFile } from './paths';
-import { writeJsonAtomic } from './state';
 
 type BoardStore = Store<BoardCommentsFile, BoardHumanOp, BoardAgentOp>;
 
@@ -322,12 +321,12 @@ export function createBoardCommentRegistry(options: Options) {
     return currentHashes(id);
   };
   const roundsFile = (id: string) => path.join(options.stateDir, 'artboard', id, 'rounds.json');
-  const writeRounds = (id: string) => {
+  const writeRounds = (id: string, admit?: CommentAdmission) => {
     const context = choiceContext(dirOf(id));
     if (!context.canvas) return;
-    const rounds = roundViews(context, store(id).current().threads);
+    const rounds = roundViews(context, store(id, admit).current().threads);
     if (rounds.length === 0 && !fs.existsSync(roundsFile(id))) return;
-    writeJsonAtomic(roundsFile(id), { rounds });
+    writeCommentFiles(options.root, [{ file: roundsFile(id), value: { rounds } }], admit);
   };
   const forAgent = (id: string, staleIds: Set<string>) => {
     const files = boardFiles(dirOf(id));
@@ -436,13 +435,13 @@ export function createBoardCommentRegistry(options: Options) {
         });
       return [...verify, ...choiceGroups(choiceContext(dirOf(id)), threads)];
     },
-    sync: (id: string) => {
-      if (store(id).sync()) push(id);
-      writeRounds(id);
+    sync: (id: string, admit?: CommentAdmission) => {
+      if (store(id, admit).sync(admit)) push(id);
+      writeRounds(id, admit);
     },
-    boardsChanged: (id: string) => {
+    boardsChanged: (id: string, admit?: CommentAdmission) => {
       fresh(id);
-      writeRounds(id);
+      writeRounds(id, admit);
       if (!stores.has(id) && !fs.existsSync(path.join(dirOf(id), 'comments.json'))) return;
       if (JSON.stringify(stale(id)) !== (lastStale.get(id) ?? '[]')) push(id);
     },

@@ -177,8 +177,9 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     const current = maintenance.catch(() => undefined).then(async () => {
       if (stopping) throw new Error('Project is stopping');
       const resumeInputs = ctx.inputs.pause();
+      const resumeBackground = ctx.backgroundWrites.pause();
       const sockets = [...clients];
-      const resume: Array<() => void> = [() => {
+      const resume: Array<() => void> = [resumeBackground, () => {
         const failures: unknown[] = [];
         try { resumeInputs(); } catch (error) { failures.push(error); }
         for (const socket of sockets) {
@@ -233,6 +234,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
         try { await action(); completedCloseSteps.add(name); }
         catch (error) { failures.push(error); }
       };
+      await step('backgroundWrites', () => ctx.backgroundWrites.close());
       await step('watcher', () => watcher.close());
       await step('sockets', () => {
         const errors: unknown[] = [];

@@ -19,6 +19,8 @@ import type { createGitHubAuth, GitHubConfig } from './github-auth';
 import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
+import type { CommentAdmission } from './document-comments';
+import { createBackgroundWrites } from './storage/background-writes';
 import { createDeferredInputs } from './deferred-inputs';
 import { readHtml } from './html';
 import { createPreparedStateFiles } from './storage/prepared-files';
@@ -47,6 +49,7 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
+  backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
   contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   authorize?: (req: http.IncomingMessage) => boolean;
   github?: ReturnType<typeof createGitHubAuth>;
@@ -125,6 +128,10 @@ export function createServerContext(options: ServerOptions) {
   selections.clearAll();
   const changeListeners: ChangeListener[] = [];
   const inputs = createDeferredInputs();
+  const backgroundWrites = createBackgroundWrites({
+    execute: mount?.backgroundWrite ?? (async work => { work(() => undefined); }),
+    onError: () => console.warn('Background artifact state could not be saved; retrying'),
+  });
   const activityListeners: (() => void)[] = [];
   const startedAt = Date.now();
   const touch = () => {
@@ -150,7 +157,7 @@ export function createServerContext(options: ServerOptions) {
       const dir = resolveArtifactDir(root, ref.type, id);
       if (!dir) return;
       const payload = refreshState(ref, dir);
-      boardComments.boardsChanged(id);
+      backgroundWrites.enqueue(`artboard/${id}`, admit => { boardComments.sync(id, admit); boardComments.boardsChanged(id, admit); });
       const key = `artboard/${id}`;
       broadcast({ type: 'change', artifact: key, files: [] });
       changeListeners.forEach((listener) => listener(ref, payload, []));
@@ -398,6 +405,7 @@ export function createServerContext(options: ServerOptions) {
     clients,
     selections,
     inputs,
+    backgroundWrites,
     changeListeners,
     activityListeners,
     messageListeners,

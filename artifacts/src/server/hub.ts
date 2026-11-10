@@ -222,6 +222,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         fetch: options.fetch,
         debounceMs: options.debounceMs,
         mount: { port, boardPort, token: options.token, version: options.version, github,
+          backgroundWrite: work => writeQuota(project, prepare => withProjectMutation(project, async () => {
+            assertAvailable(project);
+            const admit = await prepare();
+            let total = 0;
+            work(delta => { const next = total + delta; admit(next); total = next; });
+          })),
           authorize: (req) => projectAccess.authorized(req, project),
           ...(!loopback ? { contentAccess: (req: http.IncomingMessage, ref: import('./artifacts').ArtifactRef) => {
             const identity = projectAccess.principal(req, new URL(req.url ?? '/', origin));
