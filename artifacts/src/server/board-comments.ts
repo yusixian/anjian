@@ -31,7 +31,7 @@ import {
 import { createCommentCursors } from './comment-cursors';
 import type { CommentNames } from './comment-names';
 import { asHumanOp, createStore, isId, isText, type Store, type CommentAdmission } from './document-comments';
-import { writeCommentFiles } from './storage/comment-files';
+import { writeJsonFiles } from './storage/json-files';
 import { listeningOn } from './listening';
 import { resolveBoardFile } from './paths';
 
@@ -273,7 +273,7 @@ export function createBoardCommentRegistry(options: Options) {
           const rounds = roundViews(context, next.threads);
           if (rounds.length || fs.existsSync(roundsFile(id))) files.push({ file: roundsFile(id), value: { rounds } });
         }
-        writeCommentFiles(options.root, files, admission);
+        writeJsonFiles(options.root, files, admission);
       });
       stores.set(id, found);
     }
@@ -326,7 +326,7 @@ export function createBoardCommentRegistry(options: Options) {
     if (!context.canvas) return;
     const rounds = roundViews(context, store(id, admit).current().threads);
     if (rounds.length === 0 && !fs.existsSync(roundsFile(id))) return;
-    writeCommentFiles(options.root, [{ file: roundsFile(id), value: { rounds } }], admit);
+    writeJsonFiles(options.root, [{ file: roundsFile(id), value: { rounds } }], admit);
   };
   const forAgent = (id: string, staleIds: Set<string>) => {
     const files = boardFiles(dirOf(id));

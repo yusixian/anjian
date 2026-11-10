@@ -5,6 +5,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { computeLayout } from '../shared/geometry';
 import { type CanvasPayload, type CanvasSpec, isMediaBoard } from '../shared/types';
 import { structuralWarnings, validateCanvas } from '../shared/validate';
+import type { CommentAdmission } from './document-comments';
+import { writeJsonFiles } from './storage/json-files';
 import { resolveBoardFile } from './paths';
 
 function readRaw(boardDir: string): { raw?: unknown; warning?: string } {
@@ -112,16 +114,18 @@ export function writeArtifactState(
   ref: { type: string; id: string },
   payload: { warnings: string[]; layout?: CanvasPayload['layout']; pending?: string[] },
   extra: Record<string, unknown> = {},
+  admit?: CommentAdmission,
 ) {
   const checkedAt = new Date().toISOString();
   const dir = path.join(stateDir, ref.type, ref.id);
-  if (ref.type === 'artboard') {
-    writeChangedState(path.join(dir, 'layout.json'), artifactLayoutState(payload.layout, checkedAt));
-  }
-  writeChangedState(path.join(dir, 'warnings.json'), artifactStateWarnings(payload, extra, checkedAt));
+  const files: Array<{ file: string; value: Record<string, unknown> }> = [];
+  if (ref.type === 'artboard') files.push({ file: path.join(dir, 'layout.json'), value: artifactLayoutState(payload.layout, checkedAt) });
+  files.push({ file: path.join(dir, 'warnings.json'), value: artifactStateWarnings(payload, extra, checkedAt) });
+  const changed = files.filter(({ file, value }) => stateChanged(file, value));
+  if (changed.length) writeJsonFiles(stateDir, changed, admit);
 }
 
-function writeChangedState(file: string, value: Record<string, unknown>) {
+function stateChanged(file: string, value: Record<string, unknown>) {
   // Watcher refreshes must not invalidate an upload's prepared metadata when only
   // the check time changed. Keep checkedAt as the last persisted state change.
   const { checkedAt: _checkedAt, ...next } = value;
@@ -129,12 +133,12 @@ function writeChangedState(file: string, value: Record<string, unknown>) {
     const previous = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (previous && typeof previous === 'object' && !Array.isArray(previous)) {
       const { checkedAt: _previousCheckedAt, ...state } = previous;
-      if (isDeepStrictEqual(state, next)) return;
+      if (isDeepStrictEqual(state, next)) return false;
     }
   } catch (error) {
     if (!(error instanceof SyntaxError) && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  writeJsonAtomic(file, value);
+  return true;
 }
 
 export function artifactLayoutState(

@@ -9,6 +9,7 @@ import { agentAddOnBoard, asBoardAgentOp, boardFiles, boardSpecs } from '../boar
 import type { ServerContext } from '../context';
 import { parseDocument } from '../document-codec';
 import { asAgentOp, isId } from '../document-comments';
+import { artifactStateWarnings } from '../state';
 import { sendJson } from '../http';
 import { remoteCommentCursor } from '../remote-identity';
 import { readCommentBody } from './comments';
@@ -166,7 +167,7 @@ async function serveAgentCheck(
   type: string,
   id: string,
 ) {
-  const { root, stateDir, documents, signatures } = ctx;
+  const { root, documents, signatures } = ctx;
   const ref = artifactKeyOf(`${type}/${id}`);
   const dir = ref && resolveArtifactDir(root, ref.type, ref.id);
   if (!ref || !dir) {
@@ -194,9 +195,8 @@ async function serveAgentCheck(
     }
   }
   ctx.writeState(ref, dir);
-  const state = JSON.parse(
-    await fs.promises.readFile(path.join(stateDir, ref.type, ref.id, 'warnings.json'), 'utf8'),
-  );
+  const current = ctx.stateSnapshot(ref, dir);
+  const state = artifactStateWarnings(current.payload, current.extra);
   sendJson(res, 200, merging ? { ...state, merging: true } : state);
 }
 

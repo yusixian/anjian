@@ -950,10 +950,13 @@ describe('websocket', () => {
     try {
       await waitFor(() => fs.existsSync(checked));
       expect(readJson(checked).pending).toEqual(['a']);
-      const before = readJson(checked).checkedAt;
+      const before = ws.messages.length;
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, '<!doctype html><html><body>Drawing');
-      await waitFor(() => readJson(checked).checkedAt !== before);
+      await waitFor(() => ws.messages.slice(before).some(message => {
+        const event = JSON.parse(message);
+        return event.type === 'change' && event.artifact === 'artboard/streaming' && event.files.includes('pages/p/a.html');
+      }));
       const drawing = await api(server, '/api/artifacts/artboard/streaming');
       expect(drawing.pending).toEqual(['a']);
       expect(drawing.canvas.writing).toBe('a');

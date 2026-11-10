@@ -243,7 +243,7 @@ export function createServerContext(options: ServerOptions) {
   });
 
   const signatures = new Map<string, string>();
-  const writeState = (ref: ArtifactRef, dir: string) => {
+  const stateSnapshot = (ref: ArtifactRef, dir: string) => {
     const payload = readArtifact(dir, ref, runtimeOf(ref, dir));
     const extra =
       ref.type === 'document'
@@ -253,11 +253,16 @@ export function createServerContext(options: ServerOptions) {
           : 'recordings' in payload
             ? { recordings: payload.recordings }
             : {};
-    try {
-      writeArtifactState(stateDir, ref, payload, extra);
-    } catch (err) {
-      console.error(JSON.stringify({ type: 'state-write-error', error: (err as Error).message }));
-    }
+    return { payload, extra };
+  };
+  const writeState = (ref: ArtifactRef, dir: string) => {
+    const { payload } = stateSnapshot(ref, dir);
+    backgroundWrites.enqueue(`metadata/${ref.type}/${ref.id}`, admit => {
+      const currentDir = resolveArtifactDir(root, ref.type, ref.id);
+      if (!currentDir) return;
+      const current = stateSnapshot(ref, currentDir);
+      writeArtifactState(stateDir, ref, current.payload, current.extra, admit);
+    });
     return payload;
   };
   const prepareDocumentMetadata = (id: string, xml: string, preparedWarnings: string[], files: string[]) => {
@@ -422,6 +427,7 @@ export function createServerContext(options: ServerOptions) {
     artifactMeta,
     signatures,
     writeState,
+    stateSnapshot,
     prepareDocumentMetadata,
     prepareArtifactMetadata,
     refreshState,

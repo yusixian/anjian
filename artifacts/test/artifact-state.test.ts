@@ -44,3 +44,24 @@ test('runtime changes persist and malformed state is repaired', () => {
   writeArtifactState(root, ref, { warnings: ['repaired'] });
   expect(JSON.parse(fs.readFileSync(file, 'utf8')).warnings).toEqual(['repaired']);
 });
+
+test('metadata admits the combined delta and rolls back both files on installation failure', () => {
+  const root = fixture(); const ref = { type: 'artboard', id: 'board' };
+  writeArtifactState(root, ref, { warnings: [], layout: null });
+  const files = ['layout.json', 'warnings.json'].map(name => path.join(root, 'artboard/board', name));
+  const before = files.map(file => fs.readFileSync(file));
+  const next = { warnings: ['new warning'], layout: { pages: { p: { bounds: null, groups: {}, notes: {} } } } };
+  expect(() => writeArtifactState(root, ref, next, {}, () => { throw new Error('quota'); })).toThrow('quota');
+  expect(files.map(file => fs.readFileSync(file))).toEqual(before);
+  const rename = fs.renameSync.bind(fs);
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((source, target) => {
+    if (target === files[1] && String(source).endsWith('.tmp')) throw new Error('write failure');
+    rename(source, target);
+  });
+  try { expect(() => writeArtifactState(root, ref, next)).toThrow('write failure'); }
+  finally { spy.mockRestore(); }
+  expect(files.map(file => fs.readFileSync(file))).toEqual(before);
+  let delta = 0;
+  writeArtifactState(root, ref, next, {}, bytes => { delta = bytes; });
+  expect(delta).toBe(files.reduce((sum, file, index) => sum + fs.statSync(file).size - before[index]!.byteLength, 0));
+});

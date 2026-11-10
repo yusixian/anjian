@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { CommentAdmission } from './document-comments';
-import { writeCommentFiles } from './storage/comment-files';
+import { writeJsonFiles } from './storage/json-files';
 
 export const cursorsFile = (stateDir: string, id: string, type = 'document') =>
   path.join(stateDir, type, id, 'comment-cursors.json');
@@ -29,7 +29,7 @@ export function createCommentCursors(stateDir: string, type = 'document') {
       const file = cursorsFile(stateDir, id, type);
       const all = read(file);
       if (all[agent] === stamp) return;
-      writeCommentFiles(stateDir, [{ file, value: { ...all, [agent]: stamp } }], admit);
+      writeJsonFiles(stateDir, [{ file, value: { ...all, [agent]: stamp } }], admit);
     },
   };
 }

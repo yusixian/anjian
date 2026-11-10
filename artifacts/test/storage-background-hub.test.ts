@@ -4,7 +4,7 @@ import { expect, test, vi } from 'vitest';
 import { startHub } from '../src/server/hub';
 import { machinePaths, registerProject } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
-import { tempRoot, waitFor, writeArtboard } from './helpers';
+import { tempRoot, waitFor, writeArtboard, writeHtml } from './helpers';
 
 test('background rounds retain the old file at quota and retry without another filesystem event', async () => {
   const temp = tempRoot(); const root = fs.realpathSync(temp.root);
@@ -35,3 +35,28 @@ test('background rounds retain the old file at quota and retry without another f
     expect(Date.now() - resumedAt).toBeGreaterThan(20_000);
   } finally { warning.mockRestore(); await hub.close(); }
 }, 40_000);
+
+
+test('zero quota defers generated metadata while live artifact checks remain available', async () => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  writeHtml(artifacts, 'page', { 'index.html': '<html><body>Page</body></html>' });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') }); registerProject(paths.projects, project);
+  const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime });
+  try {
+    const origin = `http://127.0.0.1:${hub.port}`;
+    const check = () => fetch(origin + '/api/agent/html/page/check', { method: 'POST' });
+    const checked = await check(); expect(checked.status).toBe(200);
+    expect(await checked.json()).toMatchObject({ warnings: [], ran: false });
+    await waitFor(() => warning.mock.calls.some(([message]) => String(message).includes('Background artifact state')));
+    const file = path.join(artifacts, '.state/html/page/warnings.json');
+    expect(fs.existsSync(file)).toBe(false);
+    expect((await fetch(origin + '/api/artifacts/html/page')).status).toBe(200);
+    settings.setSharedLimit(1024 * 1024);
+    expect((await check()).status).toBe(200);
+    await waitFor(() => fs.existsSync(file));
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toMatchObject({ warnings: [], ran: false });
+  } finally { warning.mockRestore(); await hub.close(); }
+});
