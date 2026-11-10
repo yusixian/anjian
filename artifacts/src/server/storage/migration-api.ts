@@ -8,6 +8,7 @@ import { StorageSettingsError, type createStorageSettings } from './settings';
 
 interface Options {
   migration: ReturnType<typeof createStorageMigration>;
+  maintain?: <T>(scope: string, guard: () => void, work: () => Promise<T>) => Promise<T>;
   plan: (scope: string) => Promise<MigrationSourcePlan>;
   settings: ReturnType<typeof createStorageSettings>;
   origin: string;
@@ -80,14 +81,19 @@ export function createStorageMigrationApi(options: Options) {
         const configured = options.settings.summary(scope).profile;
         if (!configured || configured.id !== body.profileId || configured.test?.ok !== true)
           throw new MigrationApiError(409, 'connection_not_tested', '请先测试当前 S3 配置连接。');
-        const plan = await options.plan(scope);
-        assertCurrent();
-        if (plan.scope !== scope) throw new MigrationApiError(503, 'invalid_plan', '迁移来源不可用。');
-        const latest = options.settings.summary(scope).profile;
-        if (!latest || latest.id !== body.profileId || latest.test?.ok !== true)
-          throw new MigrationApiError(409, 'configuration_changed', '存储配置已变化，请重新准备迁移。');
-        const job = await options.migration.prepare(scope, body.profileId, plan.roots);
-        assertCurrent();
+        const prepare = async () => {
+          assertCurrent();
+          const plan = await options.plan(scope);
+          assertCurrent();
+          if (plan.scope !== scope) throw new MigrationApiError(503, 'invalid_plan', '迁移来源不可用。');
+          const latest = options.settings.summary(scope).profile;
+          if (!latest || latest.id !== body.profileId || latest.test?.ok !== true)
+            throw new MigrationApiError(409, 'configuration_changed', '存储配置已变化，请重新准备迁移。');
+          const job = await options.migration.prepare(scope, body.profileId as string, plan.roots);
+          assertCurrent();
+          return job;
+        };
+        const job = options.maintain ? await options.maintain(scope, assertCurrent, prepare) : await prepare();
         sendJson(res, 201, { job });
         return true;
       }

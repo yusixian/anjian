@@ -45,6 +45,7 @@ export function createVerifyRecordings(options: Options) {
   const boardJobs = new Map<string, Job>();
   const queue: Job[] = [];
   const files = new Map<string, string>();
+  const pendingCleanup = new Set<string>();
   let running: Promise<void> | undefined;
   let closed = false;
   const current = (job: Job) =>
@@ -129,7 +130,10 @@ export function createVerifyRecordings(options: Options) {
       };
       notify(job);
     } finally {
-      if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+      if (temporary) {
+        try { fs.rmSync(temporary, { recursive: true, force: true }); }
+        catch { pendingCleanup.add(temporary); }
+      }
     }
   }
   function pump() {
@@ -239,7 +243,15 @@ export function createVerifyRecordings(options: Options) {
     async close() {
       closed = true;
       for (const job of jobs.values()) stop(job);
-      await running;
+      const failures: unknown[] = [];
+      try { await running; } catch (error) { failures.push(error); }
+      for (const directory of pendingCleanup) {
+        try {
+          fs.rmSync(directory, { recursive: true, force: true });
+          pendingCleanup.delete(directory);
+        } catch (error) { failures.push(error); }
+      }
+      if (failures.length) throw new AggregateError(failures, 'Recording preparation did not close completely');
     },
   };
 }

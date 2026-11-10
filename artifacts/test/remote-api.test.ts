@@ -114,7 +114,7 @@ test('a scoped device transfers its project with revision checks but cannot cont
   expect(created.url).not.toContain(MASTER);
   expect(created.revision).toMatch(/^sha256:[a-f0-9]{64}$/);
   const second = await put(project, created.revision, '<doc><p>newer</p></doc>');
-  expect(second.status).toBe(200);
+  expect(second.status, await second.clone().text()).toBe(200);
   expect((await put(project, created.revision, '<doc><p>stale</p></doc>')).status).toBe(409);
   const fetched = await fx.request(`/api/remote/projects/${project}/artifacts/document/plan`, { headers });
   expect(fetched.status).toBe(200);

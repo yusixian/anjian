@@ -89,14 +89,24 @@ export function createStorageUsage(options: {
     }
     return { total: { ...total, checkedAt: now() }, owners };
   };
+  const inventory = async () => {
+    for (let attempt = 0; ; attempt++) {
+      try { return await scan(); }
+      catch (error) {
+        // Atomic state writers can rename a listed temporary file before lstat.
+        // Restart the whole inventory instead of omitting bytes from admission.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || attempt >= 2) throw error;
+      }
+    }
+  };
   return {
     async measure(owner: string) {
-      const inventory = await scan();
-      return { shared: inventory.total.total, personal: inventory.owners.get(owner)?.total ?? 0 };
+      const current = await inventory();
+      return { shared: current.total.total, personal: current.owners.get(owner)?.total ?? 0 };
     },
     async read(scope: string): Promise<UsageReport> {
       if (!cached || now() - cached.total.checkedAt >= 5_000) {
-        if (!pending) pending = scan();
+        if (!pending) pending = inventory();
         const task = pending;
         try { cached = await task; }
         finally { if (pending === task) pending = undefined; }

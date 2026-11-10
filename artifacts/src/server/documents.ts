@@ -78,7 +78,9 @@ function outcomeWarnings(outcome: DocumentOutcome): string[] {
 
 export function createDocumentRegistry(options: RegistryOptions): DocumentRegistry {
   let closing = false;
+  let closePromise: Promise<void> | null = null;
   const sessions = new Map<string, Promise<DocumentSession | null>>();
+  const incompleteSetups = new Map<string, DocumentSession>();
   const warnings = new Map<string, string[]>();
   const docFile = (id: string) => path.join(options.root, 'document', id, 'doc.xml');
   const commentStores = new Map<string, CommentStore>();
@@ -117,56 +119,64 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       ...options.timing,
       log: options.log,
     });
-    const artifact = `document/${id}`;
-    const setWarnings = (next: string[]) => {
-      if (JSON.stringify(next) === JSON.stringify(warnings.get(id) ?? [])) return;
-      warnings.set(id, next);
-      options.onWarningsChange(id);
-    };
-    const currentWarnings = () => {
-      if (session.streaming()) return [];
-      const outcome = session.outcome();
-      return outcome.kind === 'rejected'
-        ? outcomeWarnings(outcome)
-        : [...outcomeWarnings(outcome), ...diagramWarnings(session)];
-    };
-    setWarnings(currentWarnings());
-    session.subscribe((event) => {
-      if (event.type === 'update') {
-        options.broadcast({
-          type: 'doc-update',
-          artifact,
-          bytes: Buffer.from(event.bytes).toString('base64'),
-        });
-      } else if (event.type === 'saved') {
-        setWarnings(currentWarnings());
-      } else {
-        options.broadcast({
-          type: 'doc-status',
-          artifact,
-          streaming: event.streaming,
-          outcome: event.outcome,
-          agentActiveAt: event.agentActiveAt,
-          now: Date.now(),
-        });
-        setWarnings(currentWarnings());
-      }
-    });
-    return session;
+    try {
+      const artifact = `document/${id}`;
+      const setWarnings = (next: string[]) => {
+        if (JSON.stringify(next) === JSON.stringify(warnings.get(id) ?? [])) return;
+        warnings.set(id, next);
+        options.onWarningsChange(id);
+      };
+      const currentWarnings = () => {
+        if (session.streaming()) return [];
+        const outcome = session.outcome();
+        return outcome.kind === 'rejected'
+          ? outcomeWarnings(outcome)
+          : [...outcomeWarnings(outcome), ...diagramWarnings(session)];
+      };
+      setWarnings(currentWarnings());
+      session.subscribe((event) => {
+        if (event.type === 'update') {
+          options.broadcast({
+            type: 'doc-update',
+            artifact,
+            bytes: Buffer.from(event.bytes).toString('base64'),
+          });
+        } else if (event.type === 'saved') {
+          setWarnings(currentWarnings());
+        } else {
+          options.broadcast({
+            type: 'doc-status',
+            artifact,
+            streaming: event.streaming,
+            outcome: event.outcome,
+            agentActiveAt: event.agentActiveAt,
+            now: Date.now(),
+          });
+          setWarnings(currentWarnings());
+        }
+      });
+      return session;
+    } catch (error) {
+      warnings.delete(id);
+      try { await session.close(); }
+      catch { incompleteSetups.set(id, session); }
+      throw error;
+    }
   };
 
   const open = (id: string) => {
-    if (closing) return Promise.resolve(null);
+    if (closing || incompleteSetups.has(id)) return Promise.resolve(null);
     let session = sessions.get(id);
     if (!session) {
       session = create(id).catch((err) => {
-        options.log?.(`document ${id} could not open: ${(err as Error).message}`);
+        try { options.log?.(`document ${id} could not open: ${(err as Error).message}`); }
+        catch { /* Diagnostic logging cannot orphan the session. */ }
         return null;
       });
       sessions.set(id, session);
       void session.then((s) => {
-        if (!s) sessions.delete(id);
-      });
+        if (!s && sessions.get(id) === session) sessions.delete(id);
+      }, () => { /* Retain a rejected open so close reports incomplete drain. */ });
     }
     return session;
   };
@@ -204,11 +214,34 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       return threads.map(forAgent);
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
-    close: async () => {
+    close: () => {
       closing = true;
-      const all = await Promise.all(sessions.values());
-      await Promise.all(all.map((session) => session?.close()));
-      sessions.clear();
+      if (closePromise) return closePromise;
+      closePromise = (async () => {
+        const pending = [...sessions.entries()];
+        const opened = await Promise.allSettled(pending.map(([, session]) => session));
+        const failures: unknown[] = [];
+        const entries = opened.flatMap((result, index) => {
+          if (result.status === 'rejected') { failures.push(result.reason); return []; }
+          const [id, session] = pending[index]!;
+          return [{ id, pending: session, session: result.value }];
+        });
+        const results = await Promise.allSettled(entries.map(({ session }) => session?.close()));
+        for (const [index, result] of results.entries()) {
+          const { id, pending } = entries[index]!;
+          if (result.status === 'rejected') failures.push(result.reason);
+          else if (sessions.get(id) === pending) sessions.delete(id);
+        }
+        const cleanup = [...incompleteSetups.entries()];
+        const cleanupResults = await Promise.allSettled(cleanup.map(([, session]) => session.close()));
+        for (const [index, result] of cleanupResults.entries()) {
+          const [id, session] = cleanup[index]!;
+          if (result.status === 'rejected') failures.push(result.reason);
+          else if (incompleteSetups.get(id) === session) incompleteSetups.delete(id);
+        }
+        if (failures.length) throw new AggregateError(failures, 'Documents did not close completely');
+      })().finally(() => { closePromise = null; });
+      return closePromise;
     },
   };
 }

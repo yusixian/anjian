@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import { computeLayout } from '../shared/geometry';
 import { type CanvasPayload, type CanvasSpec, isMediaBoard } from '../shared/types';
@@ -115,9 +116,25 @@ export function writeArtifactState(
   const checkedAt = new Date().toISOString();
   const dir = path.join(stateDir, ref.type, ref.id);
   if (ref.type === 'artboard') {
-    writeJsonAtomic(path.join(dir, 'layout.json'), artifactLayoutState(payload.layout, checkedAt));
+    writeChangedState(path.join(dir, 'layout.json'), artifactLayoutState(payload.layout, checkedAt));
   }
-  writeJsonAtomic(path.join(dir, 'warnings.json'), artifactStateWarnings(payload, extra, checkedAt));
+  writeChangedState(path.join(dir, 'warnings.json'), artifactStateWarnings(payload, extra, checkedAt));
+}
+
+function writeChangedState(file: string, value: Record<string, unknown>) {
+  // Watcher refreshes must not invalidate an upload's prepared metadata when only
+  // the check time changed. Keep checkedAt as the last persisted state change.
+  const { checkedAt: _checkedAt, ...next } = value;
+  try {
+    const previous = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (previous && typeof previous === 'object' && !Array.isArray(previous)) {
+      const { checkedAt: _previousCheckedAt, ...state } = previous;
+      if (isDeepStrictEqual(state, next)) return;
+    }
+  } catch (error) {
+    if (!(error instanceof SyntaxError) && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  writeJsonAtomic(file, value);
 }
 
 export function artifactLayoutState(

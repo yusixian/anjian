@@ -76,7 +76,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       .then((handled) => { if (!handled) return dispatchHttp(HTTP_ROUTES, req, res, ctx); })
       .catch((err: Error) => { if (!res.headersSent) send(res, 500, `Artifacts error: ${err.message}`); });
     requests.add(request);
-    void request.finally(() => requests.delete(request));
+    void request.then(() => requests.delete(request), () => requests.delete(request));
   };
 
   const server = http.createServer((req, res) => {
@@ -112,7 +112,11 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   if (githubConfig) ctx.github = createGitHubAuth({ config: githubConfig, token, origin: options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`, cookieName: ctx.cookieName, fetch: options.fetch });
 
   const handleBoardRequest = createBoardRequestHandler(ctx);
-  const boardServer = http.createServer(handleBoardRequest);
+  const guardedBoardRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
+    if (stopping) { send(res, 503, 'Project is being updated; retry shortly'); return; }
+    handleBoardRequest(req, res);
+  };
+  const boardServer = http.createServer(guardedBoardRequest);
   if (mount) ctx.boardPort = mount.boardPort;
   else if (isLoopbackHost(options.host) || options.boardOrigin) {
     const boardPortFile = path.join(stateDir, BOARD_PORT_FILE);
@@ -163,6 +167,56 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   });
 
   const watcher = watchArtifacts(ctx);
+  const completedCloseSteps = new Set<string>();
+  let closePromise: Promise<void> | null = null;
+  let closed = false;
+  const closeServer = (target: http.Server) => new Promise<void>((resolve, reject) => {
+    try {
+      target.close((error) => {
+        if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') reject(error);
+        else resolve();
+      });
+      target.closeAllConnections();
+    } catch (error) { reject(error); }
+  });
+  const close = (): Promise<void> => {
+    if (closed) return Promise.resolve();
+    if (closePromise) return closePromise;
+    stopping = true;
+    const run = async () => {
+      const failures: unknown[] = [];
+      const step = async (name: string, action: () => void | Promise<void>) => {
+        if (completedCloseSteps.has(name)) return;
+        try { await action(); completedCloseSteps.add(name); }
+        catch (error) { failures.push(error); }
+      };
+      await step('watcher', () => watcher.close());
+      await step('sockets', () => {
+        const errors: unknown[] = [];
+        for (const socket of clients) {
+          try { socket.destroy(); } catch (error) { errors.push(error); }
+        }
+        if (errors.length) throw new AggregateError(errors, 'Failed to close client sockets');
+      });
+      await step('requests', async () => {
+        const results = await Promise.allSettled([...requests]);
+        const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map((result) => result.reason);
+        if (errors.length) throw new AggregateError(errors, 'Requests failed while closing');
+      });
+      await step('timer', () => clearInterval(ctx.listeningTimer));
+      await step('recordings', () => ctx.recordings.close());
+      await step('documents', () => ctx.documents.close());
+      await step('selections', () => ctx.selections.clearAll());
+      await step('boardServer', () => closeServer(boardServer));
+      await step('server', () => closeServer(server));
+      if (failures.length) throw new AggregateError(failures, 'Project did not close completely');
+      if (mount) await step('serverInfo', () => fs.rmSync(path.join(stateDir, 'server-info'), { force: true }));
+      if (failures.length) throw new AggregateError(failures, 'Project did not close completely');
+      closed = true;
+    };
+    closePromise = run().finally(() => { closePromise = null; });
+    return closePromise;
+  };
 
   return {
     port,
@@ -180,8 +234,11 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       }
     },
     handleUpgrade,
-    handleBoardRequest,
-    handlePrivateContent: (req, res, rest, mode) => serveContent(ctx, res, rest, req.headers.range, mode),
+    handleBoardRequest: guardedBoardRequest,
+    handlePrivateContent: (req, res, rest, mode) => {
+      if (stopping) send(res, 503, 'Project is being updated; retry shortly');
+      else serveContent(ctx, res, rest, req.headers.range, mode);
+    },
     liveClients: () => clients.size,
     onMessage: (listener) => { ctx.messageListeners.push(listener); },
     settleDocument: async (id, source) => {
@@ -221,24 +278,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       for (const change of initialChanges) listener(change.ref, change.payload, change.files);
     },
     onActivity: (listener) => ctx.activityListeners.push(listener),
-    close: async () => {
-      stopping = true;
-      watcher.close();
-      for (const socket of clients) socket.destroy();
-      await Promise.all([...requests]);
-      clearInterval(ctx.listeningTimer);
-      await ctx.recordings.close();
-      await new Promise<void>((resolve) => {
-        ctx.selections.clearAll();
-        for (const socket of clients) socket.destroy();
-        boardServer.close();
-        boardServer.closeAllConnections();
-        server.close(() => resolve());
-        server.closeAllConnections();
-      });
-      await ctx.documents.close();
-      if (mount) fs.rmSync(path.join(stateDir, 'server-info'), { force: true });
-    },
+    close,
   };
 }
 

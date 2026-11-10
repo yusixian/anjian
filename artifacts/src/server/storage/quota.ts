@@ -7,8 +7,13 @@ export function createStorageQuota(options: {
   limits: (owner: string) => { shared: number | null; personal: number | null };
 }) {
   let pending: Promise<unknown> = Promise.resolve();
-  return async <T>(project: string, work: (prepare: () => Promise<(deltaBytes: number) => void>) => Promise<T>): Promise<T> => {
-    const current = pending.catch(() => undefined).then(() => work(async () => {
+  const exclusive = <T>(work: () => Promise<T>): Promise<T> => {
+    const current = pending.catch(() => undefined).then(work);
+    pending = current;
+    return current;
+  };
+  const upload = async <T>(project: string, work: (prepare: () => Promise<(deltaBytes: number) => void>) => Promise<T>): Promise<T> => {
+    return exclusive(() => work(async () => {
       const owner = options.owner(project);
       const usage = await options.measure(owner);
       return (delta) => {
@@ -25,7 +30,6 @@ export function createStorageQuota(options: {
         }
       };
     }));
-    pending = current;
-    return current;
   };
+  return Object.assign(upload, { exclusive });
 }

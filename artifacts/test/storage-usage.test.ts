@@ -1,11 +1,12 @@
 import fs from 'node:fs';
+import promises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { createStorageUsage } from '../src/server/storage/usage';
 
 const homes: string[] = [];
-afterEach(() => { for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true }); });
 function fixture() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-usage-')); homes.push(home);
   const projects = [{ dir: path.join(home, 'alice'), owner: 'github:2' }, { dir: path.join(home, 'bob'), owner: 'github:3' }];
@@ -19,6 +20,20 @@ function fixture() {
   };
   return { home, projects, usage, put, advance: () => { time += 5_001; } };
 }
+
+test('restarts the complete inventory if an atomic writer renames a listed file', async () => {
+  const f = fixture();
+  f.put('alice/.anjian/artifacts/.state/value.json.tmp', 42);
+  const temporary = path.join(f.home, 'alice/.anjian/artifacts/.state/value.json.tmp');
+  const final = path.join(f.home, 'alice/.anjian/artifacts/.state/value.json');
+  const lstat = promises.lstat.bind(promises);
+  const spy = vi.spyOn(promises, 'lstat').mockImplementation(async (...args) => {
+    if (args[0] === temporary && fs.existsSync(temporary)) fs.renameSync(temporary, final);
+    return lstat(...args);
+  });
+  expect(await f.usage.measure('github:2')).toEqual({ shared: 42, personal: 42 });
+  expect(spy.mock.calls.filter(([file]) => file === f.projects[0]!.dir)).toHaveLength(2);
+});
 
 test('counts source, hidden state, trash, shares and orphaned snapshots without leaking other owners', async () => {
   const f = fixture();

@@ -644,7 +644,7 @@
   "storage": {
     "migration": {
       "title": "Migration jobs",
-      "help": "Copy existing files to the tested S3 storage and verify their integrity. Original files are preserved. Completing a copy does not switch storage.",
+      "help": "Preparation temporarily pauses access to affected artifacts and waits for saves to finish. Then copy files to the tested S3 storage and verify them. Originals are preserved; copying does not switch storage.",
       "prepare": "Prepare migration",
       "refresh": "Refresh jobs",
       "testFirst": "Save the configuration and pass the connection test first.",

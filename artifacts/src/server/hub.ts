@@ -16,6 +16,7 @@ import { createPublicShare } from './public-share';
 import { createShareStore } from './share-store';
 import { serveHubViewer } from './hub-viewer';
 import { withProjectMutation } from './project-mutations';
+import { withProjectMaintenance } from './project-maintenance';
 import { createProjectSuspension } from './project-suspension';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
@@ -142,6 +143,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const projectsFile = options.paths.projects;
   const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const settings = createStorageSettings(options.paths.home);
+  const storageHome = fs.realpathSync(options.paths.home);
   const migration = createStorageMigration(options.paths.home, { resolveProfile: settings.resolve });
   const storageBackend = createStorageBackend(options.paths.home, { migration, resolveProfile: settings.resolve });
   // Hydrate before pruning missing roots, trash recovery, indexing, or accepting requests.
@@ -163,7 +165,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
 
   const ordered = () => readProjects(projectsFile).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   const registered = (dir: string) => available(dir) && ordered().some((entry) => entry.dir === dir);
-  const shares = createShareStore(options.paths.home, { canMutateProject: available });
+  const shares = createShareStore(storageHome, { canMutateProject: available });
   const index = createArtifactIndex(() => ordered().filter((entry) => available(entry.dir)).map((entry) => entry.dir), {
     rescanAfterMs: 0,
   });
@@ -588,7 +590,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
   const usage = createStorageUsage({
     projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
-    snapshotsRoot: path.join(options.paths.home, 'shares/snapshots'),
+    snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
     snapshots: () => shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: members.projectOwner(project) })),
   });
   const writeQuota = createStorageQuota({
@@ -606,12 +608,31 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       return scope === null ? 'local' : storageBackend.summary(scope).backend;
     },
   });
+  const migrationProjects = (scope: string) => [...new Set([
+    ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects(),
+  ].filter(({ owner }) => scope === 'shared' ? storageBackend.scopeFor(owner) !== owner : owner === scope).map(({ dir }) => dir))].sort();
   const migrationApi = createStorageMigrationApi({ migration, settings, origin, principal: projectAccess.principal, readBody,
+    maintain: (scope, guard, work) => writeQuota.exclusive(async () => {
+      guard();
+      if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
+      const projects = migrationProjects(scope);
+      const check = () => {
+        guard();
+        if (JSON.stringify(projects) !== JSON.stringify(migrationProjects(scope)))
+          throw new Error('Migration project ownership changed');
+        for (const project of projects) assertAvailable(project);
+      };
+      return withProjectMaintenance(projects, suspendProject, async () => {
+        const result = await work();
+        check();
+        return result;
+      }, check);
+    }),
     plan: async (scope) => {
       if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
       return planMigrationSources(scope, {
         projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
-        snapshotsRoot: path.join(options.paths.home, 'shares/snapshots'),
+        snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
         snapshots: shares.storageSnapshots,
         sharedOwner: (owner) => storageBackend.scopeFor(owner) !== owner,
       });
