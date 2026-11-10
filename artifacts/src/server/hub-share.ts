@@ -12,7 +12,7 @@ interface Options {
   authorized: (req: http.IncomingMessage, url: URL) => boolean;
   resolve: (req: http.IncomingMessage, input: Record<string, unknown>) => ShareTarget | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
-  settle: (target: ShareTarget) => Promise<void>;
+  settle: (target: ShareTarget, admit?: (bytes: number) => void) => Promise<void>;
   publish?: <T>(project: string, work: (prepare: () => Promise<(bytes: number) => void>) => Promise<T>) => Promise<T>;
 }
 
@@ -47,7 +47,7 @@ export function createHubShare(options: Options) {
         if (input.action === 'rotate') return options.store.rotate(target.project, target);
         if (input.action !== 'publish' || ![1, 7, 30, null, undefined].includes(input.expiresInDays as number | null | undefined))
           throw new Error('请选择有效的分享期限。');
-        await options.settle(target);
+        await options.settle(target, await prepare?.());
         if (!allowed(req, url) || options.resolve(req, input)?.project !== target.project)
           throw new Error('作品归属或登录状态已变化，请重新登录。');
         options.store.cleanupExpired();

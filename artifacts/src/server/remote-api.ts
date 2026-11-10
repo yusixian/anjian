@@ -105,12 +105,12 @@ export function createRemoteApi(options: Options) {
       const perform = (prepare?: () => Promise<(deltaBytes: number) => void>) => withProjectMutation(project.dir, async () => {
         assertArtifactNotTrashed(project.dir, type, id);
         const mounted = await options.mount(project.dir);
-        if (type === 'document') await mounted.settleDocument(id);
+        if (type === 'document') await mounted.settleDocument(id, undefined, await prepare?.());
         if (!options.authenticate(req)?.projects.includes(project.id))
           throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
         const decoded = req.method === 'PUT' && type === 'document' ? decodeDocumentUpload(body) : undefined;
         const prepared = decoded
-          ? await mounted.prepareDocumentUpload(id, decoded.source, decoded.files) : undefined;
+          ? await mounted.prepareDocumentUpload(id, decoded.source, decoded.files, await prepare?.()) : undefined;
         const admit = await prepare?.();
         if (!options.authenticate(req)?.projects.includes(project.id))
           throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
@@ -119,7 +119,7 @@ export function createRemoteApi(options: Options) {
               type === 'document' ? undefined : (stagedDir) => mounted.prepareArtifactUpload(type, id, stagedDir))
           : readRemoteArtifact(project.dir, artifact);
         if (prepared) {
-          await mounted.settleDocument(id);
+          await mounted.settleDocument(id, undefined, await prepare?.());
           snapshot = readRemoteArtifact(project.dir, artifact);
         }
         const link = new URL(mounted.linkFor(type, id));

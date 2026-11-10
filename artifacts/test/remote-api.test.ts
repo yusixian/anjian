@@ -57,7 +57,12 @@ async function fixture() {
     for (const dir of [temp.root, temp.viewer, temp.runtime]) fs.rmSync(dir, { recursive: true, force: true });
   });
   const id = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
-  const request = (route: string, init?: RequestInit) => fetch(`${origin}${route}`, init);
+  const request = (route: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    // The fixture restarts on the same port; do not reuse pre-restart pooled sockets.
+    headers.set('Connection', 'close');
+    return fetch(`${origin}${route}`, { ...init, headers });
+  };
   async function login() {
     const pair = await request('/api/remote/auth/device', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Test CLI' }),

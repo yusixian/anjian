@@ -37,6 +37,7 @@ test('Hub enforces document comment quota before saving or broadcasting, without
   const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') }); registerProject(paths.projects, project);
   const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime }); hubs.push(hub);
   const mount = await hub.mountOf(project);
+  await mount.settleDocument('doc');
   const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
   const messages: unknown[] = [];
   mount.onMessage((message) => { if (message.type === 'doc-comments') messages.push(message); });

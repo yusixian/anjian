@@ -160,7 +160,8 @@ test('instance quota rejects first publication and replacement without changing 
   const denied = await action('publish');
   expect(denied.status).toBe(413);
   expect((await denied.json()).code).toBe('storage_quota_exceeded');
-  expect(fs.readdirSync(path.join(home, 'shares/snapshots'))).toEqual([]);
+  const snapshots = path.join(home, 'shares/snapshots');
+  expect(fs.existsSync(snapshots) ? fs.readdirSync(snapshots) : []).toEqual([]);
   settings.setSharedLimit(100 * 1024 * 1024);
   const published = await action('publish'); expect(published.status).toBe(200);
   const first = await published.json();

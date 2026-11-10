@@ -1,3 +1,4 @@
+import { cumulativeStorageAdmission } from './storage/quota';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -33,7 +34,7 @@ export interface DocumentRegistry {
   ) => { threadId: string; messageId?: string };
   applyCommentOp: (id: string, op: HumanOp, admit?: CommentAdmission) => CommentsFile;
   close: () => Promise<void>;
-  quiesce: () => Promise<() => void>;
+  quiesce: (prepare?: () => Promise<CommentAdmission>) => Promise<() => void>;
   comments: (id: string) => CommentsFile;
   commentWarnings: (id: string) => string[];
   commentsChanged: (id: string) => void;
@@ -220,7 +221,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       return threads.map(forAgent);
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
-    quiesce: async () => {
+    quiesce: async prepare => {
       if (closing || quiescing) throw new Error('Documents are already closing or paused');
       quiescing = true;
       const resumes: Array<() => void> = [];
@@ -238,10 +239,18 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
         const failures: unknown[] = opened.filter((result) => result.status === 'rejected').map((result) => result.reason);
         const active = opened.flatMap((result) => result.status === 'fulfilled' && result.value ? [result.value] : []);
         active.push(...incompleteSetups.values());
-        const drained = await Promise.allSettled(active.map((session) => session.quiesce()));
-        for (const result of drained) {
-          if (result.status === 'fulfilled') resumes.push(result.value);
-          else failures.push(result.reason);
+        if (prepare) {
+          // Each preceding flush changes usage; scan again before the next session.
+          for (const session of active) {
+            try { resumes.push(await session.quiesce(cumulativeStorageAdmission(await prepare()))); }
+            catch (error) { failures.push(error); break; }
+          }
+        } else {
+          const drained = await Promise.allSettled(active.map((session) => session.quiesce()));
+          for (const result of drained) {
+            if (result.status === 'fulfilled') resumes.push(result.value);
+            else failures.push(result.reason);
+          }
         }
         if (failures.length) throw new AggregateError(failures, 'Documents did not quiesce completely');
         let resumed = false;

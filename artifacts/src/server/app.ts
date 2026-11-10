@@ -1,3 +1,4 @@
+import { cumulativeStorageAdmission } from './storage/quota';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
 import { createGitHubAuth, readGitHubConfig } from './github-auth';
 import { prepareNewRemoteDocument, type PreparedRemoteDocument } from './document-session';
+import type { CommentAdmission } from './document-comments';
 import type { PreparedStorageState } from './remote-transfer';
 import {
   type ArtifactPayload,
@@ -33,7 +35,7 @@ export interface ArtifactsServer {
   boardPort: number;
   close: () => Promise<void>;
   /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
-  quiesce: <T>(work: () => Promise<T>) => Promise<T>;
+  quiesce: <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>) => Promise<T>;
   contentToken: string;
   handlePrivateContent: (req: http.IncomingMessage, res: http.ServerResponse, rest: string, mode: 'main' | 'board') => void;
   handleBoardRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
@@ -42,8 +44,8 @@ export interface ArtifactsServer {
   linkFor: (type: ArtifactType, id: string) => string;
   liveClients: () => number;
   onMessage: (listener: (message: ServerMessage) => void) => void;
-  settleDocument: (id: string, source?: string) => Promise<void>;
-  prepareDocumentUpload: (id: string, source: string, files: string[]) => Promise<PreparedRemoteDocument>;
+  settleDocument: (id: string, source?: string, admit?: CommentAdmission) => Promise<void>;
+  prepareDocumentUpload: (id: string, source: string, files: string[], admit?: CommentAdmission) => Promise<PreparedRemoteDocument>;
   prepareArtifactUpload: (type: 'artboard' | 'html', id: string, stagedDir: string) => PreparedStorageState;
   onActivity: (listener: () => void) => void;
   onArtifactChange: (listener: ChangeListener) => void;
@@ -173,7 +175,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
 
   const watcher = watchArtifacts(ctx);
   let maintenance: Promise<unknown> = Promise.resolve();
-  const quiesce = <T>(work: () => Promise<T>): Promise<T> => {
+  const quiesce = <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>): Promise<T> => {
     const current = maintenance.catch(() => undefined).then(async () => {
       if (stopping) throw new Error('Project is stopping');
       const resumeInputs = ctx.inputs.pause();
@@ -195,7 +197,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
         const errors = requestsDone.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map((result) => result.reason);
         if (errors.length) throw new AggregateError(errors, 'Project requests did not finish');
         resume.push(await ctx.recordings.quiesce());
-        resume.push(await ctx.documents.quiesce());
+        resume.push(await ctx.documents.quiesce(prepare));
         value = await work();
       } catch (error) { failures.push(error); }
       finally {
@@ -286,17 +288,17 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     },
     liveClients: () => clients.size,
     onMessage: (listener) => { ctx.messageListeners.push(listener); },
-    settleDocument: async (id, source) => {
+    settleDocument: async (id, source, admit) => {
       const session = await ctx.documents.open(id);
       if (!session) return;
       if (source !== undefined) session.onFileText(source);
       await session.settled();
-      await session.flush();
+      await session.flush(cumulativeStorageAdmission(admit));
     },
-    prepareDocumentUpload: async (id, source, files) => {
+    prepareDocumentUpload: async (id, source, files, admit) => {
       const session = await ctx.documents.open(id);
       if (session) {
-        await session.readyForRemoteUpload();
+        await session.readyForRemoteUpload(cumulativeStorageAdmission(admit));
         const prepared = session.prepareRemoteText(source);
         const metadata = ctx.prepareDocumentMetadata(id, prepared.xml, prepared.warnings, files);
         prepared.stateDeltaBytes += metadata.delta;

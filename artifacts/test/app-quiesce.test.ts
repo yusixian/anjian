@@ -101,3 +101,21 @@ test('a request already opening a document finishes before snapshot work begins'
   expect(worked).toBe(true);
   f.ws.socket!.destroy();
 });
+
+test('maintenance rejects document flush at quota, skips snapshot work and can retry', async () => {
+  const f = await fixture();
+  const snapshot = path.join(f.root, '.state/document/draft/doc.loro');
+  const source = path.join(f.root, 'document/draft/doc.xml');
+  const original = fs.readFileSync(source, 'utf8');
+  let ran = false;
+  await expect(f.server.quiesce(async () => { ran = true; },
+    async () => () => { throw new Error('quota'); })).rejects.toThrow('Documents did not quiesce completely');
+  expect(ran).toBe(false);
+  expect(fs.existsSync(snapshot)).toBe(false);
+  expect(fs.readFileSync(source, 'utf8')).toBe(original);
+  expect((await get(f.origin + '/api/document/draft/state', f.headers)).status).toBe(200);
+  await f.server.quiesce(async () => { ran = true; }, async () => () => {});
+  expect(ran).toBe(true);
+  expect(fs.existsSync(snapshot)).toBe(true);
+  f.ws.socket!.destroy();
+});

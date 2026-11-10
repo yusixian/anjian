@@ -574,10 +574,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       mounts.delete(project);
       ready.delete(project);
     }, work, () => { index.rescan(); });
-  const quiesceProject = <T>(project: string, work: () => Promise<T>): Promise<T> =>
+  const quiesceProject = <T>(project: string, work: () => Promise<T>, prepare?: () => Promise<(delta: number) => void>): Promise<T> =>
     suspension.suspend(project, async () => {}, async () => {
       const mounted = mounts.get(project);
-      return mounted ? (await mounted).quiesce(work) : work();
+      return mounted ? (await mounted).quiesce(work, prepare) : work();
     }, () => { index.rescan(); });
   const trashApi = createHubTrash({
     projects: visibleProjects,
@@ -638,13 +638,13 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     ...ordered().filter(({ dir }) => members.projectOwner(dir) === owner).map(({ dir }) => dir),
     ...members.storageProjects().filter((entry) => entry.owner === owner).map(({ dir }) => dir),
   ])].sort();
-  const maintainRuntime = <T>(owner: string, work: () => Promise<T>, recovering = false) => writeQuota.exclusive(async () => {
+  const maintainRuntime = <T>(owner: string, work: () => Promise<T>, recovering = false) => writeQuota.exclusive(async prepareProject => {
     const projects = runtimeProjects(owner);
     const guard = () => {
       if (JSON.stringify(projects) !== JSON.stringify(runtimeProjects(owner))) throw new Error('Storage project ownership changed');
       if (!recovering) for (const project of projects) assertAvailable(project);
     };
-    return withProjectMaintenance(projects, quiesceProject, work, guard);
+    return withProjectMaintenance(projects, (project, work) => quiesceProject(project, work, () => prepareProject(project)), work, guard);
   });
   const planRuntime = (owner: string, scope: string, recovering = false) => planMigrationSources(scope, {
     owner,
@@ -679,7 +679,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       ])] : [scope];
       await storageRuntime.activate(scope, jobId, owners, () => storageBackend.activate(scope, jobId, (plan) => guard(plan.roots), owners));
     },
-    maintain: (scope, guard, work) => writeQuota.exclusive(async () => {
+    maintain: (scope, guard, work) => writeQuota.exclusive(async prepareProject => {
       guard();
       if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
       const projects = migrationProjects(scope);
@@ -689,7 +689,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           throw new Error('Migration project ownership changed');
         for (const project of projects) assertAvailable(project);
       };
-      return withProjectMaintenance(projects, quiesceProject, async () => {
+      return withProjectMaintenance(projects, (project, work) => quiesceProject(project, work, () => prepareProject(project)), async () => {
         const result = await work();
         check();
         return result;
@@ -721,8 +721,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         (a.id === input.id || a.url.split('/').pop() === input.id) && (!project || a.project === project));
       return matches.length === 1 ? matches[0]! : null;
     },
-    settle: async (target) => {
-      if (target.type === 'document') await (await mountOf(target.project)).settleDocument(target.id);
+    settle: async (target, admit) => {
+      if (target.type === 'document') await (await mountOf(target.project)).settleDocument(target.id, undefined, admit);
     },
   });
 
