@@ -83,3 +83,28 @@ test('WebSocket selection writes respect quota and remove obsolete Agent context
     ws.socket?.destroy(); await waitFor(() => !fs.existsSync(file));
   } finally { ws.socket?.destroy(); warning.mockRestore(); await hub.close(); }
 });
+
+test('recording preparation at zero quota keeps the source and avoids creating a cache', async () => {
+  const temp = tempRoot(); const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
+  writeArtboard(artifacts, 'recording', { version: 1, pages: [{ id: 'p', name: 'P' }],
+    boards: { clip: { type: 'video', src: 'pages/clip.webm', page: 'p', x: 0, y: 0, w: 100, h: 100 } },
+    groups: { g: { boards: ['clip'], verify: true } } }, { 'pages/clip.webm': 'original recording bytes' });
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') }); registerProject(paths.projects, project);
+  createStorageSettings(paths.home).setSharedLimit(0);
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime });
+  try {
+    const origin = `http://127.0.0.1:${hub.port}`;
+    await vi.waitFor(async () => {
+      const response = await fetch(origin + '/api/artifacts/artboard/recording');
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.recordings.clip.status).toBe('original');
+      expect(data.recordings.clip.warning).toContain('共享存储容量不足');
+      expect(data.canvas.boards.clip.file).toBe('pages/clip.webm');
+    }, { timeout: 3000 });
+    expect(fs.existsSync(path.join(artifacts, '.state/recordings'))).toBe(false);
+    expect(fs.readFileSync(path.join(artifacts, 'artboard/recording/pages/clip.webm'), 'utf8')).toBe('original recording bytes');
+  } finally { warning.mockRestore(); await hub.close(); }
+});

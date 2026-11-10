@@ -222,6 +222,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         fetch: options.fetch,
         debounceMs: options.debounceMs,
         mount: { port, boardPort, token: options.token, version: options.version, github,
+          recordingWrite: work => writeQuota(project, prepare => withProjectMutation(project, async () => {
+            assertAvailable(project);
+            await work(await prepare());
+          })),
           backgroundWrite: work => writeQuota(project, prepare => withProjectMutation(project, async () => {
             assertAvailable(project);
             const admit = await prepare();

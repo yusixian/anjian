@@ -49,6 +49,7 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
+  recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
   backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
   contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   authorize?: (req: http.IncomingMessage) => boolean;
@@ -153,6 +154,7 @@ export function createServerContext(options: ServerOptions) {
   const names = commentNames({ agentFile: path.join(stateDir, 'agent'), projectDir: path.resolve(root, '../..') });
   const recordings = createVerifyRecordings({
     stateDir,
+    withWriteQuota: mount?.recordingWrite,
     onChange: (id) => {
       const ref: ArtifactRef = { type: 'artboard', id };
       const dir = resolveArtifactDir(root, ref.type, id);

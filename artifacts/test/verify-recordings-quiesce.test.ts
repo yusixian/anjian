@@ -93,3 +93,26 @@ test('a failed temporary cleanup aborts quiesce and permits retry', async () => 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('maintenance does not wait on a recording queued behind its own quota lock', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-recording-quota-wait-'));
+  const dir = path.join(root, 'artboard/one'); const file = path.join(dir, 'pages/capture.webm');
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'capture');
+  let release!: () => void; let entered = false;
+  const lock = new Promise<void>(resolve => { release = resolve; });
+  const prepare = vi.fn(async () => ({ status: 'unchanged' as const, duration: 1, start: 0, end: 1, removed: 0 }));
+  const registry = createVerifyRecordings({
+    stateDir: path.join(root, '.state'), stableMs: 0, onChange: () => {}, prepare,
+    withWriteQuota: async work => { entered = true; await lock; await work(() => undefined); },
+  });
+  try {
+    registry.project('one', dir, payload(file));
+    await vi.waitFor(() => expect(entered).toBe(true));
+    const resume = await registry.quiesce();
+    release(); await lock; await Promise.resolve(); await Promise.resolve();
+    expect(prepare).not.toHaveBeenCalled();
+    resume();
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(registry.project('one', dir, payload(file)).pending).toEqual([]));
+  } finally { release(); await registry.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
