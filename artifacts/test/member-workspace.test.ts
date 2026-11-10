@@ -53,3 +53,24 @@ test('storage recovery does not prevent login or create an empty member workspac
   await prepare(identity);
   expect(register).toHaveBeenCalledOnce();
 });
+
+test('storage protection must succeed before workspace creation or ownership assignment', async () => {
+  const { home, members, identity } = fixture();
+  const register = vi.fn(async () => {});
+  const beforeWrite = vi.fn(async () => { throw new Error('marker write failed'); });
+  const assign = vi.spyOn(members, 'assignProject');
+  await expect(createMemberWorkspace({ home, members, register, beforeWrite })(identity)).rejects.toThrow('marker write failed');
+  expect(beforeWrite).toHaveBeenCalledWith(identity.id);
+  expect(fs.existsSync(path.join(home, 'workspaces'))).toBe(false);
+  expect(assign).not.toHaveBeenCalled();
+  expect(register).not.toHaveBeenCalled();
+});
+
+test('revocation while preparing storage prevents workspace creation', async () => {
+  const { home, members, identity } = fixture();
+  const register = vi.fn(async () => {});
+  const beforeWrite = async () => { members.update(identity.id, { status: 'suspended' }); };
+  await expect(createMemberWorkspace({ home, members, register, beforeWrite })(identity)).rejects.toThrow('成员访问权限已失效');
+  expect(fs.existsSync(path.join(home, 'workspaces'))).toBe(false);
+  expect(register).not.toHaveBeenCalled();
+});

@@ -229,10 +229,25 @@ export function createStorageBackend(home: string, deps: Dependencies) {
       checkScope(owner); const state = read();
       return state.bindings[owner] ? owner : state.bindings.shared ? 'shared' : null;
     },
+    bindingFor(owner: string): { scope: string; namespace: string } | null {
+      checkScope(owner);
+      const state = read();
+      const scope = state.bindings[owner] ? owner : state.bindings.shared ? 'shared' : null;
+      return scope === null ? null : { scope, namespace: state.bindings[scope]!.namespace };
+    },
+    ownersFor(scope: string): string[] {
+      checkScope(scope);
+      const state = read();
+      const binding = state.bindings[scope];
+      if (!binding) return [];
+      return [...new Set([
+        ...state.roots.filter((root) => root.scope === scope).map((root) => root.owner).filter((owner): owner is string => owner !== undefined),
+        ...readIntents().filter((intent) => intent.owner !== undefined && outstandingIntent(intent, scope, binding)).map((intent) => intent.owner!),
+      ])].sort();
+    },
     /** Call before local writes, under the same writer barrier as checkpoint/activation. */
     async markDirty(owner: string, guard: () => Promise<void>) {
       checkScope(owner);
-      if (owner === 'shared') fail('scope_conflict');
       return exclusive(async () => {
         await guard();
         const state = read();
@@ -247,7 +262,7 @@ export function createStorageBackend(home: string, deps: Dependencies) {
           saveIntent({ version: 1, id: crypto.randomUUID(), scope, owner,
             sequence: (binding.owners?.[owner] ?? 0) + 1, binding: { ...binding }, roots: [] });
         }
-        return { scope };
+        return { scope, namespace: binding.namespace };
       });
     },
     /** guard must verify authority and the complete root set while the caller holds its writer barrier. */

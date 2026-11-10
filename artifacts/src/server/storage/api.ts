@@ -4,12 +4,15 @@ import type { createStorageUsage } from './usage';
 import type { Principal } from '../member-store';
 import { sendJson } from '../http';
 import { StorageSettingsError, type createStorageSettings } from './settings';
+import type { createStorageRuntime } from './runtime';
 
 export function createStorageApi(options: {
   settings: ReturnType<typeof createStorageSettings>;
   usage: ReturnType<typeof createStorageUsage>;
   backend?: (scope: string) => 'local' | 's3';
   recoveryPending?: (scope: string) => boolean;
+  syncStatus?: (scope: string) => ReturnType<ReturnType<typeof createStorageRuntime>['status']>;
+  synchronize?: (scope: string) => Promise<void>;
   origin: string;
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
@@ -36,7 +39,7 @@ export function createStorageApi(options: {
         if (!current || current.id !== identity.id || current.role !== identity.role || current.sessionVersion !== identity.sessionVersion) {
           sendJson(res, 403, { error: '登录状态已变化。' }); return true;
         }
-        sendJson(res, 200, { ...summary, recoveryPending: options.recoveryPending?.(scope) ?? false, backend: options.backend?.(scope) ?? 'local', tested: summary.profile?.test?.ok ?? false, usage });
+        sendJson(res, 200, { ...summary, recoveryPending: options.recoveryPending?.(scope) ?? false, backend: options.backend?.(scope) ?? 'local', tested: summary.profile?.test?.ok ?? false, usage, sync: options.syncStatus?.(scope) });
         return true;
       }
       if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }
@@ -53,7 +56,14 @@ export function createStorageApi(options: {
       if (!current || current.id !== identity.id || current.sessionVersion !== identity.sessionVersion || current.role !== identity.role) {
         sendJson(res, 403, { error: '登录状态已变化。' }); return true;
       }
-      if (body.action === 'test' && typeof body.id === 'string') {
+      if (body.action === 'sync' && options.synchronize) {
+        await options.synchronize(scope);
+        const latest = options.principal(req, url);
+        if (!latest || latest.id !== identity.id || latest.sessionVersion !== identity.sessionVersion || latest.role !== identity.role) {
+          sendJson(res, 403, { error: '登录状态已变化。' }); return true;
+        }
+        sendJson(res, 200, { sync: options.syncStatus?.(scope) });
+      } else if (body.action === 'test' && typeof body.id === 'string') {
         for (const [key, until] of recent) if (until <= Date.now()) recent.delete(key);
         if (testing.size >= 4 || testing.has(scope) || recent.has(scope)) {
           sendJson(res, 429, { error: '连接测试进行中或过于频繁，请稍后再试。' }); return true;

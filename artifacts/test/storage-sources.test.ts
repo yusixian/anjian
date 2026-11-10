@@ -130,3 +130,59 @@ test('prepares projects before the first share without creating an empty snapsho
   expect(plan.roots.map((root) => root.kind).sort()).toEqual(['artifacts', 'trash']);
   expect(fs.existsSync(f.options.snapshotsRoot)).toBe(false);
 });
+
+test('owner-filtered shared plan ignores another member missing cache while retaining ownership checks', async () => {
+  const f = fixture();
+  const alice = f.project('alice', 'github:2');
+  const bob = f.project('bob', 'github:3');
+  const aliceSnapshot = f.snapshot(alice);
+  const bobSnapshot = f.snapshot(bob);
+  fs.rmSync(bob, { recursive: true });
+  fs.rmSync(bobSnapshot, { recursive: true });
+  const plan = await planMigrationSources('shared', { ...f.options, owner: 'github:2' });
+  expect(plan.roots.map((root) => root.directory)).toEqual(expect.arrayContaining([
+    path.join(alice, '.anjian/artifacts'), path.join(alice, '.anjian/.trash'), aliceSnapshot,
+  ]));
+  expect(plan.roots.every((root) => root.owner === 'github:2')).toBe(true);
+  expect(fs.existsSync(path.join(bob, '.anjian'))).toBe(false);
+  await expect(planMigrationSources('shared', f.options)).rejects.toThrow();
+  f.projects.push({ dir: alice, owner: 'github:3' });
+  await expect(planMigrationSources('shared', { ...f.options, owner: 'github:2' })).rejects.toMatchObject({ code: 'invalid_source' });
+});
+
+test('owner-filtered plan checks selected roots and every declared path without touching unrelated caches', async () => {
+  const f = fixture();
+  const alice = f.project('alice', 'github:2');
+  const bob = f.project('bob', 'github:3');
+  const selected = f.snapshot(alice);
+  const other = f.snapshot(bob);
+  fs.rmSync(bob, { recursive: true });
+  fs.rmSync(other, { recursive: true });
+  f.projects[1]!.dir = `${bob}/../bob`;
+  await expect(planMigrationSources('shared', { ...f.options, owner: 'github:2' })).rejects.toMatchObject({ code: 'invalid_source' });
+  f.projects[1]!.dir = bob;
+  f.snapshots[1]!.directory = path.join(f.options.snapshotsRoot, '..', path.basename(other));
+  await expect(planMigrationSources('shared', { ...f.options, owner: 'github:2' })).rejects.toMatchObject({ code: 'invalid_source' });
+  f.snapshots[1]!.directory = other;
+  fs.rmSync(selected, { recursive: true });
+  await expect(planMigrationSources('shared', { ...f.options, owner: 'github:2' })).rejects.toThrow();
+  await expect(planMigrationSources('shared', { ...f.options, owner: 'github:3' })).rejects.toThrow();
+});
+
+test('shared pseudo-owner selects orphan snapshots only and does not create member resources', async () => {
+  const f = fixture();
+  const alice = f.project('alice', 'github:2');
+  const aliceSnapshot = f.snapshot(alice);
+  const orphan = f.snapshot();
+  const plan = await planMigrationSources('shared', { ...f.options, owner: 'shared' });
+  expect(plan.roots.map((root) => root.directory)).toEqual([orphan]);
+  expect(plan.roots[0]?.owner).toBe('shared');
+  expect(fs.existsSync(path.join(alice, '.anjian'))).toBe(false);
+  fs.rmSync(aliceSnapshot, { recursive: true });
+  const unchanged = await planMigrationSources('shared', { ...f.options, owner: 'shared' });
+  expect(() => assertMigrationSourcesUnchanged(plan, unchanged)).not.toThrow();
+  fs.rmSync(orphan, { recursive: true });
+  const removed = await planMigrationSources('shared', { ...f.options, owner: 'shared' });
+  expect(() => assertMigrationSourcesUnchanged(plan, removed)).toThrow();
+  await expect(planMigrationSources('github:2', { ...f.options, owner: 'shared' })).rejects.toMatchObject({ code: 'invalid_source' });
+});

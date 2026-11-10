@@ -671,6 +671,18 @@
     "recoveryPending": "Storage recovery is incomplete for this space. Access to its artifacts is paused and existing files are preserved. Ask the administrator to check the storage connection and pending recovery records.",
     "s3": "Current storage: S3 (server cache)",
     "s3Help": "This space is bound to S3. Files are accessed through the server cache, and existing files are preserved.",
+    "sync": {
+      "title": "Runtime sync",
+      "local": "No sync status is available yet.",
+      "pending": "Local changes are waiting to sync.",
+      "syncing": "Syncing local changes…",
+      "ready": "Last synced {{time}}",
+      "readyUnknown": "Sync is ready, but no successful sync time is available.",
+      "error": "Sync failed. Your local changes are preserved; you can retry.",
+      "syncNow": "Sync now",
+      "retry": "Retry sync",
+      "completed": "Storage sync completed."
+    },
     "localHelp": "Saving settings or testing a connection does not move files. Existing artifacts are still read from the server disk.",
     "s3Config": "S3 connection",
     "endpoint": "Service address (Endpoint)",

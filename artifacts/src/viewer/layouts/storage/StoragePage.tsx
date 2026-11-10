@@ -10,7 +10,8 @@ interface TestResult { ok: boolean; checkedAt: number; steps: { write: boolean; 
 interface Settings { endpoint: string; bucket: string; region: string; prefix: string; forcePathStyle: boolean }
 interface Profile extends Settings { id: string; credentialsConfigured: boolean; test?: TestResult | null }
 interface Usage { artifacts: number; history: number; trash: number; shares: number; retained: number; total: number; checkedAt: number }
-interface Summary { recoveryPending?: boolean; usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local' | 's3'; sharedLimitBytes?: number | null }
+interface SyncStatus { state: 'local' | 'recovery' | 'pending' | 'syncing' | 'ready' | 'error'; lastSyncedAt: number | null }
+interface Summary { recoveryPending?: boolean; usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local' | 's3'; sharedLimitBytes?: number | null; sync?: SyncStatus }
 const blank: Settings = { endpoint: '', bucket: '', region: 'auto', prefix: 'anjian', forcePathStyle: true };
 const emptyCredentials = { accessKeyId: '', secretAccessKey: '', sessionToken: '' };
 const GIB = 1024 ** 3;
@@ -69,6 +70,16 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     void request<Summary>(undefined, controller.signal).then((next) => { if (!controller.signal.aborted) apply(next); }).catch((failure: Error) => { if (!controller.signal.aborted) setError(failure.message); });
     return () => controller.abort();
   }, [request]);
+  useEffect(() => {
+    if (data?.backend !== 's3') return;
+    const controller = new AbortController();
+    const timer = window.setInterval(() => {
+      void request<Summary>(undefined, controller.signal).then((next) => {
+        if (!controller.signal.aborted) setData((old) => old ? { ...old, sync: next.sync, recoveryPending: next.recoveryPending } : next);
+      }).catch(() => undefined);
+    }, 30_000);
+    return () => { window.clearInterval(timer); controller.abort(); };
+  }, [data?.backend, request]);
   const run = async (body: object, success: () => void) => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setOperation((body as { action: string }).action); onBusy(true); setError(''); setNotice('');
@@ -82,10 +93,29 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     if ((!data?.profile || replacing) && (!credentials.accessKeyId || !credentials.secretAccessKey)) { setError(t('storage.credentialsRequired')); return; }
     void run({ action: 'save', settings, ...((!data?.profile || replacing) ? { credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey, ...(credentials.sessionToken ? { sessionToken: credentials.sessionToken } : {}) } } : {}) }, () => { setCredentials(emptyCredentials); setNotice(t('storage.saved')); });
   };
+  const updateSyncStatus = (next: Summary) => setData((old) => old ? { ...old, sync: next.sync, recoveryPending: next.recoveryPending } : next);
+  const syncNow = async () => {
+    if (lock.current || data?.recoveryPending || data?.sync?.state === 'recovery') return;
+    lock.current = true; setBusy(true); setOperation('sync'); onBusy(true); setError(''); setNotice('');
+    try {
+      await request({ action: 'sync' });
+      updateSyncStatus(await request<Summary>());
+      setNotice(t('storage.sync.completed'));
+    } catch (failure) {
+      setError((failure as Error).message);
+      try { updateSyncStatus(await request<Summary>()); } catch { /* Keep the action error visible if status refresh also fails. */ }
+    } finally { lock.current = false; setBusy(false); onBusy(false); }
+  };
   const test = data?.profile?.test;
+  const sync = data?.backend === 's3' ? data.sync : undefined;
   return <>
     <div {...stylex.props(styles.preview)}><strong>{t(data?.backend === 's3' ? 'storage.s3' : 'storage.local')}</strong><p {...stylex.props(styles.rowMeta)}>{t(data?.backend === 's3' ? 'storage.s3Help' : 'storage.localHelp')}</p></div>
-    {data?.recoveryPending && <p role="alert" {...stylex.props(styles.status, styles.error)}>{t('storage.recoveryPending')}</p>}
+    {(data?.recoveryPending || sync?.state === 'recovery') && <p role="alert" {...stylex.props(styles.status, styles.error)}>{t('storage.recoveryPending')}</p>}
+    {sync && !data?.recoveryPending && sync.state !== 'recovery' && <section {...stylex.props(styles.preview)} aria-label={t('storage.sync.title')}>
+      <strong>{t('storage.sync.title')}</strong>
+      <p role={sync.state === 'error' ? 'alert' : 'status'} {...stylex.props(styles.rowMeta, sync.state === 'error' && styles.error)}>{sync.state === 'ready' ? sync.lastSyncedAt ? t('storage.sync.ready', { time: new Date(sync.lastSyncedAt).toLocaleString(i18n.language) }) : t('storage.sync.readyUnknown') : t(`storage.sync.${sync.state}`)}</p>
+      {(sync.state === 'pending' || sync.state === 'ready' || sync.state === 'error' || (sync.state === 'syncing' && busy && operation === 'sync')) && <Button disabled={busy || sync.state === 'syncing'} loading={busy && operation === 'sync'} onClick={() => void syncNow()}>{t(sync.state === 'error' ? 'storage.sync.retry' : sync.state === 'syncing' ? 'storage.sync.syncing' : 'storage.sync.syncNow')}</Button>}
+    </section>}
     {error && <div role="alert" {...stylex.props(styles.status, styles.error)}>{error} {!data && <Button onClick={() => { setError(''); void request<Summary>().then(apply).catch((failure: Error) => setError(failure.message)); }}>{t('devices.retry')}</Button>}</div>}
     {busy && operation === 'test' && <p role="status" {...stylex.props(styles.note)}>{t('storage.testing')}</p>}
     {notice && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}

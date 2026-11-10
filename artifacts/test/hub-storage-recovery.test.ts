@@ -15,8 +15,16 @@ const backendMock = vi.hoisted(() => ({
 }));
 vi.mock('../src/server/storage/backend', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/server/storage/backend')>();
-  return { ...original, createStorageBackend: (...args: Parameters<typeof original.createStorageBackend>) =>
-    backendMock.factory ? backendMock.factory(original.createStorageBackend, args) : original.createStorageBackend(...args) };
+  return { ...original, createStorageBackend: (...args: Parameters<typeof original.createStorageBackend>) => {
+    const backend = backendMock.factory ? backendMock.factory(original.createStorageBackend, args) : original.createStorageBackend(...args);
+    if (backend.bindingFor) return backend;
+    // Recovery fixtures model pre-existing bindings without an object provider.
+    const bindingFor = (owner: string) => {
+      const scope = backend.scopeFor(owner);
+      return scope ? { scope, namespace: 'recovery-fixture' } : null;
+    };
+    return { ...backend, bindingFor, ownersFor: () => [], markDirty: async (owner: string, guard: () => Promise<void>) => { await guard(); return bindingFor(owner); } };
+  } };
 });
 
 const hubs: Hub[] = [];

@@ -26,6 +26,8 @@ export interface MigrationSourceOptions {
   snapshots: () => Array<{ directory: string; project: string }>;
   /** Shared storage may omit resources already bound to an owner's personal storage. */
   sharedOwner?: (owner: string) => boolean;
+  /** Internal runtime checkpoint: select one owner's roots without requiring other owners' caches. */
+  owner?: string;
 }
 
 export interface MigrationSourcePlan {
@@ -57,10 +59,12 @@ async function directory(value: string, create = false): Promise<string> {
 /** Build a complete server-trusted source set before prepare and again before activation. */
 export async function planMigrationSources(scope: string, options: MigrationSourceOptions): Promise<MigrationSourcePlan> {
   if (!SCOPE.test(scope)) invalid();
+  if (options.owner !== undefined && (!SCOPE.test(options.owner) || scope !== 'shared' && options.owner !== scope)) invalid();
   const projects = new Map<string, string>();
   for (const project of options.projects()) {
-    const dir = await directory(project.dir);
     if (!SCOPE.test(project.owner) || project.owner === 'shared') invalid();
+    const dir = canonicalInput(project.dir);
+    if (options.owner === undefined || project.owner === options.owner) await directory(dir);
     if (projects.has(dir) && projects.get(dir) !== project.owner) invalid();
     projects.set(dir, project.owner);
   }
@@ -78,15 +82,16 @@ export async function planMigrationSources(scope: string, options: MigrationSour
   for (const snapshot of options.snapshots()) {
     const file = canonicalInput(snapshot.directory);
     if (path.dirname(file) !== snapshotsRoot || !SNAPSHOT.test(path.basename(file))) invalid();
-    await directory(file);
     const project = canonicalInput(snapshot.project);
     const owner = projects.get(project) ?? 'shared';
+    if (options.owner === undefined || owner === options.owner) await directory(file);
     if (indexed.has(file) && indexed.get(file) !== owner) invalid();
     indexed.set(file, owner);
   }
 
   const sharedOwners = new Map<string, boolean>();
   const includeOwner = (owner: string) => {
+    if (options.owner !== undefined && owner !== options.owner) return false;
     if (scope !== 'shared') return scope === owner;
     if (owner === 'shared') return true;
     let included = sharedOwners.get(owner);
@@ -110,9 +115,12 @@ export async function planMigrationSources(scope: string, options: MigrationSour
   }
   for (const name of (hasSnapshots ? await fs.readdir(snapshotsRoot) : []).sort()) {
     const file = path.join(snapshotsRoot, name);
-    if (!SNAPSHOT.test(name)) invalid();
-    await directory(file);
+    if (!SNAPSHOT.test(name)) {
+      if (options.owner === undefined || options.owner === 'shared') invalid();
+      continue;
+    }
     const owner = indexed.get(file) ?? 'shared';
+    if (options.owner === undefined || owner === options.owner) await directory(file);
     if (includeOwner(owner)) selected.push({ directory: file, kind: 'snapshot', owner });
   }
   selected.sort((a, b) => a.directory < b.directory ? -1 : a.directory > b.directory ? 1 : a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0);

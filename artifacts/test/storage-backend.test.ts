@@ -261,7 +261,7 @@ test('write-ahead marker preserves local deletion if the process stops before ch
   f.write('deleted', 'old'); await f.activate('shared', [root]);
   // A failed provider must not prevent the local durable marker from being made.
   f.failScope('shared');
-  expect(await f.create().markDirty('github:2', guard)).toEqual({ scope: 'shared' });
+  expect(await f.create().markDirty('github:2', guard)).toEqual({ scope: 'shared', namespace: f.create().bindingFor('github:2')!.namespace });
   fs.unlinkSync(path.join(f.source, 'deleted'));
   f.failScope();
   const restarted = f.create();
@@ -307,16 +307,52 @@ test('write-ahead authority and persistence failures reject before callers can m
   await expect(f.create().markDirty('github:2', guard)).rejects.toThrow('disk full');
   fail.mockRestore();
   expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('old');
-  expect(await f.create().markDirty('github:2', guard)).toEqual({ scope: 'github:2' });
+  expect(await f.create().markDirty('github:2', guard)).toEqual({ scope: 'github:2', namespace: f.create().bindingFor('github:2')!.namespace });
 });
 
-test('local-only writes need no dirty marker and cannot mark the shared pseudo-owner', async () => {
+test('local-only writes need no dirty marker', async () => {
   const f = fixture();
   const authorize = vi.fn(guard);
   expect(await f.create().markDirty('owner', authorize)).toBeNull();
   expect(authorize).toHaveBeenCalledOnce();
-  await expect(f.create().markDirty('shared', guard)).rejects.toMatchObject({ code: 'scope_conflict' });
+  expect(await f.create().markDirty('shared', guard)).toBeNull();
   expect(fs.readdirSync(path.join(f.home, 'storage/bindings/intents'))).toEqual(['settled']);
+});
+
+test('shared pseudo-owner marks only orphan roots and does not suppress member restoration', async () => {
+  const f = fixture();
+  const orphan = { ...f.root, kind: 'snapshot' as const, owner: 'shared' };
+  const member = { id: 'member', directory: path.join(f.home, 'member'), kind: 'artifacts' as const, owner: 'github:2' };
+  fs.mkdirSync(member.directory); f.write('orphan', 'keep local'); fs.writeFileSync(path.join(member.directory, 'data'), 'restore member');
+  await f.activate('shared', [orphan, member]);
+  const backend = f.create();
+  expect(backend.ownersFor('shared')).toEqual(['github:2', 'shared']);
+  expect(await backend.markDirty('shared', guard)).toEqual(backend.bindingFor('shared'));
+  fs.unlinkSync(path.join(f.source, 'orphan'));
+  fs.rmSync(member.directory, { recursive: true });
+  expect((await f.create().restore()).pendingOwners).toEqual([{ scope: 'shared', owner: 'shared' }]);
+  expect(fs.existsSync(path.join(f.source, 'orphan'))).toBe(false);
+  expect(fs.readFileSync(path.join(member.directory, 'data'), 'utf8')).toBe('restore member');
+  expect(f.create().summary('shared', 'github:2').pending).toBe(false);
+  await f.create().checkpoint('shared', [orphan], guard, 'shared');
+  expect(f.create().summary('shared').pending).toBe(false);
+});
+
+test('binding lookup follows personal override and outstanding owners survive root removal', async () => {
+  const f = fixture();
+  const root = { ...f.root, owner: 'github:2' };
+  f.write('index', 'data'); await f.activate('shared', [root]);
+  const shared = f.create().bindingFor('github:2');
+  expect(shared).toMatchObject({ scope: 'shared', namespace: expect.any(String) });
+  await f.create().markDirty('github:3', guard);
+  expect(f.create().ownersFor('shared')).toEqual(['github:2', 'github:3']);
+  await f.activate('github:2', [root]);
+  const personal = f.create().bindingFor('github:2');
+  expect(personal).toMatchObject({ scope: 'github:2', namespace: expect.any(String) });
+  expect(personal!.namespace).not.toBe(shared!.namespace);
+  expect(await f.create().markDirty('github:2', guard)).toEqual(personal);
+  expect(f.create().ownersFor('github:2')).toEqual(['github:2']);
+  expect(f.create().ownersFor('shared')).toEqual(['github:3']);
 });
 
 test('a live checkpoint arms its successor before publishing, protecting subsequent writes on restart', async () => {
@@ -351,6 +387,7 @@ test('a live checkpoint arms its successor before publishing, protecting subsequ
 test('write-ahead admission refuses roots with unknown ownership', async () => {
   const f = fixture(); f.write('index', 'old'); await f.activate();
   await expect(f.create().markDirty('github:2', guard)).rejects.toMatchObject({ code: 'scope_conflict' });
+  await expect(f.create().markDirty('shared', guard)).rejects.toMatchObject({ code: 'scope_conflict' });
   expect(f.create().summary('shared').pending).toBe(false);
 });
 

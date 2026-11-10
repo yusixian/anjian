@@ -17,6 +17,7 @@ import { createShareStore } from './share-store';
 import { serveHubViewer } from './hub-viewer';
 import { withProjectMutation } from './project-mutations';
 import { withProjectMaintenance } from './project-maintenance';
+import { createStorageRuntime } from './storage/runtime';
 import { createProjectSuspension } from './project-suspension';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
@@ -148,14 +149,22 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const storageBackend = createStorageBackend(options.paths.home, { migration, resolveProfile: settings.resolve });
   // Hydrate before pruning missing roots, trash recovery, indexing, or accepting requests.
   await storageBackend.restore();
-  const recoveryPending = (owner: string) => {
-    const scope = owner === 'shared' ? 'shared' : storageBackend.scopeFor(owner);
-    return scope !== null && storageBackend.summary(scope, owner === 'shared' ? undefined : owner).pending;
-  };
+  const storageRuntime = createStorageRuntime({ backend: storageBackend,
+    owners: () => [...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)), ...members.storageProjects().map(({ owner }) => owner)],
+    maintain: (owner, work) => maintainRuntime(owner, work),
+    plan: (owner, scope) => planRuntime(owner, scope),
+  });
+  const recoveryPending = (owner: string) => owner === 'shared'
+    ? storageRuntime.scopePending('shared') : storageRuntime.ownerPending(owner);
   const available = (project: string) => !recoveryPending(members.projectOwner(project));
   const assertAvailable = (project: string) => {
     if (!available(project)) throw new Error('存储尚未恢复，此空间暂不可用，请联系管理员。');
   };
+  // Cleanup and mounting also write cached resources. Protect them before either starts.
+  for (const owner of new Set(['shared', ...storageBackend.ownersFor('shared'),
+    ...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)), ...members.storageProjects().map(({ owner }) => owner)])) {
+    if (!storageRuntime.ownerPending(owner)) await storageRuntime.arm(owner);
+  }
   pruneProjects(projectsFile, (project) => !available(project));
 
   for (const project of readProjects(projectsFile)) {
@@ -200,7 +209,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     if (closing) return Promise.reject(new Error('Artifacts server is stopping'));
     let pending = mounts.get(project);
     if (!pending) {
-      pending = mountArtifactsProject({
+      pending = storageRuntime.arm(members.projectOwner(project)).then(() => mountArtifactsProject({
         root: artifactsRootOf(project),
         viewerDir: options.viewerDir,
         runtimeDir: options.runtimeDir,
@@ -219,13 +228,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
             return contentAccess.issue(identity, project, ref);
           } } : {}),
         },
-      }).then((mounted) => {
+      })).then((mounted) => {
         ready.set(project, mounted);
         try { remoteEvents.append(projectId(project), '', 'resync', { reason: 'project-mounted', action: 'Read current comments with comment list --all' }); }
         catch (error) { console.error('Remote event persistence failed:', (error as Error).message); }
         mounted.onMessage((message) => {
           if (message.type !== 'doc-comments' && message.type !== 'board-comments' && message.type !== 'change') return;
           if (!('artifact' in message)) return;
+          storageRuntime.changed(members.projectOwner(project));
           try { remoteEvents.append(projectId(project), message.artifact, message.type, { action: 'Read current comments or pull the changed artifact' }); }
           catch (error) { console.error('Remote event persistence failed:', (error as Error).message); }
         });
@@ -439,6 +449,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     if (!real) throw new Error(`Project directory not found: ${dir}`);
     return withProjectMutation(real, async () => {
       assertAvailable(real);
+      await storageRuntime.arm(members.projectOwner(real));
+      assertAvailable(real);
       if (!mounts.has(real)) recoverProjectTrash(real);
       fs.mkdirSync(artifactsRootOf(real), { recursive: true });
       const entry = registerProject(projectsFile, real);
@@ -450,7 +462,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     });
   };
 
-  const prepareMember = createMemberWorkspace({ home: options.paths.home, members, register, available: (owner) => !recoveryPending(owner) });
+  const prepareMember = createMemberWorkspace({ home: options.paths.home, members, register, available: (owner) => !recoveryPending(owner), beforeWrite: storageRuntime.arm });
 
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
@@ -606,8 +618,28 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       personal: owner === 'owner' ? null : members.list().members.find((member) => member.id === owner)?.quotaBytes ?? 0,
     }),
   });
+  const runtimeProjects = (owner: string) => [...new Set([
+    ...ordered().filter(({ dir }) => members.projectOwner(dir) === owner).map(({ dir }) => dir),
+    ...members.storageProjects().filter((entry) => entry.owner === owner).map(({ dir }) => dir),
+  ])].sort();
+  const maintainRuntime = <T>(owner: string, work: () => Promise<T>) => writeQuota.exclusive(async () => {
+    const projects = runtimeProjects(owner);
+    const guard = () => {
+      if (JSON.stringify(projects) !== JSON.stringify(runtimeProjects(owner))) throw new Error('Storage project ownership changed');
+      for (const project of projects) assertAvailable(project);
+    };
+    return withProjectMaintenance(projects, quiesceProject, work, guard);
+  });
+  const planRuntime = (owner: string, scope: string) => planMigrationSources(scope, {
+    owner,
+    projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
+    snapshotsRoot: path.join(storageHome, 'shares/snapshots'), snapshots: shares.storageSnapshots,
+    sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
+  });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload: writeQuota });
   const storageApi = createStorageApi({ settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
+    syncStatus: (owner) => owner === 'shared' ? storageRuntime.scopeStatus('shared') : storageRuntime.status(owner),
+    synchronize: (owner) => owner === 'shared' ? storageRuntime.syncScope('shared') : storageRuntime.sync(owner),
     backend: (owner) => {
       const scope = owner === 'shared' ? 'shared' : storageBackend.scopeFor(owner);
       return scope === null ? 'local' : storageBackend.summary(scope).backend;
@@ -808,6 +840,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     writeCompatInfo(entry.dir);
     if (!isDormant(entry)) void mountOf(entry.dir).catch(() => undefined);
   }
+  storageRuntime.start();
 
   return {
     port,
@@ -827,6 +860,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       clearInterval(trashCleanup);
       remoteAuth.close();
       await migrationApi.close();
+      await storageRuntime.close();
       const stopped = [front, board].map(
         (server) => new Promise((resolve) => server.close(resolve)),
       );
