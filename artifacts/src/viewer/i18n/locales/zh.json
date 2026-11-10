@@ -716,6 +716,10 @@
     "saveLimit": "保存总容量",
     "limitSaved": "共享总容量配置已保存。",
     "usage": {
+      "sharedTitle": "共享额度用量",
+      "sharedHelp": "不含已启用个人 S3 的空间；未归属的保留快照仍计入共享用量。",
+      "personalHelp": "此空间使用个人 S3，不占用实例共享额度。服务器缓存仍占用磁盘空间。",
+      "allocatedHelp": "此空间的资源计入实例共享用量，并受分配的共享额度限制。",
       "title": "本地资源用量",
       "artifacts": "作品与资源",
       "history": "历史与协作数据",

@@ -17,13 +17,14 @@ const empty = (): UsageBytes => ({ artifacts: 0, history: 0, trash: 0, shares: 0
 export function createStorageUsage(options: {
   projects: () => Array<{ dir: string; owner: string }>;
   snapshotsRoot: string;
-  snapshots: () => Array<{ directory: string; owner: string }>;
+  snapshots: () => Array<{ directory: string; owner?: string }>;
+  sharedOwner?: (owner: string) => boolean;
   now?: () => number;
 }) {
   const now = options.now ?? Date.now;
   let pending: Promise<Inventory> | undefined;
   let cached: Inventory | undefined;
-  const scan = async (): Promise<Inventory> => {
+  const scan = async (measuring?: string): Promise<Inventory> => {
     const total = empty();
     const owners = new Map<string, UsageBytes>();
     let entries = 0;
@@ -67,6 +68,7 @@ export function createStorageUsage(options: {
       projects.set(normalized, owner);
     }
     for (const [project, owner] of projects) {
+      if (measuring !== undefined && owner !== measuring && options.sharedOwner?.(owner) === false) continue;
       await directory(project);
       const root = path.join(project, '.anjian');
       if (!await directory(root, true)) continue;
@@ -84,14 +86,15 @@ export function createStorageUsage(options: {
       for (const name of await fs.readdir(options.snapshotsRoot)) {
         const file = path.resolve(options.snapshotsRoot, name);
         const owner = snapshots.get(file);
+        if (measuring !== undefined && owner && owner !== measuring && options.sharedOwner?.(owner) === false) continue;
         await walk(file, owner ? 'shares' : 'retained', owner);
       }
     }
     return { total: { ...total, checkedAt: now() }, owners };
   };
-  const inventory = async () => {
+  const inventory = async (measuring?: string) => {
     for (let attempt = 0; ; attempt++) {
-      try { return await scan(); }
+      try { return await scan(measuring); }
       catch (error) {
         // Atomic state writers can rename a listed temporary file before lstat.
         // Restart the whole inventory instead of omitting bytes from admission.
@@ -99,10 +102,20 @@ export function createStorageUsage(options: {
       }
     }
   };
+  // Apply current bindings even to cached inventories: activation changes budget
+  // allocation immediately without changing the retained local files.
+  const shared = (current: Inventory): UsageReport => {
+    const report = { ...current.total };
+    for (const [owner, usage] of current.owners) {
+      if (options.sharedOwner?.(owner) === false)
+        for (const key of Object.keys(usage) as Array<keyof UsageBytes>) report[key] -= usage[key];
+    }
+    return report;
+  };
   return {
     async measure(owner: string) {
-      const current = await inventory();
-      return { shared: current.total.total, personal: current.owners.get(owner)?.total ?? 0 };
+      const current = await inventory(owner);
+      return { shared: shared(current).total, personal: current.owners.get(owner)?.total ?? 0 };
     },
     async read(scope: string): Promise<UsageReport> {
       if (!cached || now() - cached.total.checkedAt >= 5_000) {
@@ -111,7 +124,7 @@ export function createStorageUsage(options: {
         try { cached = await task; }
         finally { if (pending === task) pending = undefined; }
       }
-      return scope === 'shared' ? { ...cached.total } : { ...(cached.owners.get(scope) ?? empty()), checkedAt: cached.total.checkedAt };
+      return scope === 'shared' ? shared(cached) : { ...(cached.owners.get(scope) ?? empty()), checkedAt: cached.total.checkedAt };
     },
   };
 }

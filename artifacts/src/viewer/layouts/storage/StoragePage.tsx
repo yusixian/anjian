@@ -11,7 +11,7 @@ interface Settings { endpoint: string; bucket: string; region: string; prefix: s
 interface Profile extends Settings { id: string; credentialsConfigured: boolean; test?: TestResult | null }
 interface Usage { artifacts: number; history: number; trash: number; shares: number; retained: number; total: number; checkedAt: number }
 interface SyncStatus { state: 'local' | 'recovery' | 'pending' | 'syncing' | 'ready' | 'error'; lastSyncedAt: number | null }
-interface Summary { recoveryPending?: boolean; usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local' | 's3'; sharedLimitBytes?: number | null; sync?: SyncStatus }
+interface Summary { allocation?: 'shared' | 'personal'; recoveryPending?: boolean; usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local' | 's3'; sharedLimitBytes?: number | null; sync?: SyncStatus }
 const blank: Settings = { endpoint: '', bucket: '', region: 'auto', prefix: 'anjian', forcePathStyle: true };
 const emptyCredentials = { accessKeyId: '', secretAccessKey: '', sessionToken: '' };
 const GIB = 1024 ** 3;
@@ -129,8 +129,9 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     {notice && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}
     {!data && !error && <p role="status">{t('common.loading')}</p>}
     {data && <>
-      <section {...stylex.props(styles.preview)} aria-label={t('storage.usage.title')}>
-        <h2 {...stylex.props(styles.dialogTitle)}>{t('storage.usage.title')}</h2>
+      <section {...stylex.props(styles.preview)} aria-label={t(scope === 'shared' ? 'storage.usage.sharedTitle' : 'storage.usage.title')}>
+        <h2 {...stylex.props(styles.dialogTitle)}>{t(scope === 'shared' ? 'storage.usage.sharedTitle' : 'storage.usage.title')}</h2>
+        <p {...stylex.props(styles.rowMeta)}>{t(scope === 'shared' ? 'storage.usage.sharedHelp' : data.allocation === 'personal' ? 'storage.usage.personalHelp' : 'storage.usage.allocatedHelp')}</p>
         {data.usage ? <>
           <strong>{formatUsage(data.usage.total, i18n.language)}</strong>
           <dl {...stylex.props(storageStyles.usageGrid)}>{(['artifacts', 'history', 'trash', 'shares', ...(scope === 'shared' ? ['retained'] as const : [])] as const).map((category) => <div key={category}><dt {...stylex.props(styles.rowMeta)}>{t(`storage.usage.${category}`)}</dt><dd {...stylex.props(storageStyles.usageValue)}>{formatUsage(data.usage![category], i18n.language)}</dd></div>)}</dl>

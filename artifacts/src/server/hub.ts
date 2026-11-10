@@ -608,10 +608,15 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const usage = createStorageUsage({
     projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
     snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
-    snapshots: () => shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: members.projectOwner(project) })),
+    snapshots: () => {
+      const owners = new Map([...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()].map(({ dir, owner }) => [dir, owner]));
+      return shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: owners.get(project) }));
+    },
+    sharedOwner: (owner) => storageBackend.scopeFor(owner) !== owner,
   });
   const writeQuota = createStorageQuota({
     owner: members.projectOwner,
+    sharedOwner: (owner) => storageBackend.scopeFor(owner) !== owner,
     measure: usage.measure,
     limits: (owner) => ({
       shared: settings.summary('shared').sharedLimitBytes ?? null,
@@ -639,6 +644,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload: writeQuota });
   const storageApi = createStorageApi({ settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
+    allocation: (owner) => owner !== 'shared' && storageBackend.scopeFor(owner) === owner ? 'personal' : 'shared',
     syncStatus: (owner) => owner === 'shared' ? storageRuntime.scopeStatus('shared') : storageRuntime.status(owner),
     synchronize: (owner) => owner === 'shared' ? storageRuntime.syncScope('shared') : storageRuntime.sync(owner),
     recover: (owner, authorize) => owner === 'shared' ? storageRuntime.recoverScope('shared', authorize) : storageRuntime.recover(owner, authorize),

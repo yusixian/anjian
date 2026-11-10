@@ -148,4 +148,6 @@ test('verified GUI activation protects shared then personal bindings without rep
   f.settings.recordTest('owner', personal.id, { ok: true, checkedAt: Date.now(), steps: { write: true, read: true, delete: true } });
   await prepareAndActivate('personal', personal.id);
   expect(f.backend.scopeFor('owner')).toBe('owner');
+  expect(await (await f.request(hub, '/api/storage?scope=personal')).json()).toMatchObject({ allocation: 'personal', usage: { total: expect.any(Number) } });
+  expect(await (await f.request(hub, '/api/storage?scope=shared')).json()).toMatchObject({ allocation: 'shared', usage: { total: 0 } });
 });

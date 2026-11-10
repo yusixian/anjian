@@ -10,6 +10,7 @@ export function createStorageApi(options: {
   settings: ReturnType<typeof createStorageSettings>;
   usage: ReturnType<typeof createStorageUsage>;
   backend?: (scope: string) => 'local' | 's3';
+  allocation?: (scope: string) => 'shared' | 'personal';
   recoveryPending?: (scope: string) => boolean;
   syncStatus?: (scope: string) => ReturnType<ReturnType<typeof createStorageRuntime>['status']>;
   synchronize?: (scope: string) => Promise<void>;
@@ -40,7 +41,7 @@ export function createStorageApi(options: {
         if (!current || current.id !== identity.id || current.role !== identity.role || current.sessionVersion !== identity.sessionVersion) {
           sendJson(res, 403, { error: '登录状态已变化。' }); return true;
         }
-        sendJson(res, 200, { ...summary, recoveryPending: options.recoveryPending?.(scope) ?? false, backend: options.backend?.(scope) ?? 'local', tested: summary.profile?.test?.ok ?? false, usage, sync: options.syncStatus?.(scope) });
+        sendJson(res, 200, { ...summary, allocation: options.allocation?.(scope) ?? 'shared', recoveryPending: options.recoveryPending?.(scope) ?? false, backend: options.backend?.(scope) ?? 'local', tested: summary.profile?.test?.ok ?? false, usage, sync: options.syncStatus?.(scope) });
         return true;
       }
       if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }

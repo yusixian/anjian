@@ -14,11 +14,12 @@ function fixture() {
   const snapshotsRoot = path.join(home, 'snapshots'); fs.mkdirSync(snapshotsRoot);
   let time = 10_000;
   const snapshots = [{ directory: path.join(snapshotsRoot, 'published'), owner: 'github:2' }];
-  const usage = createStorageUsage({ projects: () => [...projects, projects[0]!], snapshotsRoot, snapshots: () => snapshots, now: () => time });
+  const personal = new Set<string>();
+  const usage = createStorageUsage({ projects: () => [...projects, projects[0]!], snapshotsRoot, snapshots: () => snapshots, now: () => time, sharedOwner: (owner) => !personal.has(owner) });
   const put = (relative: string, bytes: number) => {
     const file = path.join(home, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, Buffer.alloc(bytes));
   };
-  return { home, projects, usage, put, advance: () => { time += 5_001; } };
+  return { home, projects, usage, put, personal, advance: () => { time += 5_001; } };
 }
 
 test('restarts the complete inventory if an atomic writer renames a listed file', async () => {
@@ -84,4 +85,28 @@ test('upload accounting bypasses the display cache and returns one inventory for
   f.put('alice/.anjian/artifacts/html/a/index.html', 11);
   f.put('bob/.anjian/.trash/retained/source', 7);
   expect(await f.usage.measure('github:2')).toEqual({ shared: 18, personal: 11 });
+});
+
+test('personal S3 allocation immediately leaves shared accounting without hiding its own usage or orphan snapshots', async () => {
+  const f = fixture();
+  f.put('alice/.anjian/artifacts/html/a/index.html', 10);
+  f.put('alice/.anjian/artifacts/.state/history', 20);
+  f.put('alice/.anjian/.trash/kept', 30);
+  f.put('snapshots/published/index.html', 40);
+  f.put('snapshots/orphan/index.html', 50);
+  f.put('bob/.anjian/artifacts/html/b/index.html', 60);
+  expect((await f.usage.read('shared')).total).toBe(210);
+  f.personal.add('github:2');
+  // The display cache is still warm, but binding allocation must take effect now.
+  expect(await f.usage.read('shared')).toEqual({ artifacts: 60, history: 0, trash: 0, shares: 0, retained: 50, total: 110, checkedAt: 10_000 });
+  expect((await f.usage.read('github:2')).total).toBe(100);
+  expect(await f.usage.measure('github:2')).toEqual({ shared: 110, personal: 100 });
+  f.personal.delete('github:2');
+  expect((await f.usage.read('shared')).total).toBe(210);
+});
+
+test('shared admission does not depend on another personal S3 cache being available', async () => {
+  const f = fixture(); f.put('alice/.anjian/artifacts/file', 9);
+  f.personal.add('github:3'); fs.rmSync(f.projects[1]!.dir, { recursive: true });
+  expect(await f.usage.measure('github:2')).toEqual({ shared: 9, personal: 9 });
 });

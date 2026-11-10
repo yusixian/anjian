@@ -34,3 +34,18 @@ test('personal limits apply even when shared capacity is unlimited', async () =>
   await quota('a', async (prepare) => (await prepare())(1));
   await expect(quota('a', async (prepare) => (await prepare())(2))).rejects.toMatchObject({ code: 'storage_quota_exceeded' });
 });
+
+test('private S3 writes do not consume shared allocations and binding changes invalidate admission', async () => {
+  let shared = false;
+  const quota = createStorageQuota({ owner: () => 'github:2', sharedOwner: () => shared,
+    measure: async () => ({ shared: 50, personal: 20 }), limits: () => ({ shared: 0, personal: 0 }) });
+  await quota('private', async (prepare) => (await prepare())(100));
+  await expect(quota('private', async (prepare) => { const admit = await prepare(); shared = true; admit(1); })).rejects.toMatchObject({ code: 'storage_changed' });
+  await expect(quota('shared', async (prepare) => (await prepare())(1))).rejects.toMatchObject({ code: 'storage_quota_exceeded' });
+});
+
+test('private S3 admission does not scan unrelated shared resources', async () => {
+  const quota = createStorageQuota({ owner: () => 'github:2', sharedOwner: () => false,
+    measure: async () => { throw new Error('unrelated missing cache'); }, limits: () => ({ shared: 0, personal: 0 }) });
+  await quota('private', async (prepare) => (await prepare())(12));
+});

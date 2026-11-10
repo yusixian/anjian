@@ -732,6 +732,10 @@
     "saveLimit": "Save capacity",
     "limitSaved": "Shared capacity configuration saved.",
     "usage": {
+      "sharedTitle": "Shared quota usage",
+      "sharedHelp": "Excludes spaces using personal S3. Unassigned retained snapshots still count toward shared usage.",
+      "personalHelp": "This space uses personal S3 and does not consume shared quota. Server caches still use local disk space.",
+      "allocatedHelp": "This space counts toward shared usage and its assigned shared quota.",
       "title": "Local resource usage",
       "artifacts": "Artifacts and assets",
       "history": "History and collaboration",

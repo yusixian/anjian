@@ -5,6 +5,8 @@ export function createStorageQuota(options: {
   owner: (project: string) => string;
   measure: (owner: string) => Promise<{ shared: number; personal: number }>;
   limits: (owner: string) => { shared: number | null; personal: number | null };
+  /** Member quotas are allocations of shared storage, not limits on their private S3. */
+  sharedOwner?: (owner: string) => boolean;
 }) {
   let pending: Promise<unknown> = Promise.resolve();
   const exclusive = <T>(work: () => Promise<T>): Promise<T> => {
@@ -15,10 +17,13 @@ export function createStorageQuota(options: {
   const upload = async <T>(project: string, work: (prepare: () => Promise<(deltaBytes: number) => void>) => Promise<T>): Promise<T> => {
     return exclusive(() => work(async () => {
       const owner = options.owner(project);
-      const usage = await options.measure(owner);
+      const shared = options.sharedOwner?.(owner) ?? true;
+      const usage = shared ? await options.measure(owner) : { shared: 0, personal: 0 };
       return (delta) => {
         if (options.owner(project) !== owner) throw new RemoteTransferError(409, 'ownership_changed', '项目归属已变化，请重试');
         if (!Number.isSafeInteger(delta)) throw new Error('Invalid storage delta');
+        if ((options.sharedOwner?.(owner) ?? true) !== shared) throw new RemoteTransferError(409, 'storage_changed', '存储归属已变化，请重试');
+        if (!shared) return;
         const limits = options.limits(owner);
         for (const scope of ['shared', 'personal'] as const) {
           if (!Number.isSafeInteger(usage[scope]) || usage[scope] < 0) throw new Error('Invalid storage usage');
