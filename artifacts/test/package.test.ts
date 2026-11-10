@@ -19,7 +19,6 @@ test('the published package holds the CLI, the server, the viewer under fixed en
       'bin/anjian.cjs',
       'dist/cli.cjs',
       'dist/runtime/anjian-ui.js',
-      'dist/viewer/index.css',
       'dist/viewer/index.html',
       'dist/viewer/index.js',
       'dist/viewer-lib/index.js',
@@ -31,6 +30,14 @@ test('the published package holds the CLI, the server, the viewer under fixed en
       'README.md',
     ]),
   );
+  // Vite and StyleX may rename CSS when sharing it between HTML entry points.
+  for (const entry of ['index', 'preview', 'share']) {
+    const html = fs.readFileSync(path.join(pkgDir, `dist/viewer/${entry}.html`), 'utf8');
+    const stylesheets = [...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)];
+    expect(stylesheets.length).toBeGreaterThan(0);
+    for (const match of stylesheets)
+      expect(files).toContain(`dist/viewer/${match[1]!.replace(/^\//, '')}`);
+  }
   expect(
     files.filter(
       (file) =>
