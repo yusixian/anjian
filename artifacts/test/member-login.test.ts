@@ -119,4 +119,14 @@ test('storage settings isolate personal credentials and reserve shared settings 
   expect(shared.sharedLimitBytes).toBe(1024);
   expect(shared.configured).toBe(false);
   expect((await f.request('/api/storage', '')).status).toBe(403);
+  const deniedProfile = await (await f.request('/api/storage', alice.cookie, { action: 'save', settings: { ...settings, endpoint: 'https://127.0.0.1' } })).json();
+  expect((await f.request('/api/storage', bob.cookie, { action: 'test', id: deniedProfile.profile.id })).status).toBe(404);
+  const checked = await (await f.request('/api/storage', alice.cookie, { action: 'test', id: deniedProfile.profile.id })).json();
+  expect(checked.test.ok).toBe(false);
+  expect(checked.test.steps).toEqual({ write: false, read: false, delete: false });
+  const checkedSummary = await (await f.request('/api/storage', alice.cookie)).json();
+  expect(checkedSummary.tested).toBe(false);
+  expect(checkedSummary.profile.test).toEqual(checked.test);
+  expect((await f.request('/api/storage', alice.cookie, { action: 'test', id: deniedProfile.profile.id })).status).toBe(429);
+
 });

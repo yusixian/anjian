@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { S3TestResult } from './s3';
 
 export interface S3Settings {
   endpoint: string;
@@ -21,6 +22,7 @@ interface State {
   sharedLimitBytes: number | null;
   profiles: Profile[];
   drafts: Record<string, string>;
+  tests?: Record<string, S3TestResult>;
 }
 export class StorageSettingsError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -82,6 +84,10 @@ export function createStorageSettings(home: string) {
       }
       for (const [scope, id] of Object.entries(state.drafts))
         if (!validScope(scope) || !state.profiles.some((p) => p.scope === scope && p.id === id)) return unavailable();
+      if (state.tests && (typeof state.tests !== 'object' || Array.isArray(state.tests) || Object.entries(state.tests).some(([id, result]) =>
+          !ids.has(id) || !result || typeof result.ok !== 'boolean' || !Number.isFinite(result.checkedAt) || !result.steps ||
+          ![result.steps.write, result.steps.read, result.steps.delete].every((value) => typeof value === 'boolean') ||
+          result.ok !== (result.steps.write && result.steps.read && result.steps.delete)))) return unavailable();
       return state;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, sharedLimitBytes: null, profiles: [], drafts: {} };
@@ -123,7 +129,7 @@ export function createStorageSettings(home: string) {
       if (!validScope(scope)) return fail('存储归属无效。');
       const state = read();
       const profile = state.profiles.find((p) => p.id === state.drafts[scope]);
-      return { configured: Boolean(profile), profile: profile ? summary(profile) : null,
+      return { configured: Boolean(profile), profile: profile ? { ...summary(profile), test: state.tests?.[profile.id] ?? null } : null,
         ...(scope === 'shared' ? { sharedLimitBytes: state.sharedLimitBytes } : {}) };
     },
     save(scope: string, input: unknown, credentials?: unknown) {
@@ -148,6 +154,11 @@ export function createStorageSettings(home: string) {
       const profile = read().profiles.find((p) => p.scope === scope && p.id === id);
       if (!profile) throw new StorageSettingsError(404, '存储配置不存在。');
       return { ...summary(profile), credentials: decrypt(profile) };
+    },
+    recordTest(scope: string, id: string, result: S3TestResult) {
+      const state = read();
+      if (!state.profiles.some((p) => p.id === id && p.scope === scope)) throw new StorageSettingsError(404, '存储配置不存在。');
+      state.tests = { ...state.tests, [id]: result }; write(state);
     },
     setSharedLimit(limit: number) {
       if (!bytes(limit)) return fail('共享容量必须是非负整数。');

@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { testS3Connection } from './s3';
 import type { Principal } from '../member-store';
 import { sendJson } from '../http';
 import { StorageSettingsError, type createStorageSettings } from './settings';
@@ -9,6 +10,8 @@ export function createStorageApi(options: {
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
 }) {
+  const testing = new Set<string>();
+  const recent = new Map<string, number>();
   return async (req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<boolean> => {
     if (url.pathname !== '/api/storage') return false;
     const identity = options.principal(req, url);
@@ -23,7 +26,8 @@ export function createStorageApi(options: {
     const scope = scopeName === 'shared' ? 'shared' : identity.id;
     try {
       if (req.method === 'GET') {
-        sendJson(res, 200, { ...options.settings.summary(scope), backend: 'local', tested: false });
+        const summary = options.settings.summary(scope);
+        sendJson(res, 200, { ...summary, backend: 'local', tested: summary.profile?.test?.ok ?? false });
         return true;
       }
       if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }
@@ -40,7 +44,23 @@ export function createStorageApi(options: {
       if (!current || current.id !== identity.id || current.sessionVersion !== identity.sessionVersion || current.role !== identity.role) {
         sendJson(res, 403, { error: '登录状态已变化。' }); return true;
       }
-      if (body.action === 'save') {
+      if (body.action === 'test' && typeof body.id === 'string') {
+        for (const [key, until] of recent) if (until <= Date.now()) recent.delete(key);
+        if (testing.size >= 4 || testing.has(scope) || recent.has(scope)) {
+          sendJson(res, 429, { error: '连接测试进行中或过于频繁，请稍后再试。' }); return true;
+        }
+        const profile = options.settings.resolve(scope, body.id);
+        testing.add(scope); recent.set(scope, Date.now() + 30_000);
+        try {
+          const result = await testS3Connection(profile, profile.credentials);
+          const latest = options.principal(req, url);
+          if (!latest || latest.id !== identity.id || latest.sessionVersion !== identity.sessionVersion) {
+            sendJson(res, 403, { error: '登录状态已变化。' }); return true;
+          }
+          options.settings.recordTest(scope, profile.id, result);
+          sendJson(res, 200, { test: result, backend: 'local' });
+        } finally { testing.delete(scope); }
+      } else if (body.action === 'save') {
         const profile = options.settings.save(scope, body.settings, body.credentials);
         sendJson(res, 200, { profile, backend: 'local', tested: false });
       } else if (body.action === 'limit' && scope === 'shared') {
