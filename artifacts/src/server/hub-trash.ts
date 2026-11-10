@@ -15,7 +15,8 @@ interface Options {
   resolveProject: (req: http.IncomingMessage, reference: string) => string | null;
   projectReference: (req: http.IncomingMessage, project: string) => string;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
-  suspend: <T>(project: string, work: () => T) => Promise<T>;
+  // Owns the storage queue and project lock; rechecks access before closing sessions.
+  suspend: <T>(project: string, work: () => T, guard: () => void) => Promise<T>;
   deployment: 'local' | 'self-hosted';
   beforeMove?: (project: string, artifact: HubArtifact) => void;
 }
@@ -66,22 +67,22 @@ export function createHubTrash(options: Options) {
         : trashSelectionKey({ project: reference, trashId: item.trashId! });
       try {
         if (!project) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
-        const entry = await withProjectMutation(project, async () => {
+        const guard = () => {
           if (!options.projects(req).includes(project)) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
-          return options.suspend(project, () => {
-            if (!options.projects(req).includes(project)) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
-            if (!moving) return pathname.endsWith('/restore')
-              ? restoreTrash(project, item.trashId!) : purgeTrash(project, item.trashId!);
-            const artifact = options.artifacts(req).find((a) => a.project === project && a.url === item.url && a.type === item.type && a.id === item.id);
-            if (artifact) {
-              options.beforeMove?.(project, artifact);
-              return moveArtifactToTrash(project, artifact);
-            }
-            const deleted = findTrashedArtifact(project, item.type as HubArtifact['type'], item.id!);
-            if (deleted && deleted.url === item.url) return deleted;
-            throw new ArtifactTrashError(404, 'artifact_not_found', '作品不存在或已发生变化，请刷新列表');
-          });
-        });
+        };
+        const entry = await options.suspend(project, () => {
+          if (!options.projects(req).includes(project)) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
+          if (!moving) return pathname.endsWith('/restore')
+            ? restoreTrash(project, item.trashId!) : purgeTrash(project, item.trashId!);
+          const artifact = options.artifacts(req).find((a) => a.project === project && a.url === item.url && a.type === item.type && a.id === item.id);
+          if (artifact) {
+            options.beforeMove?.(project, artifact);
+            return moveArtifactToTrash(project, artifact);
+          }
+          const deleted = findTrashedArtifact(project, item.type as HubArtifact['type'], item.id!);
+          if (deleted && deleted.url === item.url) return deleted;
+          throw new ArtifactTrashError(404, 'artifact_not_found', '作品不存在或已发生变化，请刷新列表');
+        }, guard);
         results.push({ key, ok: true, entry: entry ? { ...entry, project: reference } : undefined });
       } catch (error) {
         results.push({ key, ok: false,

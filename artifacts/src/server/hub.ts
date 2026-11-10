@@ -9,7 +9,7 @@ import type { ArtifactType } from '../shared/types';
 import { accessPolicy, hostAllowed, isLoopbackHost, navigationAllowed, originAllowed } from './access';
 import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
-import { findTrashedArtifact, listTrash, recoverProjectTrash } from './artifact-trash';
+import { ArtifactTrashError, findTrashedArtifact, listTrash, recoverProjectTrash } from './artifact-trash';
 import { createHubTrash } from './hub-trash';
 import { createHubShare } from './hub-share';
 import { createPublicShare } from './public-share';
@@ -581,13 +581,23 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return true;
   };
 
-  const suspendProject = <T>(project: string, work: () => T | Promise<T>): Promise<T> =>
-    suspension.suspend(project, async () => {
+  const suspendProject = <T>(project: string, work: () => T | Promise<T>, guard: () => void): Promise<T> =>
+    writeQuota(project, prepare => withProjectMutation(project, () => suspension.suspend(project, async () => {
+      guard();
+      assertAvailable(project);
       const pending = mounts.get(project);
-      if (pending) await (await pending).close();
+      if (pending) {
+        const mounted = await pending;
+        try { await mounted.quiesce(async () => {}, prepare); }
+        catch {
+          throw new ArtifactTrashError(409, 'document_save_blocked',
+            '文档尚未保存，操作未执行。请在存储设置中检查可用容量与连接后重试。');
+        }
+        await mounted.close(prepare);
+      }
       mounts.delete(project);
       ready.delete(project);
-    }, work, () => { index.rescan(); });
+    }, work, () => { index.rescan(); })));
   const quiesceProject = <T>(project: string, work: () => Promise<T>, prepare?: () => Promise<(delta: number) => void>): Promise<T> =>
     suspension.suspend(project, async () => {}, async () => {
       const mounted = mounts.get(project);

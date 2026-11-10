@@ -8,6 +8,7 @@ import { afterEach, expect, test } from 'vitest';
 import type { HubArtifact } from '../src/shared/hub';
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
+import { createStorageSettings } from '../src/server/storage/settings';
 import { tempRoot, writeDocument, writeHtml } from './helpers';
 
 const hubs: Hub[] = [];
@@ -20,10 +21,11 @@ async function fixture() {
   writeHtml(root, 'preview', { 'index.html': '<h1>Keep this HTML</h1>' });
   const temp = tempRoot();
   const token = 't'.repeat(48);
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-trash-hub-')) });
   const hub = await startHub({
     host: '0.0.0.0', urlHost: 'localhost', viewerDir: temp.viewer, runtimeDir: temp.runtime,
     ports: [0], boardPorts: [0], version: '0.1.0', token,
-    paths: machinePaths({ ANJIAN_SERVER_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-trash-hub-')) }),
+    paths,
   });
   hubs.push(hub);
   await hub.register(project);
@@ -33,8 +35,41 @@ async function fixture() {
     method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ items }),
   });
   const list = async (): Promise<HubArtifact[]> => (await (await request('/api/hub/artifacts')).json()).artifacts;
-  return { hub, project, root, base, token, request, post, list };
+  return { hub, project, root, base, token, request, post, list, settings: createStorageSettings(paths.home) };
 }
+
+test.each(['/api/hub/trash', '/api/hub/trash/restore', '/api/hub/trash/purge'])(
+  '%s preserves live documents and trash entries when quota blocks saving', async (route) => {
+    const f = await fixture();
+    try {
+      const items = await f.list();
+      const html = items.find(item => item.type === 'html')!;
+      const trashed = (await (await f.post('/api/hub/trash', [html])).json()).results[0].entry;
+      // The earlier trash operation may have saved all existing documents.
+      // Create a fresh one so this operation must allocate its first snapshot.
+      f.settings.setSharedLimit(0);
+      writeDocument(f.root, 'quota-draft', { 'doc.xml': '<doc><p>Save before trash</p></doc>' });
+      const doc = (await f.list()).find(item => item.id === 'quota-draft')!;
+      const stateRoute = '/api/document/quota-draft/state';
+      const state = await f.request(stateRoute);
+      expect(state.status, await state.clone().text()).toBe(200);
+      const mounts = f.hub.mounted();
+      const original = fs.readFileSync(path.join(f.root, 'document/quota-draft/doc.xml'), 'utf8');
+      const input = route === '/api/hub/trash' ? doc : { project: trashed.project, trashId: trashed.trashId };
+      const denied = (await (await f.post(route, [input])).json()).results[0];
+      expect(denied).toMatchObject({ ok: false, code: 'document_save_blocked' });
+      expect(denied.error).toContain('存储设置');
+      expect(f.hub.mounted()).toEqual(mounts);
+      expect((await f.request(stateRoute)).status).toBe(200);
+      expect(fs.readFileSync(path.join(f.root, 'document/quota-draft/doc.xml'), 'utf8')).toBe(original);
+      expect(fs.existsSync(path.join(f.root, '.state/document/quota-draft/doc.loro'))).toBe(false);
+      const trash = await (await f.request('/api/hub/trash')).json();
+      expect(trash.entries.map((entry: { trashId: string }) => entry.trashId)).toEqual([trashed.trashId]);
+      f.settings.setSharedLimit(1024 * 1024);
+      expect((await (await f.post(route, [input])).json()).results[0].ok).toBe(true);
+    } finally { f.settings.setSharedLimit(1024 * 1024); }
+  },
+);
 
 test('bulk trash preserves a live document and restores its original opaque URL', async () => {
   const f = await fixture();
