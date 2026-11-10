@@ -6,7 +6,7 @@ import { type AccessPolicy, hostAllowed, originAllowed } from './access';
 import { parseCookies, safeEqual, send } from './http';
 
 const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
-const PAGE = /^\/(?:index\.html|devices|connect|(?:(?:preview|embed)\/)?(?:artboard|document|html)\/[\w-]+\/?)?$/;
+const PAGE = /^\/(?:index\.html|devices|connect|members|(?:(?:preview|embed)\/)?(?:artboard|document|html)\/[\w-]+\/?)?$/;
 const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]!);

@@ -1,11 +1,12 @@
 import { ContextMenuTrigger } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { ChevronDown, ChevronRight, Clock, Folder, Laptop, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Folder, Laptop, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 
 import type { HubProjectStatus } from '../../../shared/hub';
 import { useTranslation } from '../../i18n';
+import { useAccount } from '../../hooks/useAccount';
 import { type HomeSelection, splitProjects } from './home-model';
 
 const styles = stylex.create({
@@ -99,13 +100,14 @@ export function ProjectSidebar({
   onRemove: (project: HubProjectStatus) => void;
 }) {
   const { t } = useTranslation();
+  const account = useAccount();
   const [showDormant, setShowDormant] = useState(false);
   const { active, dormant } = splitProjects(projects);
 
   const row = (project: HubProjectStatus) => (
     <ContextMenuTrigger
       key={project.dir}
-      items={[
+      items={account?.role === 'member' ? [] : [
         {
           key: 'remove',
           label: t('home.removeProject'),
@@ -163,6 +165,10 @@ export function ProjectSidebar({
         <Laptop aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
         <span {...stylex.props(styles.name)}>{t('home.devices')}</span>
       </a>
+      {account?.role === 'owner' && <a href="/members" aria-current={selection === 'members' ? 'page' : undefined} {...stylex.props(styles.item, selection === 'members' && styles.active)}>
+        <Users aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
+        <span {...stylex.props(styles.name)}>{t('members.title')}</span>
+      </a>}
       <button
         aria-current={selection === 'trash' ? 'page' : undefined}
         type="button"

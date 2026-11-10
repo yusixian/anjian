@@ -54,6 +54,8 @@ test('invited members enter isolated workspaces and cannot read owner or other m
   const bob = await f.join('bob', 3);
   expect((await f.request('/', alice.cookie)).status).toBe(200);
   expect((await f.request('/devices', alice.cookie)).status).toBe(200);
+  expect((await f.request('/members', alice.cookie)).status).toBe(403);
+  expect((await f.request('/members', f.ownerCookie)).status).toBe(200);
   expect(await (await f.request('/api/browser-session', alice.cookie)).json()).toMatchObject({ authenticated: true });
   const initial = await (await f.request('/api/hub/artifacts', alice.cookie)).json();
   expect(await (await f.request('/api/account', alice.cookie)).json()).toEqual({ role: 'member', login: 'alice', quotaBytes: 1024 * 1024 });

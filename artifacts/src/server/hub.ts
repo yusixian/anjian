@@ -644,7 +644,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         send(res, 400, 'Bad request');
         return;
       }
-      const devicePage = pathname === '/devices' || pathname === '/connect';
+      const devicePage = pathname === '/devices' || pathname === '/connect' || pathname === '/members';
+      if (pathname === '/members' && !authorized(req, url)) { send(res, 403, 'Forbidden'); return; }
       if (devicePage || (visibleProjects(req).length === 0 && req.method === 'GET' && !pathname.startsWith('/api/'))) {
         if (req.method !== 'GET') { send(res, 405, 'Method not allowed'); return; }
         if (!authenticated(req, url) || !originAllowed(policy, req.headers.origin) ||
