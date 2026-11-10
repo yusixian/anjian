@@ -268,4 +268,61 @@ describe('remote device authorization', () => {
     expect((await fetch(`${base}/devices`)).status).toBe(403);
     expect((await fetch(`${base}/connect`)).status).toBe(403);
   });
+
+  test('member devices are owned, filtered and revoked when membership changes', async () => {
+    auth.close();
+    let active = true;
+    let version = 0;
+    auth = createRemoteAuth({
+      home, origin: ORIGIN, isAdmin: (req) => req.headers.cookie === 'owner=1', now: () => time,
+      principal: (req) => req.headers.cookie === 'owner=1'
+        ? { id: 'owner', role: 'owner', sessionVersion: 0 }
+        : req.headers.cookie === 'alice=1' && active ? { id: 'github:2', role: 'member', sessionVersion: version } : null,
+      projects: (req) => req.headers.cookie === 'owner=1'
+        ? [{ id: 'project-a', name: 'A' }, { id: 'project-b', name: 'B' }] : [{ id: 'project-a', name: 'A' }],
+      deviceAllowed: (id, epoch) => id === 'owner' || (active && id === 'github:2' && epoch === version),
+    });
+    const alice = { Cookie: 'alice=1', Origin: ORIGIN, 'Content-Type': 'application/json' };
+    const ownerPair = await pair('Owner machine');
+    await approve(ownerPair.userCode, ['project-b']);
+    const ownerDevice = await (await fetch(`${base}/api/remote/auth/token`, json({ deviceCode: ownerPair.deviceCode }))).json();
+    const memberPair = await pair('Alice machine');
+    const invalid = await fetch(`${base}/api/remote/auth/approve`, {
+      ...json({ code: memberPair.userCode, projects: ['project-b'] }), headers: alice,
+    });
+    expect(invalid.status).toBe(400);
+    expect((await fetch(`${base}/api/remote/auth/approve`, {
+      ...json({ code: memberPair.userCode, projects: ['project-a'] }), headers: alice,
+    })).status).toBe(200);
+    const memberDevice = await (await fetch(`${base}/api/remote/auth/token`, json({ deviceCode: memberPair.deviceCode }))).json();
+    const listing = await (await fetch(`${base}/api/remote/auth/devices`, { headers: alice })).json();
+    expect(listing.devices.map((d: { name: string }) => d.name)).toEqual(['Alice machine']);
+    expect(listing.projects.map((p: { id: string }) => p.id)).toEqual(['project-a']);
+    expect((await fetch(`${base}/api/remote/auth/revoke`, {
+      ...json({ id: ownerDevice.device.id }), headers: alice,
+    })).status).toBe(404);
+    const session = () => fetch(`${base}/api/remote/auth/session`, { headers: { Authorization: `Bearer ${memberDevice.token}` } });
+    expect((await session()).status).toBe(200);
+    active = false;
+    expect((await session()).status).toBe(401);
+    active = true;
+    version++;
+    expect((await session()).status).toBe(401);
+    expect((await fetch(`${base}/api/remote/auth/session`, { headers: { Authorization: `Bearer ${ownerDevice.token}` } })).status).toBe(200);
+  });
+
+  test('approval cannot be redeemed after the approving member loses authority', async () => {
+    auth.close();
+    let active = true;
+    auth = createRemoteAuth({ home, origin: ORIGIN, isAdmin: () => false, now: () => time,
+      principal: () => active ? { id: 'github:2', role: 'member', sessionVersion: 0 } : null,
+      projects: () => [{ id: 'project-a', name: 'A' }], deviceAllowed: () => active,
+    });
+    const pending = await pair();
+    expect((await approve(pending.userCode)).status).toBe(200);
+    active = false;
+    expect((await fetch(`${base}/api/remote/auth/token`, json({ deviceCode: pending.deviceCode }))).status).toBe(403);
+    expect(fs.existsSync(path.join(home, 'remote-devices.json'))).toBe(false);
+  });
+
 });

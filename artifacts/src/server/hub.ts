@@ -225,11 +225,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const startedAt = Date.now();
   let lastActivity = startedAt;
 
-  const projectStatuses = (): HubProjectStatus[] => {
+  const projectStatuses = (scope?: ReadonlySet<string>): HubProjectStatus[] => {
     const counts = new Map<string, number>();
     for (const entry of index.list(STATUS_SCAN_MS))
       counts.set(entry.project, (counts.get(entry.project) ?? 0) + 1);
-    return ordered().map((entry) => ({
+    return ordered().filter((entry) => !scope || scope.has(entry.dir)).map((entry) => ({
       dir: entry.dir,
       name: path.basename(entry.dir),
       lastUsedAt: entry.lastUsedAt,
@@ -238,10 +238,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     }));
   };
 
-  const artifactList = (): HubArtifactList => {
+  const artifactList = (scope?: ReadonlySet<string>): HubArtifactList => {
     const artifacts: HubArtifact[] = [];
     const warnings: string[] = [];
     for (const entry of ordered()) {
+      if (scope && !scope.has(entry.dir)) continue;
       const root = artifactsRootOf(entry.dir);
       const listed = listArtifacts(root);
       for (const warning of listed.warnings)
@@ -260,7 +261,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }
     }
     artifacts.sort((a, b) => b.updatedAt - a.updatedAt);
-    return { projects: projectStatuses(), artifacts, warnings };
+    return { projects: projectStatuses(scope), artifacts, warnings };
   };
 
   const status = (): HubStatus => {
@@ -291,6 +292,20 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
   const projectAccess = createProjectAccess({ members, github, isOwner: authorized, registered });
+  const authenticated = (req: http.IncomingMessage, url: URL) => Boolean(projectAccess.principal(req, url));
+  const visibleProjects = (req: http.IncomingMessage) => projectAccess.visibleProjects(req, ordered().map((p) => p.dir));
+  const projectReference = (req: http.IncomingMessage, project: string) =>
+    authorized(req, new URL(req.url ?? '/', origin)) ? project : projectId(project);
+  const resolveProject = (req: http.IncomingMessage, reference: string) =>
+    visibleProjects(req).find((project) => projectReference(req, project) === reference) ?? null;
+  const visibleArtifacts = (req: http.IncomingMessage) => artifactList(new Set(visibleProjects(req)));
+  const browserArtifacts = (req: http.IncomingMessage): HubArtifactList => {
+    const result = visibleArtifacts(req);
+    return { ...result,
+      projects: result.projects.map((p) => ({ ...p, dir: projectReference(req, p.dir) })),
+      artifacts: result.artifacts.map((a) => ({ ...a, project: projectReference(req, a.project) })),
+    };
+  };
   const fromAgent = (req: http.IncomingMessage, url: URL) =>
     req.headers.origin === undefined && keyOk(url);
 
@@ -485,8 +500,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     }
   };
   const trashApi = createHubTrash({
-    projects: () => ordered().map((p) => p.dir),
-    artifacts: () => artifactList().artifacts,
+    projects: visibleProjects,
+    artifacts: (req) => visibleArtifacts(req).artifacts,
+    resolveProject,
+    projectReference,
     readBody,
     suspend: suspendProject,
     deployment: loopback ? 'local' : 'self-hosted',
@@ -505,20 +522,32 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     home: options.paths.home,
     origin,
     isAdmin: (req, requestUrl) => authorized(req, requestUrl),
-    projects: () => remoteProjects().map(({ id, name }) => ({ id, name })),
+    principal: projectAccess.principal,
+    projects: (req) => {
+      const visible = new Set(visibleProjects(req));
+      return remoteProjects().filter((p) => visible.has(p.dir)).map(({ id, name }) => ({ id, name }));
+    },
+    deviceAllowed: (ownerId, version, projects) => {
+      if (ownerId === 'owner') return true;
+      const identity = members.principal(Number(ownerId.slice('github:'.length)), version);
+      if (!identity) return false;
+      const available = new Set(remoteProjects().filter((p) => projectAccess.canAccess(identity, p.dir)).map((p) => p.id));
+      return projects.every((id) => available.has(id));
+    },
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized, github });
   const publicShares = createPublicShare({ store: shares, origin,
     previewOrigin: options.boardOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${boardPort}`,
     viewerDir: options.viewerDir, runtimeDir: options.runtimeDir, registered });
-  const shareApi = createHubShare({ store: shares, origin, authorized, readBody,
+  const shareApi = createHubShare({ store: shares, origin, authorized: authenticated, readBody,
     resolve: (req, input) => {
       if (typeof input.type !== 'string' || typeof input.id !== 'string' ||
           (input.project !== undefined && typeof input.project !== 'string')) return null;
-      const project = typeof input.project === 'string' ? input.project : refererProject(req);
-      if (project && !registered(project)) return null;
-      const matches = artifactList().artifacts.filter((a) => a.type === input.type &&
+      const project = typeof input.project === 'string' ? resolveProject(req, input.project) : refererProject(req);
+      if (typeof input.project === 'string' && !project) return null;
+      if (project && !projectAccess.authorized(req, project)) return null;
+      const matches = visibleArtifacts(req).artifacts.filter((a) => a.type === input.type &&
         (a.id === input.id || a.url.split('/').pop() === input.id) && (!project || a.project === project));
       return matches.length === 1 ? matches[0]! : null;
     },
@@ -540,7 +569,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
-        if (!authorized(req, url) || !originAllowed(policy, req.headers.origin) ||
+        if (!authenticated(req, url) || !originAllowed(policy, req.headers.origin) ||
             !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) sendJson(res, 403, { error: 'Forbidden' });
         else await trashApi(req, res, url.pathname);
         return;
@@ -557,9 +586,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       if (url.pathname === '/api/hub/artifacts') {
-        if (!authorized(req, url) || !originAllowed(policy, req.headers.origin))
+        if (!authenticated(req, url) || !originAllowed(policy, req.headers.origin))
           send(res, 403, 'Forbidden');
-        else sendJson(res, 200, artifactList());
+        else sendJson(res, 200, browserArtifacts(req));
         return;
       }
       lastActivity = Date.now();
@@ -587,11 +616,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const deletedRoute = /^\/(document|artboard|html)\/([A-Za-z0-9_-]+)\/?$/.exec(pathname);
-      if (deletedRoute && authorized(req, url) && originAllowed(policy, req.headers.origin) &&
+      if (deletedRoute && authenticated(req, url) && originAllowed(policy, req.headers.origin) &&
           navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
         const explicitProject = headerProject(req, url);
         const liveProject = projectForPath(pathname);
-        const candidates = explicitProject ? [explicitProject] : liveProject ? [] : ordered().map((p) => p.dir);
+        const candidates = explicitProject ? [explicitProject] : liveProject ? [] : visibleProjects(req);
         const deleted = candidates.some((project) => findTrashedArtifact(project, deletedRoute[1] as ArtifactType, deletedRoute[2]!));
         if (deleted) {
           send(res, 410, '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>作品已移入回收站 · 案间</title><body style="font:16px system-ui;padding:48px;max-width:640px;margin:auto"><h1>作品已移入回收站</h1><p>作品暂时无法访问。保留期内可从回收站恢复；已永久删除的作品无法恢复。</p><a href="/?view=trash">前往回收站</a></body></html>', { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" });

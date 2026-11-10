@@ -28,6 +28,8 @@ export interface RemoteDevice {
 interface StoredDevice extends RemoteDevice {
   tokenHash: string;
   createdAt: number;
+  ownerId?: string;
+  ownerVersion?: number;
 }
 
 interface Pairing {
@@ -38,13 +40,17 @@ interface Pairing {
   state: 'pending' | 'approved' | 'denied';
   projects: string[];
   lastPollAt: number;
+  ownerId?: string;
+  ownerVersion?: number;
 }
 
 export interface RemoteAuthOptions {
   home: string;
   origin: string;
   isAdmin: (req: http.IncomingMessage, url: URL) => boolean;
-  projects: () => RemoteProject[];
+  projects: (req: http.IncomingMessage) => RemoteProject[];
+  principal?: (req: http.IncomingMessage, url: URL) => { id: string; role: 'owner' | 'member'; sessionVersion: number } | null;
+  deviceAllowed?: (ownerId: string, ownerVersion: number, projects: string[]) => boolean;
   now?: () => number;
   viewerPages?: boolean;
 }
@@ -142,7 +148,10 @@ function readStore(file: string): StoredDevice[] {
     return d && typeof d.id === 'string' && typeof d.name === 'string' &&
       Array.isArray(d.projects) && d.projects.every((p) => typeof p === 'string') &&
       typeof d.tokenHash === 'string' && /^[a-f0-9]{64}$/.test(d.tokenHash) &&
-      Number.isFinite(d.createdAt) && Number.isFinite(d.expiresAt);
+      Number.isFinite(d.createdAt) && Number.isFinite(d.expiresAt) &&
+      (d.ownerId === undefined ? d.ownerVersion === undefined :
+        typeof d.ownerId === 'string' && /^(owner|github:[1-9]\d*)$/.test(d.ownerId) &&
+        Number.isSafeInteger(d.ownerVersion) && Number(d.ownerVersion) >= 0);
   })) throw new Error('Invalid device store');
   return devices as StoredDevice[];
 }
@@ -202,9 +211,16 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
     if (!match) return null;
     const hash = digest(match[1]!);
     const device = devices.find((item) => item.expiresAt > now() && equal(item.tokenHash, hash));
-    return device ? { id: device.id, name: device.name, projects: [...device.projects], expiresAt: device.expiresAt } : null;
+    return device && (options.deviceAllowed?.(device.ownerId ?? 'owner', device.ownerVersion ?? 0, device.projects) ?? true) ? { id: device.id, name: device.name, projects: [...device.projects], expiresAt: device.expiresAt } : null;
   };
-  const admin = (req: http.IncomingMessage, url: URL) => options.isAdmin(req, url);
+  const principal = (req: http.IncomingMessage, url: URL) => options.principal
+    ? options.principal(req, url)
+    : options.isAdmin(req, url) ? { id: 'owner', role: 'owner' as const, sessionVersion: 0 } : null;
+  const admin = (req: http.IncomingMessage, url: URL) => Boolean(principal(req, url));
+  const manages = (req: http.IncomingMessage, url: URL, device: StoredDevice) => {
+    const actor = principal(req, url);
+    return actor?.role === 'owner' || (actor !== null && actor.id === (device.ownerId ?? 'owner'));
+  };
   const sameOriginRead = (req: http.IncomingMessage) =>
     (req.headers.origin === undefined || req.headers.origin === origin) &&
     (req.headers['sec-fetch-site'] === undefined || req.headers['sec-fetch-site'] === 'same-origin');
@@ -255,10 +271,14 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
         }
         return true;
       }
+      if (!(options.deviceAllowed?.(pairing.ownerId ?? 'owner', pairing.ownerVersion ?? 0, pairing.projects) ?? true)) {
+        pending.delete(deviceCode); sendJson(res, 403, { status: 'denied' }); return true;
+      }
       const token = secret(32);
       const device: StoredDevice = {
         id: secret(16), name: pairing.name, projects: pairing.projects,
         createdAt: now(), expiresAt: now() + TOKEN_MS, tokenHash: digest(token),
+        ownerId: pairing.ownerId ?? 'owner', ownerVersion: pairing.ownerVersion ?? 0,
       };
       try { persist([...devices, device]); } catch { sendJson(res, 503, { error: 'credential storage unavailable' }); return true; }
       pending.delete(deviceCode);
@@ -281,9 +301,9 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
     if (route === '/api/remote/auth/devices' && req.method === 'GET') {
       if (!admin(req, url) || !sameOriginRead(req)) { sendJson(res, 403, { error: 'forbidden' }); return true; }
       const response: RemoteDevicesResponse = {
-        devices: devices.filter((item) => item.expiresAt > now()).map(({ id, name, projects, createdAt, expiresAt }) =>
+        devices: devices.filter((item) => item.expiresAt > now() && manages(req, url, item)).map(({ id, name, projects, createdAt, expiresAt }) =>
           ({ id, name, projects: [...projects], createdAt, expiresAt })),
-        projects: options.projects(),
+        projects: options.projects(req),
         origin,
       };
       sendJson(res, 200, response);
@@ -296,7 +316,7 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
       if (!pairing) { sendJson(res, 410, { error: 'pairing code expired or invalid' }); return true; }
       const response: RemotePairingResponse = {
         pairing: { code: pairing.userCode, name: pairing.name, expiresAt: pairing.expiresAt },
-        projects: options.projects(),
+        projects: options.projects(req),
       };
       sendJson(res, 200, response);
       return true;
@@ -309,7 +329,7 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
       if (options.viewerPages) return false;
       const entered = url.searchParams.get('code')?.trim().toUpperCase() ?? '';
       const pairing = [...pending.values()].find((entry) => entry.userCode === entered && entry.state === 'pending');
-      const choices = options.projects();
+      const choices = options.projects(req);
       const fieldset = pairing ? `<p>设备：<strong>${esc(pairing.name)}</strong></p><fieldset><legend>允许访问的项目</legend>${choices.map((project) => `<label><input type="checkbox" name="project" value="${esc(project.id)}"> ${esc(project.name)}</label>`).join('')}</fieldset><button formaction="/api/remote/auth/approve">批准此设备</button><button formaction="/api/remote/auth/deny">拒绝</button>` : entered ? '<p>配对码无效或已过期。</p>' : '';
       html(res, 200, '连接设备', `<p>在本地 CLI 中运行 <code>anjian login ${esc(origin)}</code>，输入显示的配对码。批准后，本地设备仅能访问所选项目。</p><form method="get" action="/connect"><label>配对码 <input type="text" name="code" value="${esc(entered)}" required autocomplete="off" spellcheck="false"></label><button type="submit">查看设备</button></form>${pairing ? `<form method="post" action="/api/remote/auth/approve"><input type="hidden" name="code" value="${esc(pairing.userCode)}">${fieldset}</form>` : fieldset}`);
       return true;
@@ -317,7 +337,7 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
     if (route === '/devices' && req.method === 'GET') {
       if (!admin(req, url)) { html(res, 403, '设备管理', '<p>请先通过带访问密钥的完整作品库链接打开案间。</p>'); return true; }
       if (options.viewerPages) return false;
-      html(res, 200, '设备管理', `<p>这里可以撤销本地 CLI 设备的访问权限。</p><ul>${devices.filter((item) => item.expiresAt > now()).map((item) => `<li><strong>${esc(item.name)}</strong> · ${new Date(item.expiresAt).toLocaleDateString('zh-CN')} 到期 · ${item.projects.length} 个项目<form action="/api/remote/auth/revoke" method="post"><input type="hidden" name="id" value="${esc(item.id)}"><button type="submit">撤销</button></form></li>`).join('') || '<li>尚无授权设备。</li>'}</ul><p><a href="/connect">连接新设备</a></p>`);
+      html(res, 200, '设备管理', `<p>这里可以撤销本地 CLI 设备的访问权限。</p><ul>${devices.filter((item) => item.expiresAt > now() && manages(req, url, item)).map((item) => `<li><strong>${esc(item.name)}</strong> · ${new Date(item.expiresAt).toLocaleDateString('zh-CN')} 到期 · ${item.projects.length} 个项目<form action="/api/remote/auth/revoke" method="post"><input type="hidden" name="id" value="${esc(item.id)}"><button type="submit">撤销</button></form></li>`).join('') || '<li>尚无授权设备。</li>'}</ul><p><a href="/connect">连接新设备</a></p>`);
       return true;
     }
     if (['/api/remote/auth/approve', '/api/remote/auth/deny', '/api/remote/auth/revoke'].includes(route) && req.method === 'POST') {
@@ -334,6 +354,8 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
       if (route === '/api/remote/auth/revoke') {
         const id = typeof body.id === 'string' ? body.id : '';
         if (!ID_PATTERN.test(id)) { respond(400, 'invalid device', '设备无效', '设备编号无效。'); return true; }
+        const device = devices.find((item) => item.id === id);
+        if (device && !manages(req, url, device)) { respond(404, 'device not found', '设备不存在', '设备不存在。'); return true; }
         try { persist(devices.filter((item) => item.id !== id)); }
         catch { respond(503, 'credential storage unavailable', '撤销失败', '设备凭证暂时无法更新。'); return true; }
         if (wantsJson) sendJson(res, 200, { revoked: true });
@@ -346,11 +368,15 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
       if (route === '/api/remote/auth/deny') pairing.state = 'denied';
       else {
         const selected = Array.isArray(body.projects) ? body.projects : [];
-        const available = new Set(options.projects().map((project) => project.id));
+        const available = new Set(options.projects(req).map((project) => project.id));
         if (selected.length === 0 || selected.length > available.size || !selected.every((id) => typeof id === 'string' && available.has(id)) || new Set(selected).size !== selected.length) {
           respond(400, 'invalid projects', '项目无效', '请返回配对页面，至少选择一个有效项目。');
           return true;
         }
+        const actor = principal(req, url);
+        if (!actor) { respond(403, 'forbidden', '无权操作', '登录状态已变化。'); return true; }
+        pairing.ownerId = actor.id;
+        pairing.ownerVersion = actor.sessionVersion;
         pairing.projects = selected as string[];
         pairing.state = 'approved';
       }

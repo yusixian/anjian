@@ -10,8 +10,10 @@ import { sendJson } from './http';
 import { withProjectMutation } from './project-mutations';
 
 interface Options {
-  projects: () => string[];
-  artifacts: () => HubArtifact[];
+  projects: (req: http.IncomingMessage) => string[];
+  artifacts: (req: http.IncomingMessage) => HubArtifact[];
+  resolveProject: (req: http.IncomingMessage, reference: string) => string | null;
+  projectReference: (req: http.IncomingMessage, project: string) => string;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
   suspend: <T>(project: string, work: () => T) => Promise<T>;
   deployment: 'local' | 'self-hosted';
@@ -27,11 +29,15 @@ export function createHubTrash(options: Options) {
     if (req.method === 'GET' && pathname === '/api/hub/trash') {
       const entries = [];
       const warnings: string[] = [];
-      for (const project of options.projects()) {
-        try { entries.push(...await withProjectMutation(project, async () => listTrash(project))); }
+      for (const project of options.projects(req)) {
+        try { entries.push(...await withProjectMutation(project, async () => {
+          if (!options.projects(req).includes(project)) return [];
+          return listTrash(project).map((entry) => ({ ...entry, project: options.projectReference(req, project) }));
+        })); }
         catch { warnings.push('部分项目的回收站暂时无法读取，请重试。'); }
       }
-      sendJson(res, 200, { entries: entries.sort((a, b) => b.deletedAt - a.deletedAt), warnings, deployment: options.deployment });
+      const visible = new Set(options.projects(req).map((project) => options.projectReference(req, project)));
+      sendJson(res, 200, { entries: entries.filter((entry) => visible.has(entry.project)).sort((a, b) => b.deletedAt - a.deletedAt), warnings, deployment: options.deployment });
       return;
     }
     if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
@@ -53,17 +59,20 @@ export function createHubTrash(options: Options) {
     if (!valid) { sendJson(res, 400, { error: 'Invalid item' }); return; }
     const results: TrashResult[] = [];
     for (const item of body.items as Record<string, string>[]) {
-      const project = item.project!;
+      const reference = item.project!;
+      const project = options.resolveProject(req, reference);
       const key = moving
-        ? artifactSelectionKey({ project, url: item.url! })
-        : trashSelectionKey({ project, trashId: item.trashId! });
+        ? artifactSelectionKey({ project: reference, url: item.url! })
+        : trashSelectionKey({ project: reference, trashId: item.trashId! });
       try {
+        if (!project) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
         const entry = await withProjectMutation(project, async () => {
-          if (!options.projects().includes(project)) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
+          if (!options.projects(req).includes(project)) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
           return options.suspend(project, () => {
+            if (!options.projects(req).includes(project)) throw new ArtifactTrashError(404, 'project_not_found', '项目不存在或已移除');
             if (!moving) return pathname.endsWith('/restore')
               ? restoreTrash(project, item.trashId!) : purgeTrash(project, item.trashId!);
-            const artifact = options.artifacts().find((a) => a.project === project && a.url === item.url && a.type === item.type && a.id === item.id);
+            const artifact = options.artifacts(req).find((a) => a.project === project && a.url === item.url && a.type === item.type && a.id === item.id);
             if (artifact) {
               options.beforeMove?.(project, artifact);
               return moveArtifactToTrash(project, artifact);
@@ -73,7 +82,7 @@ export function createHubTrash(options: Options) {
             throw new ArtifactTrashError(404, 'artifact_not_found', '作品不存在或已发生变化，请刷新列表');
           });
         });
-        results.push({ key, ok: true, entry });
+        results.push({ key, ok: true, entry: entry ? { ...entry, project: reference } : undefined });
       } catch (error) {
         results.push({ key, ok: false,
           code: error instanceof ArtifactTrashError ? error.code : 'operation_failed',

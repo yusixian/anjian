@@ -47,7 +47,8 @@ export function createHubShare(options: Options) {
         if (input.action !== 'publish' || ![1, 7, 30, null, undefined].includes(input.expiresInDays as number | null | undefined))
           throw new Error('请选择有效的分享期限。');
         await options.settle(target);
-        if (!allowed(req, url)) throw new Error('登录状态已变化，请重新登录。');
+        if (!allowed(req, url) || options.resolve(req, input)?.project !== target.project)
+          throw new Error('作品归属或登录状态已变化，请重新登录。');
         return options.store.publish(target.project, target, { title: target.title, expiresInDays: input.expiresInDays as 1 | 7 | 30 | null | undefined });
       });
       sendJson(res, 200, response(target, result));
