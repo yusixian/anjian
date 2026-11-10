@@ -374,3 +374,13 @@ Hub 在停止 HTTP、认证和后台服务之前，先持有额度/项目锁暂�
 1440px 桌面与 390px 手机邀请页、手机存储失败状态已截图并人工查看，无横向溢出和 pageerror。首次手机截图发生重排中的残影，等待布局稳定后重新截图，DOM 检查只有一个 header，稳定截图无重复顶栏。没有因此修改应用代码。脚本 /tmp/anjian-members-real-browser.mjs，最终日志 /tmp/anjian-members-real-browser-verified.log；截图 /tmp/anjian-members-real-desktop.png、/tmp/anjian-members-real-mobile.png、/tmp/anjian-member-storage-real-mobile.png。
 
 本轮补强了此前模拟 API 的界面证据，但尚未覆盖真实 S3 成功读写、迁移激活的完整 GUI 流程、生产账号登录或线上部署。此次未推送或部署。
+
+## 迁移与恢复真实应用 GUI 验收（2026-11-11，本地验证）
+
+隔离 Chrome 连接真实 Hub，保留真实配置、连接探针、对象摘要校验、迁移任务、激活绑定和恢复逻辑，仅在测试打包时将 storage/client.ts 替换为内存 SDK 客户端。没有修改生产客户端或拦截案间 API；该证据不包含实际 S3 网络、请求签名或提供方权限验证。
+
+GUI 保存并测试配置后，确认探针写入、读回和删除完成且测试对象不残留。准备迁移后注入对象服务故障，复制失败仍为 local 后端且原 HTML 字节不变；恢复测试服务并点击继续复制后校验通过。启用按钮在勾选保留原文件之前不可用；勾选并启用后实际绑定变为 s3，内存对象副本包含原文件、服务器原文件保留。关闭并重启 Hub 后显示待恢复状态，GUI 确认使用保留文件并执行校验恢复，原文件不变且作品 HTTP 返回 200。
+
+桌面校验状态与 390px 手机启用/恢复状态均有截图，手机启用截图人工检查，无横向溢出或 pageerror。日志 /tmp/anjian-migration-real-browser-final.log；脚本 /tmp/anjian-migration-real-browser.mjs；截图 /tmp/anjian-migration-real-verified-desktop.png、/tmp/anjian-migration-real-active-mobile.png、/tmp/anjian-migration-real-recovered-mobile.png。测试替身首次因打包后的 SDK 命令类名变化而识别失败，修正替身后完整重跑通过，未修改应用行为。
+
+与上一节成员 GUI 证据合并后，主要配置与迁移 GUI 已完成真实应用服务验证；外部 GitHub/S3 仍使用测试替身。真实 S3 凭据未提供，保持待配置。最终交付审计、当前版本全量回归/CI与已授权部署尚未完成。
