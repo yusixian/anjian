@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown, Eye } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 
 import { ANJIAN_MARK_BODY, ANJIAN_MARK_VIEWBOX } from '../../shared/brand';
@@ -27,13 +28,13 @@ interface SharePayload {
 
 const texts = {
   zh: {
-    brand: '案间', readOnly: '公开分享 · 只读', published: '发布于', expires: '链接到期',
+    access: '只读', details: '分享信息', brand: '案间', readOnly: '公开分享 · 只读', published: '发布于', expires: '链接到期',
     loading: '正在加载分享…', unavailable: '此分享暂时无法访问', unavailableHelp: '链接可能已失效，或分享者已关闭访问。',
     retry: '重试', offline: '连接中断，内容可能已经更新。请重试。', noContent: '发布内容暂不可用。',
     snapshot: '这是一份发布快照；作者后续修改不会自动公开。',
   },
   en: {
-    brand: 'Anjian', readOnly: 'Public share · Read only', published: 'Published', expires: 'Link expires',
+    access: 'Read only', details: 'Share details', brand: 'Anjian', readOnly: 'Public share · Read only', published: 'Published', expires: 'Link expires',
     loading: 'Loading share…', unavailable: 'This share is unavailable', unavailableHelp: 'The link may have expired or been closed by its owner.',
     retry: 'Retry', offline: 'Connection interrupted. Content may have changed. Please retry.', noContent: 'Published content is unavailable.',
     snapshot: 'This is a published snapshot; later edits are not automatically public.',
@@ -89,12 +90,23 @@ export function SharePage() {
   return (
     <div className={`share-page${data?.type === 'artboard' ? ' share-workbench' : ''}`}>
       <header className="share-header">
-        <span className="share-brand"><svg aria-hidden="true" viewBox={ANJIAN_MARK_VIEWBOX} dangerouslySetInnerHTML={{ __html: ANJIAN_MARK_BODY }} />{copy.brand}</span>
-        <span className="share-readonly">{copy.readOnly}</span>
+        <span className="share-brand"><svg aria-hidden="true" viewBox={ANJIAN_MARK_VIEWBOX} dangerouslySetInnerHTML={{ __html: ANJIAN_MARK_BODY }} /><span>{copy.brand}</span></span>
+        {data && <h1 className="share-title" title={data.title}>{data.title}</h1>}
+        {data ? <>
+          <button className="share-access" type="button" popoverTarget="share-details" aria-label={copy.details}>
+            <Eye size={14} aria-hidden="true" /><span>{copy.access}</span><ChevronDown size={12} aria-hidden="true" />
+          </button>
+          <div className="share-details" id="share-details" popover="auto">
+            <strong>{data.title}</strong>
+            <span className="share-readonly">{copy.readOnly}</span>
+            <p>{copy.published} {date(data.publishedAt)}</p>
+            {data.expiresAt && <p>{copy.expires} {date(data.expiresAt)}</p>}
+            <p className="share-snapshot">{copy.snapshot}</p>
+          </div>
+        </> : <span className="share-readonly">{copy.readOnly}</span>}
       </header>
       {data && (state === 'ready' || state === 'offline') ? (
         <>
-          <div className="share-info"><div><strong>{data.title}</strong><small>{copy.published} {date(data.publishedAt)}{data.expiresAt ? ` · ${copy.expires} ${date(data.expiresAt)}` : ''}</small></div><span>{copy.readOnly}</span></div>
           {state === 'offline' && <div className="share-alert" role="alert">{copy.offline} <button type="button" onClick={() => void load()}>{copy.retry}</button></div>}
           <main className="share-main">
             {data.type === 'artboard' ? (
@@ -121,7 +133,6 @@ export function SharePage() {
               <Suspense fallback={<div className="share-message">{copy.loading}</div>}><PublicDocument key={data.contentBase} contentBase={data.contentBase} state={data.state} /></Suspense>
             ) : <div className="share-message">{copy.noContent}</div>}
           </main>
-          <footer className="share-footer">{copy.snapshot}</footer>
         </>
       ) : <main className="share-message" role={state === 'loading' ? 'status' : 'alert'}>
         <div><h1>{state === 'loading' ? copy.loading : copy.unavailable}</h1>{state !== 'loading' && <><p>{copy.unavailableHelp}</p><button type="button" onClick={() => void load()}>{copy.retry}</button></>}</div>
