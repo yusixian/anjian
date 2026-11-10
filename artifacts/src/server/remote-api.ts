@@ -105,13 +105,21 @@ export function createRemoteApi(options: Options) {
       const perform = (prepare?: () => Promise<(deltaBytes: number) => void>) => withProjectMutation(project.dir, async () => {
         assertArtifactNotTrashed(project.dir, type, id);
         const mounted = await options.mount(project.dir);
-        if (type === 'document') await mounted.settleDocument(id, undefined, await prepare?.());
+        if (type === 'document') {
+          try { await mounted.settleDocument(id, undefined, await prepare?.()); }
+          catch (error) {
+            // A full quota cannot turn a download into a write bypass or hide the
+            // already persisted source. Its revision still describes disk bytes.
+            if (req.method !== 'GET' || !(error instanceof RemoteTransferError) ||
+                error.code !== 'storage_quota_exceeded') throw error;
+          }
+        }
         if (!options.authenticate(req)?.projects.includes(project.id))
           throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
         const decoded = req.method === 'PUT' && type === 'document' ? decodeDocumentUpload(body) : undefined;
         const prepared = decoded
           ? await mounted.prepareDocumentUpload(id, decoded.source, decoded.files, await prepare?.()) : undefined;
-        const admit = await prepare?.();
+        const admit = req.method === 'PUT' ? await prepare?.() : undefined;
         if (!options.authenticate(req)?.projects.includes(project.id))
           throw new RemoteTransferError(401, 'unauthorized', '设备授权已撤销');
         let snapshot = req.method === 'PUT'
@@ -126,7 +134,7 @@ export function createRemoteApi(options: Options) {
         link.searchParams.delete('key');
         return { ...snapshot, url: link.href };
       });
-      const result = req.method === 'PUT' && options.upload
+      const result = (req.method === 'PUT' || type === 'document') && options.upload
         ? await options.upload(project.dir, perform) : await perform();
       sendJson(res, 200, result);
     } catch (error) {

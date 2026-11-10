@@ -460,3 +460,37 @@ test('CLI unread cursor writes cannot bypass storage quota', async () => {
   expect((await retry.json()).threads).toHaveLength(1);
   expect((await (await post()).json()).threads).toHaveLength(0);
 });
+
+test('document download at zero quota returns persisted bytes without uncharged normalization', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const settings = createStorageSettings(fx.home);
+  settings.setSharedLimit(0);
+  const directory = path.join(fx.alpha, '.anjian/artifacts/document/read-budget');
+  fs.mkdirSync(directory, { recursive: true });
+  const original = '<doc><p>download this original</p></doc>';
+  const file = path.join(directory, 'doc.xml');
+  const snapshot = path.join(fx.alpha, '.anjian/artifacts/.state/document/read-budget/doc.loro');
+  fs.writeFileSync(file, original);
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/document/read-budget`;
+  try {
+    const response = await fx.request(route, { headers });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const downloaded = await response.json();
+    expect(Buffer.from(downloaded.files['doc.xml'], 'base64').toString()).toBe(original);
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+    expect(fs.existsSync(snapshot)).toBe(false);
+    const again = await fx.request(route, { headers });
+    expect((await again.json()).revision).toBe(downloaded.revision);
+    settings.setSharedLimit(1024 * 1024);
+    const normalized = await (await fx.request(route, { headers })).json();
+    expect(fs.existsSync(snapshot)).toBe(true);
+    expect(Buffer.from(normalized.files['doc.xml'], 'base64').toString()).toContain('id="');
+    const updated = await fx.request(route, {
+      method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseRevision: normalized.revision, files: { 'doc.xml': encode('<doc><p>next edit</p></doc>') } }),
+    });
+    expect(updated.status, await updated.clone().text()).toBe(200);
+    expect(fs.readFileSync(file, 'utf8')).toContain('next edit');
+  } finally { settings.setSharedLimit(1024 * 1024); }
+});
