@@ -882,6 +882,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     if (!isDormant(entry)) void mountOf(entry.dir).catch(() => undefined);
   }
   storageRuntime.start();
+  let shutdown: Promise<void> | null = null;
+  let shutdownComplete = false;
 
   return {
     port,
@@ -896,22 +898,42 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     register,
     remove,
     linkFor: async (project, type, id) => (await mountOf(project)).linkFor(type, id),
-    close: async () => {
+    close: () => {
+      if (shutdownComplete) return Promise.resolve();
+      if (shutdown) return shutdown;
       closing = true;
-      clearInterval(trashCleanup);
-      remoteAuth.close();
-      await migrationApi.close();
-      await storageRuntime.close();
-      const stopped = [front, board].map(
-        (server) => new Promise((resolve) => server.close(resolve)),
-      );
-      const all = [...mounts.values()];
-      mounts.clear();
-      ready.clear();
-      await Promise.all(all.map(async (pending) => (await pending.catch(() => null))?.close()));
-      for (const entry of ordered()) if (available(entry.dir)) fs.rmSync(infoFileOf(entry.dir), { force: true });
-      for (const server of [front, board]) server.closeAllConnections();
-      await Promise.all(stopped);
+      shutdown = (async () => {
+        clearInterval(trashCleanup);
+        remoteAuth.close();
+        await migrationApi.close();
+        await storageRuntime.close();
+        const stopped = [front, board].map(
+          server => new Promise<void>(resolve => { server.close(() => resolve()); }),
+        );
+        const failures: unknown[] = [];
+        try {
+          await writeQuota.exclusive(async prepareProject => {
+            for (const [project, pending] of [...mounts]) {
+              try {
+                const mounted = await pending;
+                await withProjectMutation(project, () => mounted.close(() => prepareProject(project)));
+                if (mounts.get(project) === pending) {
+                  mounts.delete(project);
+                  ready.delete(project);
+                }
+                if (available(project)) fs.rmSync(infoFileOf(project), { force: true });
+              } catch (error) { failures.push(error); }
+            }
+          });
+        } finally {
+          for (const server of [front, board]) server.closeAllConnections();
+          await Promise.all(stopped);
+        }
+        if (failures.length) throw new AggregateError(failures, 'Hub did not close completely');
+        for (const entry of ordered()) if (available(entry.dir)) fs.rmSync(infoFileOf(entry.dir), { force: true });
+        shutdownComplete = true;
+      })().finally(() => { shutdown = null; });
+      return shutdown;
     },
   };
 }

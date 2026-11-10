@@ -54,14 +54,25 @@ async function main() {
   });
 
   let stopping = false;
+  let shutdownRetry: NodeJS.Timeout | undefined;
   async function shutdown(reason: string, intended = true) {
     if (stopping) return;
     stopping = true;
-    console.info(JSON.stringify({ type: 'server-stopped', reason }));
-    fs.rmSync(paths.info, { force: true });
-    if (intended) writeJsonAtomic(paths.stopped, { reason, timestamp: Date.now() });
-    await hub.close();
-    process.exit(0);
+    try {
+      await hub.close();
+      fs.rmSync(paths.info, { force: true });
+      if (intended) writeJsonAtomic(paths.stopped, { reason, timestamp: Date.now() });
+      clearInterval(shutdownRetry);
+      console.info(JSON.stringify({ type: 'server-stopped', reason }));
+      process.exit(0);
+    } catch {
+      stopping = false;
+      // Listener sockets may already be closed. Keep unsaved sessions alive so
+      // another shutdown signal can retry after storage becomes available.
+      shutdownRetry ??= setInterval(() => {}, 60_000);
+      console.error(JSON.stringify({ type: 'server-stop-error', reason,
+        error: 'Shutdown could not save all documents. Restore storage capacity or availability, then retry shutdown.' }));
+    }
   }
 
   function relaunch() {

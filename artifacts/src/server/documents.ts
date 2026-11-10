@@ -33,7 +33,7 @@ export interface DocumentRegistry {
     admit?: CommentAdmission,
   ) => { threadId: string; messageId?: string };
   applyCommentOp: (id: string, op: HumanOp, admit?: CommentAdmission) => CommentsFile;
-  close: () => Promise<void>;
+  close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
   quiesce: (prepare?: () => Promise<CommentAdmission>) => Promise<() => void>;
   comments: (id: string) => CommentsFile;
   commentWarnings: (id: string) => string[];
@@ -268,10 +268,21 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
         throw error;
       }
     },
-    close: () => {
+    close: prepare => {
       closing = true;
       if (closePromise) return closePromise;
       closePromise = (async () => {
+        const closeSessions = async (active: Array<DocumentSession | null>) => {
+          if (!prepare) return Promise.allSettled(active.map(session => session?.close()));
+          const results: PromiseSettledResult<void>[] = [];
+          for (const session of active) {
+            try {
+              if (session) await session.close(cumulativeStorageAdmission(await prepare()));
+              results.push({ status: 'fulfilled', value: undefined });
+            } catch (reason) { results.push({ status: 'rejected', reason }); }
+          }
+          return results;
+        };
         const pending = [...sessions.entries()];
         const opened = await Promise.allSettled(pending.map(([, session]) => session));
         const failures: unknown[] = [];
@@ -280,14 +291,14 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
           const [id, session] = pending[index]!;
           return [{ id, pending: session, session: result.value }];
         });
-        const results = await Promise.allSettled(entries.map(({ session }) => session?.close()));
+        const results = await closeSessions(entries.map(({ session }) => session));
         for (const [index, result] of results.entries()) {
           const { id, pending } = entries[index]!;
           if (result.status === 'rejected') failures.push(result.reason);
           else if (sessions.get(id) === pending) sessions.delete(id);
         }
         const cleanup = [...incompleteSetups.entries()];
-        const cleanupResults = await Promise.allSettled(cleanup.map(([, session]) => session.close()));
+        const cleanupResults = await closeSessions(cleanup.map(([, session]) => session));
         for (const [index, result] of cleanupResults.entries()) {
           const [id, session] = cleanup[index]!;
           if (result.status === 'rejected') failures.push(result.reason);

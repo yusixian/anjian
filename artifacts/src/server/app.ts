@@ -33,7 +33,7 @@ export type { ArtifactPayload, MountSettings, ServerOptions } from './context';
 
 export interface ArtifactsServer {
   boardPort: number;
-  close: () => Promise<void>;
+  close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
   /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
   quiesce: <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>) => Promise<T>;
   contentToken: string;
@@ -224,7 +224,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       target.closeAllConnections();
     } catch (error) { reject(error); }
   });
-  const close = (): Promise<void> => {
+  const close = (prepare?: () => Promise<CommentAdmission>): Promise<void> => {
     if (closed) return Promise.resolve();
     if (closePromise) return closePromise;
     stopping = true;
@@ -252,7 +252,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       });
       await step('timer', () => clearInterval(ctx.listeningTimer));
       await step('recordings', () => ctx.recordings.close());
-      await step('documents', () => ctx.documents.close());
+      await step('documents', () => ctx.documents.close(prepare));
       await step('selections', () => ctx.selections.clearAll());
       await step('boardServer', () => closeServer(boardServer));
       await step('server', () => closeServer(server));
