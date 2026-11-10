@@ -509,7 +509,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     }
   };
 
-  const handleControl = (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
+  const handleControl = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
     const action = url.pathname.slice('/api/hub/'.length);
     if (action === 'log') {
       if (req.method !== 'GET') send(res, 405, 'Method not allowed');
@@ -519,11 +519,19 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const control = options.control;
     if (req.method !== 'POST') send(res, 405, 'Method not allowed');
     else if (!control) send(res, 409, 'Not available');
-    else if (action === 'stop') {
-      sendJson(res, 202, { stopping: true });
-      setImmediate(control.stop);
-    } else if (control.relaunch()) sendJson(res, 202, { restarting: true });
-    else sendJson(res, 409, { error: 'cannot relaunch' });
+    else {
+      try { await prepareShutdown(); }
+      catch {
+        sendJson(res, 409, { code: 'document_save_blocked',
+          error: '文档尚未保存，服务仍在运行。请在存储设置中检查可用容量与连接后重试。' });
+        return;
+      }
+      if (action === 'stop') {
+        sendJson(res, 202, { stopping: true });
+        setImmediate(control.stop);
+      } else if (control.relaunch()) sendJson(res, 202, { restarting: true });
+      else sendJson(res, 409, { error: 'cannot relaunch' });
+    }
   };
 
   const handleHubApi = async (
@@ -768,7 +776,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (CONTROL_PATH.test(url.pathname)) {
         if (!authorized(req, url) || !originAllowed(policy, req.headers.origin))
           send(res, 403, 'Forbidden');
-        else handleControl(req, res, url);
+        else await handleControl(req, res, url);
         return;
       }
       if (url.pathname === '/api/hub/artifacts') {
@@ -882,6 +890,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     if (!isDormant(entry)) void mountOf(entry.dir).catch(() => undefined);
   }
   storageRuntime.start();
+  const prepareShutdown = () => writeQuota.exclusive(prepareProject => withProjectMaintenance(
+    [...mounts.keys()],
+    (project, work) => quiesceProject(project, work, () => prepareProject(project)),
+    async () => {},
+  ));
   let shutdown: Promise<void> | null = null;
   let shutdownComplete = false;
 
@@ -903,6 +916,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (shutdown) return shutdown;
       closing = true;
       shutdown = (async () => {
+        try {
+          await prepareShutdown();
+        } catch (error) {
+          // Nothing has been stopped yet. Keep settings and live sessions available
+          // so the owner can restore capacity and retry through the normal UI.
+          closing = false;
+          throw new AggregateError([error], 'Hub did not close completely');
+        }
         clearInterval(trashCleanup);
         remoteAuth.close();
         await migrationApi.close();

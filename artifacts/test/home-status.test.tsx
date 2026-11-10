@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import type { HubStatus } from '../src/shared/hub';
-import { formatUptime } from '../src/viewer/layouts/home/status-format';
+import { formatUptime, hubAction } from '../src/viewer/layouts/home/status-format';
 import { StatusPill } from '../src/viewer/layouts/home/StatusPill';
 
 vi.mock('@stylexjs/stylex', async (original) => ({
@@ -45,6 +45,7 @@ beforeEach(() => {
   requests.length = 0;
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     requests.push({ url, method: init?.method ?? 'GET', body: init?.body as string | undefined });
+    if (url === '/api/account') return new Response(JSON.stringify({ role: 'owner', login: 'Owner' }));
     if (url === '/api/status') return new Response(JSON.stringify(status()));
     if (url.startsWith('/api/hub/log'))
       return new Response(JSON.stringify({ lines: ['{"project":"/p/anjian"}'] }));
@@ -133,7 +134,18 @@ test('uptime reads in days and hours, or hours and minutes', () => {
 });
 
 test('self-hosted status identifies the remote server', async () => {
-  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ...status(), deployment: 'self-hosted', url: 'https://anjian.cosine.ren' })));
+  vi.stubGlobal('fetch', async (url: string) => new Response(JSON.stringify(url === '/api/account'
+    ? { role: 'owner', login: 'Owner' }
+    : { ...status(), deployment: 'self-hosted', url: 'https://anjian.cosine.ren' })));
   await render();
   expect(host.querySelector('button[aria-expanded]')!.textContent).toContain('Self-hosted');
+});
+
+
+test('blocked shutdown reports the actionable server message rather than a success notice', async () => {
+  const error = '文档尚未保存，服务仍在运行。请在存储设置中检查可用容量与连接后重试。';
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ code: 'document_save_blocked', error }), { status: 409 }));
+  await expect(hubAction('/api/hub/stop')).rejects.toThrow(error);
+  vi.stubGlobal('fetch', async () => new Response('private server detail', { status: 500 }));
+  await expect(hubAction('/api/hub/stop')).rejects.toThrow('500');
 });

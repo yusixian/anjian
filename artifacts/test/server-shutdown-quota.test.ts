@@ -48,7 +48,14 @@ test('shutdown failure keeps the process and unsaved session alive until a signa
     const snapshot = path.join(artifacts, '.state/document/draft/doc.loro');
     expect(fs.readFileSync(source, 'utf8')).toBe(original);
     expect(fs.existsSync(snapshot)).toBe(false);
-    settings.setSharedLimit(1024 * 1024);
+    const origin = `http://127.0.0.1:${start.port}`;
+    expect((await fetch(origin + '/api/document/draft/state')).status).toBe(200);
+    const limit = await fetch(origin + '/api/storage?scope=shared', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json',
+        Cookie: `anjian_artifacts_${start.port}=${fs.readFileSync(paths.key, 'utf8').trim()}` },
+      body: JSON.stringify({ action: 'limit', bytes: 1024 * 1024 }),
+    });
+    expect(limit.status, await limit.clone().text()).toBe(200);
     child.kill('SIGTERM');
     await vi.waitFor(() => expect(child.exitCode).toBe(0), { timeout: 5000 });
     await exited;

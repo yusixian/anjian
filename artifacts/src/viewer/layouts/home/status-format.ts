@@ -23,5 +23,9 @@ export function addressOf(url: string) {
 
 export async function hubAction(path: string, init: RequestInit = { method: 'POST' }) {
   const response = await fetch(path, init);
-  if (!response.ok) throw new Error(String(response.status));
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.code === 'document_save_blocked' && typeof body.error === 'string'
+      ? body.error : String(response.status));
+  }
 }
