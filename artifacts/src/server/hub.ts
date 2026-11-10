@@ -16,6 +16,7 @@ import { createPublicShare } from './public-share';
 import { createShareStore } from './share-store';
 import { serveHubViewer } from './hub-viewer';
 import { withProjectMutation } from './project-mutations';
+import { createProjectSuspension } from './project-suspension';
 import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
@@ -171,9 +172,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
-  const paused = new Map<string, Promise<void>>();
+  const suspension = createProjectSuspension();
   const mountOf = (project: string): Promise<MountedProject> => {
-    const pause = paused.get(project);
+    const pause = suspension.wait(project);
     if (pause) return pause.then(() => mountOf(project));
     if (closing) return Promise.reject(new Error('Artifacts server is stopping'));
     let pending = mounts.get(project);
@@ -519,21 +520,13 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return true;
   };
 
-  const suspendProject = async <T>(project: string, work: () => T): Promise<T> => {
-    let resume!: () => void;
-    paused.set(project, new Promise<void>((resolve) => { resume = resolve; }));
-    try {
+  const suspendProject = <T>(project: string, work: () => T | Promise<T>): Promise<T> =>
+    suspension.suspend(project, async () => {
       const pending = mounts.get(project);
       if (pending) await (await pending).close();
       mounts.delete(project);
       ready.delete(project);
-      return work();
-    } finally {
-      index.rescan();
-      paused.delete(project);
-      resume();
-    }
-  };
+    }, work, () => { index.rescan(); });
   const trashApi = createHubTrash({
     projects: visibleProjects,
     artifacts: (req) => visibleArtifacts(req).artifacts,
