@@ -45,6 +45,7 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
+  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   authorize?: (req: http.IncomingMessage) => boolean;
   github?: ReturnType<typeof createGitHubAuth>;
   boardPort: number;

@@ -116,3 +116,35 @@ test('artboard/document data projection omits private state and rejects unknown 
     expect(foreign.status).toBe(403);
   }
 });
+
+test('private capability paths preserve relative resources without reopening legacy content access', async () => {
+  const { req, owner, root, h, project } = await setup();
+  const response = await req('/api/artifacts/html/demo', { headers: owner });
+  expect(response.status).toBe(200);
+  const metadata = await response.json();
+  expect(metadata.contentBase).toMatch(/^\/p\/[A-Za-z0-9_-]{43}\/$/);
+  expect(metadata.contentExpiresAt).toBeGreaterThan(Date.now());
+  const base = metadata.contentBase;
+  const page = await req(base + 'index.html');
+  expect(page.status).toBe(200);
+  expect(page.headers.get('cache-control')).toBe('no-store');
+  expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+  expect(await page.text()).toContain('Original');
+  const asset = await req(base + 'asset.txt', { headers: { Range: 'bytes=0-2' } });
+  expect(asset.status).toBe(206); expect(await asset.text()).toBe('RES');
+  expect((await req(base + 'index.html', { method: 'POST' })).status).toBe(405);
+  expect((await req(base + '%2e%2e%2fother/index.html')).status).toBe(404);
+  expect((await req('/p/' + 'a'.repeat(43) + '/index.html')).status).toBe(404);
+  const preview = await (await req('/api/preview/html/demo', { headers: owner })).json();
+  expect(preview.contentBase).toBe(base);
+  expect((await req(base + 'index.html', {}, true)).status).toBe(404);
+
+  writeArtboard(root, 'private-board', { version: 1, title: 'Private', pages: [{ id: 'p', name: 'Page' }], boards: { a: { page: 'p', file: 'pages/p/a.html', x: 0, y: 0, w: 300, h: 200 } } }, { 'pages/p/a.html': '<html><body>Private board</body></html>' });
+  const board = await (await req('/api/artifacts/artboard/private-board', { headers: owner })).json();
+  expect(board.boardPath).toBe(board.contentBase);
+  expect((await req('/c/artboard/private-board/pages/p/a.html', {}, true)).status).toBe(404);
+  const content = await req(board.boardPath + 'pages/p/a.html', {}, true);
+  expect(content.status).toBe(200); expect(await content.text()).toContain('Private board');
+  await h.remove(project);
+  expect((await req(base + 'index.html')).status).toBe(404);
+});

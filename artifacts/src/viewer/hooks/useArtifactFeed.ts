@@ -5,11 +5,14 @@ import type { ArtifactType } from '../../shared/types';
 import { boardCommentsFromMessage, type BoardCommentsState } from '../lib/board-comments';
 import type { ArtifactFeed } from '../lib/feed';
 import { useArtifactSocket } from './useArtifactSocket';
+import { useContentRefresh } from './useContentRefresh';
 
 export function useLocalFeed(type: ArtifactType, id: string): ArtifactFeed {
   const [revision, setRevision] = useState(0);
+  const [expiresAt, setExpiresAt] = useState<unknown>();
   const [boardComments, setBoardComments] = useState<BoardCommentsState | null>(null);
   const bump = useCallback(() => setRevision((current) => current + 1), []);
+  useContentRefresh(expiresAt, bump);
   const { live, send } = useArtifactSocket((message) => {
     if (message.type === 'change' && message.artifact === `${type}/${id}`) bump();
     const comments = boardCommentsFromMessage(message, `${type}/${id}`);
@@ -17,7 +20,9 @@ export function useLocalFeed(type: ArtifactType, id: string): ArtifactFeed {
   }, bump);
   const load = useCallback(async () => {
     const res = await fetch(`/api/artifacts/${type}/${id}`, { cache: 'no-store' });
-    return { found: res.ok, data: (await res.json()) as Record<string, unknown> };
+    const data = (await res.json()) as Record<string, unknown>;
+    setExpiresAt(res.ok ? data.contentExpiresAt : undefined);
+    return { found: res.ok, data };
   }, [type, id]);
   const comment = useCallback(
     async (op: BoardHumanOp) => {

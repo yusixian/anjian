@@ -20,6 +20,7 @@ import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
 import { createBrowserAuth } from './browser-auth';
+import { createContentAccess } from './content-access';
 import { createMemberStore } from './member-store';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
@@ -183,7 +184,13 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         fetch: options.fetch,
         debounceMs: options.debounceMs,
         mount: { port, boardPort, token: options.token, version: options.version, github,
-          authorize: (req) => projectAccess.authorized(req, project) },
+          authorize: (req) => projectAccess.authorized(req, project),
+          ...(!loopback ? { contentAccess: (req: http.IncomingMessage, ref: import('./artifacts').ArtifactRef) => {
+            const identity = projectAccess.principal(req, new URL(req.url ?? '/', origin));
+            if (!identity) throw new Error('Content access denied');
+            return contentAccess.issue(identity, project, ref);
+          } } : {}),
+        },
       }).then((mounted) => {
         ready.set(project, mounted);
         try { remoteEvents.append(projectId(project), '', 'resync', { reason: 'project-mounted', action: 'Read current comments with comment list --all' }); }
@@ -292,6 +299,25 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
   const projectAccess = createProjectAccess({ members, github, isOwner: authorized, registered });
+  const contentAccess = createContentAccess(projectAccess.canAccess);
+  const privateContent = async (req: http.IncomingMessage, res: http.ServerResponse, requestUrl: URL, mode: 'main' | 'board') => {
+    if (!requestUrl.pathname.startsWith('/p/')) return false;
+    if (req.method !== 'GET' && req.method !== 'HEAD') { send(res, 405, 'Read only'); return true; }
+    const match = /^\/p\/([A-Za-z0-9_-]{43})\/(.+)$/.exec(requestUrl.pathname);
+    const grant = match ? contentAccess.resolve(match[1]!) : null;
+    if (!grant || (mode === 'board' && grant.artifact.type !== 'artboard')) { send(res, 404, 'Not found'); return true; }
+    let relative: string;
+    try { relative = decodeURIComponent(match![2]!); } catch { send(res, 400, 'Invalid path'); return true; }
+    if (relative.split('/').some((part) => !part || part === '.' || part === '..') || relative.includes('\\')) {
+      send(res, 404, 'Not found'); return true;
+    }
+    const mounted = await mountOf(grant.project);
+    if (!contentAccess.resolve(match![1]!)) { send(res, 404, 'Not found'); return true; }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    mounted.handlePrivateContent(req, res, `${grant.artifact.type}/${grant.artifact.id}/${relative}`, mode);
+    return true;
+  };
   const authenticated = (req: http.IncomingMessage, url: URL) => Boolean(projectAccess.principal(req, url));
   const visibleProjects = (req: http.IncomingMessage) => projectAccess.visibleProjects(req, ordered().map((p) => p.dir));
   const projectReference = (req: http.IncomingMessage, project: string) =>
@@ -564,6 +590,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
       if (await publicShares(req, res, url)) return;
+      if (await privateContent(req, res, url, 'main')) return;
       if (await browserAuth(req, res, url)) return;
       if (await shareApi(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
@@ -656,8 +683,16 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         }
         if (await publicShares(req, res, url, true)) return;
       }
+      if (url.pathname.startsWith('/p/')) {
+        const expected = options.boardOrigin ? new URL(options.boardOrigin).host : null;
+        if (expected ? req.headers.host?.toLowerCase() !== expected.toLowerCase() : !hostAllowed(policy, req.headers.host)) {
+          send(res, 403, 'Forbidden host'); return;
+        }
+        if (await privateContent(req, res, url, 'board')) return;
+      }
       const pathname = decode(url.pathname) ?? '/';
       const boardRoute = routeBoardRequest(req, pathname);
+      if (!loopback && boardRoute.kind === 'board') { send(res, 404, 'Not found'); return; }
       const project =
         boardRoute.kind === 'board'
           ? (index.find('artboard', boardRoute.address)?.project ?? null)

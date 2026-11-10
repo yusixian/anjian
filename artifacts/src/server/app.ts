@@ -19,7 +19,7 @@ import {
   type ServerOptions,
 } from './context';
 import { listen, readPersisted, send, urlHostForHttp } from './http';
-import { createBoardRequestHandler } from './routes/content';
+import { createBoardRequestHandler, serveContent } from './routes/content';
 import { HTTP_ROUTES, UPGRADE_ROUTES } from './routes/index';
 import { dispatchHttp, dispatchUpgrade } from './routes/table';
 import { writeJsonAtomic } from './state';
@@ -30,6 +30,7 @@ export interface ArtifactsServer {
   boardPort: number;
   close: () => Promise<void>;
   contentToken: string;
+  handlePrivateContent: (req: http.IncomingMessage, res: http.ServerResponse, rest: string, mode: 'main' | 'board') => void;
   handleBoardRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
   handleRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
   handleUpgrade: (req: http.IncomingMessage, socket: Duplex, head?: Buffer) => void;
@@ -176,6 +177,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     },
     handleUpgrade,
     handleBoardRequest,
+    handlePrivateContent: (req, res, rest, mode) => serveContent(ctx, res, rest, req.headers.range, mode),
     liveClients: () => clients.size,
     onMessage: (listener) => { ctx.messageListeners.push(listener); },
     settleDocument: async (id, source) => {

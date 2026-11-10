@@ -51,7 +51,7 @@ export const avatarRoute: HttpRoute<ServerContext> = {
 export const previewApiRoute: HttpRoute<ServerContext> = {
   path: API_PREVIEW_ROUTE,
   auth: 'viewer',
-  handle: (_req, res, ctx, { match }) => {
+  handle: (req, res, ctx, { match }) => {
     const [, type = '', id = ''] = match;
     const dir = resolveArtifactDir(ctx.root, type, id);
     const ref = artifactKeyOf(`${type}/${id}`);
@@ -67,6 +67,7 @@ export const previewApiRoute: HttpRoute<ServerContext> = {
         title,
         warnings: payload.warnings,
         contentBase: `${ctx.contentPrefix}${type}/${id}/`,
+        ...ctx.mount?.contentAccess?.(req, ref),
       });
     } catch {
       sendJson(res, 422, { error: 'Preview unavailable' });
@@ -112,7 +113,7 @@ export const thumbnailRoute: HttpRoute<ServerContext> = {
 export const artifactApiRoute: HttpRoute<ServerContext> = {
   path: API_ARTIFACT_ROUTE,
   auth: 'viewer',
-  handle: (_req, res, ctx, { match }) => {
+  handle: (req, res, ctx, { match }) => {
     const [, type = '', id = ''] = match;
     const dir = resolveArtifactDir(ctx.root, type, id);
     if (!dir) {
@@ -120,13 +121,15 @@ export const artifactApiRoute: HttpRoute<ServerContext> = {
       return;
     }
     const ref = artifactKeyOf(`${type}/${id}`)!;
+    const access = ctx.mount?.contentAccess?.(req, ref);
     sendJson(res, 200, {
       ...ctx.artifactMeta(ref, dir),
+      ...access,
       ...(ref.type === 'artboard' && ctx.boardPort
         ? {
             boardPort: ctx.boardPort,
             ...(ctx.options.boardOrigin ? { boardOrigin: ctx.options.boardOrigin } : {}),
-            boardPath: `/c${artifactPath(ctx.root, 'artboard', ref.id)}/`,
+            boardPath: access?.contentBase ?? `/c${artifactPath(ctx.root, 'artboard', ref.id)}/`,
           }
         : {}),
     });

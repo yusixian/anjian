@@ -126,7 +126,8 @@ export const contentRoute: HttpRoute<ServerContext> = {
   path: /^\/c\//,
   auth: 'public',
   handle: (req, res, ctx, { pathname }) => {
-    if (!pathname.startsWith(ctx.contentPrefix)) send(res, 404, 'Not found');
+    if (ctx.mount?.contentAccess && !pathname.startsWith(`${ctx.contentPrefix}runtime/`)) send(res, 404, 'Not found');
+    else if (!pathname.startsWith(ctx.contentPrefix)) send(res, 404, 'Not found');
     else serveContent(ctx, res, pathname.slice(ctx.contentPrefix.length), req.headers.range);
   },
 };
