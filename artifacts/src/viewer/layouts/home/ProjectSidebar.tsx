@@ -1,7 +1,7 @@
 import { ContextMenuTrigger } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { ChevronDown, ChevronRight, Clock, Folder, Laptop, Trash2, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Folder, Laptop, Trash2, Users, HardDrive } from 'lucide-react';
 import { useState } from 'react';
 
 import type { HubProjectStatus } from '../../../shared/hub';
@@ -165,6 +165,9 @@ export function ProjectSidebar({
         <Laptop aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
         <span {...stylex.props(styles.name)}>{t('home.devices')}</span>
       </a>
+      {account && <a href="/storage" aria-current={selection === 'storage' ? 'page' : undefined} {...stylex.props(styles.item, selection === 'storage' && styles.active)}>
+        <HardDrive aria-hidden="true" size={14} {...stylex.props(styles.icon)} /><span {...stylex.props(styles.name)}>{t('storage.title')}</span>
+      </a>}
       {account?.role === 'owner' && <a href="/members" aria-current={selection === 'members' ? 'page' : undefined} {...stylex.props(styles.item, selection === 'members' && styles.active)}>
         <Users aria-hidden="true" size={14} {...stylex.props(styles.icon)} />
         <span {...stylex.props(styles.name)}>{t('members.title')}</span>

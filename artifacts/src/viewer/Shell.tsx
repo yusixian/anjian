@@ -14,7 +14,7 @@ const ArtboardLayout = lazy(() =>
 const ArtifactList = lazy(() =>
   import('./layouts/ArtifactList').then(({ ArtifactList }) => ({ default: ArtifactList })),
 );
-const MemberLayout = lazy(() => import('./layouts/MemberLayout').then(({ MemberLayout }) => ({ default: MemberLayout })));
+const SettingsLayout = lazy(() => import('./layouts/SettingsLayout').then(({ SettingsLayout }) => ({ default: SettingsLayout })));
 const DeviceLayout = lazy(() =>
   import('./layouts/DeviceLayout').then(({ DeviceLayout }) => ({ default: DeviceLayout })),
 );
@@ -67,7 +67,7 @@ function RouteView() {
     window.scrollTo(0, 0);
   }, [path]);
   if (route.kind === 'list') return local(<ArtifactList />);
-  if (route.kind === 'members') return <MemberLayout />;
+  if (route.kind === 'members' || route.kind === 'storage') return <SettingsLayout page={route.kind} />;
   if (route.kind === 'devices') return <DeviceLayout connect={route.connect} />;
   if (route.kind === 'unknown')
     return <div {...stylex.props(styles.unknown)}>No artifact lives at this address.</div>;

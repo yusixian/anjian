@@ -1,0 +1,117 @@
+import { Button } from '@lobehub/ui';
+import * as stylex from '@stylexjs/stylex';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAccount } from '../../hooks/useAccount';
+import { useTranslation } from '../../i18n';
+import { deviceStyles as styles } from '../devices/device-styles';
+
+interface TestResult { ok: boolean; checkedAt: number; steps: { write: boolean; read: boolean; delete: boolean }; error?: string; cleanupKey?: string }
+interface Settings { endpoint: string; bucket: string; region: string; prefix: string; forcePathStyle: boolean }
+interface Profile extends Settings { id: string; credentialsConfigured: boolean; test?: TestResult | null }
+interface Summary { profile: Profile | null; configured: boolean; backend: 'local'; sharedLimitBytes?: number | null }
+const blank: Settings = { endpoint: '', bucket: '', region: 'auto', prefix: 'anjian', forcePathStyle: true };
+const emptyCredentials = { accessKeyId: '', secretAccessKey: '', sessionToken: '' };
+const GIB = 1024 ** 3;
+const storageStyles = stylex.create({
+  credentialHeading: { marginTop: 28 },
+  input: { marginTop: 6, fontWeight: 400, letterSpacing: 'normal' },
+});
+
+export function StoragePage() {
+  const account = useAccount();
+  const { t } = useTranslation();
+  const [selection, setSelection] = useState<'shared' | 'personal' | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!account) return <p role="status">{t('common.loading')}</p>;
+  const scope = account.role === 'owner' ? selection ?? 'shared' : 'personal';
+  return <section {...stylex.props(styles.page)}>
+    <h1 {...stylex.props(styles.title)}>{t('storage.title')}</h1>
+    <p {...stylex.props(styles.rowMeta)}>{t('storage.description')}</p>
+    {account.role === 'owner' && <div role="tablist" aria-label={t('storage.title')} {...stylex.props(styles.toolbar)}>
+      <div {...stylex.props(styles.tabs)}>{(['shared', 'personal'] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={scope === value} disabled={busy} {...stylex.props(styles.tab, scope === value && styles.tabActive)} onClick={() => setSelection(value)}>{t(`storage.${value}`)}</button>)}</div>
+    </div>}
+    {account.role === 'member' && <p {...stylex.props(styles.note)}>{t('storage.memberQuota', { amount: (account.quotaBytes ?? 0) / GIB })}</p>}
+    <StorageForm key={scope} scope={scope} onBusy={setBusy} />
+  </section>;
+}
+
+function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: (busy: boolean) => void }) {
+  const { t, i18n } = useTranslation();
+  const [data, setData] = useState<Summary | null>(null);
+  const [settings, setSettings] = useState<Settings>(blank);
+  const [credentials, setCredentials] = useState(emptyCredentials);
+  const [limit, setLimit] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [operation, setOperation] = useState('');
+  const lock = useRef(false);
+  const url = `/api/storage?scope=${scope}`;
+  const request = useCallback(async <T,>(body?: object, signal?: AbortSignal): Promise<T> => {
+    const response = await fetch(url, { cache: 'no-store', signal, ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? `HTTP ${response.status}`);
+    return result as T;
+  }, [url]);
+  const apply = (next: Summary) => {
+    setData(next);
+    if (next.profile) setSettings({ endpoint: next.profile.endpoint, bucket: next.profile.bucket, region: next.profile.region, prefix: next.profile.prefix, forcePathStyle: next.profile.forcePathStyle });
+    setLimit(next.sharedLimitBytes === null || next.sharedLimitBytes === undefined ? '' : String(next.sharedLimitBytes / GIB));
+    setDirty(false);
+  };
+  useEffect(() => {
+    const controller = new AbortController();
+    void request<Summary>(undefined, controller.signal).then((next) => { if (!controller.signal.aborted) apply(next); }).catch((failure: Error) => { if (!controller.signal.aborted) setError(failure.message); });
+    return () => controller.abort();
+  }, [request]);
+  const run = async (body: object, success: () => void) => {
+    if (lock.current) return;
+    lock.current = true; setBusy(true); setOperation((body as { action: string }).action); onBusy(true); setError(''); setNotice('');
+    try { await request(body); success(); apply(await request<Summary>()); }
+    catch (failure) { setError((failure as Error).message); }
+    finally { lock.current = false; setBusy(false); onBusy(false); }
+  };
+  const change = <K extends keyof Settings>(key: K, value: Settings[K]) => { setSettings((old) => ({ ...old, [key]: value })); setDirty(true); setNotice(''); };
+  const save = () => {
+    const replacing = Object.values(credentials).some(Boolean);
+    if ((!data?.profile || replacing) && (!credentials.accessKeyId || !credentials.secretAccessKey)) { setError(t('storage.credentialsRequired')); return; }
+    void run({ action: 'save', settings, ...((!data?.profile || replacing) ? { credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey, ...(credentials.sessionToken ? { sessionToken: credentials.sessionToken } : {}) } } : {}) }, () => { setCredentials(emptyCredentials); setNotice(t('storage.saved')); });
+  };
+  const test = data?.profile?.test;
+  return <>
+    <div {...stylex.props(styles.preview)}><strong>{t('storage.local')}</strong><p {...stylex.props(styles.rowMeta)}>{t('storage.localHelp')}</p></div>
+    {error && <div role="alert" {...stylex.props(styles.status, styles.error)}>{error} {!data && <Button onClick={() => { setError(''); void request<Summary>().then(apply).catch((failure: Error) => setError(failure.message)); }}>{t('devices.retry')}</Button>}</div>}
+    {busy && operation === 'test' && <p role="status" {...stylex.props(styles.note)}>{t('storage.testing')}</p>}
+    {notice && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}
+    {!data && !error && <p role="status">{t('common.loading')}</p>}
+    {data && <>
+      <form {...stylex.props(styles.form)} onSubmit={(event) => { event.preventDefault(); save(); }}>
+        <h2 {...stylex.props(styles.dialogTitle)}>{t('storage.s3Config')}</h2>
+        {(['endpoint', 'bucket', 'region', 'prefix'] as const).map((key) => <label key={key} {...stylex.props(styles.label)}>{t(`storage.${key}`)}<input required={key !== 'prefix'} type={key === 'endpoint' ? 'url' : 'text'} autoComplete="off" value={settings[key]} disabled={busy} placeholder={key === 'endpoint' ? 'https://s3.example.com' : undefined} onChange={(event) => change(key, event.target.value)} {...stylex.props(styles.input, storageStyles.input)} /></label>)}
+        <label {...stylex.props(styles.projectOption)}><input type="checkbox" checked={settings.forcePathStyle} disabled={busy} onChange={(event) => change('forcePathStyle', event.target.checked)} {...stylex.props(styles.check)} />{t('storage.pathStyle')}</label>
+        <p {...stylex.props(styles.rowMeta)}>{t('storage.endpointHelp')}</p>
+        <h2 {...stylex.props(styles.dialogTitle, storageStyles.credentialHeading)}>{t('storage.credentials')}</h2>
+        <p {...stylex.props(styles.rowMeta)}>{t(data.profile ? 'storage.credentialsSaved' : 'storage.credentialsHelp')}</p>
+        {(['accessKeyId', 'secretAccessKey', 'sessionToken'] as const).map((key) => <label key={key} {...stylex.props(styles.label)}>{t(`storage.${key}`)}<input type="password" autoComplete="new-password" value={credentials[key]} disabled={busy} onChange={(event) => { setCredentials((old) => ({ ...old, [key]: event.target.value })); setDirty(true); }} {...stylex.props(styles.input, storageStyles.input)} /></label>)}
+        <div {...stylex.props(styles.actions)}><Button type="primary" htmlType="submit" disabled={busy} loading={busy && operation === 'save'}>{t('storage.save')}</Button><Button loading={busy && operation === 'test'} disabled={busy || dirty || !data.profile} onClick={() => void run({ action: 'test', id: data.profile!.id }, () => {})}>{t('storage.test')}</Button></div>
+        {dirty && data.profile && <p {...stylex.props(styles.note)}>{t('storage.saveFirst')}</p>}
+      </form>
+      {test && <section {...stylex.props(styles.preview)} aria-label={t('storage.testResult')}>
+        <strong>{t(test.ok ? 'storage.testPassed' : 'storage.testFailed')}</strong><p {...stylex.props(styles.rowMeta)}>{new Date(test.checkedAt).toLocaleString(i18n.language)}</p>
+        <ul {...stylex.props(styles.projectList)}>{(['write', 'read', 'delete'] as const).map((step) => <li key={step} {...stylex.props(styles.projectOption)}>{t(`storage.step.${step}`)} · {t(test.steps[step] ? 'storage.passed' : 'storage.notPassed')}</li>)}</ul>
+        {test.error && <p role="alert" {...stylex.props(styles.error)}>{test.error}</p>}
+        {test.cleanupKey && <><p {...stylex.props(styles.rowMeta)}>{t('storage.cleanup')}</p><code {...stylex.props(styles.code)}>{test.cleanupKey}</code></>}
+        {test.ok && <p {...stylex.props(styles.rowMeta)}>{t('storage.notMigrated')}</p>}
+      </section>}
+      {scope === 'shared' && <form {...stylex.props(styles.form)} onSubmit={(event) => {
+        event.preventDefault();
+        const bytes = data.sharedLimitBytes !== null && data.sharedLimitBytes !== undefined && limit === String(data.sharedLimitBytes / GIB) ? data.sharedLimitBytes : Math.round(Number(limit) * GIB);
+        if (!/^\d+(?:\.\d{1,3})?$/.test(limit) || !Number.isSafeInteger(bytes) || bytes < 0) { setError(t('members.invalidQuota')); return; }
+        void run({ action: 'limit', bytes }, () => setNotice(t('storage.limitSaved')));
+      }}>
+        <h2 {...stylex.props(styles.dialogTitle)}>{t('storage.totalLimit')}</h2><label {...stylex.props(styles.label)}>{t('storage.limitGiB')}<input required inputMode="decimal" value={limit} disabled={busy} onChange={(event) => setLimit(event.target.value)} {...stylex.props(styles.input, storageStyles.input)} /></label><p {...stylex.props(styles.rowMeta)}>{t('storage.limitHelp')}</p><div {...stylex.props(styles.actions)}><Button htmlType="submit" disabled={busy || dirty}>{t('storage.saveLimit')}</Button></div>
+      </form>}
+    </>}
+  </>;
+}
