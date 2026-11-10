@@ -28,14 +28,14 @@ const texts = {
     brand: '案间', readOnly: '公开分享 · 只读', published: '发布于', expires: '链接到期',
     loading: '正在加载分享…', unavailable: '此分享暂时无法访问', unavailableHelp: '链接可能已失效，或分享者已关闭访问。',
     retry: '重试', offline: '连接中断，内容可能已经更新。请重试。', noContent: '发布内容暂不可用。',
-    page: '页面', fit: '适合屏幕', zoomIn: '放大', zoomOut: '缩小', expand: '展开画板', close: '关闭',
+    page: '页面', actual: '原始尺寸', fit: '适合屏幕', zoomIn: '放大', zoomOut: '缩小', expand: '展开画板', boardList: '查看单张画板', close: '返回画布',
     snapshot: '这是一份发布快照；作者后续修改不会自动公开。',
   },
   en: {
     brand: 'Anjian', readOnly: 'Public share · Read only', published: 'Published', expires: 'Link expires',
     loading: 'Loading share…', unavailable: 'This share is unavailable', unavailableHelp: 'The link may have expired or been closed by its owner.',
     retry: 'Retry', offline: 'Connection interrupted. Content may have changed. Please retry.', noContent: 'Published content is unavailable.',
-    page: 'Page', fit: 'Fit to screen', zoomIn: 'Zoom in', zoomOut: 'Zoom out', expand: 'Expand board', close: 'Close',
+    page: 'Page', actual: 'Actual size', fit: 'Fit to screen', zoomIn: 'Zoom in', zoomOut: 'Zoom out', expand: 'Expand board', boardList: 'View individual boards', close: 'Back to canvas',
     snapshot: 'This is a published snapshot; later edits are not automatically public.',
   },
 } as const;
@@ -48,6 +48,39 @@ function shareBase(pathname: string) {
 const none = new Set<string>();
 const noRef = () => () => undefined;
 const noLoad = () => undefined;
+
+function ExpandedBoard({ url, board, copy }: {
+  url: string;
+  board: NonNullable<SharePayload['canvas']>['boards'][string];
+  copy: typeof texts.zh | typeof texts.en;
+}) {
+  const body = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: innerWidth, height: innerHeight - 110 });
+  const [actual, setActual] = useState(false);
+  useEffect(() => {
+    const el = body.current!;
+    const measure = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const scale = actual ? 1 : Math.max(0.01, Math.min(1, (size.width - 32) / board.w, (size.height - 32) / board.h));
+  return <>
+    <div className="share-expanded-tools">
+      <button type="button" aria-pressed={!actual} onClick={() => setActual(false)}>{copy.fit}</button>
+      <button type="button" aria-pressed={actual} onClick={() => setActual(true)}>{copy.actual}</button>
+      <span>{Math.round(scale * 100)}%</span>
+    </div>
+    <div ref={body} className="share-expanded-body">
+      <div className="share-expanded-content" style={{ width: board.w * scale, height: board.h * scale }}>
+        <div style={{ width: board.w, height: board.h, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+          {board.type === 'image' ? <img src={url} alt={board.title ?? ''} /> : board.type === 'video' ? <video controls src={url} /> : <iframe title={board.title ?? copy.expand} sandbox="allow-scripts" referrerPolicy="no-referrer" src={url} />}
+        </div>
+      </div>
+    </div>
+  </>;
+}
 
 function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | typeof texts.en }) {
   const canvas = data.canvas;
@@ -68,6 +101,23 @@ function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | 
     observer.observe(current);
     return () => observer.disconnect();
   }, []);
+  useEffect(() => {
+    const current = stage.current;
+    if (!current) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = current.getBoundingClientRect();
+      const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? current.clientHeight : 1;
+      const dx = event.deltaX * factor;
+      const dy = event.deltaY * factor;
+      if (event.ctrlKey || event.metaKey)
+        setView((old) => zoomAround(old, Math.exp(-dy * 0.01), event.clientX - rect.left, event.clientY - rect.top));
+      else setView((old) => ({ ...old, x: old.x - dx, y: old.y - dy }));
+    };
+    // React's passive wheel listener cannot cancel the browser's trackpad pinch zoom.
+    current.addEventListener('wheel', wheel, { passive: false });
+    return () => current.removeEventListener('wheel', wheel);
+  }, []);
   const bounds = layout?.pages[page]?.bounds;
   const fit = useCallback(() => {
     if (bounds) setView(fitView(bounds, viewport, { top: 24, right: 24, bottom: 24, left: 24 }));
@@ -82,7 +132,13 @@ function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | 
     close.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); setExpanded(null); }
-      if (event.key === 'Tab') { event.preventDefault(); close.current?.focus(); }
+      if (event.key === 'Tab') {
+        const controls = Array.from(close.current?.closest('[role="dialog"]')?.querySelectorAll<HTMLElement>('button, iframe, video') ?? []);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
     };
     addEventListener('keydown', onKey);
     return () => { removeEventListener('keydown', onKey); returnFocus.current?.focus(); };
@@ -110,12 +166,6 @@ function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | 
       <div
         ref={stage}
         className="share-canvas"
-        onWheel={(event) => {
-          event.preventDefault();
-          const rect = event.currentTarget.getBoundingClientRect();
-          if (event.ctrlKey || event.metaKey) setView((old) => zoomAround(old, Math.exp(-event.deltaY * 0.008), event.clientX - rect.left, event.clientY - rect.top));
-          else setView((old) => ({ ...old, x: old.x - event.deltaX, y: old.y - event.deltaY }));
-        }}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           drag.current = { x: event.clientX, y: event.clientY };
@@ -146,7 +196,8 @@ function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | 
           boardSandbox="allow-scripts"
         />
       </div>
-      <div className="share-board-list" aria-label={copy.expand}>
+      <div className="share-board-list" aria-label={copy.boardList}>
+        <span className="share-board-list-label">{copy.boardList}</span>
         {boards.map(([id, board]) => (
           <button key={id} type="button" onClick={(event) => { returnFocus.current = event.currentTarget; setExpanded(id); }} aria-label={`${copy.expand}：${board.title ?? id}`}>
             {board.title ?? id}
@@ -156,9 +207,7 @@ function Artboard({ data, copy }: { data: SharePayload; copy: typeof texts.zh | 
       {selected && url && (
         <div className="share-expanded" role="dialog" aria-modal="true" aria-label={selected.title ?? expanded ?? copy.expand}>
           <div className="share-expanded-head"><strong>{selected.title ?? expanded}</strong><button ref={close} type="button" onClick={() => setExpanded(null)}>{copy.close}</button></div>
-          <div className="share-expanded-body">
-            {selected.type === 'image' ? <img src={url} alt={selected.title ?? expanded ?? ''} /> : selected.type === 'video' ? <video controls src={url} /> : <iframe title={selected.title ?? expanded ?? ''} sandbox="allow-scripts" referrerPolicy="no-referrer" src={url} style={{ width: selected.w, height: selected.h }} />}
-          </div>
+          <ExpandedBoard key={url} url={url} board={selected} copy={copy} />
         </div>
       )}
     </>

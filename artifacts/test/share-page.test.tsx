@@ -95,3 +95,23 @@ test('document resource base does not redirect refresh requests to the preview o
     expect(host.textContent).toContain('Published example');
   } finally { base.remove(); }
 });
+
+test('canvas pinch cancels browser zoom and changes canvas scale only', async () => {
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({
+    ...fixture, type: 'artboard',
+    canvas: { version: 1, pages: [{ id: 'p', name: 'Page' }], boards: {}, activePage: 'p' },
+    layout: { pages: { p: { bounds: { minX: 0, minY: 0, maxX: 500, maxY: 500 }, groups: {}, notes: {} } } },
+  })));
+  await render();
+  const canvas = host.querySelector('.share-canvas')!;
+  const before = host.querySelector('.share-zoom span')!.textContent;
+  const pinch = new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, clientX: 100, clientY: 100, bubbles: true, cancelable: true });
+  // happy-dom's WheelEvent omits MouseEvent modifier fields.
+  Object.defineProperties(pinch, { ctrlKey: { value: true }, clientX: { value: 100 }, clientY: { value: 100 } });
+  await act(async () => { canvas.dispatchEvent(pinch); });
+  expect(pinch.defaultPrevented).toBe(true);
+  expect(host.querySelector('.share-zoom span')!.textContent).not.toBe(before);
+  const outside = new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true });
+  host.querySelector('.share-header')!.dispatchEvent(outside);
+  expect(outside.defaultPrevented).toBe(false);
+});

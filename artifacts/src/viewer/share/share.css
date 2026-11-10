@@ -32,13 +32,17 @@ button:focus-visible, select:focus-visible { outline: 2px solid currentColor; ou
 .share-canvas { flex: 1; position: relative; min-height: 330px; overflow: hidden; touch-action: none; cursor: grab; background: var(--lobe-color-bg-layout, #0a0a0a); background-image: radial-gradient(var(--lobe-color-border, #222) 1px, transparent 1px); background-size: 12px 12px; }
 .share-canvas:active { cursor: grabbing; }
 .share-board-list { display: flex; gap: 7px; overflow-x: auto; padding: 9px 16px; background: var(--lobe-color-bg-container, #101010); border-top: 1px solid var(--lobe-color-border-secondary, #292929); }
+.share-board-list-label { flex-shrink: 0; align-self: center; color: var(--lobe-color-text-secondary, #999); }
 .share-board-list button { flex-shrink: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-expanded { position: fixed; inset: 0; z-index: 100; background: var(--lobe-color-bg-layout, #0a0a0a); display: flex; flex-direction: column; }
 .share-expanded-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 6px 16px; background: var(--lobe-color-bg-container, #101010); border-bottom: 1px solid var(--lobe-color-border-secondary, #292929); }
 .share-expanded-head strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.share-expanded-body { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 24px; }
-.share-expanded-body iframe { flex: 0 0 auto; border: 0; background: #fff; }
-.share-expanded-body img, .share-expanded-body video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.share-expanded-tools { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
+.share-expanded-tools button[aria-pressed="true"] { outline: 1px solid currentColor; }
+.share-expanded-body { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
+.share-expanded-content { position: relative; margin-inline: auto; }
+.share-expanded-content > div { position: absolute; inset: 0; }
+.share-expanded-content iframe, .share-expanded-content img, .share-expanded-content video { display: block; width: 100%; height: 100%; border: 0; object-fit: contain; }
 @media (max-width: 600px) {
   .share-header, .share-info { padding-inline: 16px; }
   .share-info > span { display: none; }
