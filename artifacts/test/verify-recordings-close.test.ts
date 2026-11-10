@@ -15,11 +15,13 @@ test('a failed temporary cleanup remains pending until recording close retries i
   fs.writeFileSync(source, 'capture');
   const stateDir = path.join(root, '.state');
   let entered = false;
+  let scratch = '';
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const registry = createVerifyRecordings({
     stateDir, stableMs: 0, onChange: () => {},
-    prepare: async () => {
+    prepare: async input => {
+      scratch = path.dirname(input);
       entered = true;
       await gate;
       return { status: 'unchanged', duration: 1, start: 0, end: 1, removed: 0 };
@@ -39,16 +41,15 @@ test('a failed temporary cleanup remains pending until recording close retries i
     const remove = fs.rmSync.bind(fs);
     let failures = 2;
     const spy = vi.spyOn(fs, 'rmSync').mockImplementation((file, options) => {
-      if (String(file).includes('.prepare-') && failures-- > 0) throw new Error('injected cleanup failure');
+      if (String(file) === scratch && failures-- > 0) throw new Error('injected cleanup failure');
       remove(file, options);
     });
     const closing = registry.close();
     release();
     await expect(closing).rejects.toThrow('Recording preparation did not close completely');
-    const cacheDir = path.join(stateDir, 'recordings');
-    expect(fs.readdirSync(cacheDir).some((name) => name.startsWith('.prepare-'))).toBe(true);
+    expect(fs.existsSync(scratch)).toBe(true);
     await registry.close();
-    expect(fs.readdirSync(cacheDir).some((name) => name.startsWith('.prepare-'))).toBe(false);
+    expect(fs.existsSync(scratch)).toBe(false);
     spy.mockRestore();
   } finally {
     release();

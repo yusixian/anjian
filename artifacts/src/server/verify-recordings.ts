@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import type { CanvasPayload, RecordingState } from '../shared/types';
@@ -48,8 +49,15 @@ export function createVerifyRecordings(options: Options) {
   const queue: Job[] = [];
   const files = new Map<string, string>();
   const pendingCleanup = new Set<string>();
-  let running: Promise<void> | undefined;
+  let running: Promise<unknown> | undefined;
+  let task: Promise<void> | undefined;
   let waitingForQuota = false;
+  const temporaryDirectories = new Set<string>();
+  const resumeWaiters = new Set<() => void>();
+  const wake = () => {
+    for (const resolve of resumeWaiters) resolve();
+    resumeWaiters.clear();
+  };
   let closed = false;
   let paused = false;
   const current = (job: Job) =>
@@ -59,7 +67,38 @@ export function createVerifyRecordings(options: Options) {
   };
   const cacheDir = path.join(options.stateDir, 'recordings');
 
-  async function process(job: Job, admit?: CommentAdmission) {
+  const active = async <T>(work: () => Promise<T>): Promise<T> => {
+    const phase = work();
+    running = phase;
+    try {
+      return await phase;
+    } finally {
+      if (running === phase) running = undefined;
+    }
+  };
+  const admitted = async (job: Job, work: (admit: CommentAdmission) => void) => {
+    while (current(job)) {
+      if (paused) await new Promise<void>(resolve => resumeWaiters.add(resolve));
+      if (!current(job)) return false;
+      let executed = false;
+      const enter = async (admit: CommentAdmission) => {
+        if (!current(job) || paused) return;
+        work(admit);
+        executed = true;
+      };
+      waitingForQuota = true;
+      try {
+        if (options.withWriteQuota) await options.withWriteQuota(enter);
+        else await enter(() => undefined);
+      } finally {
+        waitingForQuota = false;
+      }
+      if (executed) return true;
+    }
+    return false;
+  };
+
+  async function process(job: Job) {
     let temporary: string | undefined;
     try {
       if (stamp(job.file) !== job.stamp) {
@@ -90,44 +129,49 @@ export function createVerifyRecordings(options: Options) {
         /* uncached or incomplete entry */
       }
       if (!cached) {
-        admit?.(bytes.byteLength);
-        fs.mkdirSync(cacheDir, { recursive: true });
-        temporary = fs.mkdtempSync(path.join(cacheDir, '.prepare-'));
-        const input = path.join(temporary, 'capture');
-        const prepared = path.join(temporary, 'clip.mp4');
-        fs.writeFileSync(input, bytes);
-        const result = await (options.prepare ?? trimRecording)(
-          input,
-          prepared,
-          job.controller.signal,
-        );
+        if (!await admitted(job, admit => {
+          admit(bytes.byteLength);
+          temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-recording-prepare-'));
+          temporaryDirectories.add(temporary);
+          fs.writeFileSync(path.join(temporary, 'capture'), bytes);
+        })) return;
+        const input = path.join(temporary!, 'capture');
+        const prepared = path.join(temporary!, 'clip.mp4');
+        const result = await active(() => (options.prepare ?? trimRecording)(input, prepared, job.controller.signal));
         if (!current(job)) return;
         if (stamp(job.file) !== job.stamp) {
           jobs.delete(job.key);
           options.onChange(job.artifact);
           return;
         }
-        const clip = result.status === 'trimmed' ? fs.readFileSync(prepared) : undefined;
-        const hash = clip ? digest(clip) : undefined;
-        cached = { result, ...(hash ? { hash } : {}) };
-        const planned = [
-          ...(clip ? [{ file: output, data: clip }] : []),
-          { file: metadata, data: `${JSON.stringify(cached, null, 2)}\n` },
-        ];
-        const size = (file: string) => {
-          try { return fs.statSync(file).size; }
-          catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
-        };
-        admit?.(planned.reduce((sum, entry) => sum + Buffer.byteLength(entry.data) - size(entry.file), 0));
-        const transaction = createPreparedStateFiles(options.stateDir, planned);
-        transaction.stage();
-        try { transaction.commit(); }
-        catch (error) {
-          try { transaction.abort(); }
-          catch (rollback) { throw new AggregateError([error, rollback], 'Recording cache rollback failed'); }
-          throw error;
-        }
-        transaction.finalize();
+        if (!await admitted(job, admit => {
+          if (stamp(job.file) !== job.stamp) {
+            jobs.delete(job.key);
+            options.onChange(job.artifact);
+            return;
+          }
+          const clip = result.status === 'trimmed' ? fs.readFileSync(prepared) : undefined;
+          const hash = clip ? digest(clip) : undefined;
+          cached = { result, ...(hash ? { hash } : {}) };
+          const planned = [
+            ...(clip ? [{ file: output, data: clip }] : []),
+            { file: metadata, data: `${JSON.stringify(cached, null, 2)}\n` },
+          ];
+          const size = (file: string) => {
+            try { return fs.statSync(file).size; }
+            catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
+          };
+          admit(planned.reduce((sum, entry) => sum + Buffer.byteLength(entry.data) - size(entry.file), 0));
+          const transaction = createPreparedStateFiles(options.stateDir, planned);
+          transaction.stage();
+          try { transaction.commit(); }
+          catch (error) {
+            try { transaction.abort(); }
+            catch (rollback) { throw new AggregateError([error, rollback], 'Recording cache rollback failed'); }
+            throw error;
+          }
+          transaction.finalize();
+        })) return;
       }
       if (!current(job)) return;
       if (stamp(job.file) !== job.stamp) {
@@ -135,6 +179,7 @@ export function createVerifyRecordings(options: Options) {
         options.onChange(job.artifact);
         return;
       }
+      if (!cached) return;
       job.state = { ...cached.result, status: 'ready', outcome: cached.result.status };
       if (cached.result.status === 'trimmed') {
         job.output = output;
@@ -152,31 +197,27 @@ export function createVerifyRecordings(options: Options) {
       notify(job);
     } finally {
       if (temporary) {
-        try { fs.rmSync(temporary, { recursive: true, force: true }); }
-        catch { pendingCleanup.add(temporary); }
+        try {
+          fs.rmSync(temporary, { recursive: true, force: true });
+          temporaryDirectories.delete(temporary);
+          pendingCleanup.delete(temporary);
+        } catch {
+          pendingCleanup.add(temporary);
+        }
       }
     }
   }
   function pump() {
-    if (running || waitingForQuota || closed || paused) return;
+    if (task || closed || paused) return;
     const job = queue.shift();
     if (!job) return;
     if (!current(job)) { pump(); return; }
-    const start = async (admit?: CommentAdmission) => {
-      if (!current(job)) return;
-      if (paused) { queue.unshift(job); return; }
-      // Do not count a task waiting for the quota lock as running: maintenance owns that lock.
-      running = process(job, admit);
-      try { await running; } finally { running = undefined; }
-    };
-    waitingForQuota = true;
-    const task = options.withWriteQuota ? options.withWriteQuota(start) : start();
-    void task.catch(() => {
-      if (!current(job)) return;
-      job.state = { status: 'original', warning: 'Using the original recording: storage preparation is unavailable' };
-      notify(job);
+    task = process(job).catch(error => {
+      // Observers may throw after processing or fallback notification. Keep the
+      // queue alive and make the failure visible without an unhandled rejection.
+      console.error('Recording preparation notification failed', error);
     }).finally(() => {
-      waitingForQuota = false;
+      task = undefined;
       pump();
     });
   }
@@ -279,6 +320,7 @@ export function createVerifyRecordings(options: Options) {
         if (released) return;
         released = true;
         paused = false;
+        wake();
         pump();
       };
       try {
@@ -288,6 +330,7 @@ export function createVerifyRecordings(options: Options) {
           try {
             fs.rmSync(directory, { recursive: true, force: true });
             pendingCleanup.delete(directory);
+            temporaryDirectories.delete(directory);
           } catch (error) { failures.push(error); }
         }
         if (failures.length) throw new AggregateError(failures, 'Recording preparation did not quiesce completely');
@@ -300,12 +343,17 @@ export function createVerifyRecordings(options: Options) {
     async close() {
       closed = true;
       for (const job of jobs.values()) stop(job);
+      wake();
       const failures: unknown[] = [];
       try { await running; } catch (error) { failures.push(error); }
-      for (const directory of pendingCleanup) {
+      if (!waitingForQuota) {
+        try { await task; } catch (error) { failures.push(error); }
+      }
+      for (const directory of new Set([...pendingCleanup, ...temporaryDirectories])) {
         try {
           fs.rmSync(directory, { recursive: true, force: true });
           pendingCleanup.delete(directory);
+          temporaryDirectories.delete(directory);
         } catch (error) { failures.push(error); }
       }
       if (failures.length) throw new AggregateError(failures, 'Recording preparation did not close completely');

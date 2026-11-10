@@ -147,7 +147,7 @@ test('an oversized prepared result is discarded before publishing durable cache 
   await vi.waitFor(() => expect(f.read().recordings!.clip!.status).toBe('original'));
   expect(admissions[0]).toBe(Buffer.byteLength('first capture'));
   expect(admissions[1]).toBeGreaterThan(4096);
-  expect(fs.readdirSync(path.join(f.stateDir, 'recordings'))).toEqual([]);
+  expect(fs.existsSync(path.join(f.stateDir, 'recordings'))).toBe(false);
   expect(fs.readFileSync(path.join(f.dir, 'pages/clip.webm'), 'utf8')).toBe('first capture');
 });
 
