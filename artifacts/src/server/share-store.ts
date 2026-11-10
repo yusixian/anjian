@@ -288,5 +288,8 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     } catch { return null; }
   };
 
-  return { status, publish, revoke, revokeProject, rotate, find, file, cleanupExpired };
+  const storageSnapshots = () => Object.values(index().records).map((entry) => ({
+    directory: path.join(snapshots, entry.snapshotId), project: entry.project,
+  }));
+  return { status, publish, revoke, revokeProject, rotate, find, file, cleanupExpired, storageSnapshots };
 }

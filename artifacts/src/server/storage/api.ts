@@ -1,11 +1,13 @@
 import type http from 'node:http';
 import { testS3Connection } from './s3';
+import type { createStorageUsage } from './usage';
 import type { Principal } from '../member-store';
 import { sendJson } from '../http';
 import { StorageSettingsError, type createStorageSettings } from './settings';
 
 export function createStorageApi(options: {
   settings: ReturnType<typeof createStorageSettings>;
+  usage: ReturnType<typeof createStorageUsage>;
   origin: string;
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
@@ -27,7 +29,12 @@ export function createStorageApi(options: {
     try {
       if (req.method === 'GET') {
         const summary = options.settings.summary(scope);
-        sendJson(res, 200, { ...summary, backend: 'local', tested: summary.profile?.test?.ok ?? false });
+        const usage = await options.usage.read(scope).catch(() => null);
+        const current = options.principal(req, url);
+        if (!current || current.id !== identity.id || current.role !== identity.role || current.sessionVersion !== identity.sessionVersion) {
+          sendJson(res, 403, { error: '登录状态已变化。' }); return true;
+        }
+        sendJson(res, 200, { ...summary, backend: 'local', tested: summary.profile?.test?.ok ?? false, usage });
         return true;
       }
       if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }

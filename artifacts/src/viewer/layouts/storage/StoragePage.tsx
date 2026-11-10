@@ -8,11 +8,14 @@ import { deviceStyles as styles } from '../devices/device-styles';
 interface TestResult { ok: boolean; checkedAt: number; steps: { write: boolean; read: boolean; delete: boolean }; error?: string; cleanupKey?: string }
 interface Settings { endpoint: string; bucket: string; region: string; prefix: string; forcePathStyle: boolean }
 interface Profile extends Settings { id: string; credentialsConfigured: boolean; test?: TestResult | null }
-interface Summary { profile: Profile | null; configured: boolean; backend: 'local'; sharedLimitBytes?: number | null }
+interface Usage { artifacts: number; history: number; trash: number; shares: number; retained: number; total: number; checkedAt: number }
+interface Summary { usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local'; sharedLimitBytes?: number | null }
 const blank: Settings = { endpoint: '', bucket: '', region: 'auto', prefix: 'anjian', forcePathStyle: true };
 const emptyCredentials = { accessKeyId: '', secretAccessKey: '', sessionToken: '' };
 const GIB = 1024 ** 3;
 const storageStyles = stylex.create({
+  usageGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 16, marginTop: 20, marginBottom: 16 },
+  usageValue: { margin: 0, marginTop: 4, fontVariantNumeric: 'tabular-nums', fontWeight: 600 },
   credentialHeading: { marginTop: 28 },
   input: { marginTop: 6, fontWeight: 400, letterSpacing: 'normal' },
 });
@@ -86,6 +89,22 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     {notice && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}
     {!data && !error && <p role="status">{t('common.loading')}</p>}
     {data && <>
+      <section {...stylex.props(styles.preview)} aria-label={t('storage.usage.title')}>
+        <h2 {...stylex.props(styles.dialogTitle)}>{t('storage.usage.title')}</h2>
+        {data.usage ? <>
+          <strong>{formatUsage(data.usage.total, i18n.language)}</strong>
+          <dl {...stylex.props(storageStyles.usageGrid)}>{(['artifacts', 'history', 'trash', 'shares', ...(scope === 'shared' ? ['retained'] as const : [])] as const).map((category) => <div key={category}><dt {...stylex.props(styles.rowMeta)}>{t(`storage.usage.${category}`)}</dt><dd {...stylex.props(storageStyles.usageValue)}>{formatUsage(data.usage![category], i18n.language)}</dd></div>)}</dl>
+          <p {...stylex.props(styles.rowMeta)}>{t('storage.usage.checked', { time: new Date(data.usage.checkedAt).toLocaleTimeString(i18n.language) })}</p>
+        </> : <p role="status" {...stylex.props(styles.rowMeta)}>{t('storage.usage.unavailable')}</p>}
+        <p {...stylex.props(styles.rowMeta)}>{t('storage.usage.help')}</p>
+        <Button disabled={busy} loading={busy && operation === 'usage'} onClick={async () => {
+          if (lock.current) return;
+          lock.current = true; setBusy(true); setOperation('usage'); onBusy(true); setError('');
+          try { const next = await request<Summary>(); setData((old) => old ? { ...old, usage: next.usage } : next); }
+          catch (failure) { setError((failure as Error).message); }
+          finally { lock.current = false; setBusy(false); onBusy(false); }
+        }}>{t('storage.usage.refresh')}</Button>
+      </section>
       <form {...stylex.props(styles.form)} onSubmit={(event) => { event.preventDefault(); save(); }}>
         <h2 {...stylex.props(styles.dialogTitle)}>{t('storage.s3Config')}</h2>
         {(['endpoint', 'bucket', 'region', 'prefix'] as const).map((key) => <label key={key} {...stylex.props(styles.label)}>{t(`storage.${key}`)}<input required={key !== 'prefix'} type={key === 'endpoint' ? 'url' : 'text'} autoComplete="off" value={settings[key]} disabled={busy} placeholder={key === 'endpoint' ? 'https://s3.example.com' : undefined} onChange={(event) => change(key, event.target.value)} {...stylex.props(styles.input, storageStyles.input)} /></label>)}
@@ -114,4 +133,9 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
       </form>}
     </>}
   </>;
+}
+
+function formatUsage(bytes: number, language: string) {
+  const unit = bytes < 1024 ? 0 : Math.min(4, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${new Intl.NumberFormat(language, { maximumFractionDigits: unit ? 2 : 0 }).format(bytes / 1024 ** unit)} ${['B', 'KiB', 'MiB', 'GiB', 'TiB'][unit]}`;
 }

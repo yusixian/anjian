@@ -151,6 +151,9 @@ export function createMemberStore(home: string, ownerId?: number, now = Date.now
       write(state);
       return member;
     },
+    storageProjects() {
+      return read().projects.map(({ project, memberId }) => ({ dir: project, owner: memberId }));
+    },
     projectOwner(project: string): string {
       // Existing registered projects remain owned by the original instance owner.
       return read().projects.find((p) => p.project === path.resolve(project))?.memberId ?? 'owner';

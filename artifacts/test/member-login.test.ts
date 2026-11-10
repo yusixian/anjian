@@ -131,3 +131,36 @@ test('storage settings isolate personal credentials and reserve shared settings 
   expect((await f.request('/api/storage', alice.cookie, { action: 'test', id: deniedProfile.profile.id })).status).toBe(429);
 
 });
+
+test('storage usage exposes only the current member', async () => {
+  const f = await fixture();
+  const alice = await f.join('alice', 2);
+  const bob = await f.join('bob', 3);
+  for (const [member, bytes] of [[alice, 17], [bob, 31]] as const) {
+    const root = path.join(member.project, '.anjian/artifacts');
+    fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, 'usage-fixture'), Buffer.alloc(bytes));
+  }
+  const own = await (await f.request('/api/storage', alice.cookie)).json();
+  expect(own.usage.artifacts).toBe(17);
+  expect(own.usage.total).toBe(17 + own.usage.history);
+  expect(JSON.stringify(own)).not.toContain(bob.project);
+  expect((await (await f.request('/api/storage', bob.cookie)).json()).usage.artifacts).toBe(31);
+  const shared = await (await f.request('/api/storage?scope=shared', f.ownerCookie)).json();
+  expect(shared.usage.total).toBeGreaterThan(48);
+  expect((await f.request('/api/storage?scope=shared', alice.cookie)).status).toBe(403);
+});
+
+
+test('storage configuration remains available when usage cannot be safely scanned', async () => {
+  const f = await fixture();
+  const alice = await f.join('alice', 2);
+  const root = path.join(alice.project, '.anjian/artifacts');
+  fs.mkdirSync(root, { recursive: true });
+  fs.symlinkSync(f.ownerProject, path.join(root, 'unsafe-link'));
+  const response = await f.request('/api/storage', alice.cookie);
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.usage).toBeNull();
+  expect(result.configured).toBe(false);
+  expect(result.backend).toBe('local');
+});

@@ -683,6 +683,18 @@
     "limitGiB": "Total capacity limit (GiB)",
     "limitHelp": "This is the budget allocated by this instance, not the S3 provider’s actual available capacity. Zero allocates no shared capacity.",
     "saveLimit": "Save capacity",
-    "limitSaved": "Shared capacity configuration saved."
+    "limitSaved": "Shared capacity configuration saved.",
+    "usage": {
+      "title": "Local resource usage",
+      "artifacts": "Artifacts and assets",
+      "history": "History and collaboration",
+      "trash": "Trash",
+      "shares": "Share snapshots",
+      "retained": "Unattributed retained files",
+      "checked": "Checked at {{time}}",
+      "unavailable": "Usage is unavailable. Try again shortly.",
+      "help": "Counts file bytes, including retained data; not free disk space or S3 capacity. Cached for up to 5 seconds; usage may change during writes.",
+      "refresh": "Refresh usage"
+    }
   }
 }
