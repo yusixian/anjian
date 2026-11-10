@@ -23,6 +23,7 @@ import { readHtml } from './html';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
 import { createSelectionStore } from './selection';
+import { socketAuthorized } from './socket-access';
 import { readCanvas, writeArtifactState } from './state';
 import { createVerifyRecordings } from './verify-recordings';
 import { textFrame } from './ws';
@@ -44,6 +45,7 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
+  authorize?: (req: http.IncomingMessage) => boolean;
   github?: ReturnType<typeof createGitHubAuth>;
   boardPort: number;
   port: number;
@@ -133,7 +135,7 @@ export function createServerContext(options: ServerOptions) {
   const broadcast = (message: ServerMessage) => {
     for (const listener of messageListeners) listener(message);
     const frame = textFrame(JSON.stringify(message));
-    for (const socket of clients) socket.write(frame);
+    for (const socket of clients) if (socketAuthorized(socket)) socket.write(frame);
   };
   const avatars = createAvatars(options.fetch);
   const names = commentNames({ agentFile: path.join(stateDir, 'agent'), projectDir: path.resolve(root, '../..') });
@@ -208,11 +210,13 @@ export function createServerContext(options: ServerOptions) {
     return members.some((board) => payload.pending.includes(board));
   };
 
-  const isAuthorized = (req: http.IncomingMessage, keyFromQuery: string | null) =>
-    loopback ||
-    (keyFromQuery !== null && safeEqual(keyFromQuery, token)) ||
-    safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', token) ||
-    Boolean(ctx.github?.authorized(req.headers.cookie));
+  const isAuthorized = (req: http.IncomingMessage, keyFromQuery: string | null) => {
+    if (mount?.authorize) return mount.authorize(req);
+    return loopback ||
+      (keyFromQuery !== null && safeEqual(keyFromQuery, token)) ||
+      safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', token) ||
+      Boolean(ctx.github?.authorized(req.headers.cookie));
+  };
 
   const artifactMeta = (ref: ArtifactRef, dir: string, contentOrigin = '') => ({
     ...readArtifact(dir, ref, runtimeOf(ref, dir)),

@@ -20,6 +20,8 @@ import { createArtifactIndex } from './artifact-index';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
 import { createBrowserAuth } from './browser-auth';
+import { createMemberStore } from './member-store';
+import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
 import { latestMtime } from './html';
@@ -153,6 +155,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
 
   const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
+  const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const github = githubConfig ? createGitHubAuth({ config: githubConfig, token: options.token, origin, cookieName: `anjian_artifacts_${port}`, fetch: options.fetch }) : undefined;
 
   const projectId = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
@@ -179,7 +182,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         boardOrigin: options.boardOrigin,
         fetch: options.fetch,
         debounceMs: options.debounceMs,
-        mount: { port, boardPort, token: options.token, version: options.version, github },
+        mount: { port, boardPort, token: options.token, version: options.version, github,
+          authorize: (req) => projectAccess.authorized(req, project) },
       }).then((mounted) => {
         ready.set(project, mounted);
         try { remoteEvents.append(projectId(project), '', 'resync', { reason: 'project-mounted', action: 'Read current comments with comment list --all' }); }
@@ -286,6 +290,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     (req.headers.cookie ?? '')
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
+  const projectAccess = createProjectAccess({ members, github, isOwner: authorized, registered });
   const fromAgent = (req: http.IncomingMessage, url: URL) =>
     req.headers.origin === undefined && keyOk(url);
 
@@ -338,7 +343,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       refererProject(req) ??
       ordered()[0]?.dir ??
       null;
-    return project ? mountOf(project) : null;
+    if (!project) return null;
+    const identity = projectAccess.principal(req, url);
+    if (identity && !projectAccess.canAccess(identity, project)) return null;
+    return mountOf(project);
   };
 
   const openWhenReady = (mounted: MountedProject, request: OpenRequest) => {

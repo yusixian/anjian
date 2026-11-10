@@ -1,3 +1,4 @@
+import { socketAuthorized } from './socket-access';
 import type { Duplex } from 'node:stream';
 
 import type { ServerMessage } from '../shared/types';
@@ -62,5 +63,5 @@ export function acceptReport(
   const frame = textFrame(
     JSON.stringify({ type: 'change', artifact, files: [] } satisfies ServerMessage),
   );
-  for (const socket of clients) socket.write(frame);
+  for (const socket of clients) if (socketAuthorized(socket)) socket.write(frame);
 }
