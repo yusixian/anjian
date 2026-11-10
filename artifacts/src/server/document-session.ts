@@ -39,15 +39,15 @@ export interface DocumentSessionOptions {
 
 export interface DocumentSession {
   agentActiveAt: () => number;
-  close: () => Promise<void>;
-  flush: () => Promise<void>;
-  quiesce: () => Promise<() => void>;
+  close: (admit?: CommentAdmission) => Promise<void>;
+  flush: (admit?: CommentAdmission) => Promise<void>;
+  quiesce: (admit?: CommentAdmission) => Promise<() => void>;
   importUpdate: (bytes: Uint8Array, features?: readonly string[]) => void;
   saveUpdate: (bytes: Uint8Array, features?: readonly string[], admit?: CommentAdmission) => void;
   lineage: () => string;
   onFileText: (text: string) => void;
   prepareRemoteText: (text: string) => PreparedRemoteDocument;
-  readyForRemoteUpload: () => Promise<void>;
+  readyForRemoteUpload: (admit?: CommentAdmission) => Promise<void>;
   outcome: () => DocumentOutcome;
   settled: () => Promise<void>;
   snapshot: () => Uint8Array;
@@ -186,13 +186,6 @@ async function readText(file: string) {
   }
 }
 
-async function writeAtomic(file: string, data: string | Uint8Array) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, data);
-  await fs.rename(tmp, file);
-}
-
 export async function createDocumentSession(
   options: DocumentSessionOptions,
 ): Promise<DocumentSession> {
@@ -242,7 +235,7 @@ export async function createDocumentSession(
   // doc.xml's mtime also moves on human autosaves, so it only stands in before the first recorded agent write.
   const activityFile = path.join(path.dirname(snapshotFile), 'agent-active');
   let agentActiveAt = await lastAgentWrite(activityFile, file);
-  let activitySaved = Promise.resolve();
+  let activityDirty = false;
   const emitStatus = () =>
     emit({ type: 'status', outcome, streaming: streaming > 0, agentActiveAt });
   const setOutcome = (next: DocumentOutcome) => {
@@ -291,10 +284,7 @@ export async function createDocumentSession(
     lastFileText = text;
     revision++;
     agentActiveAt = Date.now();
-    const at = agentActiveAt;
-    activitySaved = activitySaved
-      .then(() => writeAtomic(activityFile, String(at)))
-      .catch((err) => log(`agent activity not saved: ${messageOf(err)}`));
+    activityDirty = true;
     let target: SerializedEditorState;
     try {
       target = parseDocument(text);
@@ -331,14 +321,20 @@ export async function createDocumentSession(
     });
   };
 
-  const persistDocument = (xml: string, snapshot: Uint8Array, admit?: CommentAdmission) => {
+  const persistDocument = (xml: string | null, snapshot: Uint8Array, admit?: CommentAdmission) => {
     const size = (target: string) => {
       try { return fsSync.statSync(target).size; }
       catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
     };
-    admit?.(Buffer.byteLength(xml) - size(file) + snapshot.byteLength - size(snapshotFile));
-    const content = createPreparedStateFiles(path.dirname(file), [{ file, data: xml }]);
-    const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), [{ file: snapshotFile, data: snapshot }]);
+    const stateFiles: Array<{ file: string; data: string | Uint8Array }> = [
+      { file: snapshotFile, data: snapshot },
+      ...(activityDirty ? [{ file: activityFile, data: String(agentActiveAt) }] : []),
+    ];
+    const delta = (xml === null ? 0 : Buffer.byteLength(xml) - size(file)) +
+      stateFiles.reduce((sum, entry) => sum + Buffer.byteLength(entry.data) - size(entry.file), 0);
+    admit?.(delta);
+    const content = createPreparedStateFiles(path.dirname(file), xml === null ? [] : [{ file, data: xml }]);
+    const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), stateFiles);
     try {
       content.stage(); state.stage();
       content.commit(); state.commit();
@@ -349,10 +345,11 @@ export async function createDocumentSession(
       }
       throw new DocumentPersistenceError('Document could not be saved. Please retry.', { cause: errors.length > 1 ? new AggregateError(errors, 'Document save rollback failed') : error });
     }
+    activityDirty = false;
     return () => { content.finalize(); state.finalize(); };
   };
 
-  const write = async () => {
+  const write = async (admit?: CommentAdmission) => {
     clearTimeout(writeTimer);
     writeTimer = undefined;
     if (streaming > 0) return;
@@ -360,20 +357,12 @@ export async function createDocumentSession(
       // Preserve recoverable collaborative edits without overwriting invalid
       // externally supplied XML or acknowledging that source as saved.
       const version = versionKey();
-      if (version !== persistedVersion || persistedSnapshotSignature === null ||
+      if (activityDirty || version !== persistedVersion || persistedSnapshotSignature === null ||
           snapshotSignature(snapshotFile) !== persistedSnapshotSignature) {
-        const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile),
-          [{ file: snapshotFile, data: loro.export({ mode: 'snapshot' }) }]);
-        state.stage();
-        try { state.commit(); }
-        catch (error) {
-          try { state.abort(); }
-          catch (rollback) { throw new AggregateError([error, rollback], 'Document recovery snapshot rollback failed'); }
-          throw error;
-        }
+        const finalize = persistDocument(null, loro.export({ mode: 'snapshot' }), admit);
         persistedVersion = version;
         persistedSnapshotSignature = snapshotSignature(snapshotFile);
-        state.finalize();
+        finalize();
       }
       snapshotDirty = false;
       return;
@@ -395,7 +384,7 @@ export async function createDocumentSession(
     const text = serializeDocument(editor.getEditorState().toJSON());
     const version = versionKey();
     const changed = text !== lastFileText;
-    if (!changed && version === persistedVersion && persistedSnapshotSignature !== null &&
+    if (!activityDirty && !changed && version === persistedVersion && persistedSnapshotSignature !== null &&
         snapshotSignature(snapshotFile) === persistedSnapshotSignature) {
       snapshotDirty = false;
       return;
@@ -403,7 +392,7 @@ export async function createDocumentSession(
     // No asynchronous gap between capturing the matching XML/snapshot pair and
     // installing it. A failure keeps both disk files and the saved acknowledgement unchanged.
     snapshotDirty = true;
-    const finalize = persistDocument(text, loro.export({ mode: 'snapshot' }));
+    const finalize = persistDocument(text, loro.export({ mode: 'snapshot' }), admit);
     persistedVersion = version;
     persistedSnapshotSignature = snapshotSignature(snapshotFile);
     lastFileText = text;
@@ -414,10 +403,10 @@ export async function createDocumentSession(
     if (changed) emit({ type: 'saved' });
   };
 
-  const flush = (): Promise<void> => {
+  const flush = (admit?: CommentAdmission): Promise<void> => {
     const previous = writing;
-    writing = playing.then(() => previous).then(write, write);
-    return writing.then(() => (streaming > 0 || writeTimer ? flush() : undefined));
+    writing = playing.then(() => previous).then(() => write(admit), () => write(admit));
+    return writing.then(() => (streaming > 0 || writeTimer ? flush(admit) : undefined));
   };
 
   function scheduleWrite() {
@@ -517,7 +506,7 @@ export async function createDocumentSession(
       emit({ type: 'saved' });
     },
     onFileText,
-    readyForRemoteUpload: async () => { await flush(); await activitySaved; },
+    readyForRemoteUpload: async admit => { await flush(admit); },
     prepareRemoteText: (text) => {
       if (streaming > 0 || outcome.kind === 'rejected') throw new Error('Document is not ready for upload');
       const target = parseDocument(text);
@@ -573,6 +562,7 @@ export async function createDocumentSession(
           remember(text, headsAfter(base, update));
           remember(xml);
           agentActiveAt = at;
+          activityDirty = false;
           clearTimeout(writeTimer);
           writeTimer = undefined;
           snapshotDirty = false;
@@ -591,7 +581,7 @@ export async function createDocumentSession(
     agentActiveAt: () => agentActiveAt,
     settled: () => playing,
     flush,
-    quiesce: async () => {
+    quiesce: async admit => {
       if (paused || disposed) throw new Error('Document session is already paused or closed');
       paused = true;
       clearTimeout(writeTimer);
@@ -599,8 +589,7 @@ export async function createDocumentSession(
       clearInterval(snapshotTimer);
       snapshotTimer = undefined;
       try {
-        await flush();
-        await activitySaved;
+        await flush(admit);
         let released = false;
         return () => {
           if (released) return;
@@ -613,10 +602,9 @@ export async function createDocumentSession(
         throw error;
       }
     },
-    close: async () => {
+    close: async admit => {
       clearInterval(snapshotTimer);
-      await flush();
-      await activitySaved;
+      await flush(admit);
       binding.dispose();
       listeners.clear();
       disposed = true;

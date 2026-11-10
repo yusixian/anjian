@@ -706,3 +706,28 @@ test('invalid external XML preserves pending collaborative edits in a recovery s
   expect(reopened.outcome().kind).toBe('rejected');
   expect(JSON.stringify(reopened.state())).toContain('recover this edit');
 });
+
+
+test.each(['valid', 'invalid'] as const)('flush admission includes activity and snapshot for %s external edits', async kind => {
+  const { file, snapshotFile } = setup('<doc><p>one</p></doc>');
+  const session = await createDocumentSession({ file, snapshotFile, writeDelayMs: 60_000 });
+  sessions.push(session);
+  await session.flush();
+  const activityFile = path.join(path.dirname(snapshotFile), 'agent-active');
+  const oldSnapshot = fs.readFileSync(snapshotFile);
+  const external = kind === 'valid' ? '<doc><p>two</p></doc>' : '<doc><invalid';
+  fs.writeFileSync(file, external);
+  session.onFileText(external);
+  await expect(session.flush(() => { throw new Error('quota'); })).rejects.toThrow('quota');
+  expect(read(file)).toBe(external);
+  expect(fs.readFileSync(snapshotFile)).toEqual(oldSnapshot);
+  expect(fs.existsSync(activityFile)).toBe(false);
+  let admitted = 0;
+  await session.flush(delta => { admitted += delta; });
+  const actual = fs.statSync(file).size - Buffer.byteLength(external) +
+    fs.statSync(snapshotFile).size - oldSnapshot.byteLength + fs.statSync(activityFile).size;
+  expect(admitted).toBe(actual);
+  expect(read(activityFile)).toBe(String(session.agentActiveAt()));
+  if (kind === 'invalid') expect(read(file)).toBe(external);
+  else expect(read(file)).toContain('two');
+});

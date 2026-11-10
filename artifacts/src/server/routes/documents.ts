@@ -81,10 +81,12 @@ async function serveDocumentUpdate(
     return;
   }
   try {
-    await session.readyForRemoteUpload();
+    await session.readyForRemoteUpload(requestStorageAdmission(req));
     await refreshRequestStorageAdmission(req);
-  } catch {
-    sendJson(res, 503, { error: 'Document could not be saved. Please retry.' });
+  } catch (error) {
+    if (error instanceof RemoteTransferError)
+      sendJson(res, error.status, { code: error.code, error: error.message });
+    else sendJson(res, 503, { error: 'Document could not be saved. Please retry.' });
     return;
   }
   if (sourceRejected()) {
@@ -98,7 +100,7 @@ async function serveDocumentUpdate(
     return;
   }
   try {
-    await session.flush();
+    await session.flush(requestStorageAdmission(req));
     if (sourceRejected()) {
       sendJson(res, 409, { error: 'Document source changed to invalid content. Repair it and retry.' });
       return;

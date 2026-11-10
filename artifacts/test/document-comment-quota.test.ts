@@ -64,7 +64,7 @@ test('Hub enforces document comment quota before saving or broadcasting, without
 });
 
 
-test('Hub rejects document content before live import and accepts the same update after quota is raised', async () => {
+test.each(['ready', 'missing snapshot'] as const)('Hub rejects document content before live import with %s and saves after quota is raised', async mode => {
   const temp = tempRoot(); const root = fs.realpathSync(temp.root);
   const project = path.join(root, 'project'); const artifacts = path.join(project, '.anjian/artifacts');
   writeDocument(artifacts, 'doc', { 'doc.xml': '<doc><p id="b1">hello</p></doc>' });
@@ -84,10 +84,15 @@ test('Hub rejects document content before live import and accepts the same updat
     text.setTextContent('hello quota guarded document');
   }, { discrete: true });
   const update = peer.export({ mode: 'update', from }); binding.dispose();
+  await mount.settleDocument('doc');
+  const snapshotFile = path.join(artifacts, '.state/document/doc/doc.loro');
+  if (mode === 'missing snapshot') fs.rmSync(snapshotFile);
   const settings = createStorageSettings(paths.home); settings.setSharedLimit(0);
   const messages: unknown[] = []; mount.onMessage(message => { if (message.type === 'doc-update') messages.push(message); });
   const post = () => fetch(origin + '/api/document/doc/update', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/octet-stream' }, body: Buffer.from(update) });
   const denied = await post(); expect(denied.status, await denied.clone().text()).toBe(413);
+  expect((await denied.json()).code).toBe('storage_quota_exceeded');
+  if (mode === 'missing snapshot') expect(fs.existsSync(snapshotFile)).toBe(false);
   expect(messages).toEqual([]);
   const file = path.join(artifacts, 'document/doc/doc.xml');
   expect(fs.readFileSync(file, 'utf8')).not.toContain('quota guarded');
