@@ -651,6 +651,17 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects(),
   ].filter(({ owner }) => scope === 'shared' ? storageBackend.scopeFor(owner) !== owner : owner === scope).map(({ dir }) => dir))].sort();
   const migrationApi = createStorageMigrationApi({ migration, settings, origin, principal: projectAccess.principal, readBody,
+    activeJob: (scope) => {
+      const binding = storageBackend.bindingFor(scope);
+      return binding?.scope === scope ? binding.namespace : null;
+    },
+    activate: async (scope, jobId, guard) => {
+      const owners = scope === 'shared' ? [...new Set(['shared',
+        ...migrationProjects(scope).map((project) => members.projectOwner(project)),
+        ...storageBackend.ownersFor(scope).filter((owner) => storageBackend.scopeFor(owner) === scope),
+      ])] : [scope];
+      await storageRuntime.activate(scope, jobId, owners, () => storageBackend.activate(scope, jobId, (plan) => guard(plan.roots), owners));
+    },
     maintain: (scope, guard, work) => writeQuota.exclusive(async () => {
       guard();
       if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');

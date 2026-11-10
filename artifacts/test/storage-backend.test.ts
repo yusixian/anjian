@@ -424,3 +424,24 @@ test('local recovery cannot omit a previously committed root and preserves local
   expect([...f.remote.values()].some((data) => data.toString() === 'local edit')).toBe(true);
   expect(backend.summary('shared', 'owner').pending).toBe(true);
 });
+
+test('live activation writes dirty markers before publishing and fails closed if protection cannot persist', async () => {
+  const f = fixture(); f.write('index', 'retained original');
+  const root = { ...f.root, owner: 'owner' };
+  const job = await f.prepare('shared', [root]); const backend = f.create();
+  const link = fs.linkSync;
+  const fail = vi.spyOn(fs, 'linkSync').mockImplementation((from, to) => {
+    if (String(to).includes('/bindings/intents/')) throw new Error('disk full');
+    return link(from, to);
+  });
+  await expect(backend.activate('shared', job.id, guard, ['shared', 'owner'])).rejects.toThrow('disk full');
+  fail.mockRestore();
+  expect(backend.bindingFor('owner')).toBeNull();
+  expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('retained original');
+  await backend.activate('shared', job.id, guard, ['shared', 'owner']);
+  expect(backend.summary('shared', 'owner').pending).toBe(true);
+  expect(backend.summary('shared', 'shared').pending).toBe(true);
+  fs.unlinkSync(path.join(f.source, 'index'));
+  await f.create().restore();
+  expect(fs.existsSync(path.join(f.source, 'index'))).toBe(false);
+});

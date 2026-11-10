@@ -7,7 +7,7 @@ import { deviceStyles as styles } from '../devices/device-styles';
 interface Job {
   id: string; profileId: string; state: 'prepared' | 'copying' | 'verified' | 'failed';
   createdAt: number; files: number; bytes: number; verifiedFiles: number; verifiedBytes: number;
-  error: string | null; running: boolean;
+  error: string | null; running: boolean; active?: boolean;
 }
 const layout = stylex.create({
   jobs: { listStyleType: 'none', margin: 0, padding: 0 },
@@ -15,13 +15,14 @@ const layout = stylex.create({
   progress: { display: 'block', width: '100%', height: 6, marginBlock: 12, accentColor: 'currentColor' },
 });
 
-export function StorageMigration({ scope, profileId, enabled, disabled, onBusy }: {
-  scope: 'shared' | 'personal'; profileId?: string; enabled: boolean; disabled: boolean; onBusy: (value: boolean) => void;
+export function StorageMigration({ scope, profileId, enabled, disabled, onBusy, onActivated }: {
+  scope: 'shared' | 'personal'; profileId?: string; enabled: boolean; disabled: boolean; onBusy: (value: boolean) => void; onActivated?: () => Promise<void>;
 }) {
   const { t, i18n } = useTranslation();
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmJob, setConfirmJob] = useState<string | null>(null);
   const lock = useRef(false);
   const sequence = useRef(0);
   const lifetime = useRef<AbortController | null>(null);
@@ -51,7 +52,7 @@ export function StorageMigration({ scope, profileId, enabled, disabled, onBusy }
     timer = setTimeout(() => void poll(), 2000);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [load, running]);
-  const run = async (body?: object) => {
+  const run = async (body?: { action: string; profileId?: string; id?: string; confirm?: string }) => {
     if (lock.current) return;
     lock.current = true; setBusy(true); onBusy(true); setError('');
     const signal = lifetime.current?.signal;
@@ -61,6 +62,7 @@ export function StorageMigration({ scope, profileId, enabled, disabled, onBusy }
           headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? `HTTP ${response.status}`);
+        if (body.action === 'activate') { setConfirmJob(null); await onActivated?.(); }
       }
       await load(signal);
     } catch (failure) {
@@ -84,14 +86,18 @@ export function StorageMigration({ scope, profileId, enabled, disabled, onBusy }
     <ul {...stylex.props(layout.jobs)}>{jobs?.map((job) => {
       const state = job.running ? 'copying' : job.state === 'copying' ? 'interrupted' : job.state;
       return <li key={job.id} {...stylex.props(layout.job)}>
-        <strong>{t(`storage.migration.${state}`)}</strong>
+        <strong>{t(`storage.migration.${job.active ? 'active' : state}`)}</strong>
         <p {...stylex.props(styles.rowMeta)}>{new Date(job.createdAt).toLocaleString(i18n.language)}</p>
         <p {...stylex.props(styles.rowMeta)}>{t('storage.migration.progress', { done: job.verifiedFiles, total: job.files,
           size: new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format(job.bytes / 1024 ** 2) })}</p>
         <progress {...stylex.props(layout.progress)} aria-label={t('storage.migration.copying')} max={job.files || 1} value={job.state === 'verified' ? job.files || 1 : job.verifiedFiles} />
         {job.profileId !== profileId && <p {...stylex.props(styles.rowMeta)}>{t('storage.migration.previousProfile')}</p>}
         {job.error && <p {...stylex.props(styles.error)}>{t(job.error === 'source_changed' ? 'storage.migration.sourceChanged' : 'storage.migration.copyFailed')}</p>}
-        {state === 'verified' ? <p {...stylex.props(styles.note)}>{t('storage.migration.verifiedHelp')}</p> :
+        {state === 'verified' ? job.active ? <p {...stylex.props(styles.note)}>{t('storage.migration.activeHelp')}</p> : <>
+          <p {...stylex.props(styles.note)}>{t('storage.migration.verifiedHelp')}</p>
+          <label {...stylex.props(styles.projectOption)}><input type="checkbox" checked={confirmJob === job.id} disabled={disabled || busy || running || !enabled || job.profileId !== profileId} onChange={(event) => setConfirmJob(event.target.checked ? job.id : null)} {...stylex.props(styles.check)} />{t('storage.migration.confirmActivate')}</label>
+          <Button disabled={disabled || busy || running || !enabled || job.profileId !== profileId || confirmJob !== job.id} loading={busy && confirmJob === job.id} onClick={() => void run({ action: 'activate', id: job.id, confirm: 'retain-original-files' })}>{t('storage.migration.activate')}</Button>
+        </> :
           <Button disabled={disabled || busy || running || job.running || job.error === 'source_changed'} onClick={() => void run({ action: 'resume', id: job.id })}>{t(state === 'prepared' ? 'storage.migration.copy' : 'storage.migration.retry')}</Button>}
       </li>;
     })}</ul>

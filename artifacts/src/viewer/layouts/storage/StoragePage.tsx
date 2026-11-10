@@ -161,9 +161,9 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
         <ul {...stylex.props(styles.projectList)}>{(['write', 'read', 'delete'] as const).map((step) => <li key={step} {...stylex.props(styles.projectOption)}>{t(`storage.step.${step}`)} · {t(test.steps[step] ? 'storage.passed' : 'storage.notPassed')}</li>)}</ul>
         {test.error && <p role="alert" {...stylex.props(styles.error)}>{test.error}</p>}
         {test.cleanupKey && <><p {...stylex.props(styles.rowMeta)}>{t('storage.cleanup')}</p><code {...stylex.props(styles.code)}>{test.cleanupKey}</code></>}
-        {test.ok && <p {...stylex.props(styles.rowMeta)}>{t('storage.notMigrated')}</p>}
+        {test.ok && data.backend !== 's3' && <p {...stylex.props(styles.rowMeta)}>{t('storage.notMigrated')}</p>}
       </section>}
-      <StorageMigration scope={scope} profileId={data.profile?.id} enabled={Boolean(test?.ok) && !dirty} disabled={busy || Boolean(data.recoveryPending)} onBusy={onBusy} />
+      <StorageMigration scope={scope} profileId={data.profile?.id} enabled={Boolean(test?.ok) && !dirty} disabled={busy || Boolean(data.recoveryPending)} onBusy={onBusy} onActivated={async () => { const next = await request<Summary>(); setData(next); }} />
       {scope === 'shared' && <form {...stylex.props(styles.form)} onSubmit={(event) => {
         event.preventDefault();
         const bytes = data.sharedLimitBytes !== null && data.sharedLimitBytes !== undefined && limit === String(data.sharedLimitBytes / GIB) ? data.sharedLimitBytes : Math.round(Number(limit) * GIB);

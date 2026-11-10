@@ -36,7 +36,7 @@ vi.mock('../src/server/storage/objects', async (importOriginal) => {
 const hubs: Hub[] = [];
 afterEach(async () => { remote.fail = false; for (const hub of hubs.splice(0)) await hub.close(); remote.data.clear(); });
 
-async function fixture() {
+async function fixture(local = false) {
   const temp = tempRoot(); const base = fs.realpathSync(temp.root);
   const home = path.join(base, 'home'); const project = path.join(base, 'project');
   const artifacts = path.join(project, '.anjian/artifacts');
@@ -44,16 +44,17 @@ async function fixture() {
   const paths = machinePaths({ ANJIAN_SERVER_HOME: home }); registerProject(paths.projects, project);
   const settings = createStorageSettings(home);
   const profile = settings.save('shared', { endpoint: 'https://objects.example', bucket: 'private-bucket', region: 'auto', prefix: '', forcePathStyle: true }, { accessKeyId: 'fixture', secretAccessKey: 'fixture' });
+  settings.recordTest('shared', profile.id, { ok: true, checkedAt: Date.now(), steps: { write: true, read: true, delete: true } });
   const migration = createStorageMigration(home, { resolveProfile: settings.resolve });
   const backend = createStorageBackend(home, { migration, resolveProfile: settings.resolve });
   const job = await migration.prepare('shared', profile.id, [{ id: 'project', directory: artifacts, owner: 'owner', kind: 'artifacts' }]);
-  await migration.resume('shared', job.id); await backend.activate('shared', job.id, async () => {});
+  await migration.resume('shared', job.id); if (!local) await backend.activate('shared', job.id, async () => {});
   const start = async () => { const hub = await startHub({ paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0], token: 't'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime }); hubs.push(hub); return hub; };
   const request = (hub: Hub, route: string, body?: unknown) => {
     const origin = `http://127.0.0.1:${hub.port}`;
     return fetch(origin + route, { ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}), headers: { Origin: origin, 'Content-Type': 'application/json' } });
   };
-  return { home, project, artifacts, backend, start, request };
+  return { home, project, artifacts, backend, settings, profile, start, request };
 }
 
 test('live S3 dirty markers permit editing and manual synchronization retains the mounted session', async () => {
@@ -112,4 +113,39 @@ test('recovery refuses a missing resource directory without recreating it', asyn
   expect(result.status).toBe(503);
   expect(fs.existsSync(f.artifacts)).toBe(false);
   await expect(restarted.mountOf(f.project)).rejects.toThrow('存储尚未恢复');
+});
+
+test('verified GUI activation protects shared then personal bindings without replacing mounted editors', async () => {
+  const f = await fixture(true); const hub = await f.start();
+  const mount = await hub.mountOf(f.project);
+  const prepareAndActivate = async (scope: 'shared' | 'personal', profileId: string) => {
+    const url = `/api/storage/migrations?scope=${scope}`;
+    const prepared = await f.request(hub, url, { action: 'prepare', profileId });
+    expect(prepared.status, await prepared.clone().text()).toBe(201);
+    const { job } = await prepared.json();
+    const activate = { action: 'activate', id: job.id, confirm: 'retain-original-files' };
+    expect((await f.request(hub, url, { action: 'activate', id: job.id })).status).toBe(400);
+    expect((await f.request(hub, url, activate)).status).not.toBe(200);
+    expect((await f.request(hub, url, { action: 'resume', id: job.id })).status).toBe(202);
+    await vi.waitFor(async () => {
+      const { jobs } = await (await f.request(hub, url)).json();
+      expect(jobs.find((entry: { id: string }) => entry.id === job.id)).toMatchObject({ state: 'verified', running: false });
+    });
+    const response = await f.request(hub, url, activate);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await hub.mountOf(f.project)).toBe(mount);
+    expect(await (await f.request(hub, '/api/storage?scope=personal')).json()).toMatchObject({ backend: 's3', recoveryPending: false });
+    expect(f.backend.summary(scope === 'personal' ? 'owner' : scope, 'owner').pending).toBe(true);
+    const { jobs } = await (await f.request(hub, url)).json();
+    expect(jobs.find((entry: { id: string }) => entry.id === job.id).active).toBe(true);
+    fs.writeFileSync(path.join(f.artifacts, 'html/sample/index.html'), '<h1>after activation</h1>');
+    // A lost success response can be retried without resetting to the old snapshot.
+    expect((await f.request(hub, url, activate)).status).toBe(200);
+    expect(fs.readFileSync(path.join(f.artifacts, 'html/sample/index.html'), 'utf8')).toContain('after activation');
+  };
+  await prepareAndActivate('shared', f.profile.id);
+  const personal = f.settings.save('owner', { endpoint: 'https://personal.example', bucket: 'own', region: 'auto', prefix: '', forcePathStyle: true }, { accessKeyId: 'fixture', secretAccessKey: 'fixture' });
+  f.settings.recordTest('owner', personal.id, { ok: true, checkedAt: Date.now(), steps: { write: true, read: true, delete: true } });
+  await prepareAndActivate('personal', personal.id);
+  expect(f.backend.scopeFor('owner')).toBe('owner');
 });

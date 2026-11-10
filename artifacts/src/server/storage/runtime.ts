@@ -118,6 +118,20 @@ export function createStorageRuntime(options: {
   };
   return {
     arm,
+    /** Caller holds all affected writer barriers; commit arms owners before publishing. */
+    async activate(scope: string, jobId: string, owners: readonly string[], commit: () => Promise<unknown>) {
+      if (stopping) throw new Error('Storage runtime is stopping');
+      try { await commit(); }
+      finally {
+        // Pointer rename may succeed before a later fsync reports failure. Reconcile
+        // from the actual binding so existing sessions retain a protected live lease.
+        for (const owner of owners) {
+          const active = binding(owner);
+          if (active?.scope === scope && active.namespace === jobId && !live(owner))
+            leases.set(owner, { binding: active, state: 'pending', lastSyncedAt: null });
+        }
+      }
+    },
     recover,
     async recoverScope(scope: string, authorize: () => void) {
       for (const owner of scopeOwners(scope)) if (ownerPending(owner)) await recover(owner, authorize);

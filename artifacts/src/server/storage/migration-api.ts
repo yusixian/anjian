@@ -5,12 +5,15 @@ import { sendJson } from '../http';
 import { MigrationSourceError, type MigrationSourcePlan } from './sources';
 import { StorageMigrationError, type MigrationRoot, type createStorageMigration } from './migration';
 import { StorageSettingsError, type createStorageSettings } from './settings';
+import { StorageBackendError } from './backend';
 
 interface Options {
   migration: ReturnType<typeof createStorageMigration>;
   maintain?: <T>(scope: string, guard: () => void, work: () => Promise<T>) => Promise<T>;
   plan: (scope: string) => Promise<MigrationSourcePlan>;
   settings: ReturnType<typeof createStorageSettings>;
+  activeJob?: (scope: string) => string | null;
+  activate?: (scope: string, jobId: string, guard: (roots: readonly MigrationRoot[]) => Promise<void>) => Promise<void>;
   origin: string;
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
@@ -61,7 +64,7 @@ export function createStorageMigrationApi(options: Options) {
       if (req.method === 'GET') {
         const jobs = await options.migration.list(scope);
         assertCurrent();
-        sendJson(res, 200, { jobs: jobs.map((job) => ({ ...job, running: running.get(scope)?.id === job.id })) });
+        sendJson(res, 200, { jobs: jobs.map((job) => ({ ...job, active: options.activeJob?.(scope) === job.id, running: running.get(scope)?.id === job.id })) });
         return true;
       }
       if (req.method !== 'POST') { sendJson(res, 405, { code: 'method_not_allowed', error: 'Method not allowed' }); return true; }
@@ -75,6 +78,26 @@ export function createStorageMigrationApi(options: Options) {
         body = input as Record<string, unknown>;
       } catch { throw new MigrationApiError(400, 'invalid_request', '请求格式无效。'); }
       assertCurrent();
+      if (body.action === 'activate' && options.activate) {
+        if (typeof body.id !== 'string' || body.confirm !== 'retain-original-files')
+          throw new MigrationApiError(400, 'invalid_request', '请确认启用存储并保留原文件。');
+        if (running.has(scope)) throw new MigrationApiError(409, 'busy', '迁移任务正在运行，请稍后重试。');
+        const activate = async () => {
+          assertCurrent();
+          if (options.activeJob?.(scope) === body.id) return;
+          const job = await options.migration.status(scope, body.id as string);
+          const check = async (roots: readonly MigrationRoot[]) => {
+            await assertSources(roots);
+            const latest = options.settings.summary(scope).profile;
+            if (!latest || latest.id !== job.profileId || latest.test?.ok !== true)
+              throw new MigrationApiError(409, 'configuration_changed', '存储配置已变化，请重新准备迁移。');
+          };
+          await options.activate!(scope, job.id, check);
+          assertCurrent();
+        };
+        if (options.maintain) await options.maintain(scope, assertCurrent, activate); else await activate();
+        sendJson(res, 200, { active: true }); return true;
+      }
       if (body.action === 'prepare') {
         if (typeof body.profileId !== 'string' || body.roots !== undefined || body.paths !== undefined)
           throw new MigrationApiError(400, 'invalid_request', '迁移配置无效。');
@@ -118,12 +141,13 @@ export function createStorageMigrationApi(options: Options) {
       const known = error instanceof MigrationApiError ? error : null;
       const migration = error instanceof StorageMigrationError ? error : null;
       const source = error instanceof MigrationSourceError ? error : null;
+      const backend = error instanceof StorageBackendError ? error : null;
       const status = known?.status ?? (migration?.code === 'not_found' ? 404 : migration?.code === 'busy' ? 409 :
         migration?.code === 'invalid_request' || source?.code === 'invalid_source' ? 400 :
-          migration?.code === 'source_changed' || source?.code === 'source_changed' || migration?.code === 'profile_changed' ? 409 :
+          migration?.code === 'source_changed' || source?.code === 'source_changed' || backend?.code === 'source_changed' || migration?.code === 'profile_changed' ? 409 :
             error instanceof StorageSettingsError ? error.status : 503);
-      sendJson(res, status, { code: known?.code ?? migration?.code ?? source?.code ?? 'migration_unavailable',
-        error: known?.message ?? migration?.message ?? source?.message ?? '迁移暂不可用，请稍后重试。' });
+      sendJson(res, status, { code: known?.code ?? migration?.code ?? source?.code ?? backend?.code ?? 'migration_unavailable',
+        error: known?.message ?? migration?.message ?? source?.message ?? backend?.message ?? '迁移暂不可用，请稍后重试。' });
     }
     return true;
   };

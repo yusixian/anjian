@@ -643,6 +643,10 @@
   },
   "storage": {
     "migration": {
+      "active": "Active",
+      "activeHelp": "This migration is the active storage binding. Original files are retained.",
+      "confirmActivate": "Use this S3 storage and retain original server files",
+      "activate": "Activate S3",
       "title": "Migration jobs",
       "help": "Preparation temporarily pauses access to affected artifacts and waits for saves to finish. Then copy files to the tested S3 storage and verify them. Originals are preserved; copying does not switch storage.",
       "prepare": "Prepare migration",
@@ -658,7 +662,7 @@
       "previousProfile": "This job uses the configuration version saved when it was created.",
       "sourceChanged": "Source files have changed. Prepare a new migration job. Existing copies are retained.",
       "copyFailed": "Copy or verification failed. Check the storage connection and retry. Completed files will be verified again.",
-      "verifiedHelp": "File copies have been verified. Storage has not switched; activation is not available yet.",
+      "verifiedHelp": "Copies are verified. Files are checked again before activation; prepare a new migration if content has changed.",
       "copy": "Copy and verify",
       "retry": "Resume copy"
     },

@@ -43,7 +43,8 @@ test('requires tested settings, then prepares and copies without claiming storag
   expect(host.textContent).toContain('Copying and verifying');
   jobs = [{ ...job(), state: 'verified', verifiedFiles: 2 }];
   await click('Refresh jobs');
-  expect(host.textContent).toContain('Storage has not switched');
+  expect(host.textContent).toContain('Files are checked again before activation');
+  expect(button('Activate S3').disabled).toBe(true);
   expect(button('Copy and verify')).toBeUndefined();
   expect(posts.every(({ action }) => action !== 'activate')).toBe(true);
 });
@@ -57,4 +58,15 @@ test('interrupted jobs can resume but changed sources require a new preparation'
   await click('Refresh jobs');
   expect(button('Resume copy').disabled).toBe(true);
   expect(button('Prepare migration').disabled).toBe(false);
+});
+
+
+test('verified activation requires explicit confirmation and includes the retained-file choice', async () => {
+  jobs = [{ ...job(), state: 'verified', verifiedFiles: 2 }];
+  await render();
+  expect(button('Activate S3').disabled).toBe(true);
+  await act(async () => { host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); });
+  expect(button('Activate S3').disabled).toBe(false);
+  await click('Activate S3');
+  expect(posts).toEqual([{ action: 'activate', id: 'job', confirm: 'retain-original-files' }]);
 });

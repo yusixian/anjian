@@ -266,7 +266,7 @@ export function createStorageBackend(home: string, deps: Dependencies) {
       });
     },
     /** guard must verify authority and the complete root set while the caller holds its writer barrier. */
-    async activate(scope: string, jobId: string, guard: (plan: Activation) => Promise<void>) {
+    async activate(scope: string, jobId: string, guard: (plan: Activation) => Promise<void>, protectOwners?: readonly string[]) {
       checkScope(scope);
       return exclusive(async () => {
         const plan = await deps.migration.verifiedReferences(scope, jobId);
@@ -276,6 +276,8 @@ export function createStorageBackend(home: string, deps: Dependencies) {
         state.bindings[scope] = { profileId: plan.profileId, namespace: plan.id, activatedAt: Date.now(), sequence: 0 };
         const roots: Root[] = plan.roots.map((entry) => ({ ...entry, scope,
           files: plan.files.filter((file) => file.rootId === entry.id).map(({ relative, digest, object }) => ({ relative, digest, object })) }));
+        if (protectOwners && (protectOwners.some((owner) => !SCOPE.test(owner) || scope !== 'shared' && owner !== scope) ||
+          roots.some((root) => root.owner === undefined || !protectOwners.includes(root.owner)))) fail('scope_conflict');
         await checkTree(roots); await guard(plan);
         if (scope !== 'shared' && state.bindings.shared) {
           const shared = state.bindings.shared;
@@ -286,7 +288,12 @@ export function createStorageBackend(home: string, deps: Dependencies) {
           const sequence = Math.max(shared.owners?.[scope] ?? 0, ...outstanding.filter((intent) => intent.owner === scope).map((intent) => intent.sequence));
           shared.owners = { ...shared.owners, [scope]: sequence };
         }
-        replaceRoots(state, scope, roots, true); save(state); archiveSettled(state); pending.delete(scope);
+        replaceRoots(state, scope, roots, true);
+        // Persist every live owner's next write interval before publishing the binding.
+        // Failed pointer publication leaves the old binding authoritative.
+        for (const owner of new Set(protectOwners ?? [])) saveIntent({ version: 1, id: crypto.randomUUID(), scope, owner,
+          sequence: 1, binding: { ...state.bindings[scope]! }, roots: [] });
+        save(state); archiveSettled(state); pending.delete(scope);
         for (const key of pendingOwners) if (key.startsWith(scope + '/') || scope !== 'shared' && key === `shared/${scope}`) pendingOwners.delete(key);
         return publicSummary(state, scope);
       });

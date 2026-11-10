@@ -95,3 +95,13 @@ test('revoked recovery authority cannot reopen a pending space', async () => {
   expect(f.runtime.ownerPending('owner')).toBe(true);
   await f.runtime.close();
 });
+
+test('activation reconciles a published binding even when the final persistence step reports failure', async () => {
+  const f = fixture(); await f.runtime.arm('owner');
+  await expect(f.runtime.activate('shared', 'second', ['owner'], async () => { f.rebind(); throw new Error('fsync failed'); })).rejects.toThrow('fsync');
+  expect(f.runtime.ownerPending('owner')).toBe(false);
+  expect(f.runtime.status('owner').state).toBe('pending');
+  await f.runtime.sync('owner');
+  expect(f.runtime.status('owner').state).toBe('ready');
+  await f.runtime.close();
+});
