@@ -168,6 +168,7 @@ export function createStorageBackend(home: string, deps: Dependencies) {
     } catch (error) { if (error instanceof StorageBackendError) throw error; return fail('invalid_binding'); }
   };
   const saveIntent = (intent: Intent) => {
+    if (!Number.isSafeInteger(intent.sequence) || intent.sequence <= 0) fail('invalid_binding');
     const content = JSON.stringify({ ...intent, checksum: crypto.createHash('sha256').update(JSON.stringify(intent)).digest('hex') });
     if (Buffer.byteLength(content) > MAX_INDEX) fail('invalid_binding');
     atomic(path.join(intents, `${intent.id}.json`), content, false);
@@ -228,6 +229,27 @@ export function createStorageBackend(home: string, deps: Dependencies) {
       checkScope(owner); const state = read();
       return state.bindings[owner] ? owner : state.bindings.shared ? 'shared' : null;
     },
+    /** Call before local writes, under the same writer barrier as checkpoint/activation. */
+    async markDirty(owner: string, guard: () => Promise<void>) {
+      checkScope(owner);
+      if (owner === 'shared') fail('scope_conflict');
+      return exclusive(async () => {
+        await guard();
+        const state = read();
+        const scope = state.bindings[owner] ? owner : state.bindings.shared ? 'shared' : null;
+        if (scope === null) return null;
+        const binding = state.bindings[scope]!;
+        if (state.roots.some((item) => item.scope === scope && item.owner === undefined)) fail('scope_conflict');
+        // A pre-write marker needs no source scan or network access. Its presence
+        // prevents restart from restoring a deletion made before checkpoint starts.
+        const outstanding = readIntents();
+        if (!outstanding.some((intent) => intent.owner === owner && outstandingIntent(intent, scope, binding))) {
+          saveIntent({ version: 1, id: crypto.randomUUID(), scope, owner,
+            sequence: (binding.owners?.[owner] ?? 0) + 1, binding: { ...binding }, roots: [] });
+        }
+        return { scope };
+      });
+    },
     /** guard must verify authority and the complete root set while the caller holds its writer barrier. */
     async activate(scope: string, jobId: string, guard: (plan: Activation) => Promise<void>) {
       checkScope(scope);
@@ -255,8 +277,9 @@ export function createStorageBackend(home: string, deps: Dependencies) {
       });
     },
     /** Checkpoint a complete scope or all roots of one owner under its writer barrier. */
-    async checkpoint(scope: string, sources: MigrationRoot[], guard: () => Promise<void>, owner?: string) {
+    async checkpoint(scope: string, sources: MigrationRoot[], guard: () => Promise<void>, owner?: string, options: { keepDirty?: boolean } = {}) {
       checkScope(scope);
+      if (options.keepDirty && owner === undefined) fail('scope_conflict');
       if (owner !== undefined) {
         checkScope(owner);
         if (scope !== 'shared' && scope !== owner || sources.some((source) => source.owner !== owner)) fail('scope_conflict');
@@ -266,7 +289,10 @@ export function createStorageBackend(home: string, deps: Dependencies) {
         const pendingSet = owner === undefined ? pending : pendingOwners;
         const pendingKey = owner === undefined ? scope : `${scope}/${owner}`;
         pendingSet.add(pendingKey);
-        const sequence = (owner === undefined ? binding.sequence : binding.owners?.[owner] ?? 0) + 1;
+        const sequence = Math.max(
+          (owner === undefined ? binding.sequence : binding.owners?.[owner] ?? 0) + 1,
+          ...readIntents().filter((intent) => intent.owner === owner && outstandingIntent(intent, scope, binding)).map((intent) => intent.sequence),
+        );
         // Record the dirty range even when profile resolution or scanning fails before uploads.
         saveIntent({ version: 1, id: crypto.randomUUID(), scope, ...(owner !== undefined ? { owner } : {}), sequence, binding: { ...binding }, roots: [] });
         let store: Awaited<ReturnType<typeof client>> | undefined;
@@ -305,6 +331,12 @@ export function createStorageBackend(home: string, deps: Dependencies) {
           replaceRoots(state, scope, roots, false, owner);
           if (owner === undefined) { binding.sequence = sequence; binding.owners = {}; }
           else binding.owners = { ...binding.owners, [owner]: sequence };
+          if (options.keepDirty) {
+            // Arm the next write interval before publishing this checkpoint.
+            // A crash here must never expose a clean pointer to live writers.
+            saveIntent({ version: 1, id: crypto.randomUUID(), scope, owner,
+              sequence: sequence + 1, binding: { ...binding }, roots: [] });
+          }
           save(state); archiveSettled(state); pendingSet.delete(pendingKey);
           if (owner === undefined) for (const key of pendingOwners) if (key.startsWith(scope + '/')) pendingOwners.delete(key);
           return publicSummary(state, scope);

@@ -73,11 +73,26 @@ async function serveDocumentUpdate(
   const header = req.headers[DOCUMENT_FEATURES_HEADER];
   const features =
     typeof header === 'string' ? header.split(',').map((feature) => feature.trim()) : [];
+  const sourceRejected = () => session.outcome().kind === 'rejected';
+  if (sourceRejected()) {
+    sendJson(res, 409, { error: 'Document source is invalid. Repair it before saving edits.' });
+    return;
+  }
   try {
     session.importUpdate(new Uint8Array(Buffer.concat(chunks)), features);
-    send(res, 204, '');
   } catch (err) {
     sendJson(res, err instanceof OutdatedClient ? 409 : 400, { error: (err as Error).message });
+    return;
+  }
+  try {
+    await session.flush();
+    if (sourceRejected()) {
+      sendJson(res, 409, { error: 'Document source changed to invalid content. Repair it and retry.' });
+      return;
+    }
+    send(res, 204, '');
+  } catch {
+    sendJson(res, 503, { error: 'Document could not be saved. Please retry.' });
   }
 }
 

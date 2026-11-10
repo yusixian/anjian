@@ -1,11 +1,12 @@
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 
 import { createLoroBinding } from '@haklex/rich-collab-loro';
 import { $getRoot, $isElementNode, $isTextNode, type LexicalNode, type TextNode } from 'lexical';
 import { LoroDoc } from 'loro-crdt';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { type ArtifactsServer, startArtifactsServer } from '../src/server/app';
 import { createDocumentHeadlessEditor } from '../src/server/document-headless';
@@ -14,6 +15,7 @@ import { type Fetched, get, openWs, readJson, tempRoot, waitFor, writeDocument }
 let running: ArtifactsServer[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(running.map((s) => s.close()));
   running = [];
 });
@@ -161,7 +163,70 @@ describe('live document', () => {
     );
     binding.dispose();
     expect(res.status).toBe(204);
-    await waitFor(() => fs.readFileSync(docFile(root, 'relay'), 'utf8').includes('one, by hand'));
+    expect(fs.readFileSync(docFile(root, 'relay'), 'utf8')).toContain('one, by hand');
+  });
+
+  test.each([false, true])('browser acknowledgement waits for persistence, including retry after failure=%s', async (fail) => {
+    const { server, root } = await start();
+    writeDocument(root, 'relay', { 'doc.xml': '<doc><p>one</p></doc>' });
+    await api(server, '/api/document/relay/state');
+    await server.settleDocument('relay');
+    const state = await api(server, '/api/document/relay/state');
+    const peer = new LoroDoc(); peer.import(Buffer.from(state.snapshot, 'base64'));
+    const editor = createDocumentHeadlessEditor();
+    const binding = createLoroBinding(editor, peer);
+    const from = peer.oplogVersion();
+    editor.update(() => $findText($getRoot(), 'one')!.setTextContent('durable change'), { discrete: true });
+    const bytes = Buffer.from(peer.export({ mode: 'update', from }));
+    const target = docFile(root, 'relay');
+    let release!: () => void; let entered = false; let responded = false;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const rename = fsPromises.rename.bind(fsPromises);
+    const spy = vi.spyOn(fsPromises, 'rename').mockImplementation(async (source, destination) => {
+      if (destination === target) {
+        entered = true;
+        await gate;
+        if (fail) throw new Error('private disk failure detail');
+      }
+      return rename(source, destination);
+    });
+    const headers = { Cookie: cookie(server), Origin: base(server) };
+    const uploading = post(`${base(server)}/api/document/relay/update`, bytes, headers).then((result) => { responded = true; return result; });
+    try {
+      await vi.waitFor(() => expect(entered).toBe(true));
+      expect(responded).toBe(false);
+    } finally { release(); }
+    const response = await uploading;
+    spy.mockRestore(); binding.dispose();
+    expect(response.status).toBe(fail ? 503 : 204);
+    expect(response.body).not.toContain('private disk');
+    if (fail) expect((await post(`${base(server)}/api/document/relay/update`, bytes, headers)).status).toBe(204);
+    expect(fs.readFileSync(target, 'utf8')).toContain('durable change');
+    const snapshot = new LoroDoc();
+    snapshot.import(fs.readFileSync(path.join(root, '.state/document/relay/doc.loro')));
+    const restoredEditor = createDocumentHeadlessEditor();
+    const restoredBinding = createLoroBinding(restoredEditor, snapshot);
+    expect(restoredEditor.getEditorState().read(() => $findText($getRoot(), 'durable change') !== null)).toBe(true);
+    restoredBinding.dispose();
+  });
+
+  test('an invalid external source cannot receive a successful browser save acknowledgement', async () => {
+    const { server, root } = await start();
+    writeDocument(root, 'relay', { 'doc.xml': '<doc><p>one</p></doc>' });
+    const state = await api(server, '/api/document/relay/state');
+    const peer = new LoroDoc(); peer.import(Buffer.from(state.snapshot, 'base64'));
+    const editor = createDocumentHeadlessEditor();
+    const binding = createLoroBinding(editor, peer);
+    const from = peer.oplogVersion();
+    editor.update(() => $findText($getRoot(), 'one')!.setTextContent('new edit'), { discrete: true });
+    fs.writeFileSync(docFile(root, 'relay'), '<doc><invalid');
+    await server.settleDocument('relay', '<doc><invalid');
+    const response = await post(`${base(server)}/api/document/relay/update`, Buffer.from(peer.export({ mode: 'update', from })), {
+      Cookie: cookie(server), Origin: base(server),
+    });
+    binding.dispose();
+    expect(response.status).toBe(409);
+    expect(fs.readFileSync(docFile(root, 'relay'), 'utf8')).toBe('<doc><invalid');
   });
 
   test('a page that does not declare pending support cannot post into a document with pending blocks', async () => {

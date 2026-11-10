@@ -205,11 +205,12 @@ export async function createDocumentSession(
 
   const loro = new LoroDoc();
   loro.setRecordTimestamp(true);
+  const versionKey = () => JSON.stringify([...loro.oplogVersion().toJSON()].sort(([a], [b]) => a.localeCompare(b)));
   let persistedVersion: string | null = null;
   let persistedSnapshotSignature: string | null = null;
   try {
     loro.import(await fs.readFile(snapshotFile));
-    persistedVersion = JSON.stringify(loro.oplogVersion().toJSON());
+    persistedVersion = versionKey();
     persistedSnapshotSignature = snapshotSignature(snapshotFile);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -325,7 +326,7 @@ export async function createDocumentSession(
 
   const saveSnapshot = async () => {
     if (!snapshotDirty) return snapshotWriting;
-    const version = JSON.stringify(loro.oplogVersion().toJSON());
+    const version = versionKey();
     snapshotDirty = false;
     if (version === persistedVersion && persistedSnapshotSignature !== null &&
         snapshotSignature(snapshotFile) === persistedSnapshotSignature) return snapshotWriting;
@@ -472,7 +473,7 @@ export async function createDocumentSession(
           validate();
           state.commit();
           binding.import(mergedUpdate);
-          persistedVersion = JSON.stringify(loro.oplogVersion().toJSON());
+          persistedVersion = versionKey();
           persistedSnapshotSignature = snapshotSignature(snapshotFile);
           revision++;
           lastFileText = xml;

@@ -165,3 +165,13 @@
 - 最终 13 文件 51 项测试及全应用构建通过，日志 `/tmp/anjian-maintenance-stable-final.log`；类型检查与 diff 检查通过。针对间歇失败额外执行三轮各 15 项真实 HTTP 回归，均通过，日志 `/tmp/anjian-upload-race-{1,2,3}.log`。
 - 隔离 Chrome 使用当前构建和模拟 API 走通迁移准备、复制失败、继续复制、刷新后校验完成，并检查桌面/手机、中英文与成员设置入口，无脚本错误或横向溢出。日志 `/tmp/anjian-maintenance-browser.log`；人工核对手机任务区截图 `/tmp/anjian-migration-browser-evidence/migration-mobile.png`。未连接真实 S3，未推送或部署。
 - 此屏障只用于准备任务。运行期持续 checkpoint、全写入入口额度、持久提交恢复与 GUI 激活切换仍未完成；外部文件写入也不受应用锁控制，仍需来源校验。下一步接入这些运行期边界后才能开放启用和完成生产交付。
+
+## 运行期写前保护与文档保存确认
+
+- S3 后端新增 `markDirty(owner, guard)`：在本地写入前持久记录该成员的未同步范围，不访问 S3、不扫描来源；同一未结区间去重，归属未知的活动根拒绝准入。该标记能保护“本地删除完成、checkpoint 尚未开始就退出”的窗口，重启不会把旧文件补回；健康成员仍可恢复。调用方必须持有与迁移/同步相同的写入屏障并等待成功后才能写源文件。
+- owner checkpoint 支持 `keepDirty`，先持久化下一写入区间，再发布当前指针，避免持续写入期间出现无保护窗口。若下一意图已保存而指针提交失败，停写重试按当前绑定的最大未结序号提交，一次即可收敛。所有旧文件和意图追溯记录保留，不做资源清理。
+- 文档保存发现并修复版本键缺陷：Loro `oplogVersion().toJSON()` 返回 Map，旧 `JSON.stringify` 总是 `{}`，使真实修改可能复用旧 Loro 快照。版本键现在按排序后的 Map entries 计算。浏览器更新在 XML 与快照文件操作完成后才返回 204；保存失败 503 可重试，外部 XML 无效时 409，保留原文件。普通 session.flush 的保留无效来源契约不变。这是文件操作完成确认，不声明文档文件已具备断电 fsync 保证。
+- 新测试阻塞 XML rename，确认未落盘前 HTTP 不成功；注入失败后重送同一协作更新，验证 XML 与从磁盘 Loro 重建的文档均包含新内容。初版测试真实发现旧快照问题，修复后 3 文件 76 项通过。全应用构建及 8 文件 96 项整合通过；独立复核后补上无效来源与超前意图恢复，3 文件 58 项通过。日志依次为 `/tmp/anjian-durable-snapshot-tests.log`、`/tmp/anjian-runtime-durability-integration.log`、`/tmp/anjian-durability-reviewed-tests.log`。最后服务端重建、类型检查、diff 检查通过。
+- 隔离 Chrome + 真实临时服务器验证桌面键入→204→源文件检查→刷新，再用手机视口刷新读取，确认无横向溢出与脚本错误；手机截图已人工核对。证据 `/tmp/anjian-durability-browser-f3HoAH/`、日志 `/tmp/anjian-durability-browser.log`。前两次脚本在协作编辑器加载前操作未触发请求，不能算通过；最终脚本等待加载并点击具体段落键入后通过。此轮没有验证手机编辑入口、生产或真实 S3 服务。
+- **尚未接入 Hub：** 活动 dirty 目前会被 summary 计为 recovery pending，不能直接在 mountOf 前调用后继续沿用 available 判定。下一步须区分本次运行已保护的写入区间与重启待恢复状态，并实现保持会话的 quiesce（暂停新 HTTP/WS/watcher 写、等待在途请求、flush 全部文档与录制），以 owner 全根计划执行 checkpoint。挂载初始化、GET 引发的游标/状态、WS、录制、后台 watcher 均会落盘；外部 Agent 直写需要整个运行期持续 dirty，不能依靠事后 watcher 通知。共享 orphan snapshots 属于 shared 本身，需要独立覆盖，不能只同步成员根后声称完整。
+- 本轮仅本地实现与验证。全入口额度、持续同步、GUI 启用切换和生产部署仍未完成。

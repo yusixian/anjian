@@ -254,3 +254,121 @@ test('pre-upload provider failure persists the dirty owner range across restart'
   await backend.restore();
   expect(backend.summary('shared', 'github:2').pending).toBe(false);
 });
+
+test('write-ahead marker preserves local deletion if the process stops before checkpoint begins', async () => {
+  const f = fixture();
+  const root = { ...f.root, owner: 'github:2' };
+  f.write('deleted', 'old'); await f.activate('shared', [root]);
+  // A failed provider must not prevent the local durable marker from being made.
+  f.failScope('shared');
+  expect(await f.create().markDirty('github:2', guard)).toEqual({ scope: 'shared' });
+  fs.unlinkSync(path.join(f.source, 'deleted'));
+  f.failScope();
+  const restarted = f.create();
+  expect(await restarted.restore()).toMatchObject({ pendingOwners: [{ scope: 'shared', owner: 'github:2' }] });
+  expect(fs.existsSync(path.join(f.source, 'deleted'))).toBe(false);
+  await restarted.checkpoint('shared', [root], guard, 'github:2');
+  expect(restarted.summary('shared').pending).toBe(false);
+  fs.rmSync(f.source, { recursive: true });
+  await f.create().restore();
+  expect(fs.existsSync(path.join(f.source, 'deleted'))).toBe(false);
+});
+
+test('write-ahead markers isolate members and coalesce until a complete checkpoint settles them', async () => {
+  const f = fixture();
+  const alice = { ...f.root, owner: 'github:2' };
+  const bob = { id: 'bob', directory: path.join(f.home, 'bob'), kind: 'artifacts' as const, owner: 'github:3' };
+  fs.mkdirSync(bob.directory); fs.writeFileSync(path.join(bob.directory, 'index'), 'bob');
+  f.write('index', 'alice'); await f.activate('shared', [alice, bob]);
+  await f.create().markDirty('github:2', guard);
+  await f.create().markDirty('github:2', guard);
+  expect(fs.readdirSync(path.join(f.home, 'storage/bindings/intents')).filter((name) => name.endsWith('.json'))).toHaveLength(1);
+  expect(f.create().summary('shared', 'github:2').pending).toBe(true);
+  expect(f.create().summary('shared', 'github:3').pending).toBe(false);
+  fs.rmSync(bob.directory, { recursive: true });
+  await f.create().restore();
+  expect(fs.readFileSync(path.join(bob.directory, 'index'), 'utf8')).toBe('bob');
+  await f.create().checkpoint('shared', [alice], guard, 'github:2');
+  expect(f.create().summary('shared').pending).toBe(false);
+  await f.create().markDirty('github:2', guard);
+  expect(f.create().summary('shared').pending).toBe(true);
+});
+
+test('write-ahead authority and persistence failures reject before callers can mutate sources', async () => {
+  const f = fixture(); f.write('index', 'old');
+  await f.activate('github:2', [{ ...f.root, owner: 'github:2' }]);
+  await expect(f.create().markDirty('github:2', async () => { throw new Error('revoked'); })).rejects.toThrow('revoked');
+  expect(f.create().summary('github:2').pending).toBe(false);
+  const original = fs.linkSync;
+  const fail = vi.spyOn(fs, 'linkSync').mockImplementation((from, to) => {
+    if (String(to).includes('/bindings/intents/')) throw new Error('disk full');
+    return original(from, to);
+  });
+  await expect(f.create().markDirty('github:2', guard)).rejects.toThrow('disk full');
+  fail.mockRestore();
+  expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('old');
+  expect(await f.create().markDirty('github:2', guard)).toEqual({ scope: 'github:2' });
+});
+
+test('local-only writes need no dirty marker and cannot mark the shared pseudo-owner', async () => {
+  const f = fixture();
+  const authorize = vi.fn(guard);
+  expect(await f.create().markDirty('owner', authorize)).toBeNull();
+  expect(authorize).toHaveBeenCalledOnce();
+  await expect(f.create().markDirty('shared', guard)).rejects.toMatchObject({ code: 'scope_conflict' });
+  expect(fs.readdirSync(path.join(f.home, 'storage/bindings/intents'))).toEqual(['settled']);
+});
+
+test('a live checkpoint arms its successor before publishing, protecting subsequent writes on restart', async () => {
+  const f = fixture(); const root = { ...f.root, owner: 'github:2' };
+  f.write('delete-later', 'initial'); await f.activate('shared', [root]);
+  await f.create().markDirty('github:2', guard);
+  const activePointer = path.join(f.home, 'storage/bindings/active.json');
+  const rename = fs.renameSync;
+  let observed = false;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    if (String(to) === activePointer) {
+      const unfinished = fs.readdirSync(path.join(f.home, 'storage/bindings/intents'))
+        .filter((name) => name.endsWith('.json'))
+        .map((name) => JSON.parse(fs.readFileSync(path.join(f.home, 'storage/bindings/intents', name), 'utf8')));
+      expect(unfinished.some((intent) => intent.owner === 'github:2' && intent.sequence === 2)).toBe(true);
+      observed = true;
+    }
+    return rename(from, to);
+  });
+  await f.create().checkpoint('shared', [root], guard, 'github:2', { keepDirty: true });
+  spy.mockRestore();
+  expect(observed).toBe(true);
+  expect(f.create().summary('shared').pending).toBe(true);
+  fs.unlinkSync(path.join(f.source, 'delete-later'));
+  expect(await f.create().restore()).toMatchObject({ pendingOwners: [{ scope: 'shared', owner: 'github:2' }] });
+  expect(fs.existsSync(path.join(f.source, 'delete-later'))).toBe(false);
+  // Only a quiesced final checkpoint may end the live write interval.
+  await f.create().checkpoint('shared', [root], guard, 'github:2');
+  expect(f.create().summary('shared').pending).toBe(false);
+});
+
+test('write-ahead admission refuses roots with unknown ownership', async () => {
+  const f = fixture(); f.write('index', 'old'); await f.activate();
+  await expect(f.create().markDirty('github:2', guard)).rejects.toMatchObject({ code: 'scope_conflict' });
+  expect(f.create().summary('shared').pending).toBe(false);
+});
+
+test('one quiesced retry settles a live checkpoint whose pointer publication failed', async () => {
+  const f = fixture(); const root = { ...f.root, owner: 'github:2' };
+  f.write('index', 'old'); await f.activate('shared', [root]);
+  await f.create().markDirty('github:2', guard); f.write('index', 'new');
+  const rename = fs.renameSync;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    if (String(to).endsWith('/active.json')) throw new Error('disk full');
+    return rename(from, to);
+  });
+  await expect(f.create().checkpoint('shared', [root], guard, 'github:2', { keepDirty: true })).rejects.toMatchObject({ code: 'unavailable' });
+  spy.mockRestore();
+  expect(f.create().summary('shared').pending).toBe(true);
+  await f.create().checkpoint('shared', [root], guard, 'github:2');
+  expect(f.create().summary('shared').pending).toBe(false);
+  fs.rmSync(f.source, { recursive: true });
+  expect(await f.create().restore()).toEqual({ conflicts: [], pendingScopes: [], failures: [] });
+  expect(fs.readFileSync(path.join(f.source, 'index'), 'utf8')).toBe('new');
+});
