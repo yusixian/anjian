@@ -43,6 +43,7 @@ vi.mock('@smithy/node-http-handler', () => ({ NodeHttpHandler: class {
 import { createS3Objects, digestFile } from '../src/server/storage/objects';
 import { testS3Connection } from '../src/server/storage/s3';
 import { createStorageMigration } from '../src/server/storage/migration';
+import { createStorageBackend } from '../src/server/storage/backend';
 
 const homes: string[] = [];
 const stores: ReturnType<typeof createS3Objects>[] = [];
@@ -186,4 +187,28 @@ test('migration uses the real SDK adapter, survives lost acknowledgements and ne
   expect(wire.sequence).toBe(1);
   expect(wire.calls.some(({ method }) => method === 'DELETE')).toBe(false);
   expect(fs.readFileSync(path.join(resources, '.artifact-id'))).toEqual(f.body);
+});
+
+
+test('active backend hydrates a missing artifact through the real SDK adapter and checkpoints without runtime credentials', async () => {
+  const f = fixture(Buffer.from('<h1>SDK-backed artifact</h1>'));
+  const resources = path.join(fs.realpathSync(f.directory), 'resources'); fs.mkdirSync(resources);
+  fs.copyFileSync(f.source, path.join(resources, 'index.html'));
+  const root = { id: 'artifact', directory: resources, kind: 'artifacts' as const, owner: 'owner' };
+  const profile = { ...settings, credentials, id: namespace, scope: 'shared' };
+  const resolveProfile = () => profile;
+  const migration = createStorageMigration(f.directory, { resolveProfile });
+  const job = await migration.prepare('shared', profile.id, [root]); await migration.resume('shared', job.id);
+  const backend = createStorageBackend(f.directory, { migration, resolveProfile });
+  await backend.activate('shared', job.id, async () => {});
+  fs.rmSync(resources, { recursive: true });
+  expect(await backend.restore()).toEqual({ conflicts: [], pendingScopes: [], failures: [] });
+  expect(fs.readFileSync(path.join(resources, 'index.html'))).toEqual(f.body);
+  fs.mkdirSync(path.join(resources, '.state'));
+  fs.writeFileSync(path.join(resources, '.state/server-info'), '?key=do-not-upload-runtime-key');
+  const before = wire.sequence;
+  await backend.checkpoint('shared', [root], async () => {});
+  expect(wire.sequence).toBe(before);
+  expect([...wire.objects.values()].some(({ body }) => body.toString().includes('do-not-upload-runtime-key'))).toBe(false);
+  expect(backend.summary('shared')).toMatchObject({ backend: 's3', bytes: f.body.length, pending: false });
 });

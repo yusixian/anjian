@@ -3,6 +3,7 @@ import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createS3Objects, digestFile, StorageObjectError } from './objects';
+import { isRuntimeLocalArtifactStateFile } from './sources';
 import type { FileDigest, S3Objects, StoredObject } from './objects';
 import type { S3Credentials, S3Settings } from './settings';
 
@@ -19,9 +20,10 @@ export class StorageMigrationError extends Error {
     super(message);
   }
 }
-export interface MigrationRoot { id: string; directory: string; exclude?: string[] }
+export interface MigrationRoot { id: string; directory: string; kind?: 'artifacts' | 'trash' | 'snapshot'; owner?: string; exclude?: string[] }
 export interface MigrationProfile extends S3Settings { id: string; scope: string; credentials: S3Credentials }
-interface Entry { rootId: string; relative: string; digest: FileDigest; object?: StoredObject }
+export interface MigrationFileEntry { rootId: string; relative: string; digest: FileDigest; object?: StoredObject }
+type Entry = MigrationFileEntry;
 interface RootSnapshot extends MigrationRoot { exclude: string[]; directories: string[] }
 interface ManifestBody {
   version: 1; id: string; scope: string; profileId: string; profileFingerprint: string;
@@ -45,6 +47,7 @@ const validRelative = (value: unknown): value is string => typeof value === 'str
 const validDigest = (value: unknown): value is FileDigest => !!value && typeof value === 'object' &&
   Number.isSafeInteger((value as FileDigest).bytes) && (value as FileDigest).bytes >= 0 && (value as FileDigest).bytes <= 5 * 1024 ** 3 && HASH.test((value as FileDigest).sha256);
 const equalDigest = (a: FileDigest, b: FileDigest) => a.bytes === b.bytes && a.sha256 === b.sha256;
+const inside = (file: string, parent: string) => file === parent || file.startsWith(parent.endsWith(path.sep) ? parent : `${parent}${path.sep}`);
 const profileFingerprint = (profile: MigrationProfile) => crypto.createHash('sha256').update(JSON.stringify({
   endpoint: profile.endpoint, bucket: profile.bucket, region: profile.region,
   prefix: profile.prefix, forcePathStyle: profile.forcePathStyle,
@@ -90,14 +93,16 @@ function validateManifest(value: unknown, scope: string, id: string): ManifestBo
       !Array.isArray(m.roots) || !Array.isArray(m.files) || m.roots.length === 0 ||
       (m.state === 'verified' && m.files.some((file) => !file.object)) ||
       typeof recorded !== 'string' || recorded !== checksum(m)) return corrupt();
-  const rootIds = new Set<string>();
+  const rootIds = new Map<string, RootSnapshot>();
   for (const root of m.roots) {
     if (!root || !ROOT_ID.test(root.id) || rootIds.has(root.id) || typeof root.directory !== 'string' ||
         !path.isAbsolute(root.directory) || path.normalize(root.directory) !== root.directory ||
+        (root.kind !== undefined && !['artifacts', 'trash', 'snapshot'].includes(root.kind)) ||
+        (root.owner !== undefined && (!SCOPE.test(root.owner) || scope !== 'shared' && root.owner !== scope)) ||
         !Array.isArray(root.exclude) || root.exclude.some((item) => !validRelative(item)) ||
         new Set(root.exclude).size !== root.exclude.length ||
         !Array.isArray(root.directories) || root.directories[0] !== '') return corrupt();
-    rootIds.add(root.id);
+    rootIds.set(root.id, root);
     const seen = new Set<string>();
     for (const directory of root.directories) {
       if (directory !== '' && !validRelative(directory) || seen.has(directory)) return corrupt();
@@ -110,6 +115,8 @@ function validateManifest(value: unknown, scope: string, id: string): ManifestBo
     const key = `${file.rootId}\0${file.relative}`;
     if (entries.has(key)) return corrupt();
     entries.add(key);
+    const root = rootIds.get(file.rootId)!;
+    if (root.exclude.includes(file.relative) || root.kind === 'artifacts' && isRuntimeLocalArtifactStateFile(file.relative)) return corrupt();
     if (file.object && (!validDigest(file.object) || !equalDigest(file.digest, file.object) ||
         typeof file.object.key !== 'string' || !file.object.key ||
         (file.object.versionId !== undefined && (typeof file.object.versionId !== 'string' || !file.object.versionId)))) return corrupt();
@@ -135,7 +142,7 @@ async function load(file: string, scope: string, id: string): Promise<ManifestBo
     return corrupt();
   }
 }
-async function scanRoot(root: MigrationRoot): Promise<{ directories: string[]; files: Entry[] }> {
+export async function scanStorageRoot(root: MigrationRoot): Promise<{ directories: string[]; files: MigrationFileEntry[] }> {
   const stat = await fs.lstat(root.directory);
   if (!stat.isDirectory() || stat.isSymbolicLink()) invalid('源目录必须是真实目录。');
   if (await fs.realpath(root.directory) !== root.directory) invalid('源目录真实路径已变化。');
@@ -150,6 +157,10 @@ async function scanRoot(root: MigrationRoot): Promise<{ directories: string[]; f
       const target = path.join(root.directory, child);
       const stat = await fs.lstat(target);
       if (stat.isSymbolicLink()) invalid('源目录含符号链接。');
+      if (root.kind === 'artifacts' && isRuntimeLocalArtifactStateFile(child)) {
+        if (!stat.isFile()) invalid('运行态排除路径必须是普通文件。');
+        continue;
+      }
       if (exclude.has(child)) {
         if (!stat.isFile()) invalid('精确排除路径必须是普通文件。');
         continue;
@@ -167,7 +178,7 @@ async function checkTree(m: ManifestBody) {
   const expectedFiles = new Map(m.files.map((file) => [`${file.rootId}\0${file.relative}`, file.digest]));
   try {
     for (const root of m.roots) {
-      const current = await scanRoot(root);
+      const current = await scanStorageRoot(root);
       const expected = expectedDirectories.get(root.id)!;
       if (current.directories.length !== expected.length || current.directories.some((item, index) => item !== expected[index])) return sourceChanged();
       for (const file of current.files) {
@@ -207,7 +218,9 @@ export function createStorageMigration(home: string, deps: Dependencies) {
         const profile = await resolve(scope, profileId);
         const ids = new Set<string>(); const directories: string[] = []; const canonicalRoots: MigrationRoot[] = [];
         for (const root of roots) {
-          if (!root || !ROOT_ID.test(root.id) || ids.has(root.id) || typeof root.directory !== 'string' || !path.isAbsolute(root.directory)) invalid('源目录标识或路径无效。');
+          if (!root || !ROOT_ID.test(root.id) || ids.has(root.id) || typeof root.directory !== 'string' || !path.isAbsolute(root.directory) ||
+              (root.kind !== undefined && !['artifacts', 'trash', 'snapshot'].includes(root.kind)) ||
+              (root.owner !== undefined && (!SCOPE.test(root.owner) || scope !== 'shared' && root.owner !== scope))) invalid('源目录标识、归属或路径无效。');
           if (root.exclude !== undefined && (!Array.isArray(root.exclude) || root.exclude.some((item) => !validRelative(item)) ||
               new Set(root.exclude).size !== root.exclude.length)) invalid('源目录排除路径无效。');
           const directory = path.normalize(root.directory);
@@ -215,14 +228,14 @@ export function createStorageMigration(home: string, deps: Dependencies) {
           const stat = await fs.lstat(directory);
           if (!stat.isDirectory() || stat.isSymbolicLink()) invalid('源目录必须是真实目录。');
           const canonical = await fs.realpath(directory);
-          if (canonical === store || canonical.startsWith(`${store}${path.sep}`) || store.startsWith(`${canonical}${path.sep}`)) invalid('源目录不能包含迁移记录。');
-          if (directories.some((other) => canonical === other || canonical.startsWith(`${other}${path.sep}`) || other.startsWith(`${canonical}${path.sep}`))) invalid('源目录不能重叠。');
+          if (inside(canonical, store) || inside(store, canonical)) invalid('源目录不能包含迁移记录。');
+          if (directories.some((other) => inside(canonical, other) || inside(other, canonical))) invalid('源目录不能重叠。');
           ids.add(root.id); directories.push(canonical); canonicalRoots.push({ ...root, directory: canonical });
         }
         const snapshots: RootSnapshot[] = []; const files: Entry[] = [];
         for (const root of canonicalRoots) {
           const fixed = { ...root, exclude: [...(root.exclude ?? [])].sort() };
-          const result = await scanRoot(fixed);
+          const result = await scanStorageRoot(fixed);
           snapshots.push({ ...fixed, directories: result.directories }); files.push(...result.files);
         }
         await ensureDirectory(storage); await ensureDirectory(store); await ensureDirectory(directoryFor(store, scope));

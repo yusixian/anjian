@@ -82,6 +82,40 @@ test('captures hidden state, comments, trash and empty directories, verifies eve
   expect(refs.files.map((ref) => ref.relative).sort()).toEqual([...before.keys()].sort());
 });
 
+test('persisted artifacts policy excludes newly created runtime files without dropping collaboration data', async () => {
+  const f = fixture();
+  write(f.source, '.state/.artifact-id', 'identity');
+  write(f.source, '.state/artboard/a/comments.json', 'comments');
+  write(f.source, '.state/recordings/a.mp4', 'recording');
+  write(f.source, '.state/server-info', 'secret');
+  const job = await f.create().prepare('shared', f.profile.id, [{ ...f.root, kind: 'artifacts' }]);
+  write(f.source, '.state/server-info.123.tmp', 'new-secret');
+  write(f.source, '.state/.last-token.456.tmp', 'token-secret');
+  write(f.source, '.state/.last-port', 'port');
+  write(f.source, '.state/.last-board-port', 'board-port');
+  const done = await f.create().resume('shared', job.id);
+  expect(done).toMatchObject({ state: 'verified', files: 3 });
+  const refs = await f.create().verifiedReferences('shared', job.id);
+  expect(refs.roots[0]).toMatchObject({ kind: 'artifacts' });
+  expect(refs.files.map((file) => file.relative).sort()).toEqual([
+    '.state/.artifact-id', '.state/artboard/a/comments.json', '.state/recordings/a.mp4',
+  ]);
+  expect([...f.remote.values()].map((body) => body.toString())).toEqual(expect.arrayContaining(['identity', 'comments', 'recording']));
+  expect([...f.remote.values()].some((body) => body.toString().includes('secret'))).toBe(false);
+});
+
+test('persists logical root owner and rejects foreign roots in a private migration', async () => {
+  const f = fixture(); write(f.source, 'a', 'alpha');
+  const job = await f.create().prepare('shared', f.profile.id, [{ ...f.root, owner: 'github:123' }]);
+  await f.create().resume('shared', job.id);
+  expect((await f.create().verifiedReferences('shared', job.id)).roots[0]?.owner).toBe('github:123');
+  f.profile.scope = 'owner';
+  await expect(f.create().prepare('owner', f.profile.id, [{ ...f.root, owner: 'github:123' }]))
+    .rejects.toMatchObject({ code: 'invalid_request' });
+  await expect(f.create().prepare('owner', f.profile.id, [{ ...f.root, owner: 'owner' }]))
+    .resolves.toMatchObject({ scope: 'owner' });
+});
+
 test('persists partial progress and resumes across constructors without reuploading verified references', async () => {
   const f = fixture(); write(f.source, 'a', 'alpha'); write(f.source, 'b', 'beta');
   const job = await f.create().prepare('shared', f.profile.id, [f.root]);
@@ -171,6 +205,12 @@ test('rejects symlinks, invalid exclusions, overlapping roots and simultaneous s
   const first = f.create().resume('shared', job.id);
   await expect(f.create().resume('shared', job.id)).rejects.toMatchObject({ code: 'busy' });
   await first;
+});
+
+test('rejects filesystem root because it contains migration metadata', async () => {
+  const f = fixture();
+  await expect(f.create().prepare('shared', f.profile.id, [{ id: 'filesystem', directory: path.parse(f.home).root }]))
+    .rejects.toMatchObject({ code: 'invalid_request' });
 });
 
 test('rejects a symlinked storage metadata parent', async () => {
