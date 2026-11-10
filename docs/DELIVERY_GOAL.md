@@ -364,3 +364,13 @@ Hub 在停止 HTTP、认证和后台服务之前，先持有额度/项目锁暂�
 5 文件 57 项评论 Store、Registry、文档评论额度、画板评论及远程 API 回归通过。另一个真实 Hub 测试使用默认 30 秒重试：零额度 GET state 返回可读评论且原文件不变，提高额度后不再发请求或编辑文件，30.74 秒内保存规范化评论，ID 与已返回视图一致。类型检查、服务端构建、diff 检查通过；本轮未重复全量测试或浏览器验收，未推送部署。
 
 当前整体成员/存储 GUI 验收、临时空间与恢复边界审计、真实外部 S3 和最终部署仍待完成；不能将这些局部额度检查等同于整个目标完成。
+
+## 成员与存储真实服务 GUI 验收（2026-11-11，本地验证）
+
+使用当前 Hub 源码独立打包、已构建 viewer 与隔离 Chrome，所有案间 API 使用真实 HTTP 服务及临时磁盘数据，不拦截成员/存储 API 返回。仅外部 GitHub 用户查询、令牌交换、用户信息与授权重定向使用测试替身；不使用真实账号，不构成生产 GitHub OAuth 验收。
+
+实际点击并核验后端结果：管理员创建 alice 邀请；成员通过邀请和登录回调进入独立空间；访问 Owner 私有作品为 404，成员管理及共享存储 API 为 403；成员 GUI 保存个人 S3 配置，scope 固定 github:2、凭据不回显、存储仍为 local；测试私网 endpoint 被拒绝，迁移准备不可用；管理员 GUI 将共享总容量设为 5 GiB、成员额度设为 2 GiB，成员读取新额度生效；GUI 暂停成员后原会话访问作品接口为 403。
+
+1440px 桌面与 390px 手机邀请页、手机存储失败状态已截图并人工查看，无横向溢出和 pageerror。首次手机截图发生重排中的残影，等待布局稳定后重新截图，DOM 检查只有一个 header，稳定截图无重复顶栏。没有因此修改应用代码。脚本 /tmp/anjian-members-real-browser.mjs，最终日志 /tmp/anjian-members-real-browser-verified.log；截图 /tmp/anjian-members-real-desktop.png、/tmp/anjian-members-real-mobile.png、/tmp/anjian-member-storage-real-mobile.png。
+
+本轮补强了此前模拟 API 的界面证据，但尚未覆盖真实 S3 成功读写、迁移激活的完整 GUI 流程、生产账号登录或线上部署。此次未推送或部署。
