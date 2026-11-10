@@ -40,3 +40,16 @@ test('revocation during registration prevents a successful login', async () => {
   const register = async () => { members.update(identity.id, { status: 'suspended' }); };
   await expect(createMemberWorkspace({ home, members, register })(identity)).rejects.toThrow('成员访问权限已失效');
 });
+
+test('storage recovery does not prevent login or create an empty member workspace', async () => {
+  const { home, members, identity } = fixture();
+  const register = vi.fn(async () => {});
+  let available = false;
+  const prepare = createMemberWorkspace({ home, members, register, available: () => available });
+  await expect(prepare(identity)).resolves.toBeUndefined();
+  expect(register).not.toHaveBeenCalled();
+  expect(fs.existsSync(path.join(home, 'workspaces'))).toBe(false);
+  available = true;
+  await prepare(identity);
+  expect(register).toHaveBeenCalledOnce();
+});

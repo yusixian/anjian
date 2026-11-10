@@ -197,3 +197,33 @@ test('publication admission reserves the new snapshot and leaves the old share i
   expect(fs.readFileSync(path.join(old.snapshotDir, f.primary), 'utf8')).toBe('first version');
   expect(fs.readdirSync(path.join(f.home, 'shares/snapshots'))).toEqual([path.basename(old.snapshotDir)]);
 });
+
+test('expiry cleanup preserves snapshots belonging to a space awaiting storage recovery', () => {
+  const f = fixture();
+  const published = f.store.publish(f.project, f.artifact, { title: 'Pending recovery', expiresInDays: 1 });
+  const snapshot = f.store.file(published, 'index.html')!;
+  clock += 2 * 24 * 60 * 60 * 1000;
+  let available = false;
+  const store = createShareStore(f.home, { now: () => clock, canMutateProject: () => available });
+  expect(store.cleanupExpired()).toBe(0);
+  expect(store.find(published.token)).toBeNull();
+  expect(fs.existsSync(snapshot)).toBe(true);
+  available = true;
+  expect(store.cleanupExpired()).toBe(1);
+  expect(fs.existsSync(snapshot)).toBe(false);
+});
+
+test('expiry cleanup keeps a snapshot still referenced by a retained share record', () => {
+  const f = fixture();
+  const published = f.store.publish(f.project, f.artifact, { title: 'Published', expiresInDays: 1 });
+  const snapshot = f.store.file(published, 'index.html')!;
+  const indexFile = path.join(f.home, 'shares/index.json');
+  const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+  const original = Object.values(index.records)[0] as Record<string, unknown>;
+  index.records['f'.repeat(64)] = { ...original, expiresAt: null };
+  fs.writeFileSync(indexFile, JSON.stringify(index));
+  clock += 2 * 24 * 60 * 60 * 1000;
+  expect(f.store.cleanupExpired()).toBe(1);
+  expect(Object.keys(JSON.parse(fs.readFileSync(indexFile, 'utf8')).records)).toEqual(['f'.repeat(64)]);
+  expect(fs.existsSync(snapshot)).toBe(true);
+});

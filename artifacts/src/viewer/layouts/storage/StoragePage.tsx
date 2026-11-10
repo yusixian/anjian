@@ -9,7 +9,7 @@ interface TestResult { ok: boolean; checkedAt: number; steps: { write: boolean; 
 interface Settings { endpoint: string; bucket: string; region: string; prefix: string; forcePathStyle: boolean }
 interface Profile extends Settings { id: string; credentialsConfigured: boolean; test?: TestResult | null }
 interface Usage { artifacts: number; history: number; trash: number; shares: number; retained: number; total: number; checkedAt: number }
-interface Summary { usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local'; sharedLimitBytes?: number | null }
+interface Summary { recoveryPending?: boolean; usage: Usage | null; profile: Profile | null; configured: boolean; backend: 'local' | 's3'; sharedLimitBytes?: number | null }
 const blank: Settings = { endpoint: '', bucket: '', region: 'auto', prefix: 'anjian', forcePathStyle: true };
 const emptyCredentials = { accessKeyId: '', secretAccessKey: '', sessionToken: '' };
 const GIB = 1024 ** 3;
@@ -83,7 +83,8 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
   };
   const test = data?.profile?.test;
   return <>
-    <div {...stylex.props(styles.preview)}><strong>{t('storage.local')}</strong><p {...stylex.props(styles.rowMeta)}>{t('storage.localHelp')}</p></div>
+    <div {...stylex.props(styles.preview)}><strong>{t(data?.backend === 's3' ? 'storage.s3' : 'storage.local')}</strong><p {...stylex.props(styles.rowMeta)}>{t(data?.backend === 's3' ? 'storage.s3Help' : 'storage.localHelp')}</p></div>
+    {data?.recoveryPending && <p role="alert" {...stylex.props(styles.status, styles.error)}>{t('storage.recoveryPending')}</p>}
     {error && <div role="alert" {...stylex.props(styles.status, styles.error)}>{error} {!data && <Button onClick={() => { setError(''); void request<Summary>().then(apply).catch((failure: Error) => setError(failure.message)); }}>{t('devices.retry')}</Button>}</div>}
     {busy && operation === 'test' && <p role="status" {...stylex.props(styles.note)}>{t('storage.testing')}</p>}
     {notice && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}

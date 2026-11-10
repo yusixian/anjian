@@ -46,22 +46,24 @@ function validFile(file: string) {
   return segments.every((segment) => segment && segment !== '.' && segment !== '..' && !segment.startsWith('.'));
 }
 
-function safeDirectory(directory: string) {
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const stat = fs.lstatSync(directory);
+function safeDirectory(directory: string, create = true) {
+  if (create) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  let stat: fs.Stats;
+  try { stat = fs.lstatSync(directory); }
+  catch (error) { if (!create && (error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new ShareStoreError(503, 'unsafe_storage', 'Share storage directory is unsafe');
 }
 
 /** Snapshot metadata lives outside the project and is never served as a project artifact. */
-export function createShareStore(home: string, options: { maxBytes?: number; now?: () => number } = {}) {
+export function createShareStore(home: string, options: { maxBytes?: number; now?: () => number; canMutateProject?: (project: string) => boolean } = {}) {
   const root = path.resolve(home, 'shares');
   const snapshots = path.join(root, 'snapshots');
   const indexFile = path.join(root, 'index.json');
   const now = options.now ?? Date.now;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
-  safeDirectory(root);
-  safeDirectory(snapshots);
+  safeDirectory(root, false);
+  safeDirectory(snapshots, false);
 
   const keyOf = (project: string, artifact: ShareArtifact) => {
     if (!isArtifactType(artifact.type) || !isArtifactId(artifact.id) ||
@@ -101,6 +103,7 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
   };
 
   const persist = (value: Index) => {
+    safeDirectory(root);
     const tmp = path.join(root, `.index-${crypto.randomUUID()}.tmp`);
     try {
       fs.writeFileSync(tmp, JSON.stringify(value), { flag: 'wx', mode: 0o600 });
@@ -151,15 +154,18 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
 
   const cleanupExpired = () => {
     const old = index();
-    const expired = Object.values(old.records).filter((entry) =>
-      entry.expiresAt !== null && entry.expiresAt <= now(),
+    const expired = Object.entries(old.records).filter(([, entry]) =>
+      entry.expiresAt !== null && entry.expiresAt <= now() && (options.canMutateProject?.(entry.project) ?? true),
     );
     if (expired.length === 0) return 0;
+    const expiredKeys = new Set(expired.map(([key]) => key));
     const records = Object.fromEntries(Object.entries(old.records).filter(
-      ([, entry]) => entry.expiresAt === null || entry.expiresAt > now(),
+      ([key]) => !expiredKeys.has(key),
     ));
     persist({ version: 1, records });
-    for (const entry of expired) {
+    const retained = new Set(Object.values(records).map((entry) => entry.snapshotId));
+    for (const [, entry] of expired) {
+      if (retained.has(entry.snapshotId)) continue;
       try { fs.rmSync(path.join(snapshots, entry.snapshotId), { recursive: true, force: true }); }
       catch { /* The index no longer grants access. */ }
     }
@@ -203,6 +209,8 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
       throw new ShareStoreError(413, 'share_storage_full', 'Public share storage is full');
     // Reserve the entire new snapshot: the old one must remain available until publication succeeds.
     admit?.(identity.bytes);
+    safeDirectory(root);
+    safeDirectory(snapshots);
     const directory = path.join(snapshots, identity.snapshotId);
     fs.mkdirSync(directory, { mode: 0o700 });
     try {

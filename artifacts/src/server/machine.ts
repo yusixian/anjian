@@ -112,9 +112,9 @@ export function removeProject(file: string, projectDir: string) {
 
 export const artifactsRootOf = (projectDir: string) => path.join(projectDir, '.anjian', 'artifacts');
 
-export function pruneProjects(file: string) {
+export function pruneProjects(file: string, retain?: (project: string) => boolean) {
   const projects = readProjects(file);
-  const kept = projects.filter((entry) => fs.existsSync(artifactsRootOf(entry.dir)));
+  const kept = projects.filter((entry) => retain?.(entry.dir) || fs.existsSync(artifactsRootOf(entry.dir)));
   if (kept.length !== projects.length) writeProjects(file, kept);
   return kept;
 }

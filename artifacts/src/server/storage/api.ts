@@ -8,6 +8,8 @@ import { StorageSettingsError, type createStorageSettings } from './settings';
 export function createStorageApi(options: {
   settings: ReturnType<typeof createStorageSettings>;
   usage: ReturnType<typeof createStorageUsage>;
+  backend?: (scope: string) => 'local' | 's3';
+  recoveryPending?: (scope: string) => boolean;
   origin: string;
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
@@ -34,7 +36,7 @@ export function createStorageApi(options: {
         if (!current || current.id !== identity.id || current.role !== identity.role || current.sessionVersion !== identity.sessionVersion) {
           sendJson(res, 403, { error: '登录状态已变化。' }); return true;
         }
-        sendJson(res, 200, { ...summary, backend: 'local', tested: summary.profile?.test?.ok ?? false, usage });
+        sendJson(res, 200, { ...summary, recoveryPending: options.recoveryPending?.(scope) ?? false, backend: options.backend?.(scope) ?? 'local', tested: summary.profile?.test?.ok ?? false, usage });
         return true;
       }
       if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }
@@ -65,11 +67,11 @@ export function createStorageApi(options: {
             sendJson(res, 403, { error: '登录状态已变化。' }); return true;
           }
           options.settings.recordTest(scope, profile.id, result);
-          sendJson(res, 200, { test: result, backend: 'local' });
+          sendJson(res, 200, { test: result, backend: options.backend?.(scope) ?? 'local' });
         } finally { testing.delete(scope); }
       } else if (body.action === 'save') {
         const profile = options.settings.save(scope, body.settings, body.credentials);
-        sendJson(res, 200, { profile, backend: 'local', tested: false });
+        sendJson(res, 200, { profile, backend: options.backend?.(scope) ?? 'local', tested: false });
       } else if (body.action === 'limit' && scope === 'shared') {
         options.settings.setSharedLimit(body.bytes as number);
         sendJson(res, 200, options.settings.summary(scope));

@@ -7,6 +7,7 @@ export function createMemberWorkspace(options: {
   home: string;
   members: ReturnType<typeof createMemberStore>;
   register: (project: string) => Promise<unknown>;
+  available?: (owner: string) => boolean;
 }) {
   const root = path.join(fs.realpathSync(options.home), 'workspaces');
   const pending = new Map<string, Promise<void>>();
@@ -23,6 +24,8 @@ export function createMemberWorkspace(options: {
     const work = Promise.resolve().then(async () => {
       const current = identity.githubId === undefined ? null : options.members.principal(identity.githubId, identity.sessionVersion);
       if (!current || current.id !== identity.id) throw new MemberError(403, 'member_disabled', '成员访问权限已失效。');
+      // Login remains available so the member can repair their storage configuration.
+      if (options.available && !options.available(identity.id)) return;
       directory(root);
       const project = path.join(root, `github-${identity.githubId}`);
       directory(project);

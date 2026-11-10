@@ -29,6 +29,8 @@ import { createStorageSettings } from './storage/settings';
 import { createStorageApi } from './storage/api';
 import { createStorageUsage } from './storage/usage';
 import { createStorageQuota } from './storage/quota';
+import { createStorageMigration } from './storage/migration';
+import { createStorageBackend } from './storage/backend';
 import { createProjectAccess } from './project-access';
 import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
@@ -136,16 +138,31 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const localBinding = isLoopbackHost(options.host);
   const loopback = localBinding && !options.publicOrigin;
   const projectsFile = options.paths.projects;
-  pruneProjects(projectsFile);
+  const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
+  const settings = createStorageSettings(options.paths.home);
+  const migration = createStorageMigration(options.paths.home, { resolveProfile: settings.resolve });
+  const storageBackend = createStorageBackend(options.paths.home, { migration, resolveProfile: settings.resolve });
+  // Hydrate before pruning missing roots, trash recovery, indexing, or accepting requests.
+  await storageBackend.restore();
+  const recoveryPending = (owner: string) => {
+    const scope = owner === 'shared' ? 'shared' : storageBackend.scopeFor(owner);
+    return scope !== null && storageBackend.summary(scope, owner === 'shared' ? undefined : owner).pending;
+  };
+  const available = (project: string) => !recoveryPending(members.projectOwner(project));
+  const assertAvailable = (project: string) => {
+    if (!available(project)) throw new Error('存储尚未恢复，此空间暂不可用，请联系管理员。');
+  };
+  pruneProjects(projectsFile, (project) => !available(project));
 
   for (const project of readProjects(projectsFile)) {
+    if (!available(project.dir)) continue;
     await withProjectMutation(project.dir, async () => recoverProjectTrash(project.dir));
   }
 
   const ordered = () => readProjects(projectsFile).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-  const registered = (dir: string) => ordered().some((entry) => entry.dir === dir);
-  const shares = createShareStore(options.paths.home);
-  const index = createArtifactIndex(() => ordered().map((entry) => entry.dir), {
+  const registered = (dir: string) => available(dir) && ordered().some((entry) => entry.dir === dir);
+  const shares = createShareStore(options.paths.home, { canMutateProject: available });
+  const index = createArtifactIndex(() => ordered().filter((entry) => available(entry.dir)).map((entry) => entry.dir), {
     rescanAfterMs: 0,
   });
 
@@ -163,17 +180,17 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
 
   const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
-  const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const github = githubConfig ? createGitHubAuth({ config: githubConfig, token: options.token, origin, cookieName: `anjian_artifacts_${port}`, members, prepareMember: (identity) => prepareMember(identity), fetch: options.fetch }) : undefined;
 
   const projectId = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
-  const remoteProjects = () => ordered().map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
+  const remoteProjects = () => ordered().filter((entry) => available(entry.dir)).map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
   const remoteEvents = createRemoteEvents(options.paths.home);
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
   const suspension = createProjectSuspension();
   const mountOf = (project: string): Promise<MountedProject> => {
+    if (!available(project)) return Promise.reject(new Error('存储尚未恢复，此空间暂不可用，请联系管理员。'));
     const pause = suspension.wait(project);
     if (pause) return pause.then(() => mountOf(project));
     if (closing) return Promise.reject(new Error('Artifacts server is stopping'));
@@ -256,6 +273,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const artifacts: HubArtifact[] = [];
     const warnings: string[] = [];
     for (const entry of ordered()) {
+      if (!available(entry.dir)) continue;
       if (scope && !scope.has(entry.dir)) continue;
       const root = artifactsRootOf(entry.dir);
       const listed = listArtifacts(root);
@@ -416,6 +434,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const real = realDir(dir);
     if (!real) throw new Error(`Project directory not found: ${dir}`);
     return withProjectMutation(real, async () => {
+      assertAvailable(real);
       if (!mounts.has(real)) recoverProjectTrash(real);
       fs.mkdirSync(artifactsRootOf(real), { recursive: true });
       const entry = registerProject(projectsFile, real);
@@ -427,11 +446,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     });
   };
 
-  const prepareMember = createMemberWorkspace({ home: options.paths.home, members, register });
+  const prepareMember = createMemberWorkspace({ home: options.paths.home, members, register, available: (owner) => !recoveryPending(owner) });
 
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
     return withProjectMutation(real, async () => {
+      assertAvailable(real);
       shares.revokeProject(real);
       removeProject(projectsFile, real);
       index.rescan();
@@ -539,6 +559,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
   const trashCleanup = setInterval(() => {
     for (const project of ordered()) {
+      if (!available(project.dir)) continue;
       void withProjectMutation(project.dir, async () => { listTrash(project.dir); })
         .catch(() => console.error('Trash retention cleanup failed'));
     }
@@ -568,7 +589,6 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     snapshotsRoot: path.join(options.paths.home, 'shares/snapshots'),
     snapshots: () => shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: members.projectOwner(project) })),
   });
-  const settings = createStorageSettings(options.paths.home);
   const writeQuota = createStorageQuota({
     owner: members.projectOwner,
     measure: usage.measure,
@@ -578,7 +598,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     }),
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload: writeQuota });
-  const storageApi = createStorageApi({ settings, usage, origin, principal: projectAccess.principal, readBody });
+  const storageApi = createStorageApi({ settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
+    backend: (owner) => {
+      const scope = owner === 'shared' ? 'shared' : storageBackend.scopeFor(owner);
+      return scope === null ? 'local' : storageBackend.summary(scope).backend;
+    },
+  });
   const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
   const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
   const publicShares = createPublicShare({ store: shares, origin,
@@ -729,7 +754,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const project =
         boardRoute.kind === 'board'
           ? (index.find('artboard', boardRoute.address)?.project ?? null)
-          : (ordered()[0]?.dir ?? null);
+          : (ordered().find((entry) => available(entry.dir))?.dir ?? null);
       const mounted = project ? await mountOf(project) : null;
       if (!mounted) send(res, 404, 'Not found');
       else mounted.handleBoardRequest(req, res);
@@ -739,6 +764,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
 
   for (const entry of ordered()) {
+    if (!available(entry.dir)) continue;
     writeCompatInfo(entry.dir);
     if (!isDormant(entry)) void mountOf(entry.dir).catch(() => undefined);
   }
@@ -767,7 +793,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       mounts.clear();
       ready.clear();
       await Promise.all(all.map(async (pending) => (await pending.catch(() => null))?.close()));
-      for (const entry of ordered()) fs.rmSync(infoFileOf(entry.dir), { force: true });
+      for (const entry of ordered()) if (available(entry.dir)) fs.rmSync(infoFileOf(entry.dir), { force: true });
       for (const server of [front, board]) server.closeAllConnections();
       await Promise.all(stopped);
     },
