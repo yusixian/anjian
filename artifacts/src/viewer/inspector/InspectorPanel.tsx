@@ -155,7 +155,7 @@ export const InspectorPanel = memo(function InspectorPanel({
             <span title={node?.selector} {...stylex.props(styles.nodeSelector)}>
               {node?.selector}
             </span>
-            {node && (
+            {node && !readOnly && (
               <span {...stylex.props(styles.live)}>
                 <Circle aria-hidden fill="currentColor" size={6} />
                 {t('inspector.live')}

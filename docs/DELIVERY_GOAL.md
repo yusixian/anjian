@@ -404,3 +404,30 @@ CI 42883667836 失败于 storage-objects.test.ts 的首个真实 SDK 文件流�
 生产公开路径已返回新版 SettingsLayout-B4g2lpjn.js（HTTP 200），完整 SHA-256 与当前本地构建一致，确认新版设置资源已上线。刷新既有公开设计稿后标题、画板内容和 9 个 iframe 正常，页面无横向溢出；既有 anjian-production-e2e CLI remote status 仍为 linked=true，项目绑定未变。匿名 /api/account、/api/hub/members、/api/storage?scope=shared 返回 403，/members 与 /storage 返回 303 到各自登录回跳地址。
 
 本轮未获取 Dokploy 部署详情或容器状态，发布生效依据为 main 推送、新构建资源哈希和实际公网服务响应。工具浏览器仍停在 GitHub 登录页，管理员线上成员/存储页面尚未验收；用户登录请求保持待完成。真实外部 S3 未配置，未执行生产数据迁移、邀请真实成员、修改容量或清理原文件。目标不能据此标记全部完成。
+
+## 成员与存储交付收尾（2026-11-11）
+
+main CI 42885208484 已通过，核验 headSha 为 9e11268b133f06d1b28981d52d20c68065a081c5。gh 默认选择上游仓库时查询返回 404；显式指定 yusixian/anjian 后取得 completed/success，不是 CI 失败。
+
+通过 Orca 复用用户日常 Chrome 的现有案间登录态，直接打开生产 /members，确认管理员成员列表与邀请表单可用；取消未提交表单后进入 /storage，确认共享用量、S3 配置、迁移入口及“我的 S3”标签正常加载。已查看成员邀请与共享存储截图。生产当前仍为服务器磁盘，共享用量约 16.44 MiB；未配置 S3，连接测试及迁移准备禁用符合预期。没有新建真实成员、修改容量、填写凭据、执行迁移或删除数据，也没有重新验证一次完整生产 OAuth 授权交换。
+
+交付证据对照：
+
+- 成员邀请、GitHub 身份绑定、独立空间及暂停撤销：member-api、member-login、member-workspace、member-trash 回归，结合真实 Hub GUI 验收日志 /tmp/anjian-members-real-browser-verified.log。外部 GitHub 在本地测试中使用替身。
+- 共享/个人 S3 GUI、凭据隔离、用量及额度：storage-settings、storage-quota、storage-usage 与 member-login 回归；本地真实 GUI 验证保存、不回显、额度更新及私网拒绝，生产只读验证设置页面。
+- 校验后启用、保留原文件、失败继续与重启恢复：storage-migration、storage-backend、hub-storage-recovery 回归及 /tmp/anjian-migration-real-browser-final.log。GUI 使用内存 SDK 客户端，未冒充真实外部 S3 验证。
+- 桌面/手机：前述真实 Hub 浏览器验收覆盖 1440px 与 390px，页面无横向溢出及 pageerror；本轮补充生产桌面管理员页面。
+- Owner、设备和公开分享兼容：完整回归 218 文件 1,774 项通过（/tmp/anjian-release-full.log），结合前节生产公开画板与既有 CLI 绑定验证。main CI 当前成功。
+- 已授权发布：生产功能提交 9e11268；前节公网构建资源完整哈希匹配及真实页面响应作为上线证据，未获取 Dokploy 容器内部状态。
+
+功能实现、应用层验收和部署交付完成。真实外部 S3 仍待管理员提供配置并在 GUI 测试；本目标明确允许该项待配置，不宣称已接通。缓存、保留对象及临时处理空间不受提供方硬配额约束，元数据仍需备份服务器数据卷；边界详见 members-storage.md。本轮收尾记录仅本地修改，不代表再次推送或部署。
+
+## 公开分享 UI 复核与状态修正（2026-11-11，本地修正待发布）
+
+当前生产分享页已采用 48px 单行标题栏，发布信息收进“只读”菜单，桌面复用作者图层与属性面板，手机通过检查器入口全屏查看。截图里的双层页头已被此前版本替换，本轮没有重复重写布局。
+
+本轮去掉公开快照选中元素时的“实时”状态点，保留底部“只读检查”；作者视图仍保留实时状态。没有改动成员、存储或权限接口。
+
+类型检查、viewer 构建和 5 文件 69 项分享页、只读 inspector、画板 inspector、平移缩放及手机画板回归通过。隔离 Chrome 使用本地构建界面与生产公开快照数据，验证 1440px 桌面及 390px 手机：单行页头、图层选择、尺寸显示且全部属性输入禁用、无调整标签、CSS/HTML 代码可读、无横向溢出和 pageerror。截图 /tmp/anjian-share-polish-1440.png、/tmp/anjian-share-polish-390.png 已查看。通过 CDP 发送真实 Ctrl-wheel，画布从 10% 到 33%，浏览器 viewport、devicePixelRatio 和 visualViewport.scale 均不变。测试脚本曾因代码面板异步加载而过早断言，改为等待实际内容后完整重跑通过，未为此修改产品逻辑。
+
+浏览器脚本 /tmp/anjian-share-polish-browser.mjs，日志 /tmp/anjian-share-polish-browser.log；定向测试日志 /tmp/anjian-share-polish-tests.log。此次单项状态修正仅在本地，尚未提交或部署；生产现有布局已独立核验。没有改写公开设计稿内容或重新发布快照。
