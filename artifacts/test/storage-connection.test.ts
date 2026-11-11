@@ -41,3 +41,28 @@ test('unsafe endpoints fail before creating a connection', async () => {
   const result = await testS3Connection({ ...settings, endpoint: 'https://127.0.0.1' }, credentials);
   expect(result.ok).toBe(false); expect(result.steps).toEqual({ write: false, read: false, delete: false });
 });
+
+test('compatibility errors are not reported as missing permissions and cleanup keeps the original failure', async () => {
+  const store = probe();
+  vi.mocked(store.get).mockRejectedValue(Object.assign(new Error('secret provider detail'), { name: 'NotImplemented', $metadata: { httpStatusCode: 501 } }));
+  vi.mocked(store.remove).mockRejectedValue(Object.assign(new Error('secret provider detail'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }));
+  const result = await testS3Connection(settings, credentials, () => store);
+  expect(result.error).toContain('S3 读回校验失败');
+  expect(result.error).toContain('S3 兼容性');
+  expect(result.error).toContain('测试对象清理失败');
+  expect(result.error).toContain('对应操作权限');
+  expect(result.error).not.toContain('secret');
+});
+test.each([
+  ['SignatureDoesNotMatch', 403, '身份验证失败'],
+  ['AccessDenied', 403, '对应操作权限'],
+  ['TimeoutError', undefined, '请求超时'],
+  ['NotImplemented', 501, 'S3 兼容性'],
+  ['NoSuchBucket', 404, '不存在'],
+] as const)('classifies %s without exposing provider messages', async (name, status, expected) => {
+  const store = probe();
+  vi.mocked(store.get).mockRejectedValue(Object.assign(new Error('secret response'), { name, $metadata: { httpStatusCode: status } }));
+  const result = await testS3Connection(settings, credentials, () => store);
+  expect(result.error).toContain(expected);
+  expect(result.error).not.toContain('secret');
+});

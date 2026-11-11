@@ -17,6 +17,8 @@ vi.mock('@smithy/node-http-handler', () => ({ NodeHttpHandler: class {
     wire.calls.push(request);
     const key = request.path;
     const response = (status: number, data: Buffer, headers: Record<string, string> = {}) => ({ response: { statusCode: status, headers, body: Readable.from([data.subarray(0, 17), data.subarray(17)]) } });
+    if (request.hostname.endsWith('.r2.cloudflarestorage.com') && request.query.versionId)
+      return response(501, Buffer.from('<Error><Code>NotImplemented</Code><Message>versionId not implemented</Message></Error>'));
     if (request.method === 'PUT') {
       const chunks: Buffer[] = [];
       if (request.body instanceof Uint8Array) chunks.push(Buffer.from(request.body));
@@ -52,10 +54,10 @@ afterEach(() => { for (const store of stores.splice(0)) store.close(); for (cons
 const settings = { endpoint: 'https://objects.example', bucket: 'private-bucket', region: 'auto', prefix: 'tenant-files', forcePathStyle: true };
 const credentials = { accessKeyId: 'test-access', secretAccessKey: 'test-secret' };
 const namespace = 'da67a169-2cd6-4a14-bfe4-7267ded10283';
-function fixture(body = crypto.randomBytes(1024 * 1024)) {
+function fixture(body = crypto.randomBytes(1024 * 1024), config = settings) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-objects-')); homes.push(directory);
   const source = path.join(directory, 'source'); fs.writeFileSync(source, body);
-  const store = createS3Objects(settings, credentials, namespace); stores.push(store);
+  const store = createS3Objects(config, credentials, namespace); stores.push(store);
   return { directory, source, body, store };
 }
 
@@ -212,4 +214,25 @@ test('active backend hydrates a missing artifact through the real SDK adapter an
   expect(wire.sequence).toBe(before);
   expect([...wire.objects.values()].some(({ body }) => body.toString().includes('do-not-upload-runtime-key'))).toBe(false);
   expect(backend.summary('shared')).toMatchObject({ backend: 's3', bytes: f.body.length, pending: false });
+});
+
+const r2Settings = { ...settings, endpoint: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com' };
+test.each(['', 'lost-put'] as const)('R2 probe ignores returned version identifiers, including %s acknowledgements', async (fault) => {
+  wire.fault = fault;
+  const result = await testS3Connection(r2Settings, credentials);
+  expect(result.steps.delete).toBe(true);
+  expect(result.ok).toBe(fault === '');
+  expect(wire.calls.every(call => call.query.versionId === undefined)).toBe(true);
+});
+test('R2 upload, recovery and download omit version parameters while retaining integrity checks', async () => {
+  const f = fixture(Buffer.from('R2 immutable bytes'), r2Settings);
+  const digest = await digestFile(f.source);
+  const ref = await f.store.upload(f.source, digest);
+  expect(ref.versionId).toBeUndefined();
+  const legacy = { ...ref, versionId: 'version-1' };
+  expect((await f.store.verify(legacy)).versionId).toBeUndefined();
+  expect(fs.readFileSync(await f.store.download(legacy, f.directory))).toEqual(f.body);
+  expect(wire.calls.every(call => call.query.versionId === undefined)).toBe(true);
+  wire.fault = 'corrupt';
+  await expect(f.store.verify(legacy)).rejects.toMatchObject({ code: 'integrity_failed' });
 });

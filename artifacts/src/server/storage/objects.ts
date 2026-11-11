@@ -55,7 +55,7 @@ export async function digestFile(file: string): Promise<FileDigest> {
 export function createS3Objects(settings: S3Settings, credentials: S3Credentials, namespace: string) {
   if (!UUID.test(namespace)) throw new StorageObjectError('invalid_object');
   const prefix = `${settings.prefix ? settings.prefix + '/' : ''}_anjian/objects/${namespace}/`;
-  const { client, close } = createStorageClient(settings, credentials, TIMEOUT_MS);
+  const { client, objectVersion, close } = createStorageClient(settings, credentials, TIMEOUT_MS);
   const reference = (digest: FileDigest): StoredObject => {
     validateDigest(digest);
     return { bytes: digest.bytes, sha256: digest.sha256, key: prefix + digest.sha256 };
@@ -72,13 +72,13 @@ export function createS3Objects(settings: S3Settings, credentials: S3Credentials
     let stream: Readable | undefined;
     const abort = () => stream?.destroy(new StorageObjectError('transfer_failed'));
     try {
-      const result = await client.send(new GetObjectCommand({ Bucket: settings.bucket, Key: object.key, VersionId: object.versionId }), { abortSignal: signal });
+      const result = await client.send(new GetObjectCommand({ Bucket: settings.bucket, Key: object.key, VersionId: objectVersion(object.versionId) }), { abortSignal: signal });
       stream = result.Body as Readable | undefined;
       if (!stream || typeof stream.destroy !== 'function') throw new StorageObjectError('transfer_failed');
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) throw new StorageObjectError('transfer_failed');
       if ((result.ContentLength !== undefined && result.ContentLength !== object.bytes) ||
-          (object.versionId !== undefined && result.VersionId !== object.versionId)) throw new StorageObjectError('integrity_failed');
+          (objectVersion(object.versionId) !== undefined && result.VersionId !== object.versionId)) throw new StorageObjectError('integrity_failed');
       const hash = crypto.createHash('sha256'); let bytes = 0;
       for await (const raw of stream) {
         const chunk = Buffer.from(raw); bytes += chunk.length;
@@ -87,7 +87,9 @@ export function createS3Objects(settings: S3Settings, credentials: S3Credentials
         if (receive) await receive(chunk);
       }
       if (bytes !== object.bytes || hash.digest('hex') !== object.sha256) throw new StorageObjectError('integrity_failed');
-      return { ...object, ...(result.VersionId ? { versionId: result.VersionId } : {}) };
+      const { versionId: _previousVersion, ...unversioned } = object;
+      const versionId = objectVersion(result.VersionId);
+      return { ...unversioned, ...(versionId ? { versionId } : {}) };
     } catch (error) {
       if (error instanceof StorageObjectError) throw error;
       throw new StorageObjectError('transfer_failed');
@@ -112,7 +114,8 @@ export function createS3Objects(settings: S3Settings, credentials: S3Credentials
               ContentLength: expected.bytes, ContentType: 'application/octet-stream', IfNoneMatch: '*',
               ChecksumSHA256: Buffer.from(expected.sha256, 'hex').toString('base64'),
             }), { abortSignal: AbortSignal.timeout(TIMEOUT_MS) });
-            if (result.VersionId) object.versionId = result.VersionId;
+            const versionId = objectVersion(result.VersionId);
+            if (versionId) object.versionId = versionId;
           } catch {
             // A timeout may follow a committed PUT. A conditional conflict can be a completed retry.
             // Only a full read-back of the expected content may turn either into success.

@@ -7,6 +7,10 @@ import { storageAgent } from './network';
 /** All object traffic uses the same endpoint and DNS restrictions as connection tests. */
 export function createStorageClient(settings: S3Settings, credentials: S3Credentials, timeoutMs = 15000) {
   const endpoint = new URL(settings.endpoint);
+  // R2 returns an upload version identifier but rejects versionId on GET/DELETE.
+  // Other S3 providers retain exact-version reads and version-specific cleanup.
+  const r2 = /^[a-f0-9]{32}(?:\.(?:eu|fedramp))?\.r2\.cloudflarestorage\.com$/.test(endpoint.hostname);
+  const objectVersion = (version: string | undefined) => r2 ? undefined : version;
   const forcePathStyle = settings.forcePathStyle || settings.bucket.includes('.') || Boolean(isIP(endpoint.hostname.replace(/^\[|\]$/g, '')));
   const expectedHost = (forcePathStyle ? endpoint.hostname : `${settings.bucket}.${endpoint.hostname}`).replace(/^\[|\]$/g, '');
   const agent = storageAgent(expectedHost);
@@ -23,5 +27,5 @@ export function createStorageClient(settings: S3Settings, credentials: S3Credent
       },
     },
   });
-  return { client, close() { client.destroy(); handler.destroy(); agent.destroy(); } };
+  return { client, objectVersion, close() { client.destroy(); handler.destroy(); agent.destroy(); } };
 }

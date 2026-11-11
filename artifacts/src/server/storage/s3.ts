@@ -10,14 +10,15 @@ export interface ProbeStore {
   close(): void;
 }
 export function createS3Probe(settings: S3Settings, credentials: S3Credentials): ProbeStore {
-  const { client, close } = createStorageClient(settings, credentials);
+  const { client, objectVersion, close } = createStorageClient(settings, credentials);
   const versions = new Map<string, string>();
   const acknowledged = new Set<string>();
   return {
     async put(key, content) {
       const result = await client.send(new PutObjectCommand({ Bucket: settings.bucket, Key: key, Body: content, ContentType: 'application/octet-stream', IfNoneMatch: '*' }), { abortSignal: AbortSignal.timeout(15000) });
       acknowledged.add(key);
-      if (result.VersionId) versions.set(key, result.VersionId);
+      const version = objectVersion(result.VersionId);
+      if (version) versions.set(key, version);
     },
     async get(key) {
       const result = await client.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key, VersionId: versions.get(key) }), { abortSignal: AbortSignal.timeout(15000) });
@@ -38,12 +39,24 @@ export function createS3Probe(settings: S3Settings, credentials: S3Credentials):
         // A lost PUT response may hide a stored version. A bare DELETE would only add a delete marker.
         const result = await client.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }), { abortSignal: AbortSignal.timeout(15000) });
         (result.Body as { destroy?: () => void } | undefined)?.destroy?.();
-        if (result.VersionId) versions.set(key, result.VersionId);
+        const version = objectVersion(result.VersionId);
+        if (version) versions.set(key, version);
       }
       await client.send(new DeleteObjectCommand({ Bucket: settings.bucket, Key: key, VersionId: versions.get(key) }), { abortSignal: AbortSignal.timeout(15000) });
     },
     close,
   };
+}
+
+function failureReason(error: unknown): string {
+  const failure = error as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
+  const status = failure?.$metadata?.httpStatusCode;
+  if (status === 501 || failure?.name === 'NotImplemented') return '存储服务不支持此操作或请求参数，请检查 S3 兼容性。';
+  if (status === 401 || ['InvalidAccessKeyId', 'SignatureDoesNotMatch'].includes(failure?.name ?? '')) return '身份验证失败，请检查凭据、Region 和签名配置。';
+  if (status === 403 || failure?.name === 'AccessDenied') return '存储服务拒绝访问，请检查凭据及对应操作权限。';
+  if (status === 404) return '存储桶或对象不存在，请检查 Bucket 和对象路径。';
+  if (['TimeoutError', 'AbortError', 'RequestTimeout'].includes(failure?.name ?? '')) return '请求超时，请检查服务器到存储服务的网络后重试。';
+  return '请求失败，请检查网络、服务状态及 S3 配置。';
 }
 
 export interface S3TestResult {
@@ -65,12 +78,15 @@ export async function testS3Connection(settings: S3Settings, credentials: S3Cred
     const received = await client.get(key);
     if (!received.equals(content)) throw new Error('Read-back mismatch');
     result.steps.read = true;
-  } catch {
-    result.error = result.steps.write ? 'S3 读回校验失败，请检查读取权限和服务配置。' : 'S3 写入失败，请检查公网地址、凭据、Bucket、Region 和写入权限。';
+  } catch (error) {
+    result.error = `${result.steps.write ? 'S3 读回校验失败。' : 'S3 写入失败。'}${failureReason(error)}`;
   } finally {
     if (client) {
       try { await client.remove(key); result.steps.delete = true; }
-      catch { result.cleanupKey = key; result.error = '测试对象清理失败，请检查删除权限，并手动清理所列对象后重试。'; }
+      catch (error) {
+        result.cleanupKey = key;
+        result.error = `${result.error ?? ''}测试对象清理失败。${failureReason(error)}请清理所列测试对象后重试。`;
+      }
       finally { client.close(); }
     }
   }
