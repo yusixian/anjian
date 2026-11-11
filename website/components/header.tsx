@@ -26,6 +26,7 @@ export function Header() {
     : path.startsWith('/docs/self-hosting')
       ? '/docs/self-hosting'
       : '/docs';
+  if (path === '/docs' || path.startsWith('/docs/')) return null;
   return (
     <header className="site-header">
       <Link aria-label="案间文档首页" className="brand" href="/">

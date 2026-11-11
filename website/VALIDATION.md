@@ -19,12 +19,18 @@
 
 本机临时证据位于 `/tmp/anjian-docs-evidence/`；页面检查记录为 `/tmp/anjian-docs-browser.log`，交互记录为 `/tmp/anjian-docs-final-interactions.log`，应用测试记录为 `/tmp/anjian-c2-tests.log`。这些是临时文件，不随仓库分发。
 
-## 验证范围
+## 首轮本地验证范围
 
-以上属于本地构建与 Chrome 响应式检查；未进行实体手机、Safari、Firefox 或生产部署验证。本次没有提交、推送或部署。
+以上记录对应首轮本地构建与 Chrome 响应式检查；当时未提交或部署。未进行实体手机、Safari 或 Firefox 验证。
 
 ## 文档首页发布前补充
 
 已移除顶栏「文档」标签，新增 `/library` 工作台入口，并在容器中启用公开静态文档路由。类型检查通过；文档站构建与两项产物测试通过；路由、登录及 Hub 的 39 项针对性测试通过。应用全量结果为 1,796 项通过、1 项 CLI 评论测试超时；该文件和新增文档路由测试以单 worker 复测，17 项全部通过。
 
 Chrome 集成检查覆盖 1440/390px、深浅主题的「首页 → 登录 → 作品库」和中文搜索跳转，页面无脚本异常或 HTTP 错误。额外确认 Next 首页 RSC 导航数据可公开读取，而私有 API、路径越界和符号链接仍受限制。本机 Docker daemon 未运行，容器构建将在生产部署中验证。
+
+## 恢复 Fumadocs 标准阅读布局
+
+上一版已通过 PR #3 合入并部署（main `9443d833`）。生产 Chrome 的桌面、手机、深浅主题、搜索、登录跳转及原公开分享链接检查通过，现有远程 CLI 绑定仍有效。
+
+本轮移除阅读页的自定义顶栏、手机导航、页内目录、翻页组件和布局覆盖，使用 Fumadocs 原生布局。首页仍保留产品介绍。网站 typecheck、build、test 通过；Chrome 在 1440、1024、390px 的深浅主题中验证了侧栏可见性、页内目录、手机抽屉、搜索与主题切换。截图和脚本分别位于本机 `/tmp/anjian-docs-evidence/fumadocs-local-*`、`/tmp/anjian-fumadocs-browser.mjs`。

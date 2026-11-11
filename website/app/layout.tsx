@@ -20,6 +20,10 @@ export default function Layout({ children }: { children: ReactNode }) {
           i18n={{
             locale: 'zh-CN',
             translations: {
+              'Toggle Theme(aria-label)': '切换深浅主题',
+              'Light(aria-label)': '浅色',
+              'Dark(aria-label)': '深色',
+              'System(aria-label)': '跟随系统',
               'Search(search dialog)': '搜索文档',
               'Search(search trigger)': '搜索文档',
               'Open Search(search trigger)(aria-label)': '搜索文档',
