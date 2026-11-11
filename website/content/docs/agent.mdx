@@ -1,0 +1,49 @@
+---
+title: 批注与 Agent
+description: 让 Claude、Codex 或其他宿主通过本地 CLI 操作作品。
+---
+
+## 配置项目入口
+
+先构建案间，并在实际作品项目的 `AGENTS.md`（或宿主对应的项目指引）记录入口。只记录路径与服务器地址，不记录访问密钥或设备 token。
+
+```text title="项目接入说明示例"
+处理案间作品前，读取 /绝对路径/anjian/skills/artifacts/SKILL.md。
+远程任务继续读同目录 remote.md。
+CLI：node /绝对路径/anjian/skills/artifacts/app/anjian.cjs
+作品项目：/绝对路径/作品项目（所有命令传 --project-dir）
+服务器：https://你的案间域名
+客户端配置：~/.anjian/client/
+先用 remote status --json 核验绑定。
+```
+
+已有包装器时记录包装器路径，复用固定的项目与客户端配置。首次连接参见[设备与 CLI](/docs/remote-cli)。不同机器需要分别授权，不要复制其他项目的凭证。
+
+## 一轮反馈怎么处理
+
+1. 在有权限的作品工作台里添加批注。
+2. 回到 Agent 会话，发送作品链接和处理要求。
+3. Agent 读取完整批注；远程作品先安全拉取，再修改。
+4. 上传并检查，在浏览器验证相关结果，再回复原线程。
+5. 由你确认修改；只有你要求或明确确认解决后才关闭评论。
+
+```bash title="CLI · 在已绑定项目中"
+anjian comment list --artifact document/plan --all --json
+anjian pull --artifact document/plan
+# 编辑源文件后：
+anjian push --artifact document/plan
+anjian check --artifact document/plan
+anjian comment reply --artifact document/plan --thread "实际线程ID" --text "已修改"
+```
+
+这里的 `anjian` 指本仓库构建的 CLI，可用 `node /绝对路径/anjian/artifacts/dist/cli.cjs` 替代。在实际作品项目目录执行，或始终传入相同的 `--project-dir`。
+
+## 事件与自动处理
+
+`anjian watch --json` 输出事件，宿主需要自己订阅并调度任务。收到事件后再读取评论或拉取作品；事件输出不等于 Agent 已自动醒来处理。首次监听不重放全部历史评论，需要历史时使用 `comment list --all`。
+
+## 换一个 Agent 接手
+
+给接手的 Agent：作品链接、作品标识、项目目录、CLI 入口、Skill 路径和具体修改范围。让前一个 Agent 先完成上传，避免同时编辑同一作品。公开分享链接只用于查看，不能代替编辑授权。
+
+[查看真实使用案例](/use-cases)。

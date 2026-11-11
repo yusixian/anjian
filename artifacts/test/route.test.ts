@@ -5,6 +5,8 @@ import { parseRoute } from '../src/viewer/lib/route';
 describe('parseRoute', () => {
   test('the root is the artifact list', () => {
     expect(parseRoute('/')).toEqual({ kind: 'list' });
+    expect(parseRoute('/library')).toEqual({ kind: 'list' });
+    expect(parseRoute('/library/')).toEqual({ kind: 'list' });
     expect(parseRoute('/index.html')).toEqual({ kind: 'list' });
   });
 

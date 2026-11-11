@@ -15,22 +15,41 @@ export function DeviceLayout({ connect }: { connect: boolean }) {
   const { list, refresh, removeProject } = useHubArtifacts();
   const trash = useTrash();
   const title = connect ? t('devices.connectTitle') : t('home.devices');
-  useEffect(() => { document.title = `${title} · 案间`; }, [title]);
+  useEffect(() => {
+    document.title = `${title} · 案间`;
+  }, [title]);
   const artifacts = list?.artifacts ?? [];
-  const projects = (list?.projects ?? []).map((p) => ({ ...p, artifacts: artifacts.filter((a) => a.project === p.dir).length }));
+  const projects = (list?.projects ?? []).map((p) => ({
+    ...p,
+    artifacts: artifacts.filter((a) => a.project === p.dir).length,
+  }));
   return (
     <div {...stylex.props(styles.library)}>
       <WorkbenchHeader title={title} onProjectsChanged={() => void refresh()} />
       <div {...stylex.props(styles.body)}>
         <ProjectSidebar
           projects={projects}
+          selection="devices"
           total={artifacts.length}
           trashCount={trash.entries?.length ?? 0}
-          selection="devices"
-          onSelect={(next) => location.assign(next === 'recent' ? '/' : next === 'trash' ? '/?view=trash' : `/?project=${encodeURIComponent(next)}`)}
-          onRemove={(project) => void removeProject(project.dir).catch(() => toast.error(t('home.removeFailed', { name: project.name })))}
+          onRemove={(project) =>
+            void removeProject(project.dir).catch(() =>
+              toast.error(t('home.removeFailed', { name: project.name })),
+            )
+          }
+          onSelect={(next) =>
+            location.assign(
+              next === 'recent'
+                ? '/library'
+                : next === 'trash'
+                  ? '/library?view=trash'
+                  : `/library?project=${encodeURIComponent(next)}`,
+            )
+          }
         />
-        <main {...stylex.props(styles.main)}><DevicePage connect={connect} /></main>
+        <main {...stylex.props(styles.main)}>
+          <DevicePage connect={connect} />
+        </main>
       </div>
     </div>
   );

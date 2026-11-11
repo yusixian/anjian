@@ -1,0 +1,56 @@
+---
+title: 部署自己的实例
+description: 让自己的设备和朋友通过 HTTPS 访问长期运行的案间工作台。
+---
+
+## 部署前准备
+
+准备能运行 Docker Compose 的服务器、可配置 HTTPS 的域名和持久化磁盘。公开分享与成员邀请要求接收者能访问你的服务。
+
+## 两个来源
+
+| 用途 | 容器端口 | 环境变量 | 示例 |
+| --- | --- | --- | --- |
+| 工作台、文档、评论与 WebSocket | 27319 | `ANJIAN_PUBLIC_ORIGIN` | `https://anjian.example.com` |
+| 画板隔离预览 | 27329 | `ANJIAN_BOARD_ORIGIN` | `https://preview.example.net` |
+
+Origin 只有协议、主机和可选端口，不带路径。两者都应配置 HTTPS，主站反向代理需要支持 WebSocket。画板预览使用独立来源，独立 HTML 通过沙盒限制同源权限。
+
+## Docker Compose
+
+在源码仓库根目录设置实际部署地址后启动：
+
+```bash title="终端 · 仓库根目录"
+export ANJIAN_PUBLIC_ORIGIN=https://anjian.example.com
+export ANJIAN_BOARD_ORIGIN=https://preview.example.net
+docker compose up --build -d
+docker compose logs anjian
+```
+
+上述域名是占位示例，需要替换。默认端口只绑定服务器回环地址；通过反向代理将两条 HTTPS 来源分别转发至对应端口。
+
+项目位于容器 `/data/project`，服务状态在 `/data/server`，都在 `anjian-data` 卷中。保存启动输出中的管理员访问方式，保留并备份数据卷。
+
+## Dokploy
+
+创建基于本仓库源码的 Compose 应用，构建路径 `/`，Compose 文件 `compose.yaml`。为 `anjian` 服务分别配置主站、预览域名与端口，写入实际 origin，再部署。
+
+需要自动部署时，在自己的仓库设置目标分支与 On Push 触发。推送触发不会自动等待 CI 完成；先通过检查，再更新部署分支。部署日志显示完成后仍需验收实际页面。
+
+## GitHub 登录与邀请
+
+在 GitHub 创建专用 OAuth App，Homepage URL 为主站地址，回调为主站的 `/auth/github/callback`。在部署平台的私有环境变量设置：
+
+```dotenv title="部署配置 · 不要提交实际密钥"
+ANJIAN_GITHUB_CLIENT_ID=<OAuth Client ID>
+ANJIAN_GITHUB_CLIENT_SECRET=<OAuth Client Secret>
+ANJIAN_GITHUB_OWNER_ID=<管理员 GitHub 数字用户 ID>
+```
+
+认证依据数字 ID。三项全部留空时使用访问密钥登录，只配置部分会拒绝启动。配置完成后，管理员和已获邀请的成员可通过 GitHub 登录；没有开放注册。管理员访问密钥是备用管理员入口，不能发送给朋友作为成员登录方式。
+
+## 部署后检查
+
+确认主站、画板和 HTML 预览可用；检查批注保存、实时连接、CLI 配对、上传与拉取。确认重启后作品和评论保留，并独立验证备份恢复。
+
+浏览器退出只影响当前浏览器会话，CLI 设备需在「设备与 CLI」单独撤销。服务与预览隔离、访问控制和持久化都应保留。

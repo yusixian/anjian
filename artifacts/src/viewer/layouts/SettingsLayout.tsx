@@ -3,35 +3,54 @@ import * as stylex from '@stylexjs/stylex';
 import { useEffect } from 'react';
 
 import { useTranslation } from '../i18n';
-import { StoragePage } from './storage/StoragePage';
-import { MemberPage } from './members/MemberPage';
 import { styles } from './home/home-styles';
 import { ProjectSidebar } from './home/ProjectSidebar';
 import { useHubArtifacts } from './home/useHubArtifacts';
 import { useTrash } from './home/useTrash';
 import { WorkbenchHeader } from './home/WorkbenchHeader';
+import { MemberPage } from './members/MemberPage';
+import { StoragePage } from './storage/StoragePage';
 
 export function SettingsLayout({ page }: { page: 'members' | 'storage' }) {
   const { t } = useTranslation();
   const { list, refresh, removeProject } = useHubArtifacts();
   const trash = useTrash();
   const title = t(`${page}.title`);
-  useEffect(() => { document.title = `${title} · 案间`; }, [title]);
+  useEffect(() => {
+    document.title = `${title} · 案间`;
+  }, [title]);
   const artifacts = list?.artifacts ?? [];
-  const projects = (list?.projects ?? []).map((p) => ({ ...p, artifacts: artifacts.filter((a) => a.project === p.dir).length }));
+  const projects = (list?.projects ?? []).map((p) => ({
+    ...p,
+    artifacts: artifacts.filter((a) => a.project === p.dir).length,
+  }));
   return (
     <div {...stylex.props(styles.library)}>
       <WorkbenchHeader title={title} onProjectsChanged={() => void refresh()} />
       <div {...stylex.props(styles.body)}>
         <ProjectSidebar
           projects={projects}
+          selection={page}
           total={artifacts.length}
           trashCount={trash.entries?.length ?? 0}
-          selection={page}
-          onSelect={(next) => location.assign(next === 'recent' ? '/' : next === 'trash' ? '/?view=trash' : `/?project=${encodeURIComponent(next)}`)}
-          onRemove={(project) => void removeProject(project.dir).catch(() => toast.error(t('home.removeFailed', { name: project.name })))}
+          onRemove={(project) =>
+            void removeProject(project.dir).catch(() =>
+              toast.error(t('home.removeFailed', { name: project.name })),
+            )
+          }
+          onSelect={(next) =>
+            location.assign(
+              next === 'recent'
+                ? '/library'
+                : next === 'trash'
+                  ? '/library?view=trash'
+                  : `/library?project=${encodeURIComponent(next)}`,
+            )
+          }
         />
-        <main {...stylex.props(styles.main)}>{page === 'members' ? <MemberPage /> : <StoragePage />}</main>
+        <main {...stylex.props(styles.main)}>
+          {page === 'members' ? <MemberPage /> : <StoragePage />}
+        </main>
       </div>
     </div>
   );

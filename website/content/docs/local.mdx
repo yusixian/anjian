@@ -1,0 +1,54 @@
+---
+title: 在本机使用
+description: 让作品留在自己的电脑里。完成构建后，在浏览器打开案间。
+---
+
+<Environment />
+
+<Notice title="开始前">
+  案间尚未发布 npm 安装包。请使用本项目源码，不要安装上游 Ryugi 包或同名的未知软件包。下面命令需要
+  Git、Node.js 和 pnpm。
+</Notice>
+
+## 安装与启动
+
+<Steps>
+<Step title="获取源码并构建">
+在终端获取仓库，再进入应用目录安装锁定的依赖。
+
+```bash title="终端 · 获取源码"
+git clone https://github.com/yusixian/anjian.git
+cd anjian/artifacts
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+</Step>
+<Step title="启动你的作品项目">
+将下方路径替换成实际作品项目目录，保持这个终端运行。
+
+```bash title="终端 · artifacts 目录"
+node dist/cli.cjs start \
+  --project-dir /绝对路径/作品项目 \
+  --no-open --foreground
+```
+
+</Step>
+<Step title="打开浏览器">
+打开终端输出的完整 URL，不要自己拼接端口或丢掉访问参数。作品库最初为空时，可以继续[创建第一份作品](/docs/first-artifact)。
+</Step>
+</Steps>
+
+## 作品和服务状态
+
+作品位于项目的 `.anjian/artifacts/`；服务状态默认在 `~/.anjian/server/`。退出前台进程不会删除作品。下次使用同一个项目目录启动即可继续。
+
+本机服务可以登记多个项目。停止共享服务会影响它服务的所有项目；停止前确认没有其他项目正在使用。
+
+## 让其他设备打开
+
+`localhost` 只代表打开链接的那台设备，不能直接发给另一台电脑或手机。朋友需要远程访问时，先完成[自托管](/docs/self-hosting)，再创建[公开分享](/docs/sharing)或[成员邀请](/docs/members)。服务需要持续运行并能从对方设备访问。
+
+## 更新案间
+
+保留并备份作品与服务状态，从本仓库获取新版源码后重新安装依赖、构建，再重启服务。不要使用上游自动更新命令。

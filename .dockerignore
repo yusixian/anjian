@@ -8,3 +8,8 @@
 **/.DS_Store
 .env
 .env.*
+
+website/.next
+website/.source
+website/out
+**/*.tsbuildinfo

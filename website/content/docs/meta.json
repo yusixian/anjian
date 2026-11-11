@@ -1,0 +1,26 @@
+{
+  "pages": [
+    "---开始使用---",
+    "index",
+    "local",
+    "first-artifact",
+    "---作品与反馈---",
+    "artboards",
+    "documents",
+    "html",
+    "agent",
+    "---分享与协作---",
+    "sharing",
+    "members",
+    "remote-cli",
+    "---管理与部署---",
+    "library",
+    "storage",
+    "self-hosting",
+    "faq",
+    "---更多---",
+    "use-cases",
+    "about"
+  ],
+  "title": "使用指南"
+}

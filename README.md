@@ -29,6 +29,7 @@ Dokploy 已完成源码镜像构建和 HTTPS 文档访问验证；推送 main �
 
 ## 使用与开发
 
+- [Fumadocs 文档站：本地预览与静态构建](website/README.md)
 - [从源码构建和本地运行](docs/install.md)
 - [CLI 命令](docs/artifacts-cli.md)
 - [作品多选、回收站与恢复](docs/artifact-trash.md)
