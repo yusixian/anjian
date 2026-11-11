@@ -1,0 +1,54 @@
+---
+title: 设备与 CLI
+description: 将本地项目连接到自己的远程工作台，通过 HTTPS 同步作品。
+---
+
+## 安装与授权
+
+先按[本机使用](/docs/local)构建 CLI。下文的 `anjian` 可替换为 `node /绝对路径/anjian/artifacts/dist/cli.cjs`。
+
+```bash title="终端 · 首次配对"
+anjian login https://你的案间域名 --name "我的电脑"
+```
+
+浏览器打开配对页。登录后核对设备名称和配对码，选择允许访问的项目，再批准连接。终端不能打开浏览器时加 `--no-open`，手动打开输出地址。
+
+配对码 10 分钟有效，设备凭证 90 天有效。浏览器登录和设备批准是两步操作。
+
+## 绑定作品项目
+
+在实际本地作品项目目录执行：
+
+```bash title="终端 · 绑定项目"
+anjian link
+anjian remote status --json
+```
+
+只有一个可访问项目时自动选择；多个项目时按提示使用 `link --project <项目ID>`。多实例用 `--server` 指定服务器。项目 ID 不是服务器磁盘路径。
+
+## 上传与拉取
+
+```bash title="终端 · 同步单个作品"
+anjian push --artifact document/plan
+anjian check --artifact document/plan
+anjian pull --artifact document/plan
+```
+
+源文件仍在 `.anjian/artifacts/<类型>/<名称>/`。只传输选中作品的源文件与资源，不同步评论、历史、点目录或密钥；不支持符号链接。单次最多 1,000 个文件、32 MiB。
+
+远端已有同名作品时，先拉取建立版本基线。远端发生变化会拒绝覆盖；本地也有修改时普通 `pull` 会拒绝覆盖。需要保留本地副本再拉取时，可显式使用 `--backup-local`，随后比较并手动合并。同步不会自动合并两个版本。
+
+## 查看与撤销设备
+
+工作台「设备与 CLI」显示名称、授权项目与到期时间，不代表设备当前在线。撤销阻止后续请求，正在执行的操作可能已完成，作品与批注会保留。
+
+```bash title="终端 · 退出与解绑"
+anjian logout https://你的案间域名
+anjian unlink
+```
+
+`logout` 撤销服务器凭证；`unlink` 只移除当前目录绑定。客户端凭证默认位于 `~/.anjian/client/`，自定义 `ANJIAN_CLIENT_HOME` 时所有命令保持一致。
+
+## 连接问题
+
+公网地址必须是 HTTPS，且与服务公布的 origin 一致。设备过期或被撤销时重新配对；403 时检查授权项目；429 时等待重试。不要通过关闭认证解决问题。

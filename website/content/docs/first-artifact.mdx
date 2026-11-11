@@ -1,0 +1,59 @@
+---
+title: 创建第一份作品
+description: 先用一个最小 HTML 作品走通保存、预览与检查。
+---
+
+## 用 Agent 创建
+
+让你的 Agent 阅读本仓库 `skills/artifacts/SKILL.md`，并告诉它 CLI 的绝对路径、作品项目目录和本机或远程运行方式。具体配置见[批注与 Agent](/docs/agent)。可以这样发起任务：
+
+> 请用案间 Artifacts 为我的方案制作一份文档。先阅读项目里的案间接入说明，复用现有项目和 CLI，完成后检查作品并给我链接。
+
+仓库位于磁盘上，不代表 Claude、Codex 等宿主会自动加载它的 Skill；需要显式阅读或按宿主支持的方式安装。
+
+## 手动创建 HTML
+
+先按[本机使用](/docs/local)启动服务，再在你的作品项目内创建：
+
+```text title="作品目录"
+.anjian/artifacts/html/hello/index.html
+```
+
+写入以下完整页面。文件名和目录中的类型字段保持英文。
+
+```html title="index.html"
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>我的第一份作品</title>
+  </head>
+  <body>
+    <h1>你好，案间</h1>
+    <p>这是保存在自己项目里的页面。</p>
+  </body>
+</html>
+```
+
+从案间仓库根目录运行检查；项目路径与启动时保持一致：
+
+```bash title="终端 · 案间仓库根目录"
+node skills/artifacts/app/anjian.cjs check \
+  --project-dir /绝对路径/作品项目 \
+  --artifact html/hello --json
+```
+
+在作品库打开页面，确认内容可见。没有检查警告不等于页面脚本已经运行；交互仍需在浏览器实际操作。
+
+## 选择作品类型
+
+| 类型       | 源文件                  | 适合                           |
+| ---------- | ----------------------- | ------------------------------ |
+| `html`     | `index.html` 及资源     | 单个页面、组件、可点击原型     |
+| `document` | `doc.xml`、`assets/`    | 方案、说明、评审、图表         |
+| `artboard` | `canvas.json`、`pages/` | 多页面设计、方案对比、状态集合 |
+
+每个作品使用独立目录，资源放在作品内部并使用相对地址。评论、历史与 `.state` 由服务器维护，不要手工编辑它们。
+
+远程模式下，保存本地文件后还需要 `push`，详见[设备与 CLI](/docs/remote-cli)。

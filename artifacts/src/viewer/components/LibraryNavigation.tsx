@@ -1,7 +1,7 @@
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 import { ArrowLeft } from 'lucide-react';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, type ReactNode,useContext } from 'react';
 
 import { useTranslation } from '../i18n';
 
@@ -22,7 +22,7 @@ const styles = stylex.create({
     paddingInline: 10,
     borderRadius: 8,
     color: cssVar.colorText,
-    backgroundColor: { default: 'transparent', ':hover': cssVar.colorFillTertiary },
+    backgroundColor: { 'default': 'transparent', ':hover': cssVar.colorFillTertiary },
     fontFamily: cssVar.fontFamily,
     fontSize: 13,
     fontWeight: 500,
@@ -48,7 +48,7 @@ export function LibraryLink() {
   const { t } = useTranslation();
   if (!available) return null;
   return (
-    <a href="/" aria-label={t('chrome.backToLibrary')} {...stylex.props(styles.link)}>
+    <a aria-label={t('chrome.backToLibrary')} href="/library" {...stylex.props(styles.link)}>
       <ArrowLeft aria-hidden="true" size={16} />
       {t('chrome.library')}
     </a>
@@ -60,7 +60,12 @@ export function LibraryBar({ actions }: { actions?: ReactNode }) {
   return (
     <header {...stylex.props(styles.bar)}>
       <LibraryLink />
-      {actions && <><span style={{ flex: 1 }} />{actions}</>}
+      {actions && (
+        <>
+          <span style={{ flex: 1 }} />
+          {actions}
+        </>
+      )}
     </header>
   );
 }

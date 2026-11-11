@@ -6,10 +6,10 @@
 
 画板预览使用独立 HTTPS origin。独立 HTML 作品通过不含 allow-same-origin 的 iframe 沙箱加载，使用不透明来源。两条路径均限制作品脚本取得主界面的同源权限。
 
-| 服务 | 容器端口 | 示例域名 | 配置 |
-| --- | --- | --- | --- |
-| 作品库、文档、评论 API 与 WebSocket | 27319 | `https://anjian.example.com` | `ANJIAN_PUBLIC_ORIGIN` |
-| 画板预览 | 27329 | `https://preview.example.net` | `ANJIAN_BOARD_ORIGIN` |
+| 服务                                | 容器端口 | 示例域名                      | 配置                   |
+| ----------------------------------- | -------- | ----------------------------- | ---------------------- |
+| 作品库、文档、评论 API 与 WebSocket | 27319    | `https://anjian.example.com`  | `ANJIAN_PUBLIC_ORIGIN` |
+| 画板预览                            | 27329    | `https://preview.example.net` | `ANJIAN_BOARD_ORIGIN`  |
 
 origin 是协议、主机和可选端口，不含路径或查询参数。公网部署需为两个来源提供 HTTPS，反向代理需支持 WebSocket。示例不是已分配的域名；建议为可执行预览选择独立站点，实际隔离效果还需浏览器验证。
 
@@ -87,3 +87,9 @@ ANJIAN_GITHUB_OWNER_ID=<允许登录的 GitHub 数字用户 ID>
 退出清除当前浏览器 Cookie；不撤销其他浏览器会话、已连接的 WebSocket 或已授权 CLI 设备。设备撤销仍在“设备与 CLI”页面处理。服务重启会让未完成的 OAuth 流程失效，重新点击登录即可；已签发会话在配置未变且未过期时仍有效。
 
 OAuth 使用 state、PKCE 和固定回调地址。取消授权、使用未允许账号及 GitHub 暂不可用时可在登录页重试，有效流程保留原作品或配对地址。协议依据：[GitHub OAuth web application flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)。实际发布状态见交付记录。
+
+## 文档首页与工作台入口
+
+源码镜像包含 Fumadocs 静态文档站。根路径 `/` 默认公开展示文档首页，`/docs/` 为指南，`/use-cases/` 为案例；顶栏「进入工作台」跳到 `/library`，未登录时继续原登录流程。作品、公开分享、API 和设备配对路径不变。
+
+镜像通过 `ANJIAN_DOCS_DIR=/app/website/out` 指定静态产物目录。普通本机 CLI 不设置该变量，仍以作品库作为根首页；`/library` 同样可用。公开文档路由不会放开作品库或 API 的访问权限。
