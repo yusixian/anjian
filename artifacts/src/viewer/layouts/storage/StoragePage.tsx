@@ -48,7 +48,8 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
   const [settings, setSettings] = useState<Settings>(blank);
   const [credentials, setCredentials] = useState(emptyCredentials);
   const [limit, setLimit] = useState('');
-  const [dirty, setDirty] = useState(false);
+  const savedSettings = data?.profile ?? blank;
+  const dirty = (Object.keys(blank) as Array<keyof Settings>).some((key) => settings[key] !== savedSettings[key]) || Object.values(credentials).some(Boolean);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -66,7 +67,6 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     setData(next);
     if (next.profile) setSettings({ endpoint: next.profile.endpoint, bucket: next.profile.bucket, region: next.profile.region, prefix: next.profile.prefix, forcePathStyle: next.profile.forcePathStyle });
     setLimit(next.sharedLimitBytes === null || next.sharedLimitBytes === undefined ? '' : String(next.sharedLimitBytes / GIB));
-    setDirty(false);
   };
   useEffect(() => {
     const controller = new AbortController();
@@ -90,8 +90,9 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
     catch (failure) { setError((failure as Error).message); }
     finally { lock.current = false; setBusy(false); onBusy(false); }
   };
-  const change = <K extends keyof Settings>(key: K, value: Settings[K]) => { setSettings((old) => ({ ...old, [key]: value })); setDirty(true); setNotice(''); };
+  const change = <K extends keyof Settings>(key: K, value: Settings[K]) => { setSettings((old) => ({ ...old, [key]: value })); setNotice(''); };
   const save = () => {
+    setOperation('save');
     const replacing = Object.values(credentials).some(Boolean);
     if ((!data?.profile || replacing) && (!credentials.accessKeyId || !credentials.secretAccessKey)) { setError(t('storage.credentialsRequired')); return; }
     void run({ action: 'save', settings, ...((!data?.profile || replacing) ? { credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey, ...(credentials.sessionToken ? { sessionToken: credentials.sessionToken } : {}) } } : {}) }, () => { setCredentials(emptyCredentials); setNotice(t('storage.saved')); });
@@ -126,9 +127,8 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
       <p role={sync.state === 'error' ? 'alert' : 'status'} {...stylex.props(styles.rowMeta, sync.state === 'error' && styles.error)}>{sync.state === 'ready' ? sync.lastSyncedAt ? t('storage.sync.ready', { time: new Date(sync.lastSyncedAt).toLocaleString(i18n.language) }) : t('storage.sync.readyUnknown') : t(`storage.sync.${sync.state}`)}</p>
       {(sync.state === 'pending' || sync.state === 'ready' || sync.state === 'error' || (sync.state === 'syncing' && busy && operation === 'sync')) && <Button disabled={busy || sync.state === 'syncing'} loading={busy && operation === 'sync'} onClick={() => void syncNow()}>{t(sync.state === 'error' ? 'storage.sync.retry' : sync.state === 'syncing' ? 'storage.sync.syncing' : 'storage.sync.syncNow')}</Button>}
     </section>}
-    {error && <div role="alert" {...stylex.props(styles.status, styles.error)}>{error} {!data && <Button onClick={() => { setError(''); void request<Summary>().then(apply).catch((failure: Error) => setError(failure.message)); }}>{t('devices.retry')}</Button>}</div>}
-    {busy && operation === 'test' && <p role="status" {...stylex.props(styles.note)}>{t('storage.testing')}</p>}
-    {notice && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}
+    {error && !['save', 'test'].includes(operation) && <div role="alert" {...stylex.props(styles.status, styles.error)}>{error} {!data && <Button onClick={() => { setError(''); void request<Summary>().then(apply).catch((failure: Error) => setError(failure.message)); }}>{t('devices.retry')}</Button>}</div>}
+    {notice && !['save', 'test'].includes(operation) && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}
     {!data && !error && <p role="status">{t('common.loading')}</p>}
     {data && <>
       <section {...stylex.props(styles.preview)} aria-label={t(scope === 'shared' ? 'storage.usage.sharedTitle' : 'storage.usage.title')}>
@@ -155,8 +155,15 @@ function StorageForm({ scope, onBusy }: { scope: 'shared' | 'personal'; onBusy: 
         <p {...stylex.props(styles.rowMeta)}>{t('storage.endpointHelp')}</p>
         <h2 {...stylex.props(styles.dialogTitle, storageStyles.credentialHeading)}>{t('storage.credentials')}</h2>
         <p {...stylex.props(styles.rowMeta)}>{t(data.profile ? 'storage.credentialsSaved' : 'storage.credentialsHelp')}</p>
-        {(['accessKeyId', 'secretAccessKey', 'sessionToken'] as const).map((key) => <label key={key} {...stylex.props(styles.label)}>{t(`storage.${key}`)}<input type="password" autoComplete="new-password" value={credentials[key]} disabled={busy} onChange={(event) => { setCredentials((old) => ({ ...old, [key]: event.target.value })); setDirty(true); }} {...stylex.props(styles.input, storageStyles.input)} /></label>)}
-        <div {...stylex.props(styles.actions)}><Button type="primary" htmlType="submit" disabled={busy} loading={busy && operation === 'save'}>{t('storage.save')}</Button><Button loading={busy && operation === 'test'} disabled={busy || dirty || !data.profile} onClick={() => void run({ action: 'test', id: data.profile!.id }, () => {})}>{t('storage.test')}</Button></div>
+        {(['accessKeyId', 'secretAccessKey', 'sessionToken'] as const).map((key) => <label key={key} {...stylex.props(styles.label)}>{t(`storage.${key}`)}<input type="password" autoComplete="new-password" value={credentials[key]} placeholder={key !== 'sessionToken' && data.profile?.credentialsConfigured ? t('storage.credentialsPlaceholder') : undefined} disabled={busy} onChange={(event) => { setCredentials((old) => ({ ...old, [key]: event.target.value })); }} {...stylex.props(styles.input, storageStyles.input)} /></label>)}
+        <div {...stylex.props(styles.actions)}><Button type="primary" htmlType="submit" disabled={busy} loading={busy && operation === 'save'}>{t('storage.save')}</Button><Button htmlType="button" loading={busy && operation === 'test'} disabled={busy} onClick={() => {
+          setOperation('test');
+          if (dirty || !data.profile) { setNotice(''); setError(t('storage.saveFirst')); return; }
+          void run({ action: 'test', id: data.profile.id }, () => {});
+        }}>{t('storage.test')}</Button></div>
+        {error && ['save', 'test'].includes(operation) && <p role="alert" {...stylex.props(styles.error)}>{error}</p>}
+        {notice && operation === 'save' && <p role="status" {...stylex.props(styles.note)}>{notice}</p>}
+        {busy && operation === 'test' && <p role="status" {...stylex.props(styles.note)}>{t('storage.testing')}</p>}
         {dirty && data.profile && <p {...stylex.props(styles.note)}>{t('storage.saveFirst')}</p>}
       </form>
       {test && <section {...stylex.props(styles.preview)} aria-label={t('storage.testResult')}>

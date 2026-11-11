@@ -707,6 +707,7 @@
     "credentials": "Access credentials",
     "credentialsHelp": "Use dedicated credentials restricted to this Bucket.",
     "credentialsSaved": "Credentials are encrypted. Leave all fields empty to retain them. To replace them, enter both Access Key ID and Secret Access Key.",
+    "credentialsPlaceholder": "Saved — leave blank to keep",
     "accessKeyId": "Access Key ID",
     "secretAccessKey": "Secret Access Key",
     "sessionToken": "Session Token (optional)",

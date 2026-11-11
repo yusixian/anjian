@@ -691,6 +691,7 @@
     "credentials": "访问凭据",
     "credentialsHelp": "请使用仅有目标 Bucket 权限的专用凭据。",
     "credentialsSaved": "凭据已加密保存。全部留空可保留原凭据；替换时请同时填写 Access Key ID 和 Secret Access Key。",
+    "credentialsPlaceholder": "已保存，留空继续使用",
     "accessKeyId": "Access Key ID",
     "secretAccessKey": "Secret Access Key",
     "sessionToken": "Session Token（可选）",
