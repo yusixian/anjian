@@ -1,7 +1,7 @@
 name: Anjian checks
 on:
-  push:
-  pull_request:
+  push: {}
+  pull_request: {}
 permissions:
   contents: read
 jobs:
@@ -24,3 +24,22 @@ jobs:
       - run: pnpm typecheck
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: pnpm test --maxWorkers 4
+  website:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test

@@ -6,42 +6,34 @@ import type { Duplex } from 'node:stream';
 
 import type { HubArtifact, HubArtifactList, HubProjectStatus, HubStatus } from '../shared/hub';
 import type { ArtifactType } from '../shared/types';
-import { accessPolicy, hostAllowed, isLoopbackHost, navigationAllowed, originAllowed } from './access';
+import {
+  accessPolicy,
+  hostAllowed,
+  isLoopbackHost,
+  navigationAllowed,
+  originAllowed,
+} from './access';
 import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
-import { ArtifactTrashError, findTrashedArtifact, listTrash, recoverProjectTrash } from './artifact-trash';
-import { createHubTrash } from './hub-trash';
-import { createHubShare } from './hub-share';
-import { createPublicShare } from './public-share';
-import { createShareStore } from './share-store';
-import { serveHubViewer } from './hub-viewer';
-import { withProjectMutation } from './project-mutations';
-import { withProjectMaintenance } from './project-maintenance';
-import { createStorageRuntime } from './storage/runtime';
-import { withRequestStorageAdmission } from './storage/request-admission';
-import { createProjectSuspension } from './project-suspension';
 import { createArtifactIndex } from './artifact-index';
+import {
+  ArtifactTrashError,
+  findTrashedArtifact,
+  listTrash,
+  recoverProjectTrash,
+} from './artifact-trash';
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
 import { createBrowserAuth } from './browser-auth';
 import { createContentAccess } from './content-access';
-import { createMemberStore } from './member-store';
-import { createMemberApi } from './member-api';
-import { createMemberWorkspace } from './member-workspace';
-import { createStorageSettings } from './storage/settings';
-import { createDiskUsage } from './storage/disk';
-import { createStorageApi } from './storage/api';
-import { createStorageUsage } from './storage/usage';
-import { createStorageQuota } from './storage/quota';
-import { createStorageMigration } from './storage/migration';
-import { createStorageMigrationApi } from './storage/migration-api';
-import { planMigrationSources } from './storage/sources';
-import { createStorageBackend } from './storage/backend';
-import { createProjectAccess } from './project-access';
-import { createGitHubAuth, readGitHubConfig, type GitHubConfig } from './github-auth';
 import { readArtifactSource, titleOf } from './context';
+import { serveDocsSite } from './docs-site';
+import { createGitHubAuth, type GitHubConfig,readGitHubConfig } from './github-auth';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
+import { createHubShare } from './hub-share';
+import { createHubTrash } from './hub-trash';
+import { serveHubViewer } from './hub-viewer';
 import {
   artifactsRootOf,
   isDormant,
@@ -52,25 +44,46 @@ import {
   registerProject,
   removeProject,
 } from './machine';
+import { createMemberApi } from './member-api';
+import { createMemberStore } from './member-store';
+import { createMemberWorkspace } from './member-workspace';
 import { listenFirst } from './ports';
+import { createProjectAccess } from './project-access';
+import { withProjectMaintenance } from './project-maintenance';
+import { withProjectMutation } from './project-mutations';
+import { createProjectSuspension } from './project-suspension';
+import { createPublicShare } from './public-share';
 import { openReady } from './ready';
-import { createRemoteAuth } from './remote-auth';
 import { createRemoteApi } from './remote-api';
+import { createRemoteAuth } from './remote-auth';
 import { createRemoteEvents } from './remote-events';
+import { createShareStore } from './share-store';
 import { writeJsonAtomic } from './state';
+import { createStorageApi } from './storage/api';
+import { createStorageBackend } from './storage/backend';
+import { createDiskUsage } from './storage/disk';
+import { createStorageMigration } from './storage/migration';
+import { createStorageMigrationApi } from './storage/migration-api';
+import { createStorageQuota } from './storage/quota';
+import { withRequestStorageAdmission } from './storage/request-admission';
+import { createStorageRuntime } from './storage/runtime';
+import { createStorageSettings } from './storage/settings';
+import { planMigrationSources } from './storage/sources';
+import { createStorageUsage } from './storage/usage';
 
 export interface HubOptions {
-  github?: GitHubConfig;
+  boardOrigin?: string;
   boardPorts: number[];
   control?: { relaunch: () => boolean; stop: () => void };
   debounceMs?: number;
+  docsDir?: string;
   fetch?: typeof fetch;
+  github?: GitHubConfig;
   host: string;
   open?: (link: string, local: string, openCmd?: string) => Promise<void>;
   paths: MachinePaths;
   ports: number[];
   publicOrigin?: string;
-  boardOrigin?: string;
   runtimeDir?: string;
   token: string;
   urlHost: string;
@@ -147,24 +160,37 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const settings = createStorageSettings(options.paths.home);
   const storageHome = fs.realpathSync(options.paths.home);
-  const migration = createStorageMigration(options.paths.home, { resolveProfile: settings.resolve });
-  const storageBackend = createStorageBackend(options.paths.home, { migration, resolveProfile: settings.resolve });
+  const migration = createStorageMigration(options.paths.home, {
+    resolveProfile: settings.resolve,
+  });
+  const storageBackend = createStorageBackend(options.paths.home, {
+    migration,
+    resolveProfile: settings.resolve,
+  });
   // Hydrate before pruning missing roots, trash recovery, indexing, or accepting requests.
   await storageBackend.restore();
-  const storageRuntime = createStorageRuntime({ backend: storageBackend,
-    owners: () => [...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)), ...members.storageProjects().map(({ owner }) => owner)],
+  const storageRuntime = createStorageRuntime({
+    backend: storageBackend,
+    owners: () => [
+      ...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)),
+      ...members.storageProjects().map(({ owner }) => owner),
+    ],
     maintain: (owner, work, recovering) => maintainRuntime(owner, work, recovering),
     plan: (owner, scope, recovering) => planRuntime(owner, scope, recovering),
   });
-  const recoveryPending = (owner: string) => owner === 'shared'
-    ? storageRuntime.scopePending('shared') : storageRuntime.ownerPending(owner);
+  const recoveryPending = (owner: string) =>
+    owner === 'shared' ? storageRuntime.scopePending('shared') : storageRuntime.ownerPending(owner);
   const available = (project: string) => !recoveryPending(members.projectOwner(project));
   const assertAvailable = (project: string) => {
     if (!available(project)) throw new Error('存储尚未恢复，此空间暂不可用，请联系管理员。');
   };
   // Cleanup and mounting also write cached resources. Protect them before either starts.
-  for (const owner of new Set(['shared', ...storageBackend.ownersFor('shared'),
-    ...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)), ...members.storageProjects().map(({ owner }) => owner)])) {
+  for (const owner of new Set([
+    'shared',
+    ...storageBackend.ownersFor('shared'),
+    ...readProjects(projectsFile).map(({ dir }) => members.projectOwner(dir)),
+    ...members.storageProjects().map(({ owner }) => owner),
+  ])) {
     if (!storageRuntime.ownerPending(owner)) await storageRuntime.arm(owner);
   }
   pruneProjects(projectsFile, (project) => !available(project));
@@ -175,18 +201,26 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   }
 
   const ordered = () => readProjects(projectsFile).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-  const registered = (dir: string) => available(dir) && ordered().some((entry) => entry.dir === dir);
+  const registered = (dir: string) =>
+    available(dir) && ordered().some((entry) => entry.dir === dir);
   const shares = createShareStore(storageHome, { canMutateProject: available });
-  const index = createArtifactIndex(() => ordered().filter((entry) => available(entry.dir)).map((entry) => entry.dir), {
-    rescanAfterMs: 0,
-  });
+  const index = createArtifactIndex(
+    () =>
+      ordered()
+        .filter((entry) => available(entry.dir))
+        .map((entry) => entry.dir),
+    {
+      rescanAfterMs: 0,
+    },
+  );
 
   const front = http.createServer();
   const board = http.createServer();
   const port = await listenFirst(front, options.host, options.ports);
-  const boardPort = localBinding || options.boardOrigin
-    ? await listenFirst(board, options.host, options.boardPorts)
-    : 0;
+  const boardPort =
+    localBinding || options.boardOrigin
+      ? await listenFirst(board, options.host, options.boardPorts)
+      : 0;
   const policy = accessPolicy({
     host: options.host,
     urlHost: options.urlHost,
@@ -195,64 +229,125 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   });
 
   const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`;
-  const github = githubConfig ? createGitHubAuth({ config: githubConfig, token: options.token, origin, cookieName: `anjian_artifacts_${port}`, members, prepareMember: (identity) => prepareMember(identity), fetch: options.fetch }) : undefined;
+  const github = githubConfig
+    ? createGitHubAuth({
+        config: githubConfig,
+        token: options.token,
+        origin,
+        cookieName: `anjian_artifacts_${port}`,
+        members,
+        prepareMember: (identity) => prepareMember(identity),
+        fetch: options.fetch,
+      })
+    : undefined;
 
-  const projectId = (dir: string) => crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
-  const remoteProjects = () => ordered().filter((entry) => available(entry.dir)).map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
+  const projectId = (dir: string) =>
+    crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32);
+  const remoteProjects = () =>
+    ordered()
+      .filter((entry) => available(entry.dir))
+      .map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
   const remoteEvents = createRemoteEvents(options.paths.home);
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
   const suspension = createProjectSuspension();
   const mountOf = (project: string): Promise<MountedProject> => {
-    if (!available(project)) return Promise.reject(new Error('存储尚未恢复，此空间暂不可用，请联系管理员。'));
+    if (!available(project))
+      return Promise.reject(new Error('存储尚未恢复，此空间暂不可用，请联系管理员。'));
     const pause = suspension.wait(project);
     if (pause) return pause.then(() => mountOf(project));
     if (closing) return Promise.reject(new Error('Artifacts server is stopping'));
     let pending = mounts.get(project);
     if (!pending) {
-      pending = storageRuntime.arm(members.projectOwner(project)).then(() => mountArtifactsProject({
-        root: artifactsRootOf(project),
-        viewerDir: options.viewerDir,
-        runtimeDir: options.runtimeDir,
-        host: options.host,
-        urlHost: options.urlHost,
-        configFile: path.join(project, '.anjian', 'config.json'),
-        publicOrigin: options.publicOrigin,
-        boardOrigin: options.boardOrigin,
-        fetch: options.fetch,
-        debounceMs: options.debounceMs,
-        mount: { port, boardPort, token: options.token, version: options.version, github,
-          recordingWrite: work => writeQuota(project, prepare => withProjectMutation(project, async () => {
-            assertAvailable(project);
-            await work(await prepare());
-          })),
-          backgroundWrite: work => writeQuota(project, prepare => withProjectMutation(project, async () => {
-            assertAvailable(project);
-            const admit = await prepare();
-            let total = 0;
-            work(delta => { const next = total + delta; admit(next); total = next; });
-          })),
-          authorize: (req) => projectAccess.authorized(req, project),
-          ...(!loopback ? { contentAccess: (req: http.IncomingMessage, ref: import('./artifacts').ArtifactRef) => {
-            const identity = projectAccess.principal(req, new URL(req.url ?? '/', origin));
-            if (!identity) throw new Error('Content access denied');
-            return contentAccess.issue(identity, project, ref);
-          } } : {}),
-        },
-      })).then((mounted) => {
-        ready.set(project, mounted);
-        try { remoteEvents.append(projectId(project), '', 'resync', { reason: 'project-mounted', action: 'Read current comments with comment list --all' }); }
-        catch (error) { console.error('Remote event persistence failed:', (error as Error).message); }
-        mounted.onMessage((message) => {
-          if (message.type !== 'doc-comments' && message.type !== 'board-comments' && message.type !== 'change') return;
-          if (!('artifact' in message)) return;
-          storageRuntime.changed(members.projectOwner(project));
-          try { remoteEvents.append(projectId(project), message.artifact, message.type, { action: 'Read current comments or pull the changed artifact' }); }
-          catch (error) { console.error('Remote event persistence failed:', (error as Error).message); }
+      pending = storageRuntime
+        .arm(members.projectOwner(project))
+        .then(() =>
+          mountArtifactsProject({
+            root: artifactsRootOf(project),
+            viewerDir: options.viewerDir,
+            runtimeDir: options.runtimeDir,
+            host: options.host,
+            urlHost: options.urlHost,
+            configFile: path.join(project, '.anjian', 'config.json'),
+            publicOrigin: options.publicOrigin,
+            boardOrigin: options.boardOrigin,
+            fetch: options.fetch,
+            debounceMs: options.debounceMs,
+            mount: {
+              port,
+              boardPort,
+              token: options.token,
+              version: options.version,
+              github,
+              recordingWrite: (work) =>
+                writeQuota(project, (prepare) =>
+                  withProjectMutation(project, async () => {
+                    assertAvailable(project);
+                    await work(await prepare());
+                  }),
+                ),
+              backgroundWrite: (work) =>
+                writeQuota(project, (prepare) =>
+                  withProjectMutation(project, async () => {
+                    assertAvailable(project);
+                    const admit = await prepare();
+                    let total = 0;
+                    work((delta) => {
+                      const next = total + delta;
+                      admit(next);
+                      total = next;
+                    });
+                  }),
+                ),
+              authorize: (req) => projectAccess.authorized(req, project),
+              ...(!loopback
+                ? {
+                    contentAccess: (
+                      req: http.IncomingMessage,
+                      ref: import('./artifacts').ArtifactRef,
+                    ) => {
+                      const identity = projectAccess.principal(
+                        req,
+                        new URL(req.url ?? '/', origin),
+                      );
+                      if (!identity) throw new Error('Content access denied');
+                      return contentAccess.issue(identity, project, ref);
+                    },
+                  }
+                : {}),
+            },
+          }),
+        )
+        .then((mounted) => {
+          ready.set(project, mounted);
+          try {
+            remoteEvents.append(projectId(project), '', 'resync', {
+              reason: 'project-mounted',
+              action: 'Read current comments with comment list --all',
+            });
+          } catch (error) {
+            console.error('Remote event persistence failed:', (error as Error).message);
+          }
+          mounted.onMessage((message) => {
+            if (
+              message.type !== 'doc-comments' &&
+              message.type !== 'board-comments' &&
+              message.type !== 'change'
+            )
+              return;
+            if (!('artifact' in message)) return;
+            storageRuntime.changed(members.projectOwner(project));
+            try {
+              remoteEvents.append(projectId(project), message.artifact, message.type, {
+                action: 'Read current comments or pull the changed artifact',
+              });
+            } catch (error) {
+              console.error('Remote event persistence failed:', (error as Error).message);
+            }
+          });
+          return mounted;
         });
-        return mounted;
-      });
       pending.catch(() => mounts.delete(project));
       mounts.set(project, pending);
     }
@@ -286,13 +381,15 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const counts = new Map<string, number>();
     for (const entry of index.list(STATUS_SCAN_MS))
       counts.set(entry.project, (counts.get(entry.project) ?? 0) + 1);
-    return ordered().filter((entry) => !scope || scope.has(entry.dir)).map((entry) => ({
-      dir: entry.dir,
-      name: path.basename(entry.dir),
-      lastUsedAt: entry.lastUsedAt,
-      dormant: isDormant(entry),
-      artifacts: counts.get(entry.dir) ?? 0,
-    }));
+    return ordered()
+      .filter((entry) => !scope || scope.has(entry.dir))
+      .map((entry) => ({
+        dir: entry.dir,
+        name: path.basename(entry.dir),
+        lastUsedAt: entry.lastUsedAt,
+        dormant: isDormant(entry),
+        artifacts: counts.get(entry.dir) ?? 0,
+      }));
   };
 
   const artifactList = (scope?: ReadonlySet<string>): HubArtifactList => {
@@ -345,40 +442,76 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return loopback || (key !== null && safeEqual(key, options.token));
   };
   const authorized = (req: http.IncomingMessage, url: URL) =>
-    keyOk(url) || Boolean(github?.authorized(req.headers.cookie)) ||
+    keyOk(url) ||
+    Boolean(github?.authorized(req.headers.cookie)) ||
     (req.headers.cookie ?? '')
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
   const projectAccess = createProjectAccess({ members, github, isOwner: authorized, registered });
   const contentAccess = createContentAccess(projectAccess.canAccess);
-  const privateContent = async (req: http.IncomingMessage, res: http.ServerResponse, requestUrl: URL, mode: 'main' | 'board') => {
+  const privateContent = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    requestUrl: URL,
+    mode: 'main' | 'board',
+  ) => {
     if (!requestUrl.pathname.startsWith('/p/')) return false;
-    if (req.method !== 'GET' && req.method !== 'HEAD') { send(res, 405, 'Read only'); return true; }
-    const match = /^\/p\/([A-Za-z0-9_-]{43})\/(.+)$/.exec(requestUrl.pathname);
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      send(res, 405, 'Read only');
+      return true;
+    }
+    const match = /^\/p\/([\w-]{43})\/(.+)$/.exec(requestUrl.pathname);
     const grant = match ? contentAccess.resolve(match[1]!) : null;
-    if (!grant || (mode === 'board' && grant.artifact.type !== 'artboard')) { send(res, 404, 'Not found'); return true; }
+    if (!grant || (mode === 'board' && grant.artifact.type !== 'artboard')) {
+      send(res, 404, 'Not found');
+      return true;
+    }
     let relative: string;
-    try { relative = decodeURIComponent(match![2]!); } catch { send(res, 400, 'Invalid path'); return true; }
-    if (relative.split('/').some((part) => !part || part === '.' || part === '..') || relative.includes('\\')) {
-      send(res, 404, 'Not found'); return true;
+    try {
+      relative = decodeURIComponent(match![2]!);
+    } catch {
+      send(res, 400, 'Invalid path');
+      return true;
+    }
+    if (
+      relative.split('/').some((part) => !part || part === '.' || part === '..') ||
+      relative.includes('\\')
+    ) {
+      send(res, 404, 'Not found');
+      return true;
     }
     const mounted = await mountOf(grant.project);
-    if (!contentAccess.resolve(match![1]!)) { send(res, 404, 'Not found'); return true; }
+    if (!contentAccess.resolve(match![1]!)) {
+      send(res, 404, 'Not found');
+      return true;
+    }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    mounted.handlePrivateContent(req, res, `${grant.artifact.type}/${grant.artifact.id}/${relative}`, mode);
+    mounted.handlePrivateContent(
+      req,
+      res,
+      `${grant.artifact.type}/${grant.artifact.id}/${relative}`,
+      mode,
+    );
     return true;
   };
-  const authenticated = (req: http.IncomingMessage, url: URL) => Boolean(projectAccess.principal(req, url));
-  const visibleProjects = (req: http.IncomingMessage) => projectAccess.visibleProjects(req, ordered().map((p) => p.dir));
+  const authenticated = (req: http.IncomingMessage, url: URL) =>
+    Boolean(projectAccess.principal(req, url));
+  const visibleProjects = (req: http.IncomingMessage) =>
+    projectAccess.visibleProjects(
+      req,
+      ordered().map((p) => p.dir),
+    );
   const projectReference = (req: http.IncomingMessage, project: string) =>
     authorized(req, new URL(req.url ?? '/', origin)) ? project : projectId(project);
   const resolveProject = (req: http.IncomingMessage, reference: string) =>
     visibleProjects(req).find((project) => projectReference(req, project) === reference) ?? null;
-  const visibleArtifacts = (req: http.IncomingMessage) => artifactList(new Set(visibleProjects(req)));
+  const visibleArtifacts = (req: http.IncomingMessage) =>
+    artifactList(new Set(visibleProjects(req)));
   const browserArtifacts = (req: http.IncomingMessage): HubArtifactList => {
     const result = visibleArtifacts(req);
-    return { ...result,
+    return {
+      ...result,
       projects: result.projects.map((p) => ({ ...p, dir: projectReference(req, p.dir) })),
       artifacts: result.artifacts.map((a) => ({ ...a, project: projectReference(req, a.project) })),
     };
@@ -474,27 +607,44 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     });
   };
 
-  const prepareMember = createMemberWorkspace({ home: options.paths.home, members, register, available: (owner) => !recoveryPending(owner), beforeWrite: storageRuntime.arm });
+  const prepareMember = createMemberWorkspace({
+    home: options.paths.home,
+    members,
+    register,
+    available: (owner) => !recoveryPending(owner),
+    beforeWrite: storageRuntime.arm,
+  });
 
   const remove = async (dir: string) => {
     const real = realDir(dir) ?? path.resolve(dir);
-    return writeQuota(real, prepare => withProjectMutation(real, () => suspension.suspend(real, async () => {
-      assertAvailable(real);
-      const pending = mounts.get(real);
-      if (pending) {
-        const mounted = await pending;
-        // Refuse before stopping the live project, so storage settings and
-        // pending document edits remain available for recovery.
-        await mounted.quiesce(async () => {}, prepare);
-        await mounted.close(prepare);
-      }
-      mounts.delete(real);
-      ready.delete(real);
-    }, () => {
-      shares.revokeProject(real);
-      removeProject(projectsFile, real);
-      fs.rmSync(infoFileOf(real), { force: true });
-    }, () => { index.rescan(); })));
+    return writeQuota(real, (prepare) =>
+      withProjectMutation(real, () =>
+        suspension.suspend(
+          real,
+          async () => {
+            assertAvailable(real);
+            const pending = mounts.get(real);
+            if (pending) {
+              const mounted = await pending;
+              // Refuse before stopping the live project, so storage settings and
+              // pending document edits remain available for recovery.
+              await mounted.quiesce(async () => {}, prepare);
+              await mounted.close(prepare);
+            }
+            mounts.delete(real);
+            ready.delete(real);
+          },
+          () => {
+            shares.revokeProject(real);
+            removeProject(projectsFile, real);
+            fs.rmSync(infoFileOf(real), { force: true });
+          },
+          () => {
+            index.rescan();
+          },
+        ),
+      ),
+    );
   };
 
   const logTail = (project: string | null) => {
@@ -520,17 +670,25 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     const action = url.pathname.slice('/api/hub/'.length);
     if (action === 'log') {
       if (req.method !== 'GET') send(res, 405, 'Method not allowed');
-      else sendJson(res, 200, { lines: logTail(url.searchParams.get('project')).map((line) => line.split(options.token).join('[redacted]')) });
+      else
+        sendJson(res, 200, {
+          lines: logTail(url.searchParams.get('project')).map((line) =>
+            line.split(options.token).join('[redacted]'),
+          ),
+        });
       return;
     }
     const control = options.control;
     if (req.method !== 'POST') send(res, 405, 'Method not allowed');
     else if (!control) send(res, 409, 'Not available');
     else {
-      try { await prepareShutdown(); }
-      catch {
-        sendJson(res, 409, { code: 'document_save_blocked',
-          error: '文档尚未保存，服务仍在运行。请在存储设置中检查可用容量与连接后重试。' });
+      try {
+        await prepareShutdown();
+      } catch {
+        sendJson(res, 409, {
+          code: 'document_save_blocked',
+          error: '文档尚未保存，服务仍在运行。请在存储设置中检查可用容量与连接后重试。',
+        });
         return;
       }
       if (action === 'stop') {
@@ -582,28 +740,58 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     return true;
   };
 
-  const suspendProject = <T>(project: string, work: () => T | Promise<T>, guard: () => void): Promise<T> =>
-    writeQuota(project, prepare => withProjectMutation(project, () => suspension.suspend(project, async () => {
-      guard();
-      assertAvailable(project);
-      const pending = mounts.get(project);
-      if (pending) {
-        const mounted = await pending;
-        try { await mounted.quiesce(async () => {}, prepare); }
-        catch {
-          throw new ArtifactTrashError(409, 'document_save_blocked',
-            '文档尚未保存，操作未执行。请在存储设置中检查可用容量与连接后重试。');
-        }
-        await mounted.close(prepare);
-      }
-      mounts.delete(project);
-      ready.delete(project);
-    }, work, () => { index.rescan(); })));
-  const quiesceProject = <T>(project: string, work: () => Promise<T>, prepare?: () => Promise<(delta: number) => void>): Promise<T> =>
-    suspension.suspend(project, async () => {}, async () => {
-      const mounted = mounts.get(project);
-      return mounted ? (await mounted).quiesce(work, prepare) : work();
-    }, () => { index.rescan(); });
+  const suspendProject = <T>(
+    project: string,
+    work: () => T | Promise<T>,
+    guard: () => void,
+  ): Promise<T> =>
+    writeQuota(project, (prepare) =>
+      withProjectMutation(project, () =>
+        suspension.suspend(
+          project,
+          async () => {
+            guard();
+            assertAvailable(project);
+            const pending = mounts.get(project);
+            if (pending) {
+              const mounted = await pending;
+              try {
+                await mounted.quiesce(async () => {}, prepare);
+              } catch {
+                throw new ArtifactTrashError(
+                  409,
+                  'document_save_blocked',
+                  '文档尚未保存，操作未执行。请在存储设置中检查可用容量与连接后重试。',
+                );
+              }
+              await mounted.close(prepare);
+            }
+            mounts.delete(project);
+            ready.delete(project);
+          },
+          work,
+          () => {
+            index.rescan();
+          },
+        ),
+      ),
+    );
+  const quiesceProject = <T>(
+    project: string,
+    work: () => Promise<T>,
+    prepare?: () => Promise<(delta: number) => void>,
+  ): Promise<T> =>
+    suspension.suspend(
+      project,
+      async () => {},
+      async () => {
+        const mounted = mounts.get(project);
+        return mounted ? (await mounted).quiesce(work, prepare) : work();
+      },
+      () => {
+        index.rescan();
+      },
+    );
   const trashApi = createHubTrash({
     projects: visibleProjects,
     artifacts: (req) => visibleArtifacts(req).artifacts,
@@ -612,15 +800,21 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     readBody,
     suspend: suspendProject,
     deployment: loopback ? 'local' : 'self-hosted',
-    beforeMove: (project, artifact) => { shares.revoke(project, artifact); },
+    beforeMove: (project, artifact) => {
+      shares.revoke(project, artifact);
+    },
   });
-  const trashCleanup = setInterval(() => {
-    for (const project of ordered()) {
-      if (!available(project.dir)) continue;
-      void withProjectMutation(project.dir, async () => { listTrash(project.dir); })
-        .catch(() => console.error('Trash retention cleanup failed'));
-    }
-  }, 60 * 60 * 1000);
+  const trashCleanup = setInterval(
+    () => {
+      for (const project of ordered()) {
+        if (!available(project.dir)) continue;
+        void withProjectMutation(project.dir, async () => {
+          listTrash(project.dir);
+        }).catch(() => console.error('Trash retention cleanup failed'));
+      }
+    },
+    60 * 60 * 1000,
+  );
   trashCleanup.unref();
 
   const remoteAuth = createRemoteAuth({
@@ -631,22 +825,38 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     principal: projectAccess.principal,
     projects: (req) => {
       const visible = new Set(visibleProjects(req));
-      return remoteProjects().filter((p) => visible.has(p.dir)).map(({ id, name }) => ({ id, name }));
+      return remoteProjects()
+        .filter((p) => visible.has(p.dir))
+        .map(({ id, name }) => ({ id, name }));
     },
     deviceAllowed: (ownerId, version, projects) => {
       if (ownerId === 'owner') return true;
       const identity = members.principal(Number(ownerId.slice('github:'.length)), version);
       if (!identity) return false;
-      const available = new Set(remoteProjects().filter((p) => projectAccess.canAccess(identity, p.dir)).map((p) => p.id));
+      const available = new Set(
+        remoteProjects()
+          .filter((p) => projectAccess.canAccess(identity, p.dir))
+          .map((p) => p.id),
+      );
       return projects.every((id) => available.has(id));
     },
   });
   const usage = createStorageUsage({
-    projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
+    projects: () => [
+      ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })),
+      ...members.storageProjects(),
+    ],
     snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
     snapshots: () => {
-      const owners = new Map([...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()].map(({ dir, owner }) => [dir, owner]));
-      return shares.storageSnapshots().map(({ directory, project }) => ({ directory, owner: owners.get(project) }));
+      const owners = new Map(
+        [
+          ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })),
+          ...members.storageProjects(),
+        ].map(({ dir, owner }) => [dir, owner]),
+      );
+      return shares
+        .storageSnapshots()
+        .map(({ directory, project }) => ({ directory, owner: owners.get(project) }));
     },
     sharedOwner: (owner) => storageBackend.scopeFor(owner) !== owner,
   });
@@ -656,98 +866,216 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     measure: usage.measure,
     limits: (owner) => ({
       shared: settings.summary('shared').sharedLimitBytes ?? null,
-      personal: owner === 'owner' ? null : members.list().members.find((member) => member.id === owner)?.quotaBytes ?? 0,
+      personal:
+        owner === 'owner'
+          ? null
+          : (members.list().members.find((member) => member.id === owner)?.quotaBytes ?? 0),
     }),
   });
-  const runtimeProjects = (owner: string) => [...new Set([
-    ...ordered().filter(({ dir }) => members.projectOwner(dir) === owner).map(({ dir }) => dir),
-    ...members.storageProjects().filter((entry) => entry.owner === owner).map(({ dir }) => dir),
-  ])].sort();
-  const maintainRuntime = <T>(owner: string, work: () => Promise<T>, recovering = false) => writeQuota.exclusive(async prepareProject => {
-    const projects = runtimeProjects(owner);
-    const guard = () => {
-      if (JSON.stringify(projects) !== JSON.stringify(runtimeProjects(owner))) throw new Error('Storage project ownership changed');
-      if (!recovering) for (const project of projects) assertAvailable(project);
-    };
-    return withProjectMaintenance(projects, (project, work) => quiesceProject(project, work, () => prepareProject(project)), work, guard);
+  const runtimeProjects = (owner: string) =>
+    [
+      ...new Set([
+        ...ordered()
+          .filter(({ dir }) => members.projectOwner(dir) === owner)
+          .map(({ dir }) => dir),
+        ...members
+          .storageProjects()
+          .filter((entry) => entry.owner === owner)
+          .map(({ dir }) => dir),
+      ]),
+    ].sort();
+  const maintainRuntime = <T>(owner: string, work: () => Promise<T>, recovering = false) =>
+    writeQuota.exclusive(async (prepareProject) => {
+      const projects = runtimeProjects(owner);
+      const guard = () => {
+        if (JSON.stringify(projects) !== JSON.stringify(runtimeProjects(owner)))
+          throw new Error('Storage project ownership changed');
+        if (!recovering) for (const project of projects) assertAvailable(project);
+      };
+      return withProjectMaintenance(
+        projects,
+        (project, work) => quiesceProject(project, work, () => prepareProject(project)),
+        work,
+        guard,
+      );
+    });
+  const planRuntime = (owner: string, scope: string, recovering = false) =>
+    planMigrationSources(scope, {
+      owner,
+      requireExisting: recovering,
+      projects: () => [
+        ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })),
+        ...members.storageProjects(),
+      ],
+      snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
+      snapshots: shares.storageSnapshots,
+      sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
+    });
+  const remoteApi = createRemoteApi({
+    authenticate: remoteAuth.authenticate,
+    projects: remoteProjects,
+    mount: mountOf,
+    events: remoteEvents,
+    token: options.token,
+    upload: writeQuota,
   });
-  const planRuntime = (owner: string, scope: string, recovering = false) => planMigrationSources(scope, {
-    owner,
-    requireExisting: recovering,
-    projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
-    snapshotsRoot: path.join(storageHome, 'shares/snapshots'), snapshots: shares.storageSnapshots,
-    sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
-  });
-  const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload: writeQuota });
-  const storageApi = createStorageApi({ disk: createDiskUsage(() => [storageHome, ...ordered().map(({ dir }) => dir), ...members.storageProjects().map(({ dir }) => dir)]), settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
-    allocation: (owner) => owner !== 'shared' && storageBackend.scopeFor(owner) === owner ? 'personal' : 'shared',
-    syncStatus: (owner) => owner === 'shared' ? storageRuntime.scopeStatus('shared') : storageRuntime.status(owner),
-    synchronize: (owner) => owner === 'shared' ? storageRuntime.syncScope('shared') : storageRuntime.sync(owner),
-    recover: (owner, authorize) => owner === 'shared' ? storageRuntime.recoverScope('shared', authorize) : storageRuntime.recover(owner, authorize),
+  const storageApi = createStorageApi({
+    disk: createDiskUsage(() => [
+      storageHome,
+      ...ordered().map(({ dir }) => dir),
+      ...members.storageProjects().map(({ dir }) => dir),
+    ]),
+    settings,
+    usage,
+    recoveryPending,
+    origin,
+    principal: projectAccess.principal,
+    readBody,
+    allocation: (owner) =>
+      owner !== 'shared' && storageBackend.scopeFor(owner) === owner ? 'personal' : 'shared',
+    syncStatus: (owner) =>
+      owner === 'shared' ? storageRuntime.scopeStatus('shared') : storageRuntime.status(owner),
+    synchronize: (owner) =>
+      owner === 'shared' ? storageRuntime.syncScope('shared') : storageRuntime.sync(owner),
+    recover: (owner, authorize) =>
+      owner === 'shared'
+        ? storageRuntime.recoverScope('shared', authorize)
+        : storageRuntime.recover(owner, authorize),
     backend: (owner) => {
       const scope = owner === 'shared' ? 'shared' : storageBackend.scopeFor(owner);
       return scope === null ? 'local' : storageBackend.summary(scope).backend;
     },
   });
-  const migrationProjects = (scope: string) => [...new Set([
-    ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects(),
-  ].filter(({ owner }) => scope === 'shared' ? storageBackend.scopeFor(owner) !== owner : owner === scope).map(({ dir }) => dir))].sort();
-  const migrationApi = createStorageMigrationApi({ migration, settings, origin, principal: projectAccess.principal, readBody,
+  const migrationProjects = (scope: string) =>
+    [
+      ...new Set(
+        [
+          ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })),
+          ...members.storageProjects(),
+        ]
+          .filter(({ owner }) =>
+            scope === 'shared' ? storageBackend.scopeFor(owner) !== owner : owner === scope,
+          )
+          .map(({ dir }) => dir),
+      ),
+    ].sort();
+  const migrationApi = createStorageMigrationApi({
+    migration,
+    settings,
+    origin,
+    principal: projectAccess.principal,
+    readBody,
     activeJob: (scope) => {
       const binding = storageBackend.bindingFor(scope);
       return binding?.scope === scope ? binding.namespace : null;
     },
     activate: async (scope, jobId, guard) => {
-      const owners = scope === 'shared' ? [...new Set(['shared',
-        ...migrationProjects(scope).map((project) => members.projectOwner(project)),
-        ...storageBackend.ownersFor(scope).filter((owner) => storageBackend.scopeFor(owner) === scope),
-      ])] : [scope];
-      await storageRuntime.activate(scope, jobId, owners, () => storageBackend.activate(scope, jobId, (plan) => guard(plan.roots), owners));
+      const owners =
+        scope === 'shared'
+          ? [
+              ...new Set([
+                'shared',
+                ...migrationProjects(scope).map((project) => members.projectOwner(project)),
+                ...storageBackend
+                  .ownersFor(scope)
+                  .filter((owner) => storageBackend.scopeFor(owner) === scope),
+              ]),
+            ]
+          : [scope];
+      await storageRuntime.activate(scope, jobId, owners, () =>
+        storageBackend.activate(scope, jobId, (plan) => guard(plan.roots), owners),
+      );
     },
-    maintain: (scope, guard, work) => writeQuota.exclusive(async prepareProject => {
-      guard();
-      if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
-      const projects = migrationProjects(scope);
-      const check = () => {
+    maintain: (scope, guard, work) =>
+      writeQuota.exclusive(async (prepareProject) => {
         guard();
-        if (JSON.stringify(projects) !== JSON.stringify(migrationProjects(scope)))
-          throw new Error('Migration project ownership changed');
-        for (const project of projects) assertAvailable(project);
-      };
-      return withProjectMaintenance(projects, (project, work) => quiesceProject(project, work, () => prepareProject(project)), async () => {
-        const result = await work();
-        check();
-        return result;
-      }, check);
-    }),
+        if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
+        const projects = migrationProjects(scope);
+        const check = () => {
+          guard();
+          if (JSON.stringify(projects) !== JSON.stringify(migrationProjects(scope)))
+            throw new Error('Migration project ownership changed');
+          for (const project of projects) assertAvailable(project);
+        };
+        return withProjectMaintenance(
+          projects,
+          (project, work) => quiesceProject(project, work, () => prepareProject(project)),
+          async () => {
+            const result = await work();
+            check();
+            return result;
+          },
+          check,
+        );
+      }),
     plan: async (scope) => {
       if (recoveryPending(scope)) throw new Error('Storage recovery is incomplete');
       return planMigrationSources(scope, {
-        projects: () => [...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })), ...members.storageProjects()],
+        projects: () => [
+          ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })),
+          ...members.storageProjects(),
+        ],
         snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
         snapshots: shares.storageSnapshots,
         sharedOwner: (owner) => storageBackend.scopeFor(owner) !== owner,
       });
     },
   });
-  const memberApi = createMemberApi({ members, origin, enabled: Boolean(github), owner: authorized, readBody, fetch: options.fetch });
-  const browserAuth = createBrowserAuth({ cookieName: `anjian_artifacts_${port}`, token: options.token, origin, loopback, policy, authorized: authenticated, github });
-  const publicShares = createPublicShare({ store: shares, origin,
+  const memberApi = createMemberApi({
+    members,
+    origin,
+    enabled: Boolean(github),
+    owner: authorized,
+    readBody,
+    fetch: options.fetch,
+  });
+  const browserAuth = createBrowserAuth({
+    cookieName: `anjian_artifacts_${port}`,
+    token: options.token,
+    origin,
+    loopback,
+    policy,
+    authorized: authenticated,
+    github,
+  });
+  const publicShares = createPublicShare({
+    store: shares,
+    origin,
     previewOrigin: options.boardOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${boardPort}`,
-    viewerDir: options.viewerDir, runtimeDir: options.runtimeDir, registered });
-  const shareApi = createHubShare({ store: shares, origin, authorized: authenticated, readBody, publish: writeQuota,
+    viewerDir: options.viewerDir,
+    runtimeDir: options.runtimeDir,
+    registered,
+  });
+  const shareApi = createHubShare({
+    store: shares,
+    origin,
+    authorized: authenticated,
+    readBody,
+    publish: writeQuota,
     resolve: (req, input) => {
-      if (typeof input.type !== 'string' || typeof input.id !== 'string' ||
-          (input.project !== undefined && typeof input.project !== 'string')) return null;
-      const project = typeof input.project === 'string' ? resolveProject(req, input.project) : refererProject(req);
+      if (
+        typeof input.type !== 'string' ||
+        typeof input.id !== 'string' ||
+        (input.project !== undefined && typeof input.project !== 'string')
+      )
+        return null;
+      const project =
+        typeof input.project === 'string'
+          ? resolveProject(req, input.project)
+          : refererProject(req);
       if (typeof input.project === 'string' && !project) return null;
       if (project && !projectAccess.authorized(req, project)) return null;
-      const matches = visibleArtifacts(req).artifacts.filter((a) => a.type === input.type &&
-        (a.id === input.id || a.url.split('/').pop() === input.id) && (!project || a.project === project));
+      const matches = visibleArtifacts(req).artifacts.filter(
+        (a) =>
+          a.type === input.type &&
+          (a.id === input.id || a.url.split('/').pop() === input.id) &&
+          (!project || a.project === project),
+      );
       return matches.length === 1 ? matches[0]! : null;
     },
     settle: async (target, admit) => {
-      if (target.type === 'document') await (await mountOf(target.project)).settleDocument(target.id, undefined, admit);
+      if (target.type === 'document')
+        await (await mountOf(target.project)).settleDocument(target.id, undefined, admit);
     },
   });
 
@@ -758,8 +1086,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
+      if (options.docsDir && (await serveDocsSite(req, res, url, options.docsDir))) return;
       if (await publicShares(req, res, url)) return;
       if (await privateContent(req, res, url, 'main')) return;
+      if (options.docsDir && url.pathname === '/login' && !url.searchParams.has('returnTo'))
+        url.searchParams.set('returnTo', '/library');
       if (await browserAuth(req, res, url)) return;
       if (await shareApi(req, res, url)) return;
       if (await memberApi(req, res, url)) return;
@@ -768,26 +1099,47 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await remoteAuth.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
-        if (!authenticated(req, url) || !originAllowed(policy, req.headers.origin) ||
-            !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) sendJson(res, 403, { error: 'Forbidden' });
+        if (
+          !authenticated(req, url) ||
+          !originAllowed(policy, req.headers.origin) ||
+          !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+        )
+          sendJson(res, 403, { error: 'Forbidden' });
         else await trashApi(req, res, url.pathname);
         return;
       }
       if (url.pathname === '/api/account') {
         const identity = projectAccess.principal(req, url);
-        if (!identity || !originAllowed(policy, req.headers.origin) ||
-            !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
-          sendJson(res, 403, { error: 'Forbidden' }); return;
+        if (
+          !identity ||
+          !originAllowed(policy, req.headers.origin) ||
+          !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+        ) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
         }
-        if (req.method !== 'GET') { send(res, 405, 'Method not allowed'); return; }
-        const member = identity.role === 'member' ? members.list().members.find((item) => item.id === identity.id) : null;
-        sendJson(res, 200, { role: identity.role, login: member?.login ?? 'Owner',
-          ...(member ? { quotaBytes: member.quotaBytes } : {}) });
+        if (req.method !== 'GET') {
+          send(res, 405, 'Method not allowed');
+          return;
+        }
+        const member =
+          identity.role === 'member'
+            ? members.list().members.find((item) => item.id === identity.id)
+            : null;
+        sendJson(res, 200, {
+          role: identity.role,
+          login: member?.login ?? 'Owner',
+          ...(member ? { quotaBytes: member.quotaBytes } : {}),
+        });
         return;
       }
       if (url.pathname === '/api/status') {
         if (!authorized(req, url)) send(res, 403, 'Forbidden: agent calls need ?key=');
-        else sendJson(res, 200, { ...status(), url: fromAgent(req, url) ? status().url : `${origin}/` });
+        else
+          sendJson(res, 200, {
+            ...status(),
+            url: fromAgent(req, url) ? status().url : `${origin}/`,
+          });
         return;
       }
       if (CONTROL_PATH.test(url.pathname)) {
@@ -809,50 +1161,114 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         send(res, 400, 'Bad request');
         return;
       }
-      const devicePage = pathname === '/devices' || pathname === '/connect' || pathname === '/members' || pathname === '/storage';
-      if (pathname === '/members' && !authorized(req, url)) { send(res, 403, 'Forbidden'); return; }
-      if (devicePage || (visibleProjects(req).length === 0 && req.method === 'GET' && !pathname.startsWith('/api/'))) {
-        if (req.method !== 'GET') { send(res, 405, 'Method not allowed'); return; }
-        if (!authenticated(req, url) || !originAllowed(policy, req.headers.origin) ||
-            !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
-          send(res, 403, 'Forbidden'); return;
+      const devicePage =
+        pathname === '/library' ||
+        pathname === '/library/' ||
+        pathname === '/devices' ||
+        pathname === '/connect' ||
+        pathname === '/members' ||
+        pathname === '/storage';
+      if (pathname === '/members' && !authorized(req, url)) {
+        send(res, 403, 'Forbidden');
+        return;
+      }
+      if (
+        devicePage ||
+        (visibleProjects(req).length === 0 && req.method === 'GET' && !pathname.startsWith('/api/'))
+      ) {
+        if (req.method !== 'GET') {
+          send(res, 405, 'Method not allowed');
+          return;
+        }
+        if (
+          !authenticated(req, url) ||
+          !originAllowed(policy, req.headers.origin) ||
+          !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+        ) {
+          send(res, 403, 'Forbidden');
+          return;
         }
         await serveHubViewer(req, res, {
-          viewerDir: options.viewerDir, pathname,
+          viewerDir: options.viewerDir,
+          pathname,
           shell: devicePage || pathname === '/' || pathname === '/index.html',
           boardOrigin: options.boardOrigin,
-          cookieName: `anjian_artifacts_${port}`, token: options.token, key: url.searchParams.get('key'),
-          secure: origin.startsWith('https:') && req.headers.host?.toLowerCase() === new URL(origin).host.toLowerCase(),
+          cookieName: `anjian_artifacts_${port}`,
+          token: options.token,
+          key: url.searchParams.get('key'),
+          secure:
+            origin.startsWith('https:') &&
+            req.headers.host?.toLowerCase() === new URL(origin).host.toLowerCase(),
           loopback,
         });
         return;
       }
-      const deletedRoute = /^\/(document|artboard|html)\/([A-Za-z0-9_-]+)\/?$/.exec(pathname);
-      if (deletedRoute && authenticated(req, url) && originAllowed(policy, req.headers.origin) &&
-          navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) {
+      const deletedRoute = /^\/(document|artboard|html)\/([\w-]+)\/?$/.exec(pathname);
+      if (
+        deletedRoute &&
+        authenticated(req, url) &&
+        originAllowed(policy, req.headers.origin) &&
+        navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+      ) {
         const explicitProject = headerProject(req, url);
         const liveProject = projectForPath(pathname);
-        const candidates = explicitProject ? [explicitProject] : liveProject ? [] : visibleProjects(req);
-        const deleted = candidates.some((project) => findTrashedArtifact(project, deletedRoute[1] as ArtifactType, deletedRoute[2]!));
+        const candidates = explicitProject
+          ? [explicitProject]
+          : liveProject
+            ? []
+            : visibleProjects(req);
+        const deleted = candidates.some((project) =>
+          findTrashedArtifact(project, deletedRoute[1] as ArtifactType, deletedRoute[2]!),
+        );
         if (deleted) {
-          send(res, 410, '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>作品已移入回收站 · 案间</title><body style="font:16px system-ui;padding:48px;max-width:640px;margin:auto"><h1>作品已移入回收站</h1><p>作品暂时无法访问。保留期内可从回收站恢复；已永久删除的作品无法恢复。</p><a href="/?view=trash">前往回收站</a></body></html>', { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
+          send(
+            res,
+            410,
+            '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>作品已移入回收站 · 案间</title><body style="font:16px system-ui;padding:48px;max-width:640px;margin:auto"><h1>作品已移入回收站</h1><p>作品暂时无法访问。保留期内可从回收站恢复；已永久删除的作品无法恢复。</p><a href="/?view=trash">前往回收站</a></body></html>',
+            {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Cache-Control': 'no-store',
+              'Content-Security-Policy':
+                "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+            },
+          );
           return;
         }
       }
       const mounted = await route(req, url, pathname);
       if (!mounted) send(res, 404, 'Not found');
-      else if (req.method === 'POST' && /^\/api\/(?:(?:agent\/)?(?:document|artboard)\/[^/]+\/comments|document\/[^/]+\/update)$/.test(pathname)) {
+      else if (
+        req.method === 'POST' &&
+        /^\/api\/(?:(?:agent\/)?(?:document|artboard)\/[^/]+\/comments|document\/[^/]+\/update)$/.test(
+          pathname,
+        )
+      ) {
         const project = path.resolve(mounted.root, '../..');
-        if (!projectAccess.authorized(req, project) || !originAllowed(policy, req.headers.origin) ||
-          !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)) { send(res, 403, 'Forbidden'); return; }
-        await writeQuota(project, (prepare) => withProjectMutation(project, async () => {
-          const current = await route(req, url, pathname);
-          if (!current || current.root !== mounted.root) { send(res, 403, 'Project access changed'); return; }
-          const admit = await prepare();
-          await withRequestStorageAdmission(req, admit, () => current.handleRequest(req, res), prepare);
-        }));
-      }
-      else mounted.handleRequest(req, res);
+        if (
+          !projectAccess.authorized(req, project) ||
+          !originAllowed(policy, req.headers.origin) ||
+          !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+        ) {
+          send(res, 403, 'Forbidden');
+          return;
+        }
+        await writeQuota(project, (prepare) =>
+          withProjectMutation(project, async () => {
+            const current = await route(req, url, pathname);
+            if (!current || current.root !== mounted.root) {
+              send(res, 403, 'Project access changed');
+              return;
+            }
+            const admit = await prepare();
+            await withRequestStorageAdmission(
+              req,
+              admit,
+              () => current.handleRequest(req, res),
+              prepare,
+            );
+          }),
+        );
+      } else mounted.handleRequest(req, res);
     })().catch((err: Error) => {
       if (!res.headersSent) send(res, closing ? 503 : 500, `Artifacts error: ${err.message}`);
     });
@@ -874,21 +1290,34 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const url = new URL(req.url ?? '/', 'http://board.local');
       if (url.pathname.startsWith('/s/')) {
         const expected = options.boardOrigin ? new URL(options.boardOrigin).host : null;
-        if (expected ? req.headers.host?.toLowerCase() !== expected.toLowerCase() : !hostAllowed(policy, req.headers.host)) {
-          send(res, 403, 'Forbidden host'); return;
+        if (
+          expected
+            ? req.headers.host?.toLowerCase() !== expected.toLowerCase()
+            : !hostAllowed(policy, req.headers.host)
+        ) {
+          send(res, 403, 'Forbidden host');
+          return;
         }
         if (await publicShares(req, res, url, true)) return;
       }
       if (url.pathname.startsWith('/p/')) {
         const expected = options.boardOrigin ? new URL(options.boardOrigin).host : null;
-        if (expected ? req.headers.host?.toLowerCase() !== expected.toLowerCase() : !hostAllowed(policy, req.headers.host)) {
-          send(res, 403, 'Forbidden host'); return;
+        if (
+          expected
+            ? req.headers.host?.toLowerCase() !== expected.toLowerCase()
+            : !hostAllowed(policy, req.headers.host)
+        ) {
+          send(res, 403, 'Forbidden host');
+          return;
         }
         if (await privateContent(req, res, url, 'board')) return;
       }
       const pathname = decode(url.pathname) ?? '/';
       const boardRoute = routeBoardRequest(req, pathname);
-      if (!loopback && boardRoute.kind === 'board') { send(res, 404, 'Not found'); return; }
+      if (!loopback && boardRoute.kind === 'board') {
+        send(res, 404, 'Not found');
+        return;
+      }
       const project =
         boardRoute.kind === 'board'
           ? (index.find('artboard', boardRoute.address)?.project ?? null)
@@ -907,11 +1336,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     if (!isDormant(entry)) void mountOf(entry.dir).catch(() => undefined);
   }
   storageRuntime.start();
-  const prepareShutdown = () => writeQuota.exclusive(prepareProject => withProjectMaintenance(
-    [...mounts.keys()],
-    (project, work) => quiesceProject(project, work, () => prepareProject(project)),
-    async () => {},
-  ));
+  const prepareShutdown = () =>
+    writeQuota.exclusive((prepareProject) =>
+      withProjectMaintenance(
+        [...mounts.keys()],
+        (project, work) => quiesceProject(project, work, () => prepareProject(project)),
+        async () => {},
+      ),
+    );
   let shutdown: Promise<void> | null = null;
   let shutdownComplete = false;
 
@@ -939,28 +1371,35 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           // Nothing has been stopped yet. Keep settings and live sessions available
           // so the owner can restore capacity and retry through the normal UI.
           closing = false;
-          throw new AggregateError([error], 'Hub did not close completely');
+          throw new AggregateError([error], 'Hub did not close completely', { cause: error });
         }
         clearInterval(trashCleanup);
         remoteAuth.close();
         await migrationApi.close();
         await storageRuntime.close();
         const stopped = [front, board].map(
-          server => new Promise<void>(resolve => { server.close(() => resolve()); }),
+          (server) =>
+            new Promise<void>((resolve) => {
+              server.close(() => resolve());
+            }),
         );
         const failures: unknown[] = [];
         try {
-          await writeQuota.exclusive(async prepareProject => {
-            for (const [project, pending] of [...mounts]) {
+          await writeQuota.exclusive(async (prepareProject) => {
+            for (const [project, pending] of mounts) {
               try {
                 const mounted = await pending;
-                await withProjectMutation(project, () => mounted.close(() => prepareProject(project)));
+                await withProjectMutation(project, () =>
+                  mounted.close(() => prepareProject(project)),
+                );
                 if (mounts.get(project) === pending) {
                   mounts.delete(project);
                   ready.delete(project);
                 }
                 if (available(project)) fs.rmSync(infoFileOf(project), { force: true });
-              } catch (error) { failures.push(error); }
+              } catch (error) {
+                failures.push(error);
+              }
             }
           });
         } finally {
@@ -968,9 +1407,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           await Promise.all(stopped);
         }
         if (failures.length) throw new AggregateError(failures, 'Hub did not close completely');
-        for (const entry of ordered()) if (available(entry.dir)) fs.rmSync(infoFileOf(entry.dir), { force: true });
+        for (const entry of ordered())
+          if (available(entry.dir)) fs.rmSync(infoFileOf(entry.dir), { force: true });
         shutdownComplete = true;
-      })().finally(() => { shutdown = null; });
+      })().finally(() => {
+        shutdown = null;
+      });
       return shutdown;
     },
   };

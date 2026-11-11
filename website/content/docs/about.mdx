@@ -1,0 +1,26 @@
+---
+title: 开源与许可
+description: 案间的项目来源、许可证和维护边界。
+---
+
+## 项目来源
+
+案间（Anjian）从 [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2) 分叉并独立维护，基线提交为 `6054b65ab9b2208a234a78632eb065cfeb3eb166`。它面向个人使用、中文体验、本地运行和自有服务器部署。
+
+感谢 Innei 与 Ryugi 贡献者。Ryugi 工作流又源自 Jesse Vincent 与贡献者维护的 [Superpowers](https://github.com/obra/superpowers)。历史记录保留在仓库的 `UPSTREAM.md`。
+
+## 许可证
+
+| 范围                        | 许可证             |
+| --------------------------- | ------------------ |
+| `artifacts/` 应用及构建产物 | AGPL-3.0-only      |
+| Skills、集成与文档          | 根目录 MIT LICENSE |
+| 第三方依赖                  | 各自许可证         |
+
+更名不改变继承代码的许可证。向他人提供修改后的网络服务时，应履行 AGPL 的对应源码提供要求。完整条款以 [应用许可证](https://github.com/yusixian/anjian/blob/main/artifacts/LICENSE) 和 [根目录许可证](https://github.com/yusixian/anjian/blob/main/LICENSE) 为准。
+
+## 维护与更新
+
+案间不连接 Ryugi 官方云服务，也不自动安装上游发行包。更新从本项目源码构建并自行部署；后续引入上游代码时逐项核对授权。
+
+[访问案间源码](https://github.com/yusixian/anjian)。

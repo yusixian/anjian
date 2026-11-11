@@ -12,8 +12,15 @@ export type Route =
   | { kind: 'unknown' };
 
 export function parseRoute(pathname: string): Route {
-  if (pathname === '/' || pathname === '/index.html') return { kind: 'list' };
-  if (pathname === '/devices' || pathname === '/connect') return { kind: 'devices', connect: pathname === '/connect' };
+  if (
+    pathname === '/' ||
+    pathname === '/index.html' ||
+    pathname === '/library' ||
+    pathname === '/library/'
+  )
+    return { kind: 'list' };
+  if (pathname === '/devices' || pathname === '/connect')
+    return { kind: 'devices', connect: pathname === '/connect' };
   if (pathname === '/storage') return { kind: 'storage' };
   if (pathname === '/members') return { kind: 'members' };
   const embed = /^\/embed\/(artboard|document)\/([\w-]{1,64})\/?$/.exec(pathname);

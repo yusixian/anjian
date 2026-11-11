@@ -16,7 +16,7 @@ import { resolveInside } from '../paths';
 import { allowInlineScripts, viewerPage } from '../viewer-page';
 import type { HttpRoute, RouteParams } from './table';
 
-const SHELL_ROUTE = new RegExp(`^/(?:(${ARTIFACT_TYPES.join('|')})/([^/]+)/?)?$`);
+const SHELL_ROUTE = new RegExp(`^/(?:library/?|(${ARTIFACT_TYPES.join('|')})/([^/]+)/?)?$`);
 const PREVIEW_ROUTE = new RegExp(
   `^/preview/(artboard|document|html)/${ARTIFACT_LOCATOR_SOURCE}/?$`,
 );
@@ -42,8 +42,10 @@ function serveShell(
   { pathname, key }: RouteParams,
 ) {
   const { root, options, loopback, viewerDir } = ctx;
-  const requested =
-    artifactKeyOf(pathname.replace(/^\/(?:preview\/)?/, '').replace(/\/$/, ''), isArtifactLocator);
+  const requested = artifactKeyOf(
+    pathname.replace(/^\/(?:preview\/)?/, '').replace(/\/$/, ''),
+    isArtifactLocator,
+  );
   const resolved = requested && resolveArtifactAddress(root, requested.type, requested.id);
   const ref = resolved ?? requested;
   const dir = resolved?.dir;
@@ -71,13 +73,19 @@ function serveShell(
   const origin = options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${ctx.port}`;
   const canonical = `${origin}${preview ? '/preview' : ''}${canonicalPath}`;
   const csp = preview
-      ? viewerCsp(ctx.boardOrigins()).replace("frame-ancestors 'none'", "frame-ancestors 'self'")
-      : viewerCsp(ctx.boardOrigins());
+    ? viewerCsp(ctx.boardOrigins()).replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+    : viewerCsp(ctx.boardOrigins());
   const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8' };
   // One server serves every project: the page's own API calls find their project by the Referer.
   if (ref) headers['Referrer-Policy'] = 'same-origin';
-  if (key !== null && safeEqual(key, ctx.token) && !loopback && !safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', ctx.token)) {
-    const secure = options.publicOrigin?.startsWith('https:') &&
+  if (
+    key !== null &&
+    safeEqual(key, ctx.token) &&
+    !loopback &&
+    !safeEqual(parseCookies(req.headers.cookie)[ctx.cookieName] ?? '', ctx.token)
+  ) {
+    const secure =
+      options.publicOrigin?.startsWith('https:') &&
       req.headers.host?.toLowerCase() === new URL(options.publicOrigin).host.toLowerCase();
     headers['Set-Cookie'] = browserCookie(ctx.cookieName, ctx.token, Boolean(secure));
   }

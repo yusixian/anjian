@@ -29,6 +29,7 @@ async function main() {
     host: config.host,
     urlHost: config.urlHost,
     viewerDir: path.join(__dirname, 'viewer'),
+    docsDir: process.env.ANJIAN_DOCS_DIR,
     runtimeDir: path.join(__dirname, 'runtime'),
     ports: config.ports,
     boardPorts: config.boardPorts,
@@ -70,8 +71,14 @@ async function main() {
       // Listener sockets may already be closed. Keep unsaved sessions alive so
       // another shutdown signal can retry after storage becomes available.
       shutdownRetry ??= setInterval(() => {}, 60_000);
-      console.error(JSON.stringify({ type: 'server-stop-error', reason,
-        error: 'Shutdown could not save all documents. Restore storage capacity or availability, then retry shutdown.' }));
+      console.error(
+        JSON.stringify({
+          type: 'server-stop-error',
+          reason,
+          error:
+            'Shutdown could not save all documents. Restore storage capacity or availability, then retry shutdown.',
+        }),
+      );
     }
   }
 
