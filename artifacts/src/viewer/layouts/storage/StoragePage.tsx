@@ -1,6 +1,7 @@
 import { Button } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ServerDisk } from './ServerDisk';
 import { StorageMigration } from './StorageMigration';
 import { useAccount } from '../../hooks/useAccount';
 import { useTranslation } from '../../i18n';
@@ -36,6 +37,7 @@ export function StoragePage() {
       <div {...stylex.props(styles.tabs)}>{(['shared', 'personal'] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={scope === value} disabled={busy} {...stylex.props(styles.tab, scope === value && styles.tabActive)} onClick={() => setSelection(value)}>{t(`storage.${value}`)}</button>)}</div>
     </div>}
     {account.role === 'member' && <p {...stylex.props(styles.note)}>{t('storage.memberQuota', { amount: (account.quotaBytes ?? 0) / GIB })}</p>}
+    {account.role === 'owner' && scope === 'shared' && <ServerDisk />}
     <StorageForm key={scope} scope={scope} onBusy={setBusy} />
   </section>;
 }

@@ -29,6 +29,7 @@ import { createMemberStore } from './member-store';
 import { createMemberApi } from './member-api';
 import { createMemberWorkspace } from './member-workspace';
 import { createStorageSettings } from './storage/settings';
+import { createDiskUsage } from './storage/disk';
 import { createStorageApi } from './storage/api';
 import { createStorageUsage } from './storage/usage';
 import { createStorageQuota } from './storage/quota';
@@ -678,7 +679,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
   });
   const remoteApi = createRemoteApi({ authenticate: remoteAuth.authenticate, projects: remoteProjects, mount: mountOf, events: remoteEvents, token: options.token, upload: writeQuota });
-  const storageApi = createStorageApi({ settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
+  const storageApi = createStorageApi({ disk: createDiskUsage(() => [storageHome, ...ordered().map(({ dir }) => dir), ...members.storageProjects().map(({ dir }) => dir)]), settings, usage, recoveryPending, origin, principal: projectAccess.principal, readBody,
     allocation: (owner) => owner !== 'shared' && storageBackend.scopeFor(owner) === owner ? 'personal' : 'shared',
     syncStatus: (owner) => owner === 'shared' ? storageRuntime.scopeStatus('shared') : storageRuntime.status(owner),
     synchronize: (owner) => owner === 'shared' ? storageRuntime.syncScope('shared') : storageRuntime.sync(owner),

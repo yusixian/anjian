@@ -431,3 +431,11 @@ main CI 42885208484 已通过，核验 headSha 为 9e11268b133f06d1b28981d52d20c
 类型检查、viewer 构建和 5 文件 69 项分享页、只读 inspector、画板 inspector、平移缩放及手机画板回归通过。隔离 Chrome 使用本地构建界面与生产公开快照数据，验证 1440px 桌面及 390px 手机：单行页头、图层选择、尺寸显示且全部属性输入禁用、无调整标签、CSS/HTML 代码可读、无横向溢出和 pageerror。截图 /tmp/anjian-share-polish-1440.png、/tmp/anjian-share-polish-390.png 已查看。通过 CDP 发送真实 Ctrl-wheel，画布从 10% 到 33%，浏览器 viewport、devicePixelRatio 和 visualViewport.scale 均不变。测试脚本曾因代码面板异步加载而过早断言，改为等待实际内容后完整重跑通过，未为此修改产品逻辑。
 
 浏览器脚本 /tmp/anjian-share-polish-browser.mjs，日志 /tmp/anjian-share-polish-browser.log；定向测试日志 /tmp/anjian-share-polish-tests.log。此次单项状态修正仅在本地，尚未提交或部署；生产现有布局已独立核验。没有改写公开设计稿内容或重新发布快照。
+
+## 服务器磁盘概览（2026-11-11，本地验收）
+
+管理员存储设置新增磁盘卡片及只读 /api/storage/disk，按服务器数据目录、登记项目和成员空间所在文件系统去重。读取 statfs 的总量、空闲、进程可用量，分别计算已用和系统预留；不返回路径。匿名和成员拒绝，异步读取后重新检查管理员身份。5 秒缓存合并并发读取，异常不返回伪造零值。任一目录无法读取时整个报告失败，避免把不完整容量当作完整结果。
+
+GUI 独立刷新，不重置 S3 配置表单；每 60 秒查询，隐藏标签暂停，恢复可见立即刷新。失败保留旧数据及时间并标记过期，隐藏旧健康结论；首次失败显示未知。中英文文案、低空间/严重不足提醒及多盘显示已接入。
+
+类型检查、容量计算及真实 Hub 权限 10 项、前端状态及可见性 3 项测试通过。真实 Hub + Chrome 1440px/390px 验证实际本机磁盘读数、失败重试、旧数据提示和标签切换，无横向溢出或 pageerror；截图已查看。日志 /tmp/anjian-disk-tests.log、/tmp/anjian-disk-ui-tests.log、/tmp/anjian-disk-browser.log；浏览器脚本 /tmp/anjian-disk-browser.mjs。故障状态由浏览器拦截单个磁盘 API 模拟，其余使用真实服务。生产数据尚未读取，本节不代表已经部署。

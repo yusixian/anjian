@@ -191,3 +191,18 @@ test('share publication uses the project member quota and permits revocation whi
   expect((await action('revoke')).status).toBe(200);
   expect((await f.request(`${publicUrl}/data`, '')).status).toBe(404);
 });
+
+test('server disk capacity is owner-only and does not expose filesystem paths', async () => {
+  const f = await fixture();
+  const member = await f.join('alice', 2);
+  expect((await f.request('/api/storage/disk', '')).status).toBe(403);
+  expect((await f.request('/api/storage/disk', member.cookie)).status).toBe(403);
+  expect((await f.request('/api/storage/disk', f.ownerCookie, {})).status).toBe(405);
+  const response = await f.request('/api/storage/disk');
+  expect(response.status).toBe(200);
+  const report = await response.json();
+  expect(report.volumes.length).toBeGreaterThan(0);
+  expect(report.volumes[0].total).toBeGreaterThan(0);
+  expect(Object.keys(report.volumes[0]).sort()).toEqual(['available', 'reserved', 'total', 'used']);
+  expect(JSON.stringify(report)).not.toContain(f.ownerProject);
+});

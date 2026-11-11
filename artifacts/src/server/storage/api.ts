@@ -15,6 +15,7 @@ export function createStorageApi(options: {
   syncStatus?: (scope: string) => ReturnType<ReturnType<typeof createStorageRuntime>['status']>;
   synchronize?: (scope: string) => Promise<void>;
   recover?: (scope: string, authorize: () => void) => Promise<void>;
+  disk?: () => Promise<import('./disk').DiskReport>;
   origin: string;
   principal: (req: http.IncomingMessage, url: URL) => Principal | null;
   readBody: (req: http.IncomingMessage) => Promise<unknown>;
@@ -22,11 +23,25 @@ export function createStorageApi(options: {
   const testing = new Set<string>();
   const recent = new Map<string, number>();
   return async (req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<boolean> => {
-    if (url.pathname !== '/api/storage') return false;
+    if (url.pathname !== '/api/storage' && url.pathname !== '/api/storage/disk') return false;
     const identity = options.principal(req, url);
     if (!identity || (req.headers.origin && req.headers.origin !== options.origin) ||
         (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')) {
       sendJson(res, 403, { error: 'Forbidden' }); return true;
+    }
+    if (url.pathname === '/api/storage/disk') {
+      if (identity.role !== 'owner') { sendJson(res, 403, { error: 'Forbidden' }); return true; }
+      if (req.method !== 'GET') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }
+      try {
+        if (!options.disk) throw new Error('Unavailable');
+        const report = await options.disk();
+        const current = options.principal(req, url);
+        if (!current || current.role !== 'owner' || current.id !== identity.id || current.sessionVersion !== identity.sessionVersion) {
+          sendJson(res, 403, { error: 'Forbidden' }); return true;
+        }
+        sendJson(res, 200, report);
+      } catch { sendJson(res, 503, { error: 'Disk information unavailable' }); }
+      return true;
     }
     const scopeName = url.searchParams.get('scope') ?? 'personal';
     if (!['personal', 'shared'].includes(scopeName) || (scopeName === 'shared' && identity.role !== 'owner')) {

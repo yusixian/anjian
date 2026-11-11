@@ -748,6 +748,23 @@
       "unavailable": "Usage is unavailable. Try again shortly.",
       "help": "Counts file bytes, including retained data; not free disk space or S3 capacity. Cached for up to 5 seconds; usage may change during writes.",
       "refresh": "Refresh usage"
+    },
+    "disk": {
+      "title": "Server disk",
+      "help": "Filesystems containing Anjian data, including usage by the system and other applications. Admin only.",
+      "failed": "Disk information is unavailable. Previous readings are stale; this does not mean zero free space.",
+      "volume": "Data disk {{number}}",
+      "available": "available",
+      "used": "Used space",
+      "total": "Total capacity",
+      "reserved": "{{amount}} is reserved by the system and unavailable to this process.",
+      "critical": "Disk space critically low",
+      "low": "Disk space running low",
+      "healthy": "Space available",
+      "lowHelp": "Uploads, saves or migrations may fail. Review trash or expand the disk. Files are not deleted automatically.",
+      "stale": "Last successful reading: {{time}} (stale)",
+      "updated": "Updated {{time}} · refreshes every 60 seconds",
+      "cacheHelp": "Shared allocations are not disk capacity. S3 caches and retained originals still use local space. S3 capacity is not estimated here."
     }
   }
 }
