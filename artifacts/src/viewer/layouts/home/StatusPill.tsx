@@ -1,4 +1,6 @@
+import { DropdownMenu, toast } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
+import { ChevronDown, LogOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { useHubStatus } from '../../hooks/useHubStatus';
@@ -16,9 +18,11 @@ export function StatusPill({ onProjectsChanged }: { onProjectsChanged?: () => vo
         // Standalone local servers have no member accounts.
         if (response.status === 404) return { role: 'owner' as const, login: 'Owner' };
         if (!response.ok) return null;
-        return await response.json() as { role: 'owner' | 'member'; login: string };
+        return (await response.json()) as { role: 'owner' | 'member'; login: string };
       })
-      .then((value) => { if (!controller.signal.aborted) setAccount(value); })
+      .then((value) => {
+        if (!controller.signal.aborted) setAccount(value);
+      })
       .catch(() => {});
     return () => controller.abort();
   }, []);
@@ -26,16 +30,32 @@ export function StatusPill({ onProjectsChanged }: { onProjectsChanged?: () => vo
   if (account.role === 'owner') return <ServerStatusPill onProjectsChanged={onProjectsChanged} />;
   return (
     <div {...stylex.props(styles.anchor)}>
-      <form onSubmit={(event) => {
-        event.preventDefault();
-        void fetch('/logout', { method: 'POST' }).then((response) => {
-          if (response.ok) location.assign('/login?signedOut=1');
-        });
-      }}>
-        <button type="submit" {...stylex.props(styles.pill)}>
-          {account.login}<span {...stylex.props(styles.separator)}>·</span>{t('server.signOut')}
+      <DropdownMenu
+        placement="bottomRight"
+        items={[
+          {
+            key: 'sign-out',
+            label: t('server.signOut'),
+            icon: LogOut,
+            danger: true,
+            onClick: () => {
+              void fetch('/logout', { method: 'POST' })
+                .then((response) => {
+                  if (!response.ok) throw new Error(String(response.status));
+                  location.assign('/login?signedOut=1');
+                })
+                .catch((error: Error) =>
+                  toast.error(t('common.requestFailed', { status: error.message })),
+                );
+            },
+          },
+        ]}
+      >
+        <button type="button" {...stylex.props(styles.pill)}>
+          {account.login}
+          <ChevronDown aria-hidden="true" size={12} />
         </button>
-      </form>
+      </DropdownMenu>
     </div>
   );
 }
