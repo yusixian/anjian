@@ -50,7 +50,7 @@ if check; then
   fail "a viewer change without a version bump should fail"
 fi
 grep -q 'artifacts/src' "$TEST_ROOT/out" || fail "failure should name artifacts/src: $(cat "$TEST_ROOT/out")"
-grep -q 'bump-version.sh' "$TEST_ROOT/out" || fail "failure should point at bump-version.sh: $(cat "$TEST_ROOT/out")"
+grep -q 'release:version' "$TEST_ROOT/out" || fail "failure should point at release:version: $(cat "$TEST_ROOT/out")"
 
 printf '{ "name": "anjian", "version": "1.0.1" }\n' > "$repo/artifacts/package.json"
 g add -A

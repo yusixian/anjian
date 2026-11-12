@@ -4,6 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
+import { BUILD_INFO } from '../shared/build-info';
 import type { HubArtifact, HubArtifactList, HubProjectStatus, HubStatus } from '../shared/hub';
 import type { ArtifactType } from '../shared/types';
 import {
@@ -28,7 +29,7 @@ import { createBrowserAuth } from './browser-auth';
 import { createContentAccess } from './content-access';
 import { readArtifactSource, titleOf } from './context';
 import { serveDocsSite } from './docs-site';
-import { createGitHubAuth, type GitHubConfig,readGitHubConfig } from './github-auth';
+import { createGitHubAuth, type GitHubConfig, readGitHubConfig } from './github-auth';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
 import { createHubShare } from './hub-share';
@@ -422,6 +423,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const status = (): HubStatus => {
     const local = [...ready.values()].reduce((sum, mounted) => sum + mounted.liveClients(), 0);
     return {
+      build: BUILD_INFO,
       authenticationRequired: !loopback,
       deployment: loopback ? 'local' : 'self-hosted',
       pid: process.pid,

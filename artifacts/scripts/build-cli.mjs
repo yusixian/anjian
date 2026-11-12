@@ -2,6 +2,8 @@ import fs from 'node:fs';
 
 import { build } from 'esbuild';
 
+import { buildInfo } from '../../scripts/release/build-info.mjs';
+
 const { version } = JSON.parse(
   fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 );
@@ -27,7 +29,11 @@ await build({
   target: 'node18',
   format: 'cjs',
   banner: { js: '#!/usr/bin/env node' },
-  define: { CLI_VERSION: JSON.stringify(version), CLI_SKILL_DOCUMENTS: JSON.stringify(documents) },
+  define: {
+    ANJIAN_BUILD_INFO: JSON.stringify(buildInfo()),
+    CLI_VERSION: JSON.stringify(version),
+    CLI_SKILL_DOCUMENTS: JSON.stringify(documents),
+  },
   outfile: 'dist/cli.cjs',
 });
 fs.copyFileSync('dist/cli.cjs', '../skills/artifacts/app/cli.cjs');

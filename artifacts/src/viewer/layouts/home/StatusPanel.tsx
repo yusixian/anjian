@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import type { HubProjectStatus, HubStatus } from '../../../shared/hub';
 import { useTranslation } from '../../i18n';
+import { BuildDetails } from './BuildDetails';
 import { ServerLog } from './ServerLog';
 import { addressOf, formatUptime, hubAction } from './status-format';
 import { statusStyles as styles } from './status-styles';
@@ -43,10 +44,9 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
         <dt {...stylex.props(styles.term)}>{t('server.address')}</dt>
         <dd {...stylex.props(styles.value)}>{addressOf(status.url)}</dd>
         <dt {...stylex.props(styles.term)}>{t('server.livePages')}</dt>
-        <dd {...stylex.props(styles.value)}>
-          {status.live.local}
-        </dd>
+        <dd {...stylex.props(styles.value)}>{status.live.local}</dd>
       </dl>
+      <BuildDetails status={status} />
       <h3 {...stylex.props(styles.section)}>
         {t('server.projects')} · {status.projects.length}
       </h3>
@@ -73,11 +73,7 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
           <Button size="small" onClick={() => void run('/api/hub/restart', t('server.restarting'))}>
             {t('server.restart')}
           </Button>
-          <Button
-            danger
-            size="small"
-            onClick={() => setConfirmStop(true)}
-          >
+          <Button danger size="small" onClick={() => setConfirmStop(true)}>
             {t('server.stop')}
           </Button>
         </div>
@@ -87,16 +83,21 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
           <strong>{t('server.stopTitle')}</strong>
           <p {...stylex.props(styles.confirmText)}>{t('server.stopDescription')}</p>
           <div {...stylex.props(styles.controls)}>
-            <Button size="small" disabled={stopping} onClick={() => setConfirmStop(false)}>
+            <Button disabled={stopping} size="small" onClick={() => setConfirmStop(false)}>
               {t('server.cancel')}
             </Button>
-            <Button danger size="small" loading={stopping} onClick={() => {
-              setStopping(true);
-              void run('/api/hub/stop', t('server.stopped')).finally(() => {
-                setStopping(false);
-                setConfirmStop(false);
-              });
-            }}>
+            <Button
+              danger
+              loading={stopping}
+              size="small"
+              onClick={() => {
+                setStopping(true);
+                void run('/api/hub/stop', t('server.stopped')).finally(() => {
+                  setStopping(false);
+                  setConfirmStop(false);
+                });
+              }}
+            >
               {t('server.confirmStop')}
             </Button>
           </div>
@@ -109,12 +110,21 @@ export function StatusPanel({ status, onChanged }: { status: HubStatus; onChange
       )}
       {showLog && <ServerLog projects={status.projects} />}
       {status.authenticationRequired && (
-        <Button block size="small" type="text" onClick={() => {
-          void fetch('/logout', { method: 'POST' }).then((response) => {
-            if (!response.ok) throw new Error(String(response.status));
-            location.assign('/login?signedOut=1');
-          }).catch((error: Error) => toast.error(t('common.requestFailed', { status: error.message })));
-        }}>
+        <Button
+          block
+          size="small"
+          type="text"
+          onClick={() => {
+            void fetch('/logout', { method: 'POST' })
+              .then((response) => {
+                if (!response.ok) throw new Error(String(response.status));
+                location.assign('/login?signedOut=1');
+              })
+              .catch((error: Error) =>
+                toast.error(t('common.requestFailed', { status: error.message })),
+              );
+          }}
+        >
           {t('server.signOut')}
         </Button>
       )}

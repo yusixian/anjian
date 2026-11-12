@@ -2,6 +2,12 @@ name: Anjian checks
 on:
   push: {}
   pull_request: {}
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact release PR head to check
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -12,7 +18,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test tests/release-checks/*.test.mjs
+      - name: Verify dispatch identity
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - run: node scripts/release/version.mjs --check
+      - run: node --test tests/release-checks/*.test.mjs tests/versioning/*.test.mjs
   artifacts:
     runs-on: ubuntu-latest
     defaults:

@@ -116,3 +116,21 @@ test('真实 CLI 对无效参数返回非零', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /完整小写 SHA/);
 });
+
+test('explicit dispatched PR checks must match the current PR head and event', () => {
+  const dispatched = { ...run, event: 'workflow_dispatch' };
+  assert.equal(
+    checkRelease([sha, '--pr-dispatch', '7'], fixture({ runs: [dispatched], current: dispatched }))
+      .event,
+    'workflow_dispatch',
+  );
+  assert.throws(() => checkRelease([sha, '--pr-dispatch', '7'], fixture()), /没有/);
+  assert.throws(
+    () =>
+      checkRelease(
+        [sha, '--pr-dispatch', '7'],
+        fixture({ runs: [dispatched], current: dispatched, prHead: 'b'.repeat(40) }),
+      ),
+    /head/,
+  );
+});

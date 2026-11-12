@@ -1,0 +1,40 @@
+name: Verified GitHub Release
+on:
+  workflow_run:
+    workflows: [Anjian checks]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: verified-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Detect version commit
+        id: version
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const current=JSON.parse(fs.readFileSync('package.json')).version;
+          const previous=JSON.parse(execFileSync('git',['show','HEAD^:package.json'],{encoding:'utf8'})).version;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`changed=${current!==previous}\n`);
+          JS
+      - name: Create or verify immutable tag and Release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/release/publish.mjs "$RELEASE_SHA"

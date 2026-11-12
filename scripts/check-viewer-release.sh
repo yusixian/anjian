@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 #
 # check-viewer-release.sh — fail when artifacts/src changed since the last
-# release tag but the version was not bumped. The skill's launcher runs the newest
-# npm release, so a change under artifacts/src reaches users only once it is
-# published under a new version.
+# release tag but the version was not bumped. Use on a version checkout;
+# feature branches carry pending Changesets and are not release candidates.
 #
 set -euo pipefail
 
@@ -13,8 +12,8 @@ cd "$REPO_ROOT"
 version="$(jq -r '.version' artifacts/package.json)"
 
 if [[ "${1:-}" == "--require-tag" ]] && ! git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
-  echo "error: main is at version $version but tag v$version does not exist, so npm has no server or viewer for it." >&2
-  echo "Push the tag with the commit: git push --atomic origin main v$version" >&2
+  echo "error: main is at version $version but tag v$version does not exist, so its release identity is not established." >&2
+  echo "Run the verified Release workflow after this version commit passes CI." >&2
   exit 1
 fi
 
@@ -35,6 +34,6 @@ if git diff --quiet "$tag" HEAD -- artifacts/src; then
 fi
 
 echo "error: artifacts/src changed since $tag but the version is still $version." >&2
-echo "Run scripts/bump-version.sh <next-version> and release it, or users keep running the $tag release." >&2
+echo "Add a bilingual changeset and let pnpm release:version prepare the release PR." >&2
 git diff --stat "$tag" HEAD -- artifacts/src >&2
 exit 1

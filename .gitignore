@@ -19,7 +19,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
-# Built artifacts CLI, server and viewer; CI publishes them to npm and the skill's launcher installs the newest release
+# Local build outputs copied to the Skill launcher; no npm publication.
 artifacts/dist/
 artifacts/.vitest/
 skills/artifacts/app/server.cjs
@@ -28,3 +28,6 @@ skills/artifacts/app/runtime/
 skills/artifacts/app/cli.cjs
 
 verification/
+
+# Exported only from a checked clean release checkout for Docker builds.
+.anjian-build.json

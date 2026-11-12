@@ -1,3 +1,4 @@
+import type { BuildInfo } from './build-info';
 import type { ArtifactSummary } from './types';
 
 export interface HubArtifact extends ArtifactSummary {
@@ -21,9 +22,10 @@ export interface HubProjectStatus {
 
 export interface HubStatus {
   authenticationRequired?: boolean;
-  deployment?: 'local' | 'self-hosted';
   boardPort: number;
+  build?: BuildInfo;
   clients: number;
+  deployment?: 'local' | 'self-hosted';
   lastActivity: number;
   live: { local: number };
   pid: number;
