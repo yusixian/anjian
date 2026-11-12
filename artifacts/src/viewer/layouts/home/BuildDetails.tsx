@@ -1,41 +1,67 @@
+import { Button } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
+import { useRef, useState } from 'react';
 
-import { BUILD_INFO, selectNotes } from '../../../shared/build-info';
+import { BUILD_INFO } from '../../../shared/build-info';
 import type { HubStatus } from '../../../shared/hub';
 import { useTranslation } from '../../i18n';
+import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { statusStyles as styles } from './status-styles';
 
-export function BuildDetails({ status }: { status: HubStatus }) {
-  const { t, i18n } = useTranslation();
-  const notes = selectNotes(BUILD_INFO, i18n.language);
-  const identity = (sha: string | null | undefined, state: string | undefined) =>
-    `${sha ?? 'unknown'} · ${t(`release.state.${state ?? 'unknown'}`)}`;
+export function BuildDetails({
+  status,
+  onReadingChange,
+}: {
+  status: HubStatus;
+  onReadingChange?: (reading: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [reading, setReading] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <section {...stylex.props(styles.build)} aria-label={t('release.build')}>
-      <dl {...stylex.props(styles.rows)}>
-        <dt {...stylex.props(styles.term)}>{t('release.viewer')}</dt>
-        <dd {...stylex.props(styles.value)}>v{BUILD_INFO.version}</dd>
-        <dt {...stylex.props(styles.term)}>{t('release.commit')}</dt>
-        <dd {...stylex.props(styles.value)}>{identity(BUILD_INFO.sha, BUILD_INFO.state)}</dd>
-        <dt {...stylex.props(styles.term)}>{t('release.server')}</dt>
-        <dd {...stylex.props(styles.value)}>v{status.version}</dd>
-        <dt {...stylex.props(styles.term)}>{t('release.commit')}</dt>
-        <dd {...stylex.props(styles.value)}>{identity(status.build?.sha, status.build?.state)}</dd>
-      </dl>
-      <details {...stylex.props(styles.notes)}>
-        <summary {...stylex.props(styles.notesToggle)}>{t('release.notes')}</summary>
-        <p {...stylex.props(styles.notice)}>
-          {t('release.forBuild', { version: BUILD_INFO.version })}
-        </p>
-        {notes.fallback && (
-          <p role="status">
-            {t('release.fallback', { language: notes.language === 'zh' ? '中文' : 'English' })}
-          </p>
-        )}
-        <div lang={notes.language ?? undefined} {...stylex.props(styles.notesText)}>
-          {notes.text || t('release.unavailable')}
+      {[
+        { label: t('release.viewer'), version: BUILD_INFO.version, build: BUILD_INFO },
+        { label: t('release.server'), version: status.version, build: status.build },
+      ].map(({ label, version, build }) => (
+        <div key={label} {...stylex.props(styles.buildGroup)}>
+          <div {...stylex.props(styles.buildHeading)}>
+            <span {...stylex.props(styles.term)}>{label}</span>
+            <span>v{version}</span>
+          </div>
+          <div {...stylex.props(styles.buildIdentity)}>
+            {build?.sha && build.sha !== 'unknown' && (
+              <details {...stylex.props(styles.commit)}>
+                <summary
+                  aria-label={t('release.fullCommit')}
+                  {...stylex.props(styles.commitToggle)}
+                >
+                  {build.sha.slice(0, 8)}
+                </summary>
+                <code {...stylex.props(styles.fullCommit)}>{build.sha}</code>
+              </details>
+            )}
+            <span>{t(`release.state.${build?.state ?? 'unknown'}`)}</span>
+          </div>
         </div>
-      </details>
+      ))}
+      <Button
+        block
+        ref={triggerRef}
+        size="small"
+        onClick={() => {
+          setReading(true);
+          onReadingChange?.(true);
+        }}
+      >
+        {t('release.notes')}
+      </Button>
+      <ReleaseNotesDialog
+        open={reading}
+        triggerRef={triggerRef}
+        onClose={() => setReading(false)}
+        onExited={() => onReadingChange?.(false)}
+      />
     </section>
   );
 }

@@ -514,6 +514,8 @@
     "boards_other": "{{count}} 张"
   },
   "release": {
+    "closeNotes": "关闭",
+    "fullCommit": "查看完整提交标识",
     "build": "构建信息",
     "viewer": "当前界面",
     "server": "服务端",

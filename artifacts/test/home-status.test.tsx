@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { ConfigProvider } from '@lobehub/ui';
-import { motion } from 'motion/react';
+import { motion, MotionGlobalConfig } from 'motion/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
+import { BUILD_INFO } from '../src/shared/build-info';
 import type { HubStatus } from '../src/shared/hub';
 import { formatUptime, hubAction } from '../src/viewer/layouts/home/status-format';
 import { StatusPill } from '../src/viewer/layouts/home/StatusPill';
@@ -38,14 +39,18 @@ const status = (): HubStatus => ({
 
 let root: Root | null = null;
 let host: HTMLElement;
+let previousSkipAnimations: typeof MotionGlobalConfig.skipAnimations;
 const requests: { url: string; method: string; body?: string }[] = [];
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  previousSkipAnimations = MotionGlobalConfig.skipAnimations;
+  MotionGlobalConfig.skipAnimations = true;
   requests.length = 0;
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     requests.push({ url, method: init?.method ?? 'GET', body: init?.body as string | undefined });
-    if (url === '/api/account') return new Response(JSON.stringify({ role: 'owner', login: 'Owner' }));
+    if (url === '/api/account')
+      return new Response(JSON.stringify({ role: 'owner', login: 'Owner' }));
     if (url === '/api/status') return new Response(JSON.stringify(status()));
     if (url.startsWith('/api/hub/log'))
       return new Response(JSON.stringify({ lines: ['{"project":"/p/anjian"}'] }));
@@ -58,6 +63,7 @@ afterEach(() => {
   root = null;
   host.remove();
   vi.unstubAllGlobals();
+  MotionGlobalConfig.skipAnimations = previousSkipAnimations;
 });
 
 async function render() {
@@ -134,18 +140,69 @@ test('uptime reads in days and hours, or hours and minutes', () => {
 });
 
 test('self-hosted status identifies the remote server', async () => {
-  vi.stubGlobal('fetch', async (url: string) => new Response(JSON.stringify(url === '/api/account'
-    ? { role: 'owner', login: 'Owner' }
-    : { ...status(), deployment: 'self-hosted', url: 'https://anjian.cosine.ren' })));
+  vi.stubGlobal(
+    'fetch',
+    async (url: string) =>
+      new Response(
+        JSON.stringify(
+          url === '/api/account'
+            ? { role: 'owner', login: 'Owner' }
+            : { ...status(), deployment: 'self-hosted', url: 'https://anjian.cosine.ren' },
+        ),
+      ),
+  );
   await render();
   expect(host.querySelector('button[aria-expanded]')!.textContent).toContain('Self-hosted');
 });
 
-
 test('blocked shutdown reports the actionable server message rather than a success notice', async () => {
   const error = '文档尚未保存，服务仍在运行。请在存储设置中检查可用容量与连接后重试。';
-  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ code: 'document_save_blocked', error }), { status: 409 }));
+  vi.stubGlobal(
+    'fetch',
+    async () =>
+      new Response(JSON.stringify({ code: 'document_save_blocked', error }), { status: 409 }),
+  );
   await expect(hubAction('/api/hub/stop')).rejects.toThrow(error);
   vi.stubGlobal('fetch', async () => new Response('private server detail', { status: 500 }));
   await expect(hubAction('/api/hub/stop')).rejects.toThrow('500');
+});
+
+test('builds group short commit IDs and keep the complete value available', async () => {
+  const sha = 'a9cbe863d8cf4408d838d6eb86058be72189bca3';
+  vi.stubGlobal(
+    'fetch',
+    async (url: string) =>
+      new Response(
+        JSON.stringify(
+          url === '/api/account'
+            ? { role: 'owner' }
+            : { ...status(), build: { sha, state: 'clean' } },
+        ),
+      ),
+  );
+  await render();
+  await click(host.querySelector('button[aria-expanded]')!);
+  const summary = host.querySelector('summary[aria-label="Show full commit"]')!;
+  expect(summary.textContent).toBe(sha.slice(0, 8));
+  expect(summary.parentElement?.querySelector('code')?.textContent).toBe(sha);
+  expect(host.textContent).not.toContain('unknown ·');
+});
+
+test('notes open separately with explicit fallback and interface build attribution', async () => {
+  const original = BUILD_INFO.notes;
+  BUILD_INFO.notes = { zh: '仅中文更新说明', en: '' };
+  try {
+    await render();
+    await click(host.querySelector('button[aria-expanded]')!);
+    expect(host.textContent).not.toContain('仅中文更新说明');
+    await click(button('Release notes')!);
+    const content = document.querySelector('[lang="zh"]')!;
+    expect(content.textContent).toBe('仅中文更新说明');
+    const dialog = content.closest('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Showing 中文');
+    expect(dialog.textContent).toContain(`interface build v${BUILD_INFO.version}`);
+    expect(requests.some((r) => /release|notes/.test(r.url))).toBe(false);
+  } finally {
+    BUILD_INFO.notes = original;
+  }
 });
