@@ -3,21 +3,38 @@ title: 批注与 Agent
 description: 让 Claude、Codex 或其他宿主通过本地 CLI 操作作品。
 ---
 
+## 读取内置 Skill
+
+先按[本机使用](/docs/local)构建 CLI。构建产物已包含完整 Skill，作品项目无需放置源码。下文的 `anjian` 指已有包装器，或 `node /绝对路径/anjian/artifacts/dist/cli.cjs`。
+
+```bash title="CLI · 读取接入指引"
+anjian --help
+anjian skills list
+anjian skills get artifacts
+anjian skills get artifacts --reference remote.md
+```
+
+`skills list` 列出内嵌的参考文件与示例。`skills get` 完整输出 Markdown，管道中也一样；加 `--json` 可读取结构化输出。相对链接用 `--reference` 配合列表中的名称继续读取。读取帮助或 Skill 不启动服务、打开浏览器、订阅批注或写入授权。
+
+宿主需要显式阅读这些指引，或通过其支持的方式加载 Skill。内嵌 Skill 不等于宿主自动加载或后台调度。有源码时，也可选用 `skills/artifacts/SKILL.md` 及同目录参考文件。
+
 ## 配置项目入口
 
-先构建案间，并在实际作品项目的 `AGENTS.md`（或宿主对应的项目指引）记录入口。只记录路径与服务器地址，不记录访问密钥或设备 token。
+在实际作品项目的 `AGENTS.md`（或宿主对应的项目指引）记录入口。只记录路径与服务器地址，不记录访问密钥或设备 token。
 
 ```text title="项目接入说明示例"
-处理案间作品前，读取 /绝对路径/anjian/skills/artifacts/SKILL.md。
-远程任务继续读同目录 remote.md。
-CLI：node /绝对路径/anjian/skills/artifacts/app/anjian.cjs
+CLI：node /绝对路径/anjian/artifacts/dist/cli.cjs
+处理案间作品前，用上述 CLI 执行 skills get artifacts。
+远程任务继续执行 skills get artifacts --reference remote.md。
 作品项目：/绝对路径/作品项目（所有命令传 --project-dir）
 服务器：https://你的案间域名
 客户端配置：~/.anjian/client/
-先用 remote status --json 核验绑定。
+先用 remote status --json 核验；有效绑定直接复用。
+未授权时发起 login，保持进程等待用户在浏览器批准。
+随后 link 绑定项目，并回读 remote status --json。
 ```
 
-已有包装器时记录包装器路径，复用固定的项目与客户端配置。首次连接参见[设备与 CLI](/docs/remote-cli)。不同机器需要分别授权，不要复制其他项目的凭证。
+已有包装器时记录包装器路径，复用固定的项目与客户端配置。自定义 `ANJIAN_CLIENT_HOME` 时所有命令保持一致。配对与项目选择参见[设备与 CLI](/docs/remote-cli)。不同机器需要分别授权，不要复制其他项目的凭证。
 
 ## 一轮反馈怎么处理
 
@@ -44,6 +61,6 @@ anjian comment reply --artifact document/plan --thread "实际线程ID" --text "
 
 ## 换一个 Agent 接手
 
-给接手的 Agent：作品链接、作品标识、项目目录、CLI 入口、Skill 路径和具体修改范围。让前一个 Agent 先完成上传，避免同时编辑同一作品。公开分享链接只用于查看，不能代替编辑授权。
+给接手的 Agent：作品链接、作品标识、项目目录、CLI 入口、Skill 读取命令和具体修改范围。让前一个 Agent 先完成上传，避免同时编辑同一作品。公开分享链接只用于查看，不能代替编辑授权。
 
 [查看真实使用案例](/use-cases)。

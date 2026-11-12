@@ -23,10 +23,12 @@ Supported boards can also be expanded or downloaded. Images and video can be art
 
 ## File conventions for Agents
 
-An artboard lives in `.anjian/artifacts/artboard/<id>/`. `canvas.json` declares pages, boards, groups, annotations, and positions; page assets live under `pages/`. Agents should first read `skills/artifacts/artboard.md`, plus `artboard-prototype.md` for interactive designs.
+An artboard lives in `.anjian/artifacts/artboard/<id>/`. `canvas.json` declares pages, boards, groups, annotations, and positions; page assets live under `pages/`. Agents should first run `anjian skills get artifacts --reference artboard.md`, plus `anjian skills get artifacts --reference artboard-prototype.md` for interactive designs.
 
 Preserve existing IDs, pages, and comment context when editing an artboard. For remote artifacts, pull first, then edit, upload, and check.
 
 ## Public artboards
 
 [Public sharing](/docs/sharing) includes every page of the entire artboard. Visitors can browse, zoom, inspect layers, and copy code, but cannot change properties, adjust parameters, comment, or manage artifacts.
+
+Here, `anjian` is the built CLI or your existing wrapper. See [Comments and Agents](/docs/agent) for the executable path and built-in Skill discovery.

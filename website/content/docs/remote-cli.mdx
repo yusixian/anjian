@@ -7,11 +7,25 @@ description: 将本地项目连接到自己的远程工作台，通过 HTTPS 同
 
 先按[本机使用](/docs/local)构建 CLI。下文的 `anjian` 可替换为 `node /绝对路径/anjian/artifacts/dist/cli.cjs`。
 
+```bash title="终端 · 发现指引并核验绑定"
+anjian --help
+anjian skills list
+anjian skills get artifacts
+anjian skills get artifacts --reference remote.md
+anjian remote status --json
+```
+
+在实际作品项目目录执行，或始终传入相同的 `--project-dir`，复用已有包装器与客户端配置。帮助和 Skill 读取没有副作用；宿主接入见[批注与 Agent](/docs/agent)。配对前先查状态：有效绑定直接复用，继续下方作品流程，不为扩大权限撤销重绑。已有凭证但当前目录未绑定时，直接进入绑定步骤。
+
+仅在未授权、凭证过期或被撤销时发起配对：
+
 ```bash title="终端 · 首次配对"
 anjian login https://你的案间域名 --name "我的电脑"
 ```
 
-浏览器打开配对页。登录后核对设备名称和配对码，选择允许访问的项目，再批准连接。终端不能打开浏览器时加 `--no-open`，手动打开输出地址。
+Agent 可以发起 `login`，保持进程运行，等待用户在浏览器批准。浏览器打开配对页。登录后核对设备名称和配对码，选择账号可授予的所需全部项目，再批准连接。终端不能打开浏览器时加 `--no-open`，手动打开输出地址。
+
+当前协议使用设备名称与项目列表，没有 `--scope all` 或管理员权限级别参数。
 
 配对码 10 分钟有效，设备凭证 90 天有效。浏览器登录和设备批准是两步操作。
 

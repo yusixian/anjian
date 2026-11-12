@@ -7,7 +7,7 @@ description: Open a web page as an artifact and try its interactions in the brow
 
 An HTML artifact consists of `.anjian/artifacts/html/<id>/index.html` and resources in the same directory. Its name comes from the page's `title`. Images, scripts, and styles use relative paths within the artifact.
 
-HTML can include its own buttons, form interfaces, and interaction logic. For parameter or feedback controls, an Agent should read `skills/artifacts/html.md` and `ui.md` and follow Anjian runtime conventions. Ordinary HTML does not automatically gain a complete feedback form.
+HTML can include its own buttons, form interfaces, and interaction logic. For parameter or feedback controls, an Agent should run `anjian skills get artifacts --reference html.md` and `anjian skills get artifacts --reference ui.md` and follow Anjian runtime conventions. Ordinary HTML does not automatically gain a complete feedback form.
 
 ## Isolated previews
 
@@ -20,3 +20,5 @@ Public pages allow internal scripts and read-only inspection, but block external
 After writing files, run `check`, then open the artifact in a browser and operate the relevant controls. An empty runtime warning list cannot prove scripts work when the page has not run.
 
 If the page is blank, check that the entry file is complete, relative paths are correct, dependencies are inside the artifact, and the browser reports no script or sandbox errors.
+
+Here, `anjian` is the built CLI or your existing wrapper. See [Comments and Agents](/docs/agent) for the executable path and built-in Skill discovery.

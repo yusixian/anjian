@@ -23,6 +23,8 @@ Dynamic content does not run in history. Media resources do not have a complete 
 
 ## Document source files
 
-Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to read `skills/artifacts/document.md` first.
+Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to run `anjian skills get artifacts --reference document.md` first.
 
 The server fills in block IDs. Read the file again before editing and preserve existing IDs so comments keep their anchors. Do not overwrite an entire document from an old copy or edit the server-managed `comments.json`.
+
+Here, `anjian` is the built CLI or your existing wrapper. See [Comments and Agents](/docs/agent) for the executable path and built-in Skill discovery.

@@ -23,6 +23,8 @@ description: 阅读方案、选文批注、直接改字，并查看内容如何�
 
 ## 文档源文件
 
-文档使用 `.anjian/artifacts/document/<id>/doc.xml`（LiteXML）与 `assets/`。这不是直接把 Markdown 文件改名成 XML。让 Agent 先读 `skills/artifacts/document.md`。
+文档使用 `.anjian/artifacts/document/<id>/doc.xml`（LiteXML）与 `assets/`。这不是直接把 Markdown 文件改名成 XML。让 Agent 先执行 `anjian skills get artifacts --reference document.md`。
 
 服务器会为块补齐 ID；编辑前重新读取文件，保留已有块 ID，避免批注丢失定位。不要从旧副本覆盖整份文档，也不要编辑服务器管理的 `comments.json`。
+
+这里的 `anjian` 指构建后的 CLI 或已有包装器；可执行入口与内置 Skill 的发现方式见[批注与 Agent](/docs/agent)。

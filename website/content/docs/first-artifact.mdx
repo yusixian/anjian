@@ -5,9 +5,20 @@ description: 先用一个最小 HTML 作品走通保存、预览与检查。
 
 ## 用 Agent 创建
 
-让你的 Agent 阅读本仓库 `skills/artifacts/SKILL.md`，并告诉它 CLI 的绝对路径、作品项目目录和本机或远程运行方式。具体配置见[批注与 Agent](/docs/agent)。可以这样发起任务：
+让你的 Agent 用构建后的 CLI 执行 `anjian skills get artifacts`，并告诉它 CLI 的绝对路径、作品项目目录和本机或远程运行方式。具体配置见[批注与 Agent](/docs/agent)。可以这样发起任务：
 
-> 请用案间 Artifacts 为我的方案制作一份文档。先阅读项目里的案间接入说明，复用现有项目和 CLI，完成后检查作品并给我链接。
+```text title="复制给 Agent · 本机 HTML 示例"
+请在本机模式创建一份名为 hello 的最小 HTML 作品。
+CLI：node /绝对路径/anjian/artifacts/dist/cli.cjs
+作品项目：/绝对路径/作品项目
+如果项目已配置 CLI 包装器，复用该入口。
+先用上述 CLI 执行：
+skills get artifacts
+skills get artifacts --reference html.md
+按指引创建作品，运行 check，并给我作品链接。
+```
+
+发送给 Agent 前，将两处绝对路径替换为实际路径。`anjian` 是该 CLI 的简写，不是 npm 安装命令。远程任务应将本机模式改为目标服务器与项目，继续读取 `skills get artifacts --reference remote.md`，再按[设备与 CLI](/docs/remote-cli)核验并复用绑定。
 
 仓库位于磁盘上，不代表 Claude、Codex 等宿主会自动加载它的 Skill；需要显式阅读或按宿主支持的方式安装。
 
@@ -36,10 +47,10 @@ description: 先用一个最小 HTML 作品走通保存、预览与检查。
 </html>
 ```
 
-从案间仓库根目录运行检查；项目路径与启动时保持一致：
+用构建后的 CLI 运行检查；项目路径与启动时保持一致：
 
-```bash title="终端 · 案间仓库根目录"
-node skills/artifacts/app/anjian.cjs check \
+```bash title="终端 · 构建后的 CLI"
+node /绝对路径/anjian/artifacts/dist/cli.cjs check \
   --project-dir /绝对路径/作品项目 \
   --artifact html/hello --json
 ```
