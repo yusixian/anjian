@@ -529,6 +529,8 @@
     "boards_other": "{{count}} boards"
   },
   "release": {
+    "closeNotes": "Close",
+    "fullCommit": "Show full commit",
     "build": "Build information",
     "viewer": "This interface",
     "server": "Server",
