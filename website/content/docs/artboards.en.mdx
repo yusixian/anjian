@@ -1,0 +1,32 @@
+---
+title: Artboards
+description: Put pages and alternatives on one canvas, with feedback at specific locations.
+---
+
+## Browse and inspect
+
+An artboard supports multiple pages. Switch sections by page name, then use zoom, the hand tool, and panning to explore designs. The toolbar offers fit-to-canvas and 100% zoom. On desktop, use `V` to select, `H` or hold Space to pan, and `C` to comment.
+
+Select an element to inspect its layers, dimensions, style properties, and code. Inspector adjustments are preview feedback; an Agent must change the source and upload it again to make them persistent artifact content.
+
+## Comments and option selection
+
+Anchor comments to an element, a position within an artboard, or the empty canvas. Describe the intended change, such as “Align this button with the heading,” rather than only saying “This is wrong.”
+
+An Agent can arrange alternatives into a selection group for you to choose and submit, or provide an acceptance group to approve or reject. These controls depend on the artifact's declarations and do not appear on every artboard.
+
+## Interactions and parameters
+
+Artboards are static designs by default. Only boards marked interactive have a play control. Try the page while playing, then stop or replay it. Boards with declared parameters provide a panel for adjusting content. A static mockup does not establish that a feature is implemented.
+
+Supported boards can also be expanded or downloaded. Images and video can be artboard content too. On mobile, use page switching and the inspector to see details.
+
+## File conventions for Agents
+
+An artboard lives in `.anjian/artifacts/artboard/<id>/`. `canvas.json` declares pages, boards, groups, annotations, and positions; page assets live under `pages/`. Agents should first read `skills/artifacts/artboard.md`, plus `artboard-prototype.md` for interactive designs.
+
+Preserve existing IDs, pages, and comment context when editing an artboard. For remote artifacts, pull first, then edit, upload, and check.
+
+## Public artboards
+
+[Public sharing](/docs/sharing) includes every page of the entire artboard. Visitors can browse, zoom, inspect layers, and copy code, but cannot change properties, adjust parameters, comment, or manage artifacts.

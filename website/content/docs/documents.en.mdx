@@ -1,0 +1,28 @@
+---
+title: Documents
+description: Read proposals, comment on selected text, edit words, and compare changes.
+---
+
+## Read and edit
+
+Documents render as rich text with headings, lists, tables, code, images, formulas, Mermaid diagrams, charts, steps, and embedded dynamic content. The artifact determines which content is present. The table of contents helps you navigate sections.
+
+With permission, use the browser's text-editing action to change text. An Agent can also edit source files; the service manages saving and collaboration state. If you see an unsynced or insufficient-storage message, keep the page open, restore the connection or capacity, and wait for saving to finish.
+
+## Comment on text
+
+Select text or a paragraph and add a comment. Comments follow the relevant content, with conversations, replies, and status on the right. Deleting or substantially changing the original text can invalidate the anchor; use the surrounding context to identify the location.
+
+Ask an Agent to [read and reply to comments](/docs/agent), then review the changes before deciding whether to mark the comment resolved.
+
+## Compare history
+
+Open History and choose a point in time or comparison range to see additions, deletions, and changes. Show only changes or jump between differences. The document is read-only during comparison, and you can refresh the comparison when new content arrives.
+
+Dynamic content does not run in history. Media resources do not have a complete historical archive, so an image at the same URL may have changed. History comparisons do not replace file backups.
+
+## Document source files
+
+Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to read `skills/artifacts/document.md` first.
+
+The server fills in block IDs. Read the file again before editing and preserve existing IDs so comments keep their anchors. Do not overwrite an entire document from an old copy or edit the server-managed `comments.json`.

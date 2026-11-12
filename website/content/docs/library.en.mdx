@@ -1,0 +1,26 @@
+---
+title: Library and trash
+description: Find, organize, and restore artifacts while retaining editing context.
+---
+
+## Find artifacts
+
+Filter the library by project and artifact type, search, or sort to locate recent work. Cards open artifacts, sharing, or selection mode. The status panel shows the running mode, server address, and log entry point. Theme and language controls are available in the interface.
+
+## Organize in bulk
+
+Choose Select or a card's checkbox to enter selection mode. Clicking a card now changes its selection instead of opening it. Desktop shortcuts include Shift for range selection, Ctrl/Cmd+A for the current filtered results, and Esc to exit.
+
+Searching or changing the project or type clears the selection; sorting does not. After choosing Move to trash, review the artifacts and projects in the confirmation dialog. Failed items remain available for retry. After a network interruption, refresh and check the actual state first.
+
+## Restore and permanently delete
+
+Undo immediately after the operation or restore individual items from Trash in the sidebar. Content, assets, comments, and history stay together, and restoration reuses the original artifact link. Directory-name or editing-state conflicts do not overwrite existing files.
+
+Trash is retained for 30 days. The running service checks hourly and also removes expired items when reading or performing operations. No cleanup occurs while stopped. Permanent deletion cannot be reversed after the second confirmation.
+
+## Local and server copies
+
+Local mode moves the artifact directory in the current project. Self-hosted mode moves the server copy without deleting your computer's original source files. Trash lives in `.anjian/.trash/`, not the operating system's trash.
+
+Deleting an artifact revokes its public share; restoring it does not re-enable sharing. The server prevents a later `push` from automatically reviving an old ID. Restore before continuing edits; after permanent deletion, publish again with a new artifact ID.

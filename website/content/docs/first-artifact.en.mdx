@@ -1,0 +1,59 @@
+---
+title: Create your first artifact
+description: Use a minimal HTML artifact to try saving, previewing, and checking your work.
+---
+
+## Create with an Agent
+
+Ask your Agent to read `skills/artifacts/SKILL.md` in this repository. Provide the absolute CLI path, artifact project directory, and whether you are running locally or remotely. See [Comments and Agents](/docs/agent) for configuration. For example:
+
+> Please use Anjian Artifacts to create a document for my proposal. Read the project's Anjian integration instructions first, reuse the existing project and CLI, then check the artifact and give me its link.
+
+Having the repository on disk does not mean hosts such as Claude or Codex automatically load its Skill. Explicitly read it or install it using the host's supported mechanism.
+
+## Create HTML manually
+
+Start the service using the [local guide](/docs/local), then create this file in your artifact project:
+
+```text title="Artifact directory"
+.anjian/artifacts/html/hello/index.html
+```
+
+Write the complete page below. Keep filenames and directory type fields in English.
+
+```html title="index.html"
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My first artifact</title>
+  </head>
+  <body>
+    <h1>Hello, Anjian</h1>
+    <p>This page lives in my own project.</p>
+  </body>
+</html>
+```
+
+Run the check from the Anjian repository root, using the same project path as at startup:
+
+```bash title="Terminal · Anjian repository root"
+node skills/artifacts/app/anjian.cjs check \
+  --project-dir /absolute/path/to/artifact-project \
+  --artifact html/hello --json
+```
+
+Open the page from the artifact library and confirm its content is visible. No check warnings does not prove the page's scripts have run; test interactions in the browser.
+
+## Choose an artifact type
+
+| Type | Source files | Good for |
+| --- | --- | --- |
+| `html` | `index.html` and assets | A page, component, or clickable prototype |
+| `document` | `doc.xml`, `assets/` | Proposals, explanations, reviews, and diagrams |
+| `artboard` | `canvas.json`, `pages/` | Multi-page designs, comparisons, and collections of states |
+
+Give each artifact its own directory. Keep resources inside it and use relative URLs. The server maintains comments, history, and `.state`; do not edit these manually.
+
+In remote mode, saving local files must be followed by `push`. See [Devices and CLI](/docs/remote-cli).

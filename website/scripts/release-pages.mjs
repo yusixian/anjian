@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { parseNotes } from '../../scripts/release/notes.mjs';
@@ -38,7 +38,7 @@ export function releasePage(releases, language) {
         : '> 暂无中文翻译，以下显示原始更新说明。\n\n';
     return `## ${release.version}\n\n${fallback}<div${contentLanguage ? ` lang="${contentLanguage === 'zh' ? 'zh-CN' : 'en'}"` : ''}>\n\n${content || (english ? 'No release notes recorded.' : '此版本暂无更新说明。')}\n\n</div>`;
   });
-  return `---\ntitle: ${title}\ndescription: ${description}\n---\n\n<div lang="${english ? 'en' : 'zh-CN'}" className="max-w-2xl [overflow-wrap:anywhere]">\n\n<nav className="not-prose mb-6 flex gap-2" aria-label="${english ? 'Release notes language' : '更新说明语言'}">\n<a className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-fd-accent aria-[current=page]:bg-fd-accent aria-[current=page]:text-fd-primary" href="/docs/updates/" hrefLang="zh-CN"${english ? '' : ' aria-current="page"'}>中文</a> <a className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-fd-accent aria-[current=page]:bg-fd-accent aria-[current=page]:text-fd-primary" href="/docs/updates-en/" hrefLang="en"${english ? ' aria-current="page"' : ''}>English</a>\n</nav>\n\n${intro}\n\n${sections.join('\n\n')}\n\n</div>\n`;
+  return `---\ntitle: ${title}\ndescription: ${description}\n---\n\n<div lang="${english ? 'en' : 'zh-CN'}" className="max-w-2xl [overflow-wrap:anywhere]">\n\n${intro}\n\n${sections.join('\n\n')}\n\n</div>\n`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -46,9 +46,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     readFileSync(new URL('../../CHANGELOG.md', import.meta.url), 'utf8'),
   );
   if (!releases.length) throw new Error('CHANGELOG.md contains no formal releases');
+  // Remove the old generated name so upgraded worktrees do not index an extra guide.
+  rmSync(new URL('../content/docs/updates-en.mdx', import.meta.url), { force: true });
   for (const language of ['zh', 'en']) {
     writeFileSync(
-      new URL(`../content/docs/updates${language === 'en' ? '-en' : ''}.mdx`, import.meta.url),
+      new URL(`../content/docs/updates${language === 'en' ? '.en' : ''}.mdx`, import.meta.url),
       releasePage(releases, language),
     );
   }

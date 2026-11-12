@@ -1,0 +1,56 @@
+---
+title: Host your own instance
+description: Give your devices and friends HTTPS access to a persistent Anjian workspace.
+---
+
+## Prepare for deployment
+
+You need a server that can run Docker Compose, a domain with HTTPS, and persistent disk storage. Public shares and member invitations require recipients to reach your service.
+
+## Two origins
+
+| Purpose | Container port | Environment variable | Example |
+| --- | --- | --- | --- |
+| Workspace, documents, comments, and WebSocket | 27319 | `ANJIAN_PUBLIC_ORIGIN` | `https://anjian.example.com` |
+| Isolated artboard previews | 27329 | `ANJIAN_BOARD_ORIGIN` | `https://preview.example.net` |
+
+An origin contains a scheme, host, and optional port, with no path. Configure HTTPS for both. The main reverse proxy must support WebSocket. Artboard previews use a separate origin; standalone HTML uses sandbox restrictions on same-origin privileges.
+
+## Docker Compose
+
+Set your actual deployment addresses and start from the repository root:
+
+```bash title="Terminal · Repository root"
+export ANJIAN_PUBLIC_ORIGIN=https://anjian.example.com
+export ANJIAN_BOARD_ORIGIN=https://preview.example.net
+docker compose up --build -d
+docker compose logs anjian
+```
+
+These domains are placeholders and must be replaced. Default ports bind only to the server's loopback address. Use a reverse proxy to forward each HTTPS origin to its corresponding port.
+
+The project is at `/data/project` and service state at `/data/server`, both inside the `anjian-data` volume. Save the administrator access instructions from startup output, and retain and back up the volume.
+
+## Dokploy
+
+Create a Compose application from this repository's source with build path `/` and Compose file `compose.yaml`. Configure the main and preview domains and ports for the `anjian` service, enter the actual origins, and deploy.
+
+For automatic deployment, configure the target branch and On Push trigger in your repository. Push triggers do not automatically wait for CI. Pass checks before updating the deployment branch. Successful deployment logs still require verification of the actual pages.
+
+## GitHub sign-in and invitations
+
+Create a dedicated GitHub OAuth App. Use the main site as Homepage URL and its `/auth/github/callback` path as the callback. Set these private environment variables in your deployment platform:
+
+```dotenv title="Deployment configuration · Never commit actual secrets"
+ANJIAN_GITHUB_CLIENT_ID=<OAuth Client ID>
+ANJIAN_GITHUB_CLIENT_SECRET=<OAuth Client Secret>
+ANJIAN_GITHUB_OWNER_ID=<administrator's numeric GitHub user ID>
+```
+
+Authentication uses the numeric ID. Leaving all three unset uses access-key sign-in; partial configuration prevents startup. Once configured, administrators and invited members can sign in through GitHub. There is no open registration. The administrator access key remains a backup administrator entry point, not a member sign-in method to send to friends.
+
+## Check after deployment
+
+Verify the main site, artboard and HTML previews, comment saving, live connections, CLI pairing, uploads, and pulls. Check that artifacts and comments survive a restart, and independently test backup restoration.
+
+Browser sign-out affects only that browser session. Revoke CLI devices separately in Devices and CLI. Preserve service and preview isolation, access control, and persistence.

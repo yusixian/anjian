@@ -1,0 +1,36 @@
+---
+title: Public sharing
+description: Publish a read-only snapshot that friends can view without signing in.
+---
+
+## Create a public link
+
+Click Share on an artifact page or card, choose an expiration, then create a public link. Artboards, documents, and HTML are supported. Links can last 1 day, 7 days, 30 days, or indefinitely.
+
+Sharing is off by default. Review the complete artifact and its attachments before publishing: artboards include every page, not just the current one. Preview the visitor page before sending the link.
+
+## What visitors can do
+
+Visitors open the link without an account. Artboards retain page navigation, zoom and pan, the layer tree, element selection, dimension and style inspection, and code viewing and copying. Documents and HTML retain reading and previewing.
+
+Visitors cannot comment, change properties, adjust parameters, or access other private artifacts. Read-only access cannot prevent screenshots, copied text, or saved resources that have already been delivered. Anyone with the link can forward it.
+
+## Update or revoke a share
+
+| Action                    | Result                                                             |
+| ------------------------- | ------------------------------------------------------------------ |
+| Update share              | Publish a new snapshot; the link and expiration stay the same      |
+| Reset link                | Invalidate the old link; keep the published content and expiration |
+| Disable sharing           | Stop public access; keep the original artifact and comments        |
+| Recreate after expiration | Generate a new link                                                |
+| Move to trash             | Revoke the share; restoring the artifact does not republish it     |
+
+Draft edits do not automatically update the public version. Open visitor pages periodically check share status, but content already saved by visitors cannot be recalled.
+
+## Network and capacity
+
+Your server must stay running and be reachable by your friends. A `localhost` link cannot directly work across devices. See [self-hosting](/docs/self-hosting) for public deployment.
+
+Each snapshot is limited to 32 MiB and 1,000 source files. Publishing an update temporarily requires space for both old and new snapshots, so leave capacity available. Anonymous requests have burst rate limits; wait as instructed after a 429 response.
+
+Public previews restrict external networking, form submissions, and pop-ups. External scripts, fonts, images, or APIs may not work. See [HTML previews](/docs/html).

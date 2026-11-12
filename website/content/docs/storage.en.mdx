@@ -1,0 +1,43 @@
+---
+title: Storage and backups
+description: Manage shared capacity, personal S3, and server disks, with clear migration and recovery boundaries.
+---
+
+## Shared quotas
+
+Administrators set total capacity under Storage settings → Instance shared storage and assign member limits. Reported usage includes managed artifacts, history, collaboration state, trash, and share snapshots. It is not total disk usage or your S3 provider's remaining balance.
+
+New saves may be rejected when capacity runs out. If a document reports unsaved changes, keep the page open, free resources or increase the quota, and confirm saving finishes.
+
+## Configure shared or personal S3
+
+Administrators configure instance storage; members configure their own storage under My S3. Enter Endpoint, Bucket, Region, an object prefix, and dedicated credentials. Enable path-style addressing if the provider requires it.
+
+Use a public HTTPS address. Private-network endpoints and self-signed certificates are unsupported. Saved credentials are not displayed again; leave the fields empty to retain them. Save and test again after configuration changes.
+
+The connection test writes a small object, reads it back for verification, and deletes it. If cleanup fails, inspect the test object as instructed. Saving a configuration does not prove connectivity, and a successful connection does not automatically switch storage.
+
+## Migrate and enable
+
+1. Save the configuration and pass the connection test.
+2. Choose Prepare migration to list sources. Related artifacts may be temporarily unavailable during preparation.
+3. Choose Copy and verify and wait for completion. On failure, current storage stays active; continue copying or prepare again.
+4. After verification, select the option to enable this S3 while retaining server originals, then enable it. If source files changed, prepare again.
+
+Once enabled, the interface shows S3 with a server cache. Artifacts are still served through that cache and synced to the chosen S3. A space using personal S3 no longer consumes the instance's shared quota. Original files are not automatically deleted.
+
+## Failure and recovery
+
+Local changes survive sync failures; restore connectivity and retry. If recovery is pending after a restart, inspect retained server files, then confirm the page's recovery procedure to use and verify those files. Do not substitute an empty directory for a missing source or delete binding records to bypass recovery.
+
+## Server disks
+
+The administrator's instance storage page shows total, used, and process-available capacity for the filesystems containing data. Multiple disks appear separately, with each filesystem counted once. Figures include other applications and the operating system, unlike application quotas.
+
+Readings refresh every 60 seconds and pause in background tabs. Failed refreshes retain the last reading and mark it stale. Alerts do not automatically delete or migrate files.
+
+## What to back up
+
+Retained S3 objects, server caches, and temporary space may use extra capacity. Application quotas are not provider-enforced hard limits.
+
+Metadata for members, invitations, encrypted credentials, configuration, and storage bindings remains on the server. Configuring S3 does not back it up automatically. For standard Compose deployments, back up the entire `/data` volume. For local projects, retain the entire `.anjian/` directory and separately back up service state. Verify an actual restore before relying on a backup.

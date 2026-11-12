@@ -1,0 +1,48 @@
+---
+title: Invite friends
+description: Give friends their own space to create. Use public sharing when they only need to view your work.
+---
+
+## Choose how to share
+
+| Goal | Method | Recipient's access |
+| --- | --- | --- |
+| View one artifact | [Public link](/docs/sharing) | Read-only snapshot without sign-in |
+| Manage their own artifacts | Invitation tied to a GitHub account | Independent space after sign-in |
+
+<Notice title="Invitations come from the instance administrator">
+  You need a self-hosted instance your friend can reach, with GitHub sign-in configured. A local
+  localhost address cannot be sent directly to a remote friend. Never send the administrator access
+  key as an invitation.
+</Notice>
+
+## Administrator: create an invitation
+
+<Steps>
+  <Step title="Check shared capacity first">
+    Open Storage settings → Instance shared storage and set total capacity. A member's quota is
+    their limit within that capacity, not additional physical disk space.
+  </Step>
+  <Step title="Enter your friend's GitHub username">
+    In Member management, choose Invite a friend and enter the username and shared storage quota. A
+    value of 0 assigns no shared capacity.
+  </Step>
+  <Step title="Copy the invitation link and send it to that friend">
+    The link appears only when created. It is tied to the specified GitHub account, valid for 7
+    days, and can be accepted once. Revoke and recreate lost or expired invitations.
+  </Step>
+</Steps>
+
+## Friend: accept and start
+
+Open the invitation and sign in with the invited GitHub account. Once accepted, you enter your own space to manage artifacts and devices. You cannot see the administrator's private artifacts.
+
+To upload from a local Agent, pair it through [Devices and CLI](/docs/remote-cli). Ordinary browsing does not require pairing again. Members can configure [their own S3](/docs/storage).
+
+## Adjust quotas and suspend access
+
+Administrators can change quotas, revoke pending invitations, or suspend a member. Suspension invalidates existing sessions, device authorizations, and private resource links while retaining files. After access is restored, the member must sign in and connect devices again; old authorizations do not reactivate automatically.
+
+## Invitation problems
+
+Check whether the link has expired, been accepted, or been revoked, and whether the current GitHub account matches the invitation. Ask the administrator for a new invitation instead of using a shared administrator key to bypass identity restrictions.

@@ -1,13 +1,17 @@
-import { GitBranch,Info, Laptop, Package } from 'lucide-react';
+import { GitBranch, Info, Laptop, Package } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-export function Environment() {
+export function Environment({ locale = 'zh' }: { locale?: 'zh' | 'en' }) {
   return (
     <div className="environment">
       {[
-        [Laptop, '运行环境', 'Node.js 22'],
-        [Package, '包管理器', 'pnpm 10.28.2'],
-        [GitBranch, '安装方式', '源码构建'],
+        [Laptop, locale === 'zh' ? '运行环境' : 'Runtime', 'Node.js 22'],
+        [Package, locale === 'zh' ? '包管理器' : 'Package manager', 'pnpm 10.28.2'],
+        [
+          GitBranch,
+          locale === 'zh' ? '安装方式' : 'Installation',
+          locale === 'zh' ? '源码构建' : 'Build from source',
+        ],
       ].map(([Icon, label, value]) => {
         const Symbol = Icon as typeof Info;
         return (

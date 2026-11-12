@@ -16,6 +16,9 @@ export async function serveDocsSite(
   if (route === '/' && url.searchParams.has('key')) return false;
   if (!(
     route === '/' ||
+    /^\/(?:zh|en)(?:\/?$|\/(?:docs|use-cases)(?:\/|$)|\/index\.txt$|\/__next\.[\w.!$-]+\.txt$)/.test(
+      route,
+    ) ||
     route === '/docs' ||
     route.startsWith('/docs/') ||
     route === '/use-cases' ||
@@ -25,7 +28,7 @@ export async function serveDocsSite(
     route === '/anjian.svg' ||
     route === '/anjian-dark.svg' ||
     route === '/index.txt' ||
-    /^\/__next\.[\w.-]+\.txt$/.test(route)
+    /^\/__next\.[\w.!$-]+\.txt$/.test(route)
   ))
     return false;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
