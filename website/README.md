@@ -19,7 +19,9 @@ pnpm test
 
 `test` 检查构建产物中的内部链接、资源、双语翻译覆盖与搜索索引，需要先运行 `build`。页面交互、深浅主题和移动布局还需浏览器验证。
 
-语言路由为 `/zh/`、`/en/`，包括同路径下的 `docs/` 与 `use-cases/`。URL 中的明确语言始终优先于偏好；只有点击全站语言入口才写入 `localStorage` 的 `anjian.docs.language`。旧 `/`、`/docs/*`、`/use-cases/` 保留中文静态内容，浏览器加载后用 `location.replace` 转入已保存语言（没有选择时中文），不额外占用历史记录。旧 `/docs/updates-en/` 固定进入 `/en/docs/updates/`，不受偏好覆盖。切换保留对应路径、查询与 hash；刷新和历史导航以 URL 为准。禁用存储时仍可按 URL 切换；禁用 JavaScript 时旧中文页可读，英文旧入口提供明确链接。
+语言路由为 `/zh/`、`/en/`，包括同路径下的 `docs/` 与 `use-cases/`。URL 中的明确语言始终优先于偏好；只有点击全站语言入口才写入 `localStorage` 的 `anjian.docs.language`。旧 `/`、`/docs/*`、`/use-cases/` 保留中文静态内容，浏览器加载后用 `location.replace` 转入已保存语言（没有选择时中文），不额外占用历史记录。旧 `/docs/updates-en/` 固定进入 `/en/docs/updates/`，不受偏好覆盖。切换保留对应路径和查询，将已知章节 hash 映射到目标语言的同一语义章节；未知或非法编码的 hash 原样保留。普通点击及 Enter 保存语言偏好；修饰键和中键打开新标签不改偏好，链接本身包含完整查询与章节。刷新和历史导航以 URL 为准。禁用存储时仍可按 URL 切换；禁用 JavaScript 时旧中文页可读，英文旧入口提供明确链接。
+
+章节对应关系维护在 `lib/doc-anchor-map.mjs`，按页面与语义键显式配对，不依赖标题顺序。文档布局使用 Fumadocs 实际编译 TOC 校验双语覆盖、ID 唯一性及映射目标；更新说明按 CHANGELOG 版本身份生成对应关系。修改标题文案时保留原锚点，例如 `## 新标题 [#原ID]`，不要仅刷新映射使旧链接失效；新增章节需人工确认语义并补充对应关系。重复标题需要各自唯一且稳定的 ID，重排前用显式 ID 保留旧链接。新增或改动文案后运行上述构建和测试，并验证章节切换的实际滚动位置。
 
 Fumadocs 16.18.4 的 loader `i18n` 管理语言正文和分组，`fallbackLanguage: null` 禁止漏译时套用中文。`RootProvider` 传当前 locale 和对应 UI 翻译；默认搜索组件自动从 provider 取 locale，`createFromSource().staticGET` 导出带语言过滤的索引，无运行时 middleware。MDX 正文链接由共享渲染器加语言前缀，图片与工作台 `/library` 不加前缀。
 

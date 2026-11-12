@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { BrandLogo } from '@/components/brand';
 import { DocsSidebarSeparator } from '@/components/docs-sidebar-separator';
 import { LanguageSwitch } from '@/components/language-switch';
+import { getDocAnchorRoutes } from '@/lib/doc-anchor-source';
 import { type Locale, localePath } from '@/lib/i18n';
 import { source } from '@/lib/source';
 
@@ -15,7 +16,10 @@ export function DocumentationLayout({ children, locale }: { children: ReactNode;
       tree={source.getPageTree(locale)}
       links={[
         { text: locale === 'zh' ? '使用案例' : 'Use cases', url: localePath('/use-cases', locale) },
-        { type: 'custom', children: <LanguageSwitch locale={locale} /> },
+        {
+          type: 'custom',
+          children: <LanguageSwitch locale={locale} routes={getDocAnchorRoutes()[locale]} />,
+        },
         {
           type: 'custom',
           children: (
