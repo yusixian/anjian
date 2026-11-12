@@ -58,7 +58,9 @@ export function parse(args: string[], options: Options, positionals = 0) {
       strict: true,
     });
     if (parsed.positionals.length > positionals)
-      throw new CliError(`Unknown argument: ${parsed.positionals[positionals]}`);
+      throw new CliError(
+        `Unexpected positional argument: ${parsed.positionals[positionals]}. Expected at most ${positionals} positional argument(s).`,
+      );
     return {
       values: parsed.values as CommandInput['values'],
       positionals: parsed.positionals,
@@ -66,8 +68,12 @@ export function parse(args: string[], options: Options, positionals = 0) {
     };
   } catch (err) {
     if (err instanceof CliError) throw err;
-    const flag = /'([^']+)'/.exec((err as Error).message)?.[1];
-    throw new CliError(flag ? `Unknown argument: ${flag.split(' ')[0]}` : (err as Error).message);
+    const error = err as NodeJS.ErrnoException;
+    if (error.code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION') {
+      const flag = /'([^']+)'/.exec(error.message)?.[1];
+      throw new CliError(flag ? `Unknown argument: ${flag}` : error.message);
+    }
+    throw new CliError(error.message);
   }
 }
 
