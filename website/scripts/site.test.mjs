@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join,resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
 const output = resolve('out');
@@ -36,4 +36,21 @@ test('the static search index contains the core Chinese guides', async () => {
   JSON.parse(data);
   for (const title of ['在本机使用', '邀请朋友', '公开分享', '存储与备份'])
     assert(data.includes(title), `Search index is missing ${title}`);
+});
+
+test('release notes export both languages and navigation without GitHub data requests', async () => {
+  const zh = await readFile(join(output, 'docs/updates/index.html'), 'utf8');
+  const en = await readFile(join(output, 'docs/updates-en/index.html'), 'utf8');
+  for (const html of [zh, en]) {
+    for (const version of ['0.2.0', '0.2.1']) assert(html.includes(`>${version}<`));
+    assert(html.includes('href="/docs/updates/"'));
+    assert(html.includes('href="/docs/updates-en/"'));
+    assert(!html.includes('api.github.com'));
+  }
+  assert(zh.includes('将状态面板的更新说明移入独立阅读对话框'));
+  assert(zh.includes('案间的运行状态面板新增本构建的版本'));
+  assert(en.includes('Move release notes from the status panel into a dedicated reading dialog'));
+  assert(en.includes('Developers can read integration guidance'));
+  const home = await readFile(join(output, 'index.html'), 'utf8');
+  assert(home.includes('href="/docs/updates'));
 });

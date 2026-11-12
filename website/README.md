@@ -19,6 +19,8 @@ pnpm test
 
 `test` 检查构建产物中的内部链接、资源与中文搜索索引，需要先运行 `build`。页面交互、深浅主题和移动布局还需浏览器验证。
 
+更新说明位于 `/docs/updates/`（中文默认）和 `/docs/updates-en/`（英文）。`scripts/release-pages.mjs` 在安装、开发、类型检查与构建前读取根目录 `CHANGELOG.md`，复用 `scripts/release/notes.mjs` 解析正式版本；缺译时显示另一语言或原文并提示。生成的 `content/docs/updates*.mdx` 不提交，不手工维护。发布流程更新 CHANGELOG 后，下次站点构建会自动带入新版本，访客无需请求 GitHub。构建上下文须包含上述根目录文件，不能只复制 `website/`。
+
 将 `out/` 部署到站点根路径的静态托管服务；文档不需要案间后端或登录。静态服务器需按目录提供 `index.html`，并正常提供 `/api/search` 静态 JSON。可本地验证：
 
 ```bash
