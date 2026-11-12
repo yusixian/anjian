@@ -1,0 +1,23 @@
+{
+  "base": "/private/tmp/anjian-issue6-package-DNoUPl",
+  "results": [
+    {
+      "entry": "direct",
+      "documents": 10,
+      "bytes": 90789,
+      "sideEffects": 0
+    },
+    {
+      "entry": "source-launcher",
+      "documents": 10,
+      "bytes": 88962,
+      "sideEffects": 0
+    },
+    {
+      "entry": "package",
+      "documents": 10,
+      "bytes": 89281,
+      "sideEffects": 0
+    }
+  ]
+}

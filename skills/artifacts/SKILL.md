@@ -17,9 +17,15 @@ reach the self-hosted server only after an explicit `push`.
 Read the project's `AGENTS.md` for a configured CLI wrapper, project directory and
 optional `ANJIAN_CLIENT_HOME`. Reuse that entry point and run `remote status --json`.
 A successful status identifies the server and project; do not dump credential files.
-If no wrapper is documented, use this skill's `app/anjian.cjs` with an explicit
-`--project-dir`. A missing binding is not evidence that a requested remote task
-should run locally: read [remote.md](remote.md) to log in and link the target.
+Without a wrapper, use the CLI already discovered in the current environment
+(check `command -v anjian` if its location is unknown). Read its `--help`, then
+`skills get artifacts`; read each reference with `skills get artifacts --reference <name>`.
+These commands return complete built-in documents without starting services or
+authorizing a device. CLI output names the current executable; use that entry
+point for the examples below. A source installation can instead use this skill's
+`app/anjian.cjs`. Always pass the actual artifact project's `--project-dir`.
+A missing binding is not evidence that a requested remote task should run locally:
+read [remote.md](remote.md) to log in and link the target.
 
 For a self-hosted URL, a remote binding, or remote comments, read [remote.md](remote.md)
 before writing. Its `pull → edit → push → check → reply` flow takes precedence over
@@ -95,9 +101,10 @@ lowercase letters, digits and hyphens, named after the topic
 
 ## Start the local server and get the link
 
-Paths below are relative to this skill's directory: resolve `app/` to its
-absolute path before you run them. Every artifacts command goes through the
-launcher `app/anjian.cjs` with `--json`; it runs this repository's local build.
+Use the discovered CLI or configured wrapper with `--json` for operations.
+In a source installation, paths below are relative to this skill's directory:
+resolve `app/` to its absolute path. When reading through `skills get`, the CLI
+substitutes its executable into these examples; no source checkout is required.
 A background start returns one JSON startup result; foreground mode stays running.
 
 ```bash
