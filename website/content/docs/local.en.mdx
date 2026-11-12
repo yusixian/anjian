@@ -1,0 +1,55 @@
+---
+title: Run locally
+description: Keep your artifacts on your own computer. Build Anjian, then open it in your browser.
+---
+
+<Environment />
+
+<Notice title="Before you start">
+  Anjian has not published an npm installation package. Use this repository's source code, not the
+  upstream Ryugi package or an unknown package with the same name. The commands below require Git,
+  Node.js, and pnpm.
+</Notice>
+
+## Install and start
+
+<Steps>
+<Step title="Get the source and build">
+Clone the repository, then install the locked dependencies in the application directory.
+
+```bash title="Terminal · Get the source"
+git clone https://github.com/yusixian/anjian.git
+cd anjian/artifacts
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+</Step>
+<Step title="Start your artifact project">
+Replace the path below with your actual artifact project directory and keep this terminal running.
+
+```bash title="Terminal · artifacts directory"
+node dist/cli.cjs start \
+  --project-dir /absolute/path/to/artifact-project \
+  --no-open --foreground
+```
+
+</Step>
+<Step title="Open your browser">
+Open the complete URL printed in the terminal. Do not invent a port or drop the access parameters. If your library is empty, continue with [your first artifact](/docs/first-artifact).
+</Step>
+</Steps>
+
+## Artifacts and service state
+
+Artifacts live in the project's `.anjian/artifacts/`; service state defaults to `~/.anjian/server/`. Exiting the foreground process does not delete artifacts. Start with the same project directory next time to continue.
+
+A local service can register multiple projects. Stopping a shared service affects every project it serves; check that no other project is using it first.
+
+## Open from another device
+
+`localhost` means the device opening the link, so you cannot send that address directly to another computer or phone. For remote access, set up [self-hosting](/docs/self-hosting), then create a [public share](/docs/sharing) or [member invitation](/docs/members). The service must stay running and be reachable from the other device.
+
+## Update Anjian
+
+Back up artifacts and service state, get the new source from this repository, reinstall dependencies, rebuild, and restart the service. Do not use upstream automatic update commands.

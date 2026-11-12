@@ -1,0 +1,54 @@
+---
+title: Devices and CLI
+description: Connect a local project to your remote workspace and sync artifacts over HTTPS.
+---
+
+## Install and authorize
+
+Build the CLI using the [local guide](/docs/local). Replace `anjian` below with `node /absolute/path/anjian/artifacts/dist/cli.cjs` if needed.
+
+```bash title="Terminal · First pairing"
+anjian login https://anjian.example.com --name "My computer"
+```
+
+The browser opens a pairing page. Sign in, check the device name and pairing code, select allowed projects, then approve the connection. If the terminal cannot open a browser, add `--no-open` and open the printed address manually.
+
+Pairing codes last 10 minutes; device credentials last 90 days. Browser sign-in and device approval are separate steps.
+
+## Link an artifact project
+
+Run in the actual local artifact project directory:
+
+```bash title="Terminal · Link a project"
+anjian link
+anjian remote status --json
+```
+
+If only one project is accessible, it is selected automatically. For multiple projects, follow the prompt with `link --project <project-ID>`. Use `--server` to choose among instances. A project ID is not a server filesystem path.
+
+## Upload and pull
+
+```bash title="Terminal · Sync one artifact"
+anjian push --artifact document/plan
+anjian check --artifact document/plan
+anjian pull --artifact document/plan
+```
+
+Source files remain in `.anjian/artifacts/<type>/<name>/`. Only the selected artifact's source and assets are transferred, excluding comments, history, dot directories, and keys. Symlinks are unsupported. Each transfer is limited to 1,000 files and 32 MiB.
+
+If an artifact with the same name exists remotely, pull first to establish a revision baseline. Remote changes prevent an overwrite; ordinary `pull` also refuses to overwrite local changes. To retain a local copy before pulling, explicitly use `--backup-local`, then compare and merge manually. Sync does not automatically merge two versions.
+
+## Review and revoke devices
+
+The workspace's Devices and CLI page shows device names, authorized projects, and expiration times, not whether devices are online. Revoking blocks subsequent requests; an operation in progress may already have completed. Artifacts and comments remain.
+
+```bash title="Terminal · Sign out and unlink"
+anjian logout https://anjian.example.com
+anjian unlink
+```
+
+`logout` revokes the server credential; `unlink` only removes the current directory's binding. Client credentials default to `~/.anjian/client/`. If you set `ANJIAN_CLIENT_HOME`, keep it consistent across commands.
+
+## Connection problems
+
+Public addresses must use HTTPS and match the origin advertised by the service. Pair again after expiration or revocation. For 403, check project authorization; for 429, wait before retrying. Do not disable authentication to fix connectivity.

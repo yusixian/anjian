@@ -13,11 +13,7 @@ test('formal releases reuse the bilingual changelog and exclude prereleases', ()
   for (const language of ['zh', 'en']) {
     const page = releasePage(releases, language);
     for (const release of releases) assert(page.includes(release[language]));
-    assert(
-      page.includes(
-        `href="/docs/updates${language === 'en' ? '-en' : ''}/" hrefLang="${language === 'en' ? 'en' : 'zh-CN'}" aria-current="page"`,
-      ),
-    );
+    assert(!page.includes('<nav'), 'Language selection belongs to the shared layout');
   }
   assert.equal(releasesFromChangelog('## 1.0.0-beta.1\n\nPreview').length, 0);
 });

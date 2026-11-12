@@ -1,0 +1,40 @@
+---
+title: Frequently asked questions
+description: Troubleshoot an empty library, unreachable links, and sync conflicts.
+---
+
+## Why is my library empty?
+
+Check that `--project-dir` points to the actual artifact project, that files live in `.anjian/artifacts/<type>/<id>/`, and that the entry filename is correct. Remote mode also requires `push`. The source repository does not automatically become an artifact project.
+
+## Why can't my friend open the link?
+
+Check for a `localhost` address, whether the server is still running, whether HTTPS and the proxy are reachable, and whether the public link expired or was disabled. Create a public share for viewing; never send an administrator access key.
+
+## Why is the public page out of date?
+
+Public shares are snapshots. After editing a draft, choose Update share to publish it. Public snapshots also have different network restrictions from workspace previews, so external dependencies may be unavailable.
+
+## Why didn't a comment automatically start my Agent?
+
+Saving comments and scheduling host tasks are separate concerns. Return to the Agent conversation and ask it to read comments. `watch` only emits events; automatic processing needs a separately configured host integration.
+
+## What should I do about a push or pull conflict?
+
+Stop concurrent edits, inspect remote state, and compare both versions. Do not force an overwrite of local changes. If needed, explicitly use `pull --backup-local` to keep a copy, then pull, merge, and upload. See [Devices and CLI](/docs/remote-cli).
+
+## What if a document says it is unsaved?
+
+Keep the page open and check connectivity and storage capacity. Restore the connection or increase capacity, then confirm saving finishes. Refreshing may lose changes held only in the current page.
+
+## Why can't I push a deleted artifact again?
+
+The server prevents old IDs from reviving automatically. Restore from Trash first, or create a new artifact ID after permanent deletion.
+
+## Can I delete server files after setting up S3?
+
+Enabling S3 does not make the server disposable. Access still relies on the cache, metadata remains on the server, and retained files support recovery. Read [Storage and backups](/docs/storage) to understand the data boundaries.
+
+## How do I report a problem?
+
+Open a [GitHub Issue](https://github.com/yusixian/anjian/issues) with steps, expected and actual results, version, and redacted errors. Never include access keys, device tokens, or complete URLs containing credentials.

@@ -17,6 +17,14 @@ test('public docs coexist with authenticated library and APIs without exposing o
   fs.writeFileSync(path.join(docs, '__next._tree.txt'), 'Root RSC tree');
   fs.writeFileSync(path.join(docs, 'docs', 'local', 'index.html'), 'Local guide');
   fs.writeFileSync(path.join(docs, 'api', 'search'), '{"search":true}');
+  for (const locale of ['zh', 'en']) {
+    fs.mkdirSync(path.join(docs, locale, 'docs', 'local'), { recursive: true });
+    fs.writeFileSync(path.join(docs, locale, 'index.html'), `${locale} home`);
+    fs.writeFileSync(path.join(docs, locale, '__next._tree.txt'), `${locale} RSC`);
+    fs.writeFileSync(path.join(docs, locale, '__next.$d$lang.txt'), `${locale} segment`);
+    fs.writeFileSync(path.join(docs, locale, 'docs', 'local', 'index.html'), `${locale} guide`);
+    fs.writeFileSync(path.join(docs, locale, 'private.txt'), 'must not be served');
+  }
   fs.writeFileSync(path.join(home, 'secret'), 'private data');
   fs.symlinkSync(path.join(home, 'secret'), path.join(docs, 'docs', 'leak'));
   const temp = tempRoot();
@@ -43,6 +51,15 @@ test('public docs coexist with authenticated library and APIs without exposing o
     expect(await (await get('/')).text()).toBe('Public docs');
     expect(await (await get('/__next._tree.txt')).text()).toBe('Root RSC tree');
     expect(await (await get('/docs/local/')).text()).toBe('Local guide');
+    for (const locale of ['zh', 'en']) {
+      expect(await (await get(`/${locale}/`)).text()).toBe(`${locale} home`);
+      expect(await (await get(`/${locale}/docs/local/`)).text()).toBe(`${locale} guide`);
+      expect(await (await get(`/${locale}/__next._tree.txt`)).text()).toBe(`${locale} RSC`);
+      expect(await (await get(`/${locale}/__next.$d$lang.txt`)).text()).toBe(`${locale} segment`);
+      expect(await (await get(`/${locale}/private.txt`)).text()).not.toBe('must not be served');
+      expect((await get(`/${locale}/docs/%2e%2e%2f%2e%2e%2f%2e%2e%2fsecret`)).status).toBe(404);
+      expect((await get(`/${locale}/docs/local/`, { method: 'POST' })).status).toBe(405);
+    }
     expect((await get('/api/search')).headers.get('content-type')).toContain('application/json');
     expect((await get('/docs/leak')).status).toBe(404);
     expect((await get('/docs/%2e%2e%2fsecret')).status).toBe(404);

@@ -39,12 +39,12 @@ test('the static search index contains the core Chinese guides', async () => {
 });
 
 test('release notes export both languages and navigation without GitHub data requests', async () => {
-  const zh = await readFile(join(output, 'docs/updates/index.html'), 'utf8');
-  const en = await readFile(join(output, 'docs/updates-en/index.html'), 'utf8');
+  const zh = await readFile(join(output, 'zh/docs/updates/index.html'), 'utf8');
+  const en = await readFile(join(output, 'en/docs/updates/index.html'), 'utf8');
   for (const html of [zh, en]) {
     for (const version of ['0.2.0', '0.2.1']) assert(html.includes(`>${version}<`));
-    assert(html.includes('href="/docs/updates/"'));
-    assert(html.includes('href="/docs/updates-en/"'));
+    assert(!html.includes('Release notes language'));
+    assert(!html.includes('更新说明语言'));
     assert(!html.includes('api.github.com'));
   }
   assert(zh.includes('将状态面板的更新说明移入独立阅读对话框'));
@@ -52,5 +52,8 @@ test('release notes export both languages and navigation without GitHub data req
   assert(en.includes('Move release notes from the status panel into a dedicated reading dialog'));
   assert(en.includes('Developers can read integration guidance'));
   const home = await readFile(join(output, 'index.html'), 'utf8');
-  assert(home.includes('href="/docs/updates'));
+  assert(home.includes('href="/zh/docs/updates'));
+  const alias = await readFile(join(output, 'docs/updates-en/index.html'), 'utf8');
+  assert(alias.includes('lang="en"'));
+  assert(alias.includes('/en/docs/updates/'));
 });

@@ -1,0 +1,22 @@
+---
+title: HTML previews
+description: Open a web page as an artifact and try its interactions in the browser.
+---
+
+## Pages and resources
+
+An HTML artifact consists of `.anjian/artifacts/html/<id>/index.html` and resources in the same directory. Its name comes from the page's `title`. Images, scripts, and styles use relative paths within the artifact.
+
+HTML can include its own buttons, form interfaces, and interaction logic. For parameter or feedback controls, an Agent should read `skills/artifacts/html.md` and `ui.md` and follow Anjian runtime conventions. Ordinary HTML does not automatically gain a complete feedback form.
+
+## Isolated previews
+
+Artifacts run in an isolated environment without the main workspace's same-origin privileges. External dependencies, network requests, and pop-ups may be restricted, particularly in public shares. Prefer bundling dependencies you are allowed to share inside the artifact and testing the actual preview.
+
+Public pages allow internal scripts and read-only inspection, but block external API requests, form submissions, and pop-ups. Demos that depend on online services may not fully work in a snapshot.
+
+## Debug and check
+
+After writing files, run `check`, then open the artifact in a browser and operate the relevant controls. An empty runtime warning list cannot prove scripts work when the page has not run.
+
+If the page is blank, check that the entry file is complete, relative paths are correct, dependencies are inside the artifact, and the browser reports no script or sandbox errors.

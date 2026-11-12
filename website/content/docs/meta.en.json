@@ -1,0 +1,27 @@
+{
+  "pages": [
+    "---Getting started---",
+    "index",
+    "local",
+    "first-artifact",
+    "---Artifacts and feedback---",
+    "artboards",
+    "documents",
+    "html",
+    "agent",
+    "---Sharing and collaboration---",
+    "sharing",
+    "members",
+    "remote-cli",
+    "---Management and deployment---",
+    "library",
+    "storage",
+    "self-hosting",
+    "faq",
+    "---More---",
+    "use-cases",
+    "updates",
+    "about"
+  ],
+  "title": "User guide"
+}
