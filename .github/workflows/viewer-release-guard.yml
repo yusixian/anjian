@@ -46,14 +46,23 @@ jobs:
         timeout-minutes: 5
         run: |
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-            # The hosted runner's default Ubuntu mirror DNS has stalled installs.
-            # Change only its mirror list; keep Ubuntu's archive signature verification.
-            if [ -f /etc/apt/apt-mirrors.txt ]; then
-              printf '%s\n' 'https://mirrors.edge.kernel.org/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            # Bound mirror failures and retain Ubuntu archive signature verification.
+            apt_options=(-o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
+            updated=false
+            for mirror in https://mirrors.edge.kernel.org/ubuntu/ https://archive.ubuntu.com/ubuntu/; do
+              if [ -f /etc/apt/apt-mirrors.txt ]; then
+                printf '%s\n' "$mirror" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+              fi
+              if sudo timeout --kill-after=5s 45s apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update; then
+                updated=true
+                break
+              fi
+              echo "Index update failed for $mirror; trying the next archive."
+            done
+            if [ "$updated" != true ]; then
+              echo "No Ubuntu archive completed an index update." >&2
+              exit 1
             fi
-            # Bound DNS/mirror failures; failed index updates must not continue with stale lists.
-            apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
-            sudo timeout --kill-after=5s 90s apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
             sudo timeout --kill-after=5s 180s apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg
           fi
           ffmpeg -version
