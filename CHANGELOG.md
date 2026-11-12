@@ -1,6 +1,8 @@
----
-'anjian-workflow': minor
----
+# anjian-workflow
+
+## 0.2.0
+
+### Minor Changes
 
 <!-- anjian:zh -->
 

@@ -29,11 +29,12 @@ const note =
 test('synchronizes every declared field from the private root; drift and missing manifests fail', (t) => {
   const directory = fixture(t);
   const pkg = JSON.parse(fs.readFileSync(path.join(directory, 'package.json')));
-  pkg.version = '0.2.0';
+  const nextVersion = `${Number(pkg.version.split('.')[0]) + 1}.0.0`;
+  pkg.version = nextVersion;
   fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify(pkg));
   assert.throws(() => syncVersions(directory, true), /drift/);
-  assert.equal(syncVersions(directory), '0.2.0');
-  assert.equal(syncVersions(directory, true), '0.2.0');
+  assert.equal(syncVersions(directory), nextVersion);
+  assert.equal(syncVersions(directory, true), nextVersion);
   fs.rmSync(path.join(directory, 'gemini-extension.json'));
   assert.throws(() => syncVersions(directory), /ENOENT/);
 });
