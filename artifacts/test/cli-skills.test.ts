@@ -142,3 +142,98 @@ test('unbound remote command keeps error exit code and adds an actionable guide'
   expect(value.error).toContain('not linked');
   expect(value.nextStep).toContain('skills get artifacts --reference remote.md');
 });
+
+test.each([
+  {
+    args: ['remote', 'status', '--project-dir'],
+    error: "Option '--project-dir <value>' argument missing",
+    json: true,
+  },
+  {
+    args: ['skills', 'get', 'artifacts', '--reference'],
+    error: "Option '--reference <value>' argument missing",
+    json: false,
+  },
+  {
+    args: ['skills', 'get', 'artifacts', '--json', '--reference'],
+    error: "Option '--reference <value>' argument missing",
+    json: true,
+  },
+  {
+    args: ['remote', 'status', '--json=false'],
+    error: "Option '--json' does not take an argument",
+    json: true,
+  },
+  {
+    args: ['skills', 'list', '--json=false'],
+    error: "Option '--json' does not take an argument",
+    json: false,
+  },
+  { args: ['remote', 'status', '--bogus'], error: 'Unknown argument: --bogus', json: true },
+  { args: ['skills', 'list', '--bogus'], error: 'Unknown argument: --bogus', json: false },
+  {
+    args: ['version', 'extra'],
+    error: "Unexpected argument 'extra'. This command does not take positional arguments",
+    json: true,
+  },
+  {
+    args: ['remote', 'status', 'extra'],
+    error: 'Unexpected positional argument: extra. Expected at most 1 positional argument(s).',
+    json: true,
+  },
+  {
+    args: ['skills', 'get', 'artifacts', 'extra'],
+    error: 'Unexpected positional argument: extra. Expected at most 2 positional argument(s).',
+    json: false,
+  },
+])(
+  'classifies CLI parse failure $args and preserves its output channel',
+  ({ args, error, json }) => {
+    const { run, project, state } = fixture();
+    const result = run(...args);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe(json ? JSON.stringify({ error }) + '\n' : '');
+    expect(result.stderr).toBe(json ? '' : `Error: ${error}\n`);
+    expect(fs.readdirSync(project)).toEqual([]);
+    expect(fs.existsSync(state)).toBe(false);
+  },
+);
+
+test('corrected CLI values, empty project value, and help stay usable without side effects', () => {
+  const { run, project, state } = fixture();
+  for (const args of [
+    ['remote', 'status', '--project-dir', project, '--json'],
+    ['remote', 'status', '--project-dir=', '--json'],
+    ['remote', 'status', '--json'],
+  ]) {
+    const result = run(...args);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      type: 'remote-status',
+      linked: false,
+      servers: [],
+    });
+  }
+  const reference = run('skills', 'get', 'artifacts', '--reference', 'remote.md');
+  expect(reference.status, reference.stderr).toBe(0);
+  expect(reference.stderr).toBe('');
+  expect(reference.stdout).toContain('remote');
+  for (const args of [
+    ['remote', 'status'],
+    ['skills', 'get', 'artifacts'],
+  ]) {
+    const result = run(...args, '--help');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Usage: anjian');
+    expect(result.stderr).toBe('');
+  }
+  const ambiguous = run('remote', 'status', '--project-dir', '--json');
+  expect(ambiguous.status).toBe(1);
+  expect(ambiguous.stderr).toBe('');
+  expect(JSON.parse(ambiguous.stdout).error).toContain(
+    "Option '--project-dir' argument is ambiguous",
+  );
+  expect(fs.readdirSync(project)).toEqual([]);
+  expect(fs.existsSync(state)).toBe(false);
+});
