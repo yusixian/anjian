@@ -3,21 +3,38 @@ title: Comments and Agents
 description: Let Claude, Codex, or another host work with artifacts through the local CLI.
 ---
 
+## Read the built-in Skill
+
+Build the CLI using the [local guide](/docs/local). The built CLI includes the complete Skill; your artifact project does not need a source checkout. In the commands below, `anjian` means your existing wrapper or `node /absolute/path/anjian/artifacts/dist/cli.cjs`.
+
+```bash title="CLI · Read integration guidance"
+anjian --help
+anjian skills list
+anjian skills get artifacts
+anjian skills get artifacts --reference remote.md
+```
+
+`skills list` lists the bundled references and examples. `skills get` prints complete Markdown, including when piped; add `--json` for structured output. Follow relative links with `--reference` using a name from the list. Reading help or Skills does not start a service, open a browser, subscribe to comments, or write authorization.
+
+The host must explicitly read these instructions or load the Skill through its supported mechanism. A built-in Skill does not mean automatic host loading or background scheduling. With a source checkout, `skills/artifacts/SKILL.md` and its sibling references remain optional entry points.
+
 ## Configure a project entry point
 
-Build Anjian first. Record the entry point in the actual artifact project's `AGENTS.md` or equivalent host instructions. Record paths and the server address, never access keys or device tokens.
+Record the entry point in the actual artifact project's `AGENTS.md` or equivalent host instructions. Record paths and the server address, never access keys or device tokens.
 
 ```text title="Example project integration instructions"
-Before working on Anjian artifacts, read /absolute/path/anjian/skills/artifacts/SKILL.md.
-For remote tasks, also read remote.md in the same directory.
-CLI: node /absolute/path/anjian/skills/artifacts/app/anjian.cjs
+CLI: node /absolute/path/anjian/artifacts/dist/cli.cjs
+Before working on Anjian artifacts, run skills get artifacts using this CLI.
+For remote tasks, also run skills get artifacts --reference remote.md.
 Artifact project: /absolute/path/to/artifact-project (pass --project-dir to every command)
 Server: https://anjian.example.com
 Client configuration: ~/.anjian/client/
-Verify the binding with remote status --json first.
+Verify with remote status --json first; reuse a valid binding.
+If unauthorized, initiate login and keep it running while the user approves in the browser.
+Then link the project and read back remote status --json.
 ```
 
-If a wrapper exists, record its path and reuse its fixed project and client configuration. See [Devices and CLI](/docs/remote-cli) for first-time connection. Authorize each machine separately; do not copy credentials from another project.
+If a wrapper exists, record its path and reuse its fixed project and client configuration. Keep a custom `ANJIAN_CLIENT_HOME` consistent across commands. See [Devices and CLI](/docs/remote-cli) for pairing and project selection. Authorize each machine separately; do not copy credentials from another project.
 
 ## Process a round of feedback
 
@@ -44,6 +61,6 @@ Here, `anjian` means the CLI built from this repository. You can replace it with
 
 ## Hand over to another Agent
 
-Give the next Agent the artifact link, artifact ID, project directory, CLI entry point, Skill path, and precise editing scope. Have the previous Agent finish uploading first to avoid concurrent edits. A public share is for viewing and does not grant editing permission.
+Give the next Agent the artifact link, artifact ID, project directory, CLI entry point, Skill reading command, and precise editing scope. Have the previous Agent finish uploading first to avoid concurrent edits. A public share is for viewing and does not grant editing permission.
 
 [See the real workflow example](/use-cases).

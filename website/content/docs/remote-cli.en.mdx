@@ -7,11 +7,25 @@ description: Connect a local project to your remote workspace and sync artifacts
 
 Build the CLI using the [local guide](/docs/local). Replace `anjian` below with `node /absolute/path/anjian/artifacts/dist/cli.cjs` if needed.
 
+```bash title="Terminal · Discover guidance and check the binding"
+anjian --help
+anjian skills list
+anjian skills get artifacts
+anjian skills get artifacts --reference remote.md
+anjian remote status --json
+```
+
+Run in the actual artifact project, or pass the same `--project-dir` throughout. Reuse the existing wrapper and client configuration. Help and Skill reads have no side effects; see [Comments and Agents](/docs/agent) for host integration. Check status before pairing: reuse a valid binding and continue to the artifact workflow below. Do not revoke and re-pair to expand access. If credentials exist but this directory is unlinked, proceed to linking.
+
+Only when authorization is missing, expired, or revoked, initiate pairing:
+
 ```bash title="Terminal · First pairing"
 anjian login https://anjian.example.com --name "My computer"
 ```
 
-The browser opens a pairing page. Sign in, check the device name and pairing code, select allowed projects, then approve the connection. If the terminal cannot open a browser, add `--no-open` and open the printed address manually.
+An Agent can initiate `login`; keep the process running while the user approves in the browser. The browser opens a pairing page. Sign in, check the device name and pairing code, select all required projects that your account can grant, then approve the connection. If the terminal cannot open a browser, add `--no-open` and open the printed address manually.
+
+The protocol uses a device name and project list; it has no `--scope all` or administrator permission-level option.
 
 Pairing codes last 10 minutes; device credentials last 90 days. Browser sign-in and device approval are separate steps.
 

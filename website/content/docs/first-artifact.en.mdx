@@ -5,9 +5,20 @@ description: Use a minimal HTML artifact to try saving, previewing, and checking
 
 ## Create with an Agent
 
-Ask your Agent to read `skills/artifacts/SKILL.md` in this repository. Provide the absolute CLI path, artifact project directory, and whether you are running locally or remotely. See [Comments and Agents](/docs/agent) for configuration. For example:
+Ask your Agent to run `anjian skills get artifacts` using the built CLI. Provide the absolute CLI path, artifact project directory, and whether you are running locally or remotely. See [Comments and Agents](/docs/agent) for configuration. For example:
 
-> Please use Anjian Artifacts to create a document for my proposal. Read the project's Anjian integration instructions first, reuse the existing project and CLI, then check the artifact and give me its link.
+```text title="Copy to your Agent · Local HTML example"
+Create a minimal HTML artifact named hello in local mode.
+CLI: node /absolute/path/anjian/artifacts/dist/cli.cjs
+Artifact project: /absolute/path/to/artifact-project
+Reuse the project's configured CLI wrapper if one exists.
+First run these with that CLI:
+skills get artifacts
+skills get artifacts --reference html.md
+Follow the guidance, create the artifact, run check, and give me its link.
+```
+
+Replace both absolute paths before sending this prompt to your Agent. `anjian` is shorthand for that CLI, not an npm installation command. For a remote task, specify the server and project instead of local mode, read `skills get artifacts --reference remote.md`, then follow [Devices and CLI](/docs/remote-cli) to check and reuse the binding.
 
 Having the repository on disk does not mean hosts such as Claude or Codex automatically load its Skill. Explicitly read it or install it using the host's supported mechanism.
 
@@ -36,10 +47,10 @@ Write the complete page below. Keep filenames and directory type fields in Engli
 </html>
 ```
 
-Run the check from the Anjian repository root, using the same project path as at startup:
+Run the check with the built CLI, using the same project path as at startup:
 
-```bash title="Terminal · Anjian repository root"
-node skills/artifacts/app/anjian.cjs check \
+```bash title="Terminal · Built CLI"
+node /absolute/path/anjian/artifacts/dist/cli.cjs check \
   --project-dir /absolute/path/to/artifact-project \
   --artifact html/hello --json
 ```

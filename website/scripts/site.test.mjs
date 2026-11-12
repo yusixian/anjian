@@ -57,3 +57,41 @@ test('release notes export both languages and navigation without GitHub data req
   assert(alias.includes('lang="en"'));
   assert(alias.includes('/en/docs/updates/'));
 });
+
+test('both languages expose the bundled Skill discovery chain', async () => {
+  const references = {
+    'agent': ['remote.md'],
+    'remote-cli': ['remote.md'],
+    'first-artifact': ['html.md', 'remote.md'],
+    'documents': ['document.md'],
+    'html': ['html.md', 'ui.md'],
+    'artboards': ['artboard.md', 'artboard-prototype.md'],
+  };
+  for (const language of ['zh', 'en']) {
+    for (const [slug, names] of Object.entries(references)) {
+      const html = await readFile(join(output, language, 'docs', slug, 'index.html'), 'utf8');
+      // Ignore syntax highlighting spans so this checks commands readers can copy.
+      const text = html.replaceAll(/<[^>]*>/g, '');
+      assert(text.includes('skills get artifacts'), `${language}/${slug}: missing Skill entry`);
+      for (const name of names)
+        assert(
+          text.includes(`skills get artifacts --reference ${name}`),
+          `${language}/${slug}: missing ${name}`,
+        );
+      if (['agent', 'remote-cli'].includes(slug)) {
+        assert(text.includes('skills list'));
+        assert(text.includes('anjian --help'));
+      } else {
+        assert(
+          html.includes(`href="/${language}/docs/agent`),
+          `${language}/${slug}: missing CLI setup link`,
+        );
+      }
+      if (slug === 'remote-cli')
+        assert(
+          text.indexOf('remote status --json') < text.indexOf('anjian login '),
+          'Check binding before pairing',
+        );
+    }
+  }
+});

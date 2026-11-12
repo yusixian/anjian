@@ -23,10 +23,12 @@ Agent 可将多个设计组织为选择组，让你选中方案并提交；也�
 
 ## 给 Agent 的文件约定
 
-画板目录是 `.anjian/artifacts/artboard/<id>/`。`canvas.json` 声明页面、板块、分组、注释与位置；页面资源放在 `pages/` 下。Agent 应先读 `skills/artifacts/artboard.md`，交互稿再读 `artboard-prototype.md`。
+画板目录是 `.anjian/artifacts/artboard/<id>/`。`canvas.json` 声明页面、板块、分组、注释与位置；页面资源放在 `pages/` 下。Agent 应先执行 `anjian skills get artifacts --reference artboard.md`，交互稿再执行 `anjian skills get artifacts --reference artboard-prototype.md`。
 
 修改现有画板时保留原 ID、页面和批注上下文。远程作品先拉取，再编辑、上传和检查。
 
 ## 公开画板
 
 [公开分享](/docs/sharing)包含整个画板的全部页面。访客能浏览、缩放、检查图层和复制代码，但不能修改属性、调整参数、评论或管理作品。
+
+这里的 `anjian` 指构建后的 CLI 或已有包装器；可执行入口与内置 Skill 的发现方式见[批注与 Agent](/docs/agent)。

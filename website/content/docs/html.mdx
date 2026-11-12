@@ -7,7 +7,7 @@ description: 把网页作为作品打开，在浏览器里试用交互。
 
 HTML 作品由 `.anjian/artifacts/html/<id>/index.html` 和同目录资源组成。标题取自页面的 `title`，图片、脚本和样式使用作品内部的相对路径。
 
-HTML 可以包含自己的按钮、表单外观和交互逻辑。需要参数或反馈控件时，Agent 应阅读 `skills/artifacts/html.md` 与 `ui.md`，按案间 runtime 的约定接入；普通 HTML 不会自动获得完整的反馈表单。
+HTML 可以包含自己的按钮、表单外观和交互逻辑。需要参数或反馈控件时，Agent 应执行 `anjian skills get artifacts --reference html.md` 与 `anjian skills get artifacts --reference ui.md`，按案间 runtime 的约定接入；普通 HTML 不会自动获得完整的反馈表单。
 
 ## 隔离预览
 
@@ -20,3 +20,5 @@ HTML 可以包含自己的按钮、表单外观和交互逻辑。需要参数或
 写入文件后运行 `check`，再在浏览器打开作品并操作相关控件。页面未运行时，空的 runtime 警告列表不能证明脚本正常。
 
 如果页面空白，检查入口是否完整、相对路径是否正确、依赖是否在作品目录内，以及浏览器是否报告脚本或沙盒限制错误。
+
+这里的 `anjian` 指构建后的 CLI 或已有包装器；可执行入口与内置 Skill 的发现方式见[批注与 Agent](/docs/agent)。
