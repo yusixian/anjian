@@ -2,12 +2,14 @@ import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import type { ReactNode } from 'react';
 
 import { BrandLogo } from '@/components/brand';
+import { DocsSidebarSeparator } from '@/components/docs-sidebar-separator';
 import { source } from '@/lib/source';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <DocsLayout
       githubUrl="https://github.com/yusixian/anjian"
+      sidebar={{ components: { Separator: DocsSidebarSeparator } }}
       tree={source.pageTree}
       links={[
         { text: '使用案例', url: '/use-cases' },
