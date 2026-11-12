@@ -5,6 +5,14 @@ on:
 permissions:
   contents: read
 jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/release-checks/*.test.mjs
   artifacts:
     runs-on: ubuntu-latest
     defaults:
@@ -22,7 +30,22 @@ jobs:
           cache-dependency-path: artifacts/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Ensure ffmpeg and ffprobe
+        timeout-minutes: 5
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            # The hosted runner's default Ubuntu mirror DNS has stalled installs.
+            # Change only its mirror list; keep Ubuntu's archive signature verification.
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              printf '%s\n' 'https://mirrors.edge.kernel.org/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            fi
+            # Bound DNS/mirror failures; failed index updates must not continue with stale lists.
+            apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
+            sudo timeout --kill-after=5s 90s apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+            sudo timeout --kill-after=5s 180s apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
       - run: pnpm test --maxWorkers 4
   website:
     runs-on: ubuntu-latest
