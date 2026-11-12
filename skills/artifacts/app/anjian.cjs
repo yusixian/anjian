@@ -5,6 +5,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const nodeCrypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+
 const win32 = process.platform === 'win32';
 
 function localVersion() {
@@ -28,10 +29,21 @@ function ownerPid() {
 function main() {
   const cli = path.join(__dirname, 'cli.cjs');
   if (!fs.existsSync(cli)) {
-    throw new Error('Anjian has not been built. Run pnpm install --frozen-lockfile and pnpm build in the artifacts directory. No upstream package will be downloaded.');
+    throw new Error(
+      'Anjian has not been built. Run pnpm install --frozen-lockfile and pnpm build in the artifacts directory. No upstream package will be downloaded.',
+    );
   }
   const args = process.argv.slice(2);
-  if (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID) {
+  const end = args.indexOf('--');
+  const flags = end === -1 ? args : args.slice(0, end);
+  const readOnly =
+    args[0] === 'skills' ||
+    flags.includes('--help') ||
+    flags.includes('-h') ||
+    args[0] === '--version' ||
+    args[0] === '-v' ||
+    (args[0] === 'remote' && args[1] === 'status');
+  if (!readOnly && (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID)) {
     try {
       require('./comment-subscriptions.cjs').register(args);
     } catch (error) {
@@ -53,12 +65,15 @@ function main() {
     console.error(error.message);
     process.exitCode = 1;
   });
-  child.on('close', (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });
+  child.on('close', (code, signal) => {
+    process.exitCode = code ?? (signal ? 1 : 0);
+  });
 }
 
 if (require.main === module) {
-  try { main(); }
-  catch (error) {
+  try {
+    main();
+  } catch (error) {
     console.error(JSON.stringify({ error: error.message }));
     process.exitCode = 1;
   }

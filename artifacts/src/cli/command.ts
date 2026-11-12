@@ -105,7 +105,7 @@ export function commandHelp(command: CommandSpec) {
     ...(command.details ? ['', command.details] : []),
     '',
     'Options:',
-    table(optionRows({ ...command.options, ...COMMON, ...HELP_OPTION })),
+    table(optionRows({ ...COMMON, ...command.options, ...HELP_OPTION })),
   ].join('\n');
 }
 
@@ -121,6 +121,7 @@ export function rootHelp(commands: CommandSpec[], browseOptions: Options = {}) {
     table(commands.map((command) => [command.name, command.summary])),
     '',
     `Run \`${BIN} <command> --help\` for a command's options.`,
+    `Agents: run \`${BIN} skills get artifacts\`, then \`${BIN} skills get artifacts --reference remote.md\`.`,
     '',
     'Options:',
     table(

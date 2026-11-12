@@ -12,7 +12,8 @@ const BROWSE_OPTIONS: Options = {
 };
 
 function text(value: Record<string, unknown>) {
-  if (typeof value.error === 'string') return `Error: ${value.error}`;
+  if (typeof value.error === 'string')
+    return `Error: ${value.error}${value.nextStep ? `\nNext: ${value.nextStep}` : ''}`;
   for (const command of COMMANDS) {
     const line = command.text?.(value);
     if (line != null) return line;
