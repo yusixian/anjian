@@ -1,4 +1,3 @@
-import { cumulativeStorageAdmission } from './storage/quota';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -20,6 +19,7 @@ import {
   type DocumentOutcome,
   type DocumentSession,
 } from './document-session';
+import { cumulativeStorageAdmission } from './storage/quota';
 
 export interface DocumentTiming {
   writeDelayMs?: number;
@@ -31,16 +31,22 @@ export interface DocumentRegistry {
     op: AgentOp,
     agent?: string,
     admit?: CommentAdmission,
+    messageId?: string,
   ) => { threadId: string; messageId?: string };
   applyCommentOp: (id: string, op: HumanOp, admit?: CommentAdmission) => CommentsFile;
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
-  quiesce: (prepare?: () => Promise<CommentAdmission>) => Promise<() => void>;
   comments: (id: string) => CommentsFile;
-  commentWarnings: (id: string) => string[];
   commentsChanged: (id: string) => void;
+  commentWarnings: (id: string) => string[];
   fileChanged: (id: string) => void;
-  listComments: (id: string, agent: string, all: boolean, admit?: CommentAdmission) => AgentThread[];
+  listComments: (
+    id: string,
+    agent: string,
+    all: boolean,
+    admit?: CommentAdmission,
+  ) => AgentThread[];
   open: (id: string) => Promise<DocumentSession | null>;
+  quiesce: (prepare?: () => Promise<CommentAdmission>) => Promise<() => void>;
   warnings: (id: string) => string[];
 }
 
@@ -58,14 +64,14 @@ const forAgent = <T extends Thread>(thread: T) => ({
 
 interface RegistryOptions {
   broadcast: (message: ServerMessage) => void;
+  enqueueCommentWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
+  enqueueWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
   log?: (line: string) => void;
   names?: CommentNames;
   onWarningsChange: (id: string) => void;
   root: string;
   stateDir: string;
   timing?: DocumentTiming;
-  enqueueWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
-  enqueueCommentWrite?: (id: string, work: (admit: CommentAdmission) => void) => void;
 }
 
 const diagramWarnings = (session: DocumentSession) =>
@@ -97,7 +103,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       store = createCommentStore(
         path.join(options.root, 'document', id, 'comments.json'),
         options.names,
-        undefined, undefined, admit, !!options.enqueueCommentWrite,
+        undefined,
+        undefined,
+        admit,
+        !!options.enqueueCommentWrite,
       );
       commentStores.set(id, store);
       if (!admit) queueCommentSync(id);
@@ -119,9 +128,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
     pushComments(id);
     if (JSON.stringify(store.warnings()) !== before) options.onWarningsChange(id);
   };
-  const queueCommentSync = (id: string) => options.enqueueCommentWrite?.(id, admit => {
-    if (!closing && !quiescing) syncComments(id, admit);
-  });
+  const queueCommentSync = (id: string) =>
+    options.enqueueCommentWrite?.(id, (admit) => {
+      if (!closing && !quiescing) syncComments(id, admit);
+    });
 
   const create = async (id: string) => {
     if (!fs.existsSync(docFile(id))) return null;
@@ -130,7 +140,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       snapshotFile: path.join(options.stateDir, 'document', id, 'doc.loro'),
       stateRoot: options.stateDir,
       ...options.timing,
-      enqueueWrite: options.enqueueWrite ? work => options.enqueueWrite!(id, work) : undefined,
+      enqueueWrite: options.enqueueWrite ? (work) => options.enqueueWrite!(id, work) : undefined,
       log: options.log,
     });
     try {
@@ -172,8 +182,11 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       return session;
     } catch (error) {
       warnings.delete(id);
-      try { await session.close(); }
-      catch { incompleteSetups.set(id, session); }
+      try {
+        await session.close();
+      } catch {
+        incompleteSetups.set(id, session);
+      }
       throw error;
     }
   };
@@ -184,14 +197,22 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
     if (quiescing && !session) return Promise.resolve(null);
     if (!session) {
       session = create(id).catch((err) => {
-        try { options.log?.(`document ${id} could not open: ${(err as Error).message}`); }
-        catch { /* Diagnostic logging cannot orphan the session. */ }
+        try {
+          options.log?.(`document ${id} could not open: ${(err as Error).message}`);
+        } catch {
+          /* Diagnostic logging cannot orphan the session. */
+        }
         return null;
       });
       sessions.set(id, session);
-      void session.then((s) => {
-        if (!s && sessions.get(id) === session) sessions.delete(id);
-      }, () => { /* Retain a rejected open so close reports incomplete drain. */ });
+      void session.then(
+        (s) => {
+          if (!s && sessions.get(id) === session) sessions.delete(id);
+        },
+        () => {
+          /* Retain a rejected open so close reports incomplete drain. */
+        },
+      );
     }
     return session;
   };
@@ -216,8 +237,8 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       pushComments(id);
       return file;
     },
-    applyAgentCommentOp: (id, op, agent, admit) => {
-      const { threadId, messageId } = commentStore(id, admit).applyAgent(op, agent, admit);
+    applyAgentCommentOp: (id, op, agent, admit, replyId) => {
+      const { threadId, messageId } = commentStore(id, admit).applyAgent(op, agent, admit, replyId);
       pushComments(id);
       return { threadId, ...(messageId ? { messageId } : {}) };
     },
@@ -230,7 +251,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       return threads.map(forAgent);
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
-    quiesce: async prepare => {
+    quiesce: async (prepare) => {
       if (closing || quiescing) throw new Error('Documents are already closing or paused');
       quiescing = true;
       const resumes: Array<() => void> = [];
@@ -238,21 +259,35 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
         const failures: unknown[] = [];
         try {
           for (const resume of resumes) {
-            try { resume(); } catch (error) { failures.push(error); }
+            try {
+              resume();
+            } catch (error) {
+              failures.push(error);
+            }
           }
-        } finally { quiescing = false; }
+        } finally {
+          quiescing = false;
+        }
         return failures;
       };
       try {
-        const opened = await Promise.allSettled([...sessions.values()]);
-        const failures: unknown[] = opened.filter((result) => result.status === 'rejected').map((result) => result.reason);
-        const active = opened.flatMap((result) => result.status === 'fulfilled' && result.value ? [result.value] : []);
+        const opened = await Promise.allSettled(sessions.values());
+        const failures: unknown[] = opened
+          .filter((result) => result.status === 'rejected')
+          .map((result) => result.reason);
+        const active = opened.flatMap((result) =>
+          result.status === 'fulfilled' && result.value ? [result.value] : [],
+        );
         active.push(...incompleteSetups.values());
         if (prepare) {
           // Each preceding flush changes usage; scan again before the next session.
           for (const session of active) {
-            try { resumes.push(await session.quiesce(cumulativeStorageAdmission(await prepare()))); }
-            catch (error) { failures.push(error); break; }
+            try {
+              resumes.push(await session.quiesce(cumulativeStorageAdmission(await prepare())));
+            } catch (error) {
+              failures.push(error);
+              break;
+            }
           }
         } else {
           const drained = await Promise.allSettled(active.map((session) => session.quiesce()));
@@ -261,32 +296,41 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
             else failures.push(result.reason);
           }
         }
-        if (failures.length) throw new AggregateError(failures, 'Documents did not quiesce completely');
+        if (failures.length)
+          throw new AggregateError(failures, 'Documents did not quiesce completely');
         let resumed = false;
         return () => {
           if (resumed) return;
           resumed = true;
           const failures = releaseAll();
-          if (failures.length) throw new AggregateError(failures, 'Documents did not resume completely');
+          if (failures.length)
+            throw new AggregateError(failures, 'Documents did not resume completely');
         };
       } catch (error) {
         const failures = releaseAll();
-        if (failures.length) throw new AggregateError([error, ...failures], 'Documents did not quiesce or resume completely');
+        if (failures.length)
+          throw new AggregateError(
+            [error, ...failures],
+            'Documents did not quiesce or resume completely',
+            { cause: error },
+          );
         throw error;
       }
     },
-    close: prepare => {
+    close: (prepare) => {
       closing = true;
       if (closePromise) return closePromise;
       closePromise = (async () => {
         const closeSessions = async (active: Array<DocumentSession | null>) => {
-          if (!prepare) return Promise.allSettled(active.map(session => session?.close()));
+          if (!prepare) return Promise.allSettled(active.map((session) => session?.close()));
           const results: PromiseSettledResult<void>[] = [];
           for (const session of active) {
             try {
               if (session) await session.close(cumulativeStorageAdmission(await prepare()));
               results.push({ status: 'fulfilled', value: undefined });
-            } catch (reason) { results.push({ status: 'rejected', reason }); }
+            } catch (reason) {
+              results.push({ status: 'rejected', reason });
+            }
           }
           return results;
         };
@@ -294,7 +338,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
         const opened = await Promise.allSettled(pending.map(([, session]) => session));
         const failures: unknown[] = [];
         const entries = opened.flatMap((result, index) => {
-          if (result.status === 'rejected') { failures.push(result.reason); return []; }
+          if (result.status === 'rejected') {
+            failures.push(result.reason);
+            return [];
+          }
           const [id, session] = pending[index]!;
           return [{ id, pending: session, session: result.value }];
         });
@@ -311,8 +358,11 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
           if (result.status === 'rejected') failures.push(result.reason);
           else if (incompleteSetups.get(id) === session) incompleteSetups.delete(id);
         }
-        if (failures.length) throw new AggregateError(failures, 'Documents did not close completely');
-      })().finally(() => { closePromise = null; });
+        if (failures.length)
+          throw new AggregateError(failures, 'Documents did not close completely');
+      })().finally(() => {
+        closePromise = null;
+      });
       return closePromise;
     },
   };

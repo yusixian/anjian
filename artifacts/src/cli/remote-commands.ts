@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { CommandSpec } from './command';
+import { feedbackCommand, feedbackOptions } from './feedback';
 import { CliError } from './paths';
 import {
   applyLocalFiles,
@@ -461,11 +462,20 @@ const commands: CommandSpec[] = [
   },
   {
     name: 'remote',
-    summary: 'Show this directory’s remote connection',
-    usage: ['status'],
-    options: {},
-    positionals: 1,
-    run: ({ projectDir, positionals }, emit) => {
+    summary: 'Show remote connection or manage durable feedback tasks',
+    usage: [
+      'status',
+      'feedback <action> [--input <json-file>] [--task <id>] [--claim-file <private-file>]',
+    ],
+    options: feedbackOptions,
+    positionals: 2,
+    run: (input, emit) => {
+      const { projectDir, positionals } = input;
+      if (positionals[0] === 'feedback') return feedbackCommand(input, emit);
+      if (positionals.length > 1)
+        throw new CliError(
+          `Unexpected positional argument: ${positionals[1]}. Expected at most 1 positional argument(s).`,
+        );
       if (positionals[0] !== 'status') throw new CliError('Use anjian remote status');
       return status(projectDir, emit);
     },

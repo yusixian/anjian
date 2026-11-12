@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 
 import { type Thread, waitingOn } from '../../shared/comments';
 import { BottomSheet } from '../components/BottomSheet';
+import { FeedbackPanel } from '../feedback/FeedbackPanel';
 import { t } from '../i18n';
 import { color } from '../tokens.stylex';
 import { anchorLabel } from './anchor';
@@ -76,15 +77,18 @@ interface Props {
   activeId: string | null;
   agent?: string;
   draft: SelectionTarget | null;
+  feedbackArtifact?: string;
   offline: boolean;
   onCancelDraft: () => void;
   onCreate: (target: SelectionTarget, text: string) => Promise<boolean>;
+  onOpenThread?: (id: string) => void;
   onSnap: (snap: number) => void;
   snap: number;
   threads: Thread[];
 }
 
 export function PhoneSheet({
+  feedbackArtifact,
   threads,
   agent = 'Agent',
   actions,
@@ -95,6 +99,7 @@ export function PhoneSheet({
   activeId,
   snap,
   onSnap,
+  onOpenThread,
 }: Props) {
   const body = useRef<HTMLDivElement>(null);
   const shown = threads.filter((thread) => !thread.messages.every((message) => message.deleted));
@@ -162,6 +167,16 @@ export function PhoneSheet({
             </div>
           </div>
         ) : null}
+        {feedbackArtifact && (
+          <FeedbackPanel
+            artifact={feedbackArtifact}
+            key={feedbackArtifact}
+            onOpenThread={(id) => {
+              onOpenThread?.(id);
+              onSnap(SHEET_FULL);
+            }}
+          />
+        )}
         {shown.length === 0 && !draft ? (
           <div {...stylex.props(styles.empty)}>{t('document.noComments')}</div>
         ) : null}

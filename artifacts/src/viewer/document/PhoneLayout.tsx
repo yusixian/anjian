@@ -21,7 +21,7 @@ const styles = stylex.create({
     top: TOP_BAR,
     left: 0,
     right: 0,
-    bottom: 0,
+    height: 'calc(100dvh - 52px)',
     zIndex: 20,
     pointerEvents: 'none',
   },
@@ -35,6 +35,7 @@ interface Props {
   children: ReactNode;
   clearSelection: () => void;
   editor: LexicalEditor | null;
+  feedbackArtifact?: string;
   history?: DocumentHistoryView | null;
   offline: boolean;
   onCreate: (target: SelectionTarget, text: string) => Promise<boolean>;
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export function PhoneLayout({
+  feedbackArtifact,
   editor,
   threads,
   actions,
@@ -123,11 +125,13 @@ export function PhoneLayout({
           activeId={activeId}
           agent={agent}
           draft={draft}
+          feedbackArtifact={feedbackArtifact}
           offline={offline}
           snap={snap}
           threads={threads}
           onCancelDraft={() => setDraft(null)}
           onCreate={onCreate}
+          onOpenThread={setActiveId}
           onSnap={setSnap}
         />
       </div>

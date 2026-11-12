@@ -32,6 +32,7 @@ interface Props {
   children: ReactNode;
   clearSelection: () => void;
   editor: LexicalEditor | null;
+  feedbackArtifact?: string;
   history?: DocumentHistoryView | null;
   onCreate: (target: SelectionTarget, text: string) => Promise<boolean>;
   onMain: (element: HTMLElement | null) => void;
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export function DesktopDocument({
+  feedbackArtifact,
   editor,
   threads,
   actions,
@@ -59,6 +61,7 @@ export function DesktopDocument({
       actions={actions}
       agent={agent}
       editor={editor}
+      feedbackArtifact={feedbackArtifact}
       history={history}
       threads={threads}
       overlay={(articleEl) => (

@@ -182,6 +182,11 @@ test.each([
     json: true,
   },
   {
+    args: ['remote', 'feedback', 'status', 'extra'],
+    error: 'Unexpected positional argument: extra. Expected at most 2 positional argument(s).',
+    json: true,
+  },
+  {
     args: ['skills', 'get', 'artifacts', 'extra'],
     error: 'Unexpected positional argument: extra. Expected at most 2 positional argument(s).',
     json: false,

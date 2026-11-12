@@ -112,7 +112,11 @@ export type ArtboardViewProps = Omit<
 
 export function ArtboardView(props: ArtboardViewProps) {
   const phone = useMedia(PHONE_QUERY);
-  return phone ? <PhoneArtboard {...props} /> : <DesktopArtboard {...props} />;
+  return phone ? (
+    <PhoneArtboard key={props.artifact ?? props.id} {...props} />
+  ) : (
+    <DesktopArtboard key={props.artifact ?? props.id} {...props} />
+  );
 }
 
 function DesktopArtboard({
@@ -250,6 +254,7 @@ function DesktopArtboard({
     comment: readOnly ? undefined : comment,
   });
   const choices = useChoices({
+    artifact: readOnly ? null : artifact,
     canvas,
     layout,
     page,
@@ -667,6 +672,7 @@ function DesktopArtboard({
           <SubmitBar
             agent={agent}
             canAct={choices.canAct}
+            feedback={choices.feedback}
             listening={choices.listening}
             summary={choices.current}
             onSubmit={choices.submit}
@@ -707,13 +713,6 @@ function DesktopArtboard({
             id={expanded}
             interactive={expandedBoard.interactive === true}
             parameters={!readOnly && parameterBoard === expanded ? panel(false) : undefined}
-            sandbox={
-              isMediaBoard(expandedBoard)
-                ? undefined
-                : readOnly
-                  ? 'allow-scripts'
-                  : source?.sandbox
-            }
             src={`${isMediaBoard(expandedBoard) ? contentBase : (source?.base ?? contentBase)}${expandedBoard.file}?v=${versions[expandedBoard.file] ?? 0}`}
             parameterAction={
               !readOnly && parameterEntries[expanded] !== undefined ? (
@@ -730,6 +729,9 @@ function DesktopArtboard({
                 </IconProvider>
               ) : undefined
             }
+            sandbox={
+              isMediaBoard(expandedBoard) ? undefined : readOnly ? 'allow-scripts' : source?.sandbox
+            }
             onClose={() => setExpanded(null)}
             onFrameLoad={() => {
               if (!readOnly) parameters.loaded(expanded, 'expanded');
@@ -739,6 +741,7 @@ function DesktopArtboard({
       </div>
       {commentTool && (
         <CommentsPanel
+          feedbackArtifact={!readOnly && comment ? (artifact ?? undefined) : undefined}
           numbers={boardComments.numbers}
           openId={boardComments.openId}
           page={page}
@@ -758,12 +761,12 @@ function DesktopArtboard({
           frames={inspector.frames}
           hoverNode={inspector.hoverNode}
           playing={playing}
+          readOnly={readOnly}
           reset={inspector.reset}
           select={inspector.select}
           selection={inspector.selection}
           targets={inspector.targets}
           onClose={closeInspector}
-          readOnly={readOnly}
         />
       )}
     </div>

@@ -3,7 +3,9 @@ import type { LexicalEditor } from 'lexical';
 import { type ReactNode, useState } from 'react';
 
 import type { Thread } from '../../shared/comments';
+import { FeedbackPanel } from '../feedback/FeedbackPanel';
 import { useMedia } from '../hooks/useMedia';
+import { useTranslation } from '../i18n';
 import { BlockBars } from './BlockBars';
 import type { ThreadActions } from './CommentCard';
 import { CommentRail } from './CommentRail';
@@ -37,6 +39,7 @@ interface Props {
   agent?: string;
   children: ReactNode;
   editor: LexicalEditor | null;
+  feedbackArtifact?: string;
   history?: DocumentHistoryView | null;
   onMain?: (element: HTMLElement | null) => void;
   overlay?: (article: HTMLElement) => ReactNode;
@@ -44,6 +47,7 @@ interface Props {
 }
 
 export function DocumentLayout({
+  feedbackArtifact,
   editor,
   threads,
   actions,
@@ -53,6 +57,8 @@ export function DocumentLayout({
   history,
   children,
 }: Props) {
+  const { t } = useTranslation();
+  const Rail = feedbackArtifact && !history ? 'aside' : 'div';
   const [rail, setRail] = useState<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [articleEl, setArticleEl] = useState<HTMLElement | null>(null);
@@ -84,22 +90,34 @@ export function DocumentLayout({
           />
         )}
       </article>
-      <div {...stylex.props(styles.railWrap)}>
+      <Rail
+        aria-label={feedbackArtifact && !history ? t('document.commentsLabel') : undefined}
+        {...stylex.props(styles.railWrap)}
+      >
         {history ? (
           history.panel
         ) : (
-          <CommentRail
-            actions={actions}
-            activeId={activeId}
-            agent={agent}
-            anchors={anchors}
-            narrow={narrow}
-            railRef={setRail}
-            threads={threads}
-            onActivate={setActiveId}
-          />
+          <>
+            {feedbackArtifact && (
+              <FeedbackPanel
+                artifact={feedbackArtifact}
+                key={feedbackArtifact}
+                onOpenThread={setActiveId}
+              />
+            )}
+            <CommentRail
+              actions={actions}
+              activeId={activeId}
+              agent={agent}
+              anchors={anchors}
+              narrow={narrow || Boolean(feedbackArtifact)}
+              railRef={setRail}
+              threads={threads}
+              onActivate={setActiveId}
+            />
+          </>
         )}
-      </div>
+      </Rail>
       {articleEl && overlay && !history ? overlay(articleEl) : null}
     </main>
   );

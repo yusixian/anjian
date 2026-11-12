@@ -4,6 +4,7 @@ import type { BoardHumanOp, BoardThread } from '../../shared/board-comments';
 import { groupChoice, isChoiceRecord, roundSubmission } from '../../shared/choices';
 import { choiceRounds, type RoundInfo, roundOfGroup } from '../../shared/rounds';
 import type { CanvasLayout, CanvasSpec } from '../../shared/types';
+import { useRoundFeedback } from '../feedback/useRoundFeedback';
 
 export type RoundState = 'open' | 'submitted' | 'closed';
 
@@ -26,6 +27,7 @@ export interface RoundSummary {
 }
 
 interface Options {
+  artifact?: string | null;
   canvas: CanvasSpec | null | undefined;
   comment?: (op: BoardHumanOp) => Promise<unknown>;
   layout: CanvasLayout | null | undefined;
@@ -37,7 +39,16 @@ interface Options {
 const stateOf = (round: RoundInfo, threads: BoardThread[]): RoundState =>
   round.closed ? 'closed' : roundSubmission(threads, round.id).submitted ? 'submitted' : 'open';
 
-export function useChoices({ canvas, layout, page, threads, listening, comment }: Options) {
+export function useChoices({
+  artifact = null,
+  canvas,
+  layout,
+  page,
+  threads,
+  listening,
+  comment,
+}: Options) {
+  const feedback = useRoundFeedback(artifact);
   const rounds = useMemo(
     () => (canvas && layout ? choiceRounds(canvas, layout) : []),
     [canvas, layout],
@@ -59,8 +70,19 @@ export function useChoices({ canvas, layout, page, threads, listening, comment }
   }, [rounds, threads, canvas]);
 
   const states = useMemo(
-    () => new Map(rounds.map((round) => [round.id, stateOf(round, threads)])),
-    [rounds, threads],
+    () =>
+      new Map(
+        rounds.map((round) => [
+          round.id,
+          !round.closed &&
+          (feedback.taskFor(round.id) ||
+            (feedback.mode === 'connected' &&
+              feedback.rounds.find((item) => item.id === round.id)?.state === 'submitted'))
+            ? ('submitted' as const)
+            : stateOf(round, threads),
+        ]),
+      ),
+    [rounds, threads, feedback],
   );
 
   const chosenBoards = useMemo(() => {
@@ -115,7 +137,7 @@ export function useChoices({ canvas, layout, page, threads, listening, comment }
       group,
       chosen: !!found?.choice && found.choice === board && !found.byRecommendation,
       recommended: canvas?.groups?.[group]?.recommend === board,
-      disabled: !comment || !round || states.get(round.id) !== 'open',
+      disabled: !comment || !round || states.get(round.id) !== 'open' || feedback.locked(round.id),
     };
   };
 
@@ -124,15 +146,22 @@ export function useChoices({ canvas, layout, page, threads, listening, comment }
     const info = boardChoice(board);
     if (!spec || !info || info.disabled) return;
     const choice = info.chosen ? null : board;
-    send({
-      op: 'create',
-      anchor: { page: spec.page, x: spec.x, y: spec.y, group: info.group, choice },
-      text: choice ?? `Clear ${info.group}`,
-    });
+    void feedback.changeChoice(() =>
+      comment!({
+        op: 'create',
+        anchor: { page: spec.page, x: spec.x, y: spec.y, group: info.group, choice },
+        text: choice ?? `Clear ${info.group}`,
+      }),
+    );
   };
 
   const submitRound = (submit: boolean) => {
     if (!current) return;
+    if (feedback.mode === 'connected') {
+      if (submit) void feedback.submit(current.round.id);
+      return;
+    }
+    if (feedback.mode !== 'legacy') return;
     send({
       op: 'create',
       anchor: { page: current.round.page, x: 0, y: 0, round: current.round.id, submit },
@@ -141,6 +170,7 @@ export function useChoices({ canvas, layout, page, threads, listening, comment }
   };
 
   return {
+    feedback,
     active: rounds.length > 0,
     boardChoice,
     choose,

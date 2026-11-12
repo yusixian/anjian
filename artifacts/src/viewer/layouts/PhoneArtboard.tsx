@@ -1,7 +1,7 @@
 import { ActionIcon } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { ScanSearch } from 'lucide-react';
+import { MessageSquare, ScanSearch } from 'lucide-react';
 import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -20,6 +20,8 @@ import { Labels } from '../components/Labels';
 import { PhoneArtboardBar } from '../components/PhoneArtboardBar';
 import { PhoneBoard } from '../components/PhoneBoard';
 import { QuestionSheet, SHEET_PEEK } from '../components/QuestionSheet';
+import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
+import { FeedbackSheet } from '../feedback/FeedbackSheet';
 import { useArtboardPage } from '../hooks/useArtboardPage';
 import { useBoardLifecycle } from '../hooks/useBoardLifecycle';
 import { useBoardOrigin } from '../hooks/useBoardOrigin';
@@ -90,9 +92,9 @@ interface Props {
   id: string;
   layout: CanvasLayout | null;
   live?: boolean;
-  readOnly?: boolean;
   loaded: boolean;
   pending: string[];
+  readOnly?: boolean;
   versions: Record<string, number>;
   warnings: string[];
 }
@@ -100,6 +102,7 @@ interface Props {
 const NO_THREADS: never[] = [];
 
 export function PhoneArtboard({
+  artifact,
   id,
   canvas,
   layout,
@@ -131,6 +134,8 @@ export function PhoneArtboard({
     wheelAt,
     panBy,
   } = usePanZoom('hand');
+  const feedbackEnabled = useFeedbackEnabled();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
   const [snap, setSnap] = useState(SHEET_PEEK);
@@ -243,6 +248,7 @@ export function PhoneArtboard({
     versions,
   });
   const choices = useChoices({
+    artifact: readOnly ? null : artifact,
     canvas,
     layout,
     page,
@@ -322,9 +328,22 @@ export function PhoneArtboard({
   return (
     <div {...stylex.props(styles.root)} style={readOnly ? { position: 'absolute' } : undefined}>
       <PhoneArtboardBar
+        live={readOnly ? undefined : live}
+        page={page}
+        pages={canvas?.pages ?? []}
+        title={readOnly ? '' : canvas?.title || id}
         actions={
           <>
             {actions}
+            {feedbackEnabled && !readOnly && artifact && comment && (
+              <ActionIcon
+                aria-label={t('feedback.title')}
+                icon={MessageSquare}
+                size="small"
+                title={t('feedback.title')}
+                onClick={() => setFeedbackOpen(true)}
+              />
+            )}
             {readOnly && (
               <ActionIcon
                 aria-label={t('inspector.label')}
@@ -336,10 +355,6 @@ export function PhoneArtboard({
             )}
           </>
         }
-        live={readOnly ? undefined : live}
-        page={page}
-        pages={canvas?.pages ?? []}
-        title={readOnly ? '' : canvas?.title || id}
         onPageChange={changePage}
       />
       <div
@@ -409,6 +424,7 @@ export function PhoneArtboard({
                 agent={agent}
                 bottom={SHEET_PEEK + 12}
                 canAct={choices.canAct}
+                feedback={choices.feedback}
                 listening={choices.listening}
                 summary={choices.current}
                 onSubmit={choices.submit}
@@ -439,26 +455,34 @@ export function PhoneArtboard({
           contained={readOnly}
           id={open}
           origin={origin}
+          siblings={siblings}
+          src={`${isMediaBoard(openBoard) ? contentBase : (source?.base ?? contentBase)}${openBoard.file}?v=${versions[openBoard.file] ?? 0}`}
           sandbox={
             isMediaBoard(openBoard) ? undefined : readOnly ? 'allow-scripts' : source?.sandbox
           }
-          siblings={siblings}
-          src={`${isMediaBoard(openBoard) ? contentBase : (source?.base ?? contentBase)}${openBoard.file}?v=${versions[openBoard.file] ?? 0}`}
           onChoose={readOnly ? undefined : () => choices.choose(open)}
           onClose={() => setOpen(null)}
           onOpen={setOpen}
         />
       ) : null}
+      {feedbackEnabled && !readOnly && artifact && comment && feedbackOpen && (
+        <FeedbackSheet
+          artifact={artifact}
+          threads={comments?.comments.threads ?? []}
+          onClose={() => setFeedbackOpen(false)}
+          onReply={(threadId, text) => comment({ op: 'reply', threadId, text })}
+        />
+      )}
       {readOnly && inspectorOpen && (
         <InspectorPanel
+          fullScreen
+          readOnly
           boards={boards}
           change={inspector.change}
           enabled={true}
           frames={inspector.frames}
-          fullScreen
           hoverNode={inspector.hoverNode}
           playing={NOTHING}
-          readOnly
           reset={inspector.reset}
           select={inspector.select}
           selection={inspector.selection}
