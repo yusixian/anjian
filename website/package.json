@@ -4,11 +4,11 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "next build",
-    "dev": "next dev --hostname 127.0.0.1 --port 3100",
-    "postinstall": "fumadocs-mdx",
-    "test": "node --test scripts/site.test.mjs",
-    "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit"
+    "build": "node scripts/release-pages.mjs && next build",
+    "dev": "node scripts/release-pages.mjs && next dev --hostname 127.0.0.1 --port 3100",
+    "postinstall": "node scripts/release-pages.mjs && fumadocs-mdx",
+    "test": "node --test scripts/*.test.mjs",
+    "typecheck": "node scripts/release-pages.mjs && fumadocs-mdx && next typegen && tsc --noEmit"
   },
   "dependencies": {
     "fumadocs-core": "16.18.4",

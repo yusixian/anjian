@@ -12,6 +12,7 @@ const links = [
   { href: '/docs', label: '使用指南' },
   { href: '/docs/self-hosting', label: '自托管' },
   { href: '/use-cases', label: '使用案例' },
+  { href: '/docs/updates', label: '更新说明' },
 ];
 export function Header() {
   const path = usePathname();

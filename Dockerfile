@@ -9,6 +9,8 @@ FROM node:22-bookworm-slim AS docs-build
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app/website
 COPY website/ ./
+COPY CHANGELOG.md /app/CHANGELOG.md
+COPY scripts/release/notes.mjs /app/scripts/release/notes.mjs
 RUN pnpm install --frozen-lockfile && pnpm build
 
 FROM node:22-bookworm-slim
