@@ -1,3 +1,4 @@
+import { TOC, TOCProvider } from 'fumadocs-ui/layouts/docs/page/slots/toc';
 import defaultComponents from 'fumadocs-ui/mdx';
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
@@ -6,6 +7,7 @@ import { Environment, Notice, Step, Steps } from '@/components/docs-content';
 import { type Locale, localePath } from '@/lib/i18n';
 import { source } from '@/lib/source';
 
+import { DocumentationTOCPopover } from './documentation-toc';
 import { ScreenshotTranscript } from './screenshot-transcript';
 
 export function DocumentationPage({ slug, locale }: { slug?: string[]; locale: Locale }) {
@@ -14,6 +16,7 @@ export function DocumentationPage({ slug, locale }: { slug?: string[]; locale: L
   const Content = page.data.body;
   return (
     <DocsPage
+      slots={{ toc: { provider: TOCProvider, main: TOC, popover: DocumentationTOCPopover } }}
       toc={page.data.toc}
       tableOfContent={{
         footer: (
