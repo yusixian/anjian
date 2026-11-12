@@ -4,10 +4,13 @@ import stylex from '@stylexjs/unplugin';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+import { buildInfo } from '../scripts/release/build-info.mjs';
+
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   base: '/',
+  define: { ANJIAN_BUILD_INFO: JSON.stringify(buildInfo()) },
   // Keep lazy preloads beside their chunk when Cloud serves a versioned directory.
   experimental: {
     renderBuiltUrl: (_filename, { hostType }) => ({ relative: hostType !== 'html' }),

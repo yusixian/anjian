@@ -5,8 +5,10 @@ import { remoteCommands } from './remote-commands';
 import { skillsCommand } from './skills';
 import { startCommand } from './start';
 import { stopCommand } from './stop';
+import { versionCommand } from './version';
 
 export const COMMANDS: CommandSpec[] = [
+  versionCommand,
   skillsCommand,
   startCommand,
   stopCommand,

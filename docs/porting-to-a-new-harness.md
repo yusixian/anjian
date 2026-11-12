@@ -749,7 +749,7 @@ install`, etc.). Hand-copying skill files and editing the user's global/personal
   than ship an installer that edits the user's files.
 - **Register the version.** If your harness introduces a _new_ versioned
   manifest, add its path and version field to `.version-bump.json` so
-  `scripts/bump-version.sh` keeps it in lockstep (read that file to see what's
+  `pnpm release:version` keeps it in lockstep (read that file to see what's
   currently tracked). A new manifest that isn't registered there will ship a
   stale version. If your harness instead rides an already-tracked file — pi
   declares itself in the repo-root `package.json`, which is already listed —

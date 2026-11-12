@@ -23,9 +23,12 @@ export function checkRelease(args, api = github) {
   const [sha, flag, pr] = args;
   if (
     !/^[a-f0-9]{40}$/.test(sha ?? '') ||
-    (args.length !== 1 && !(args.length === 3 && flag === '--pr' && /^[1-9]\d*$/.test(pr)))
+    (args.length !== 1 &&
+      !(args.length === 3 && ['--pr', '--pr-dispatch'].includes(flag) && /^[1-9]\d*$/.test(pr)))
   ) {
-    throw new Error('用法：node scripts/check-release.mjs <完整小写 SHA> [--pr <编号>]');
+    throw new Error(
+      '用法：node scripts/check-release.mjs <完整小写 SHA> [--pr <编号> | --pr-dispatch <编号>]',
+    );
   }
   const readPR = () => {
     const [value] = api(`repos/${repo}/pulls/${pr}`);
@@ -34,7 +37,7 @@ export function checkRelease(args, api = github) {
     }
   };
   if (pr) readPR();
-  const event = pr ? 'pull_request' : 'push';
+  const event = flag === '--pr-dispatch' ? 'workflow_dispatch' : pr ? 'pull_request' : 'push';
   const runs = api(
     `repos/${repo}/actions/workflows/${workflow}/runs?head_sha=${sha}&event=${event}&per_page=100`,
   ).flatMap((page) => page.workflow_runs);

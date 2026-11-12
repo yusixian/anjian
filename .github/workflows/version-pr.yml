@@ -1,0 +1,57 @@
+name: Version PR
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: version-pr
+  cancel-in-progress: false
+jobs:
+  version:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        id: changesets
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version-script: pnpm release:version
+          pr-title: 'chore: release Anjian'
+          commit-message: 'chore: release Anjian'
+          create-github-releases: false
+          push-git-tags: false
+      - name: Dispatch checks for the actual release PR head
+        if: steps.changesets.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
+        run: |
+          gh pr view "$PR_NUMBER" --json body --jq .body > "$RUNNER_TEMP/version-pr-body.md"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const file = `${process.env.RUNNER_TEMP}/version-pr-body.md`;
+          const body = fs.readFileSync(file, 'utf8');
+          const index = body.indexOf('# Releases');
+          if (index < 0) throw new Error('Changesets release section missing');
+          const header = '此 PR 由 Changesets 统一计算案间产品版本。合并后仍须通过版本提交的 CI，才会创建 GitHub Release；生产部署单独验证。不发布 npm 包。\n\nChangesets calculated this private product version. The merged version commit must pass CI before a GitHub Release is created. Production deployment is verified separately. No npm packages are published.\n\n';
+          fs.writeFileSync(file, header + body.slice(index));
+          JS
+          gh pr edit "$PR_NUMBER" --body-file "$RUNNER_TEMP/version-pr-body.md"
+          branch=$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)
+          sha=$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)
+          gh workflow run viewer-release-guard.yml --ref "$branch" -f expected_sha="$sha"
+          echo "Checks dispatched for PR #$PR_NUMBER at $sha; dispatch is not a passing result." >> "$GITHUB_STEP_SUMMARY"
