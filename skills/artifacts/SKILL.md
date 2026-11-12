@@ -28,7 +28,9 @@ A missing binding is not evidence that a requested remote task should run locall
 read [remote.md](remote.md) to log in and link the target.
 
 For a self-hosted URL, a remote binding, or remote comments, read [remote.md](remote.md)
-before writing. Its `pull → edit → push → check → reply` flow takes precedence over
+before writing. For a user-requested automatic feedback connection, use its
+“Lody feedback connection” section: task results replace ordinary push/reply.
+For manual work, its `pull → edit → push → check → reply` flow takes precedence over
 local server/streaming instructions below and in type references. Remote work needs
 no SSH or local server. Use `start` only for an explicitly local preview.
 

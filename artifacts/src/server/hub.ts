@@ -29,6 +29,7 @@ import { createBrowserAuth } from './browser-auth';
 import { createContentAccess } from './content-access';
 import { readArtifactSource, titleOf } from './context';
 import { serveDocsSite } from './docs-site';
+import { createFeedbackApi } from './feedback/api';
 import { createGitHubAuth, type GitHubConfig, readGitHubConfig } from './github-auth';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
@@ -848,6 +849,13 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       ...ordered().map(({ dir }) => ({ dir, owner: members.projectOwner(dir) })),
       ...members.storageProjects(),
     ],
+    metadataRoot: path.join(storageHome, 'feedback'),
+    metadataOwner: (name) => {
+      const project = [...ordered(), ...members.storageProjects()].find(
+        (p) => `${projectId(p.dir)}.json` === name,
+      );
+      return project ? members.projectOwner(project.dir) : undefined;
+    },
     snapshotsRoot: path.join(storageHome, 'shares/snapshots'),
     snapshots: () => {
       const owners = new Map(
@@ -913,6 +921,27 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       snapshots: shares.storageSnapshots,
       sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
     });
+  const feedbackApi = createFeedbackApi({
+    home: options.paths.home,
+    authenticate: remoteAuth.authenticate,
+    deviceAuthorized: remoteAuth.deviceAuthorized,
+    projects: remoteProjects,
+    mount: mountOf,
+    upload: writeQuota,
+    browserProject: (req, artifact) => {
+      if (
+        (req.method !== 'GET' && !req.headers.origin) ||
+        !originAllowed(policy, req.headers.origin) ||
+        !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+      )
+        return null;
+      const [type, id] = artifact.split('/') as [ArtifactType, string];
+      const found = index.find(type, id);
+      if (!found || !projectAccess.authorized(req, found.project) || !available(found.project))
+        return null;
+      return { id: projectId(found.project), dir: found.project, artifact: `${type}/${found.id}` };
+    },
+  });
   const remoteApi = createRemoteApi({
     authenticate: remoteAuth.authenticate,
     projects: remoteProjects,
@@ -1099,6 +1128,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await storageApi(req, res, url)) return;
       if (await migrationApi(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
+      if (await feedbackApi(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
         if (

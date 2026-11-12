@@ -55,7 +55,7 @@ export function roundViews(context: ChoiceContext, threads: BoardThread[]): Roun
   });
 }
 
-const groupsTouching = (context: ChoiceContext, anchor: BoardAnchor) => {
+export const groupsTouching = (context: ChoiceContext, anchor: BoardAnchor) => {
   const boards = new Set([
     ...(anchor.board ? [anchor.board] : []),
     ...(anchor.nodes ?? []).map((node) => node.board),

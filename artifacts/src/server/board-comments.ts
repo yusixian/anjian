@@ -30,10 +30,17 @@ import {
 } from './board-choices';
 import { createCommentCursors } from './comment-cursors';
 import type { CommentNames } from './comment-names';
-import { asHumanOp, createStore, isId, isText, type Store, type CommentAdmission } from './document-comments';
-import { writeJsonFiles } from './storage/json-files';
+import {
+  asHumanOp,
+  type CommentAdmission,
+  createStore,
+  isId,
+  isText,
+  type Store,
+} from './document-comments';
 import { listeningOn } from './listening';
 import { resolveBoardFile } from './paths';
+import { writeJsonFiles } from './storage/json-files';
 
 type BoardStore = Store<BoardCommentsFile, BoardHumanOp, BoardAgentOp>;
 
@@ -266,15 +273,26 @@ export function createBoardCommentRegistry(options: Options) {
   const store = (id: string, admit?: CommentAdmission) => {
     let found = stores.get(id);
     if (!found) {
-      found = createStore(path.join(dirOf(id), 'comments.json'), boardRules, options.names, undefined, undefined, admit, (next, admission) => {
-        const files: Array<{ file: string; value: unknown }> = [{ file: path.join(dirOf(id), 'comments.json'), value: next }];
-        const context = choiceContext(dirOf(id));
-        if (context.canvas) {
-          const rounds = roundViews(context, next.threads);
-          if (rounds.length || fs.existsSync(roundsFile(id))) files.push({ file: roundsFile(id), value: { rounds } });
-        }
-        writeJsonFiles(options.root, files, admission);
-      });
+      found = createStore(
+        path.join(dirOf(id), 'comments.json'),
+        boardRules,
+        options.names,
+        undefined,
+        undefined,
+        admit,
+        (next, admission) => {
+          const files: Array<{ file: string; value: unknown }> = [
+            { file: path.join(dirOf(id), 'comments.json'), value: next },
+          ];
+          const context = choiceContext(dirOf(id));
+          if (context.canvas) {
+            const rounds = roundViews(context, next.threads);
+            if (rounds.length || fs.existsSync(roundsFile(id)))
+              files.push({ file: roundsFile(id), value: { rounds } });
+          }
+          writeJsonFiles(options.root, files, admission);
+        },
+      );
       stores.set(id, found);
     }
     return found;
@@ -376,20 +394,38 @@ export function createBoardCommentRegistry(options: Options) {
       push(id);
       return { comments: store(id).current(), stale: stale(id), listening: listening(id) };
     },
-    applyAgent: (id: string, op: BoardAgentOp, agent?: string, admit?: CommentAdmission) => {
+    applyAgent: (
+      id: string,
+      op: BoardAgentOp,
+      agent?: string,
+      admit?: CommentAdmission,
+      replyId?: string,
+    ) => {
       const stamped = op.op === 'add' ? { ...op, anchor: stamp(op.anchor, fresh(id)) } : op;
-      const { threadId, messageId } = store(id, admit).applyAgent(stamped, agent, admit);
+      const { threadId, messageId } = store(id, admit).applyAgent(stamped, agent, admit, replyId);
       push(id);
       return { threadId, ...(messageId ? { messageId } : {}) };
     },
-    agentChoose: (id: string, group: string, board: string | null, agent?: string, admit?: CommentAdmission) => {
+    agentChoose: (
+      id: string,
+      group: string,
+      board: string | null,
+      agent?: string,
+      admit?: CommentAdmission,
+    ) => {
       const anchor = agentChoiceAnchor(choiceContext(dirOf(id)), group, board);
       const text = board ? `Chose ${board}` : `Cleared the choice in ${group}`;
       const { threadId } = store(id, admit).applyAgent({ op: 'add', anchor, text }, agent, admit);
       push(id);
       return { threadId };
     },
-    agentSubmit: (id: string, round: string, submit: boolean, agent?: string, admit?: CommentAdmission) => {
+    agentSubmit: (
+      id: string,
+      round: string,
+      submit: boolean,
+      agent?: string,
+      admit?: CommentAdmission,
+    ) => {
       const anchor = agentSubmitAnchor(choiceContext(dirOf(id)), round, submit);
       const text = submit ? `Submitted ${round}` : `Withdrew ${round}`;
       const { threadId } = store(id, admit).applyAgent({ op: 'add', anchor, text }, agent, admit);

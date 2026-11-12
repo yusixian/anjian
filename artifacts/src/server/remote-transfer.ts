@@ -14,9 +14,9 @@ const MAX_DEPTH = 16;
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
 export interface RemoteArtifactSnapshot {
-  revision: string | null;
   /** File contents encoded with canonical, padded base64. */
   files: Record<string, string>;
+  revision: string | null;
 }
 
 export interface RemoteArtifactWrite {
@@ -50,12 +50,19 @@ function validRelative(file: string) {
     !file ||
     file.startsWith('/') ||
     file.includes('\\') ||
-    /[\x00-\x1f\x7f]/.test(file) ||
+    // Reject control characters in artifact paths, including NUL.
+    // eslint-disable-next-line no-control-regex
+    /[\x00-\x1F\x7F]/.test(file) ||
     Buffer.byteLength(file) > MAX_PATH_BYTES
-  ) return false;
+  )
+    return false;
   const segments = file.split('/');
-  return segments.length <= MAX_DEPTH && segments.every((segment) =>
-    segment.length > 0 && segment !== '..' && segment !== '.' && !segment.startsWith('.'),
+  return (
+    segments.length <= MAX_DEPTH &&
+    segments.every(
+      (segment) =>
+        segment.length > 0 && segment !== '..' && segment !== '.' && !segment.startsWith('.'),
+    )
   );
 }
 
@@ -142,7 +149,10 @@ function digest(files: Map<string, Buffer>) {
   const hash = crypto.createHash('sha256').update('anjian-artifact-v1\0');
   for (const name of [...files.keys()].sort()) {
     const data = files.get(name)!;
-    hash.update(String(Buffer.byteLength(name))).update(':').update(name);
+    hash
+      .update(String(Buffer.byteLength(name)))
+      .update(':')
+      .update(name);
     hash.update(String(data.length)).update(':').update(data);
   }
   return `sha256:${hash.digest('hex')}`;
@@ -151,9 +161,11 @@ function digest(files: Map<string, Buffer>) {
 function snapshot(files: Map<string, Buffer>, revision: string | null): RemoteArtifactSnapshot {
   return {
     revision,
-    files: Object.fromEntries([...files].sort(([a], [b]) => a.localeCompare(b)).map(
-      ([name, data]) => [name, data.toString('base64')],
-    )),
+    files: Object.fromEntries(
+      [...files]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, data]) => [name, data.toString('base64')]),
+    ),
   };
 }
 
@@ -163,7 +175,8 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
   const files = collect(dir, type);
   // Mounting can create metadata before the first source file is uploaded.
   if (files.size === 0) return { revision: null, files: {} };
-  const primary = type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
+  const primary =
+    type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
   if (!files.has(primary)) throw unsafe(`artifact is missing ${primary}`);
   return snapshot(files, digest(files));
 }
@@ -186,7 +199,7 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
     const estimatedBytes = Math.floor(value.length / 4) * 3 - padding;
     if (estimatedBytes > MAX_BYTES - total || value.length > Math.ceil(MAX_BYTES / 3) * 4)
       throw tooLarge('artifact exceeds 32 MiB');
-    if (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*$/.test(value.slice(0, -padding || undefined)))
+    if (value.length % 4 !== 0 || !/^[A-Z0-9+/]*$/i.test(value.slice(0, -padding || undefined)))
       throw invalid(`invalid base64 content: ${name}`);
     const data = Buffer.from(value, 'base64');
     if (data.toString('base64') !== value) throw invalid(`noncanonical base64 content: ${name}`);
@@ -225,17 +238,35 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
         throw invalid(`board ${id} needs its referenced file under pages/`);
     }
   }
-  if (type === 'html' && !primary.trim())
-    throw invalid('index.html must not be empty');
+  if (type === 'html' && !primary.trim()) throw invalid('index.html must not be empty');
   return files;
 }
 
-export function decodeDocumentUpload(incoming: RemoteArtifactWrite): { source: string; files: string[] } {
-  if (!incoming || (incoming.baseRevision !== null &&
-      (typeof incoming.baseRevision !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(incoming.baseRevision))))
+export function decodeDocumentUpload(incoming: RemoteArtifactWrite): {
+  source: string;
+  files: string[];
+} {
+  if (
+    !incoming ||
+    (incoming.baseRevision !== null &&
+      (typeof incoming.baseRevision !== 'string' ||
+        !/^sha256:[a-f0-9]{64}$/.test(incoming.baseRevision)))
+  )
     throw invalid('baseRevision must be null or a sha256 revision');
   const files = decodeManifest('document', incoming.files);
   return { source: utf8.decode(files.get('doc.xml')!), files: [...files.keys()] };
+}
+
+/** Computes the exact post-merge source identity before a durable feedback operation starts. */
+export function remoteUploadRevision(
+  artifact: string,
+  incoming: RemoteArtifactWrite,
+  xml?: string,
+) {
+  const { type } = artifactParts(artifact);
+  const files = decodeManifest(type, incoming.files);
+  if (xml !== undefined) files.set('doc.xml', Buffer.from(xml));
+  return digest(files);
 }
 
 function copyPreservingState(source: string, target: string) {
@@ -252,12 +283,12 @@ function removeManaged(dir: string, type: 'document' | 'artboard' | 'html', pref
 }
 
 export interface PreparedStorageState {
-  stateDeltaBytes: number;
-  validate: () => void;
-  stage: () => void;
   abort: () => void;
   commit: () => void;
   finalize: () => void;
+  stage: () => void;
+  stateDeltaBytes: number;
+  validate: () => void;
 }
 
 /** The caller must serialize writes for one artifact and flush any live document editor first. */
@@ -270,15 +301,23 @@ export function writeRemoteArtifact(
   prepareStaged?: (directory: string) => PreparedStorageState,
 ): RemoteArtifactSnapshot {
   const { dir, parent, type } = pathsFor(projectDir, artifact);
-  if (!incoming || (incoming.baseRevision !== null &&
-    (typeof incoming.baseRevision !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(incoming.baseRevision))))
+  if (
+    !incoming ||
+    (incoming.baseRevision !== null &&
+      (typeof incoming.baseRevision !== 'string' ||
+        !/^sha256:[a-f0-9]{64}$/.test(incoming.baseRevision)))
+  )
     throw invalid('baseRevision must be null or a sha256 revision');
   const files = decodeManifest(type, incoming.files);
   const exists = fs.existsSync(dir);
   const current = exists ? collect(dir, type) : new Map<string, Buffer>();
   const revision = current.size ? digest(current) : null;
   if (incoming.baseRevision !== revision)
-    throw new RemoteTransferError(409, 'revision_conflict', 'remote artifact changed; pull before pushing again');
+    throw new RemoteTransferError(
+      409,
+      'revision_conflict',
+      'remote artifact changed; pull before pushing again',
+    );
 
   if (prepared) {
     if (type !== 'document') throw invalid('document preparation requires a document');
@@ -287,7 +326,8 @@ export function writeRemoteArtifact(
   const identityFile = path.join(dir, '.artifact-id');
   const identity = fs.existsSync(identityFile) ? null : `${mintArtifactId()}\n`;
 
-  const bytes = (values: Map<string, Buffer>) => [...values.values()].reduce((sum, value) => sum + value.length, 0);
+  const bytes = (values: Map<string, Buffer>) =>
+    [...values.values()].reduce((sum, value) => sum + value.length, 0);
   if (bytes(files) > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB after document merge');
 
   const states: PreparedStorageState[] = prepared ? [prepared] : [];
@@ -310,9 +350,15 @@ export function writeRemoteArtifact(
       fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
       fs.writeFileSync(target, data, { mode: 0o600, flag: 'wx' });
     }
-    if (identity) fs.writeFileSync(path.join(staging, '.artifact-id'), identity, { mode: 0o600, flag: 'wx' });
+    if (identity)
+      fs.writeFileSync(path.join(staging, '.artifact-id'), identity, { mode: 0o600, flag: 'wx' });
     if (prepareStaged) states.push(prepareStaged(staging));
-    admit?.(bytes(files) - bytes(current) + states.reduce((sum, state) => sum + state.stateDeltaBytes, 0) + (identity ? Buffer.byteLength(identity) : 0));
+    admit?.(
+      bytes(files) -
+        bytes(current) +
+        states.reduce((sum, state) => sum + state.stateDeltaBytes, 0) +
+        (identity ? Buffer.byteLength(identity) : 0),
+    );
     for (const state of states) state.stage();
     for (const state of states) state.validate();
     // All mutations below are synchronous: file watchers cannot observe the temporary swap.
@@ -327,7 +373,11 @@ export function writeRemoteArtifact(
     const stateErrors: unknown[] = [];
     let sourceError: unknown;
     for (const state of [...states].reverse()) {
-      try { state.abort(); } catch (error) { stateErrors.push(error); }
+      try {
+        state.abort();
+      } catch (error) {
+        stateErrors.push(error);
+      }
     }
     try {
       if (installed && states.length) {
@@ -335,12 +385,19 @@ export function writeRemoteArtifact(
         installed = false;
       }
       if (oldMoved && !installed && backup) fs.renameSync(backup, dir);
-    } catch (error) { sourceError = error; }
+    } catch (error) {
+      sourceError = error;
+    }
     if (stateErrors.length || sourceError)
-      throw new AggregateError([err, ...stateErrors, sourceError].filter(Boolean), 'Remote artifact rollback failed');
+      throw new AggregateError(
+        [err, ...stateErrors, sourceError].filter(Boolean),
+        'Remote artifact rollback failed',
+        { cause: err },
+      );
     throw err;
   } finally {
-    if (!installed && staging && fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
+    if (!installed && staging && fs.existsSync(staging))
+      fs.rmSync(staging, { recursive: true, force: true });
   }
   // An old backup is safe to leave for manual cleanup if removal fails after installation.
   if (oldMoved && backup) {

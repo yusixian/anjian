@@ -7,6 +7,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 
 import { type CommentsFile, emptyComments, type HumanOp } from '../../shared/comments';
 import { WarningsBadge } from '../components/WarningsBadge';
+import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
 import { PHONE_QUERY, useMedia } from '../hooks/useMedia';
 import { useTypeFavicon } from '../hooks/useTypeFavicon';
 import { t } from '../i18n';
@@ -27,7 +28,11 @@ import { useNow, usePendingBlocks } from './usePendingBlocks';
 import { type SelectionTarget, useSelectionComment } from './useSelectionComment';
 
 const styles = stylex.create({
-  root: { minHeight: '100%', backgroundColor: cssVar.colorBgContainer, color: cssVar.colorText },
+  root: {
+    minHeight: '100%',
+    backgroundColor: cssVar.colorBgContainer,
+    color: cssVar.colorText,
+  },
   quotaNotice: {
     paddingBlock: 12,
     paddingInline: 24,
@@ -92,6 +97,7 @@ export function DocumentView({
   fallback?: ReactNode;
   actions?: ReactNode;
 }) {
+  const feedbackEnabled = useFeedbackEnabled();
   const [meta, setMeta] = useState<DocumentMeta | null>(null);
   const [doc, setDoc] = useState<LoroDoc | null>(null);
   const [comments, setComments] = useState<CommentsFile>(emptyComments);
@@ -314,8 +320,7 @@ export function DocumentView({
       />
       {quotaExceeded && (
         <div role="alert" {...stylex.props(styles.quotaNotice)}>
-          <strong>{t('document.quotaExceeded')}</strong>{' '}
-          {t('document.quotaRecovery')}
+          <strong>{t('document.quotaExceeded')}</strong> {t('document.quotaRecovery')}
         </div>
       )}
       {phone ? (
@@ -326,6 +331,7 @@ export function DocumentView({
           canEdit={canEdit}
           clearSelection={clearSelection}
           editor={editor}
+          feedbackArtifact={feedbackEnabled ? artifact : undefined}
           history={historyView}
           offline={false}
           selection={editing ? null : selection}
@@ -343,6 +349,7 @@ export function DocumentView({
           canComment={canComment}
           clearSelection={clearSelection}
           editor={editor}
+          feedbackArtifact={feedbackEnabled ? artifact : undefined}
           history={historyView}
           selection={selection}
           threads={comments.threads}

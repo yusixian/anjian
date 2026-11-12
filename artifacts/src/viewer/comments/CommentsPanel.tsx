@@ -6,6 +6,7 @@ import { MessageCirclePlus, X } from 'lucide-react';
 
 import type { BoardThread } from '../../shared/board-comments';
 import { authorOf } from '../document/author';
+import { FeedbackPanel } from '../feedback/FeedbackPanel';
 import { i18n, useTranslation } from '../i18n';
 import { styles as inspectorStyles } from '../inspector/styles';
 import { anchorLabel, isCommentThread, staleText } from '../lib/board-anchor';
@@ -141,6 +142,7 @@ const styles = stylex.create({
 });
 
 interface Props {
+  feedbackArtifact?: string;
   numbers: Map<string, number>;
   onClose: () => void;
   onOpen: (id: string) => void;
@@ -156,6 +158,7 @@ const timeOf = (iso: string) =>
   new Date(iso).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
 
 export function CommentsPanel({
+  feedbackArtifact,
   threads,
   page,
   stale,
@@ -211,6 +214,9 @@ export function CommentsPanel({
         </button>
       </div>
       <div {...stylex.props(styles.list)}>
+        {feedbackArtifact && (
+          <FeedbackPanel artifact={feedbackArtifact} key={feedbackArtifact} onOpenThread={onOpen} />
+        )}
         {shown.length === 0 ? (
           <div {...stylex.props(styles.empty)}>
             <MessageCirclePlus aria-hidden size={14} />

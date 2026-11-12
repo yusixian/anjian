@@ -1,9 +1,9 @@
-import { cumulativeStorageAdmission } from './storage/quota';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
+import type { Thread } from '../shared/comments';
 import type { ArtifactType, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
 import { artifactPath, resolveArtifactAddress } from './artifact-address';
@@ -11,10 +11,6 @@ import { watchArtifacts } from './artifact-watcher';
 import { type ArtifactRef, isArtifactLocator, listArtifacts } from './artifacts';
 import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
-import { createGitHubAuth, readGitHubConfig } from './github-auth';
-import { prepareNewRemoteDocument, type PreparedRemoteDocument } from './document-session';
-import type { CommentAdmission } from './document-comments';
-import type { PreparedStorageState } from './remote-transfer';
 import {
   type ArtifactPayload,
   type ChangeListener,
@@ -22,11 +18,17 @@ import {
   type MountSettings,
   type ServerOptions,
 } from './context';
+import type { CommentAdmission } from './document-comments';
+import { type PreparedRemoteDocument, prepareNewRemoteDocument } from './document-session';
+import { readFeedbackComments } from './feedback/comments';
+import { createGitHubAuth, readGitHubConfig } from './github-auth';
 import { listen, readPersisted, send, urlHostForHttp } from './http';
+import type { PreparedStorageState } from './remote-transfer';
 import { createBoardRequestHandler, serveContent } from './routes/content';
 import { HTTP_ROUTES, UPGRADE_ROUTES } from './routes/index';
 import { dispatchHttp, dispatchUpgrade } from './routes/table';
 import { writeJsonAtomic } from './state';
+import { cumulativeStorageAdmission } from './storage/quota';
 import { rejectUpgrade } from './ws';
 
 export type { ArtifactPayload, MountSettings, ServerOptions } from './context';
@@ -34,24 +36,47 @@ export type { ArtifactPayload, MountSettings, ServerOptions } from './context';
 export interface ArtifactsServer {
   boardPort: number;
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
-  /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
-  quiesce: <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>) => Promise<T>;
   contentToken: string;
-  handlePrivateContent: (req: http.IncomingMessage, res: http.ServerResponse, rest: string, mode: 'main' | 'board') => void;
+  feedbackComments?: (type: 'document' | 'artboard', id: string) => Thread<unknown>[];
+  feedbackReply?: (
+    type: 'document' | 'artboard',
+    id: string,
+    threadId: string,
+    text: string,
+    messageId: string,
+    admit: CommentAdmission,
+  ) => void;
   handleBoardRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void;
+  handlePrivateContent: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    rest: string,
+    mode: 'main' | 'board',
+  ) => void;
   handleRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void | Promise<void>;
   handleUpgrade: (req: http.IncomingMessage, socket: Duplex, head?: Buffer) => void;
   linkFor: (type: ArtifactType, id: string) => string;
   liveClients: () => number;
-  onMessage: (listener: (message: ServerMessage) => void) => void;
-  settleDocument: (id: string, source?: string, admit?: CommentAdmission) => Promise<void>;
-  prepareDocumentUpload: (id: string, source: string, files: string[], admit?: CommentAdmission) => Promise<PreparedRemoteDocument>;
-  prepareArtifactUpload: (type: 'artboard' | 'html', id: string, stagedDir: string) => PreparedStorageState;
   onActivity: (listener: () => void) => void;
   onArtifactChange: (listener: ChangeListener) => void;
+  onMessage: (listener: (message: ServerMessage) => void) => void;
   port: number;
+  prepareArtifactUpload: (
+    type: 'artboard' | 'html',
+    id: string,
+    stagedDir: string,
+  ) => PreparedStorageState;
+  prepareDocumentUpload: (
+    id: string,
+    source: string,
+    files: string[],
+    admit?: CommentAdmission,
+  ) => Promise<PreparedRemoteDocument>;
+  /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
+  quiesce: <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>) => Promise<T>;
   resolve: (type: ArtifactType, idOrAddress: string) => string | null;
   root: string;
+  settleDocument: (id: string, source?: string, admit?: CommentAdmission) => Promise<void>;
   token: string;
   url: string;
 }
@@ -59,29 +84,48 @@ export interface ArtifactsServer {
 export type MountedProject = ArtifactsServer;
 
 export async function startArtifactsServer(options: ServerOptions): Promise<ArtifactsServer> {
-  const githubConfig = options.mount ? undefined : options.github ?? readGitHubConfig();
+  const githubConfig = options.mount ? undefined : (options.github ?? readGitHubConfig());
   const ctx = createServerContext(options);
   const { root, stateDir, mount, loopback, token, clients } = ctx;
 
   const browserAuth = createBrowserAuth({
-    get cookieName() { return ctx.cookieName; },
-    get github() { return ctx.github; },
+    get cookieName() {
+      return ctx.cookieName;
+    },
+    get github() {
+      return ctx.github;
+    },
     token,
-    get origin() { return options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${ctx.port}`; },
+    get origin() {
+      return options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${ctx.port}`;
+    },
     loopback,
-    get policy() { return ctx.policy; },
+    get policy() {
+      return ctx.policy;
+    },
     authorized: (req, url) => ctx.isAuthorized(req, url.searchParams.get('key')),
   });
   let stopping = false;
   const requests = new Set<Promise<unknown>>();
   const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    if (stopping || ctx.inputs.paused) { res.setHeader('Retry-After', '1'); send(res, 503, 'Project is being updated; retry shortly'); return; }
+    if (stopping || ctx.inputs.paused) {
+      res.setHeader('Retry-After', '1');
+      send(res, 503, 'Project is being updated; retry shortly');
+      return;
+    }
     req.setTimeout(15_000, () => req.destroy());
     const request = browserAuth(req, res, new URL(req.url ?? '/', 'http://artifacts.local'))
-      .then((handled) => { if (!handled) return dispatchHttp(HTTP_ROUTES, req, res, ctx); })
-      .catch((err: Error) => { if (!res.headersSent) send(res, 500, `Artifacts error: ${err.message}`); });
+      .then((handled) => {
+        if (!handled) return dispatchHttp(HTTP_ROUTES, req, res, ctx);
+      })
+      .catch((err: Error) => {
+        if (!res.headersSent) send(res, 500, `Artifacts error: ${err.message}`);
+      });
     requests.add(request);
-    void request.then(() => requests.delete(request), () => requests.delete(request));
+    void request.then(
+      () => requests.delete(request),
+      () => requests.delete(request),
+    );
     return request;
   };
 
@@ -116,11 +160,21 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
   }
   const port = ctx.port;
   ctx.cookieName = `anjian_artifacts_${port}`;
-  if (githubConfig) ctx.github = createGitHubAuth({ config: githubConfig, token, origin: options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`, cookieName: ctx.cookieName, fetch: options.fetch });
+  if (githubConfig)
+    ctx.github = createGitHubAuth({
+      config: githubConfig,
+      token,
+      origin: options.publicOrigin ?? `http://${urlHostForHttp(options.urlHost)}:${port}`,
+      cookieName: ctx.cookieName,
+      fetch: options.fetch,
+    });
 
   const handleBoardRequest = createBoardRequestHandler(ctx);
   const guardedBoardRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    if (stopping || ctx.inputs.paused) { send(res, 503, 'Project is being updated; retry shortly'); return; }
+    if (stopping || ctx.inputs.paused) {
+      send(res, 503, 'Project is being updated; retry shortly');
+      return;
+    }
     handleBoardRequest(req, res);
   };
   const boardServer = http.createServer(guardedBoardRequest);
@@ -175,55 +229,83 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
 
   const watcher = watchArtifacts(ctx);
   let maintenance: Promise<unknown> = Promise.resolve();
-  const quiesce = <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>): Promise<T> => {
-    const current = maintenance.catch(() => undefined).then(async () => {
-      if (stopping) throw new Error('Project is stopping');
-      const resumeInputs = ctx.inputs.pause();
-      const resumeBackground = ctx.backgroundWrites.pause();
-      const sockets = [...clients];
-      const resume: Array<() => void> = [resumeBackground, () => {
+  const quiesce = <T>(
+    work: () => Promise<T>,
+    prepare?: () => Promise<CommentAdmission>,
+  ): Promise<T> => {
+    const current = maintenance
+      .catch(() => undefined)
+      .then(async () => {
+        if (stopping) throw new Error('Project is stopping');
+        const resumeInputs = ctx.inputs.pause();
+        const resumeBackground = ctx.backgroundWrites.pause();
+        const sockets = [...clients];
+        const resume: Array<() => void> = [
+          resumeBackground,
+          () => {
+            const failures: unknown[] = [];
+            try {
+              resumeInputs();
+            } catch (error) {
+              failures.push(error);
+            }
+            for (const socket of sockets) {
+              try {
+                if (!socket.destroyed) socket.resume();
+              } catch (error) {
+                failures.push(error);
+              }
+            }
+            if (failures.length)
+              throw new AggregateError(failures, 'Project inputs did not resume completely');
+          },
+        ];
         const failures: unknown[] = [];
-        try { resumeInputs(); } catch (error) { failures.push(error); }
-        for (const socket of sockets) {
-          try { if (!socket.destroyed) socket.resume(); } catch (error) { failures.push(error); }
+        let value: T | undefined;
+        try {
+          for (const socket of sockets) socket.pause();
+          const requestsDone = await Promise.allSettled(requests);
+          const errors = requestsDone
+            .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+            .map((result) => result.reason);
+          if (errors.length) throw new AggregateError(errors, 'Project requests did not finish');
+          resume.push(await ctx.recordings.quiesce());
+          resume.push(await ctx.documents.quiesce(prepare));
+          value = await work();
+        } catch (error) {
+          failures.push(error);
+        } finally {
+          for (const release of resume.reverse()) {
+            try {
+              release();
+            } catch (error) {
+              failures.push(error);
+            }
+          }
         }
-        if (failures.length) throw new AggregateError(failures, 'Project inputs did not resume completely');
-      }];
-      const failures: unknown[] = [];
-      let value: T | undefined;
-      try {
-        for (const socket of sockets) socket.pause();
-        const requestsDone = await Promise.allSettled([...requests]);
-        const errors = requestsDone.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map((result) => result.reason);
-        if (errors.length) throw new AggregateError(errors, 'Project requests did not finish');
-        resume.push(await ctx.recordings.quiesce());
-        resume.push(await ctx.documents.quiesce(prepare));
-        value = await work();
-      } catch (error) { failures.push(error); }
-      finally {
-        for (const release of resume.reverse()) {
-          try { release(); } catch (error) { failures.push(error); }
-        }
-      }
-      if (failures.length === 1) throw failures[0];
-      if (failures.length) throw new AggregateError(failures, 'Project maintenance failed');
-      return value as T;
-    });
+        if (failures.length === 1) throw failures[0];
+        if (failures.length) throw new AggregateError(failures, 'Project maintenance failed');
+        return value as T;
+      });
     maintenance = current;
     return current;
   };
   const completedCloseSteps = new Set<string>();
   let closePromise: Promise<void> | null = null;
   let closed = false;
-  const closeServer = (target: http.Server) => new Promise<void>((resolve, reject) => {
-    try {
-      target.close((error) => {
-        if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') reject(error);
-        else resolve();
-      });
-      target.closeAllConnections();
-    } catch (error) { reject(error); }
-  });
+  const closeServer = (target: http.Server) =>
+    new Promise<void>((resolve, reject) => {
+      try {
+        target.close((error) => {
+          if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING')
+            reject(error);
+          else resolve();
+        });
+        target.closeAllConnections();
+      } catch (error) {
+        reject(error);
+      }
+    });
   const close = (prepare?: () => Promise<CommentAdmission>): Promise<void> => {
     if (closed) return Promise.resolve();
     if (closePromise) return closePromise;
@@ -233,21 +315,31 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       const failures: unknown[] = [];
       const step = async (name: string, action: () => void | Promise<void>) => {
         if (completedCloseSteps.has(name)) return;
-        try { await action(); completedCloseSteps.add(name); }
-        catch (error) { failures.push(error); }
+        try {
+          await action();
+          completedCloseSteps.add(name);
+        } catch (error) {
+          failures.push(error);
+        }
       };
       await step('backgroundWrites', () => ctx.backgroundWrites.close());
       await step('watcher', () => watcher.close());
       await step('sockets', () => {
         const errors: unknown[] = [];
         for (const socket of clients) {
-          try { socket.destroy(); } catch (error) { errors.push(error); }
+          try {
+            socket.destroy();
+          } catch (error) {
+            errors.push(error);
+          }
         }
         if (errors.length) throw new AggregateError(errors, 'Failed to close client sockets');
       });
       await step('requests', async () => {
-        const results = await Promise.allSettled([...requests]);
-        const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map((result) => result.reason);
+        const results = await Promise.allSettled(requests);
+        const errors = results
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => result.reason);
         if (errors.length) throw new AggregateError(errors, 'Requests failed while closing');
       });
       await step('timer', () => clearInterval(ctx.listeningTimer));
@@ -257,11 +349,16 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       await step('boardServer', () => closeServer(boardServer));
       await step('server', () => closeServer(server));
       if (failures.length) throw new AggregateError(failures, 'Project did not close completely');
-      if (mount) await step('serverInfo', () => fs.rmSync(path.join(stateDir, 'server-info'), { force: true }));
+      if (mount)
+        await step('serverInfo', () =>
+          fs.rmSync(path.join(stateDir, 'server-info'), { force: true }),
+        );
       if (failures.length) throw new AggregateError(failures, 'Project did not close completely');
       closed = true;
     };
-    closePromise = run().finally(() => { closePromise = null; });
+    closePromise = run().finally(() => {
+      closePromise = null;
+    });
     return closePromise;
   };
 
@@ -287,7 +384,9 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       else serveContent(ctx, res, rest, req.headers.range, mode);
     },
     liveClients: () => clients.size,
-    onMessage: (listener) => { ctx.messageListeners.push(listener); },
+    onMessage: (listener) => {
+      ctx.messageListeners.push(listener);
+    },
     settleDocument: async (id, source, admit) => {
       const session = await ctx.documents.open(id);
       if (!session) return;
@@ -304,18 +403,48 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
         prepared.stateDeltaBytes += metadata.delta;
         prepared.addStateFile(metadata.file, metadata.data);
         const validate = prepared.validate;
-        prepared.validate = () => { validate(); metadata.validate(); };
+        prepared.validate = () => {
+          validate();
+          metadata.validate();
+        };
         return prepared;
       }
-      const prepared = prepareNewRemoteDocument(source, path.join(stateDir, 'document', id, 'doc.loro'), stateDir);
+      const prepared = prepareNewRemoteDocument(
+        source,
+        path.join(stateDir, 'document', id, 'doc.loro'),
+        stateDir,
+      );
       const metadata = ctx.prepareDocumentMetadata(id, prepared.xml, prepared.warnings, files);
       prepared.stateDeltaBytes += metadata.delta;
       prepared.addStateFile(metadata.file, metadata.data);
       const validate = prepared.validate;
-      prepared.validate = () => { validate(); metadata.validate(); };
+      prepared.validate = () => {
+        validate();
+        metadata.validate();
+      };
       return prepared;
     },
-    prepareArtifactUpload: (type, id, stagedDir) => ctx.prepareArtifactMetadata(type, id, stagedDir),
+    feedbackComments: (type, id) => readFeedbackComments(root, type, id),
+    feedbackReply: (type, id, threadId, text, messageId, admit) => {
+      if (type === 'document')
+        ctx.documents.applyAgentCommentOp(
+          id,
+          { op: 'reply', threadId, text },
+          'Agent',
+          admit,
+          messageId,
+        );
+      else
+        ctx.boardComments.applyAgent(
+          id,
+          { op: 'reply', threadId, text },
+          'Agent',
+          admit,
+          messageId,
+        );
+    },
+    prepareArtifactUpload: (type, id, stagedDir) =>
+      ctx.prepareArtifactMetadata(type, id, stagedDir),
     resolve: (type, idOrAddress) => {
       if (!isArtifactLocator(idOrAddress)) return null;
       return resolveArtifactAddress(root, type, idOrAddress)?.id ?? null;

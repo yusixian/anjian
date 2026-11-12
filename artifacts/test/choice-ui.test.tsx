@@ -78,7 +78,17 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ signedIn: false, artifacts: {} }) }),
+    vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        url.endsWith('/feedback/connections')
+          ? { connections: [] }
+          : url.endsWith('/feedback/tasks')
+            ? { tasks: [] }
+            : url.endsWith('/feedback/input')
+              ? { threads: [], selection: [], rounds: [] }
+              : { signedIn: false, artifacts: {} },
+    })),
   );
   vi.stubGlobal(
     'IntersectionObserver',
@@ -173,11 +183,12 @@ test('a submitted round locks its radios and offers a withdrawal', async () => {
   });
 });
 
-test('a listening watcher changes what the submitted bar says', async () => {
+test('a listening watcher does not claim that the Agent is drawing', async () => {
   state.comments.comments.threads = [record({ round: 'r1', submit: true })];
   state.comments.listening = true;
   const view = await mount();
-  expect(bar(view)!.textContent).toContain('drawing the next round');
+  expect(bar(view)!.textContent).not.toContain('drawing the next round');
+  expect(bar(view)!.textContent).toContain('Say done in the terminal');
 });
 
 test('an artboard without choice groups shows no radios and no bar', async () => {

@@ -16,6 +16,8 @@ import {
 } from '../src/viewer/document/DocumentHistory';
 import { DocumentView } from '../src/viewer/document/DocumentView';
 import type { DocumentTransport } from '../src/viewer/document/transport';
+import { FeedbackProvider } from '../src/viewer/feedback/FeedbackProvider';
+import { feedbackApi } from '../src/viewer/feedback/localApi';
 
 vi.mock('@stylexjs/stylex', async (original) => ({
   ...(await original<object>()),
@@ -214,7 +216,13 @@ function localTransport(doc: LoroDoc): DocumentTransport {
     artifact: 'document/test',
     channel: createChannel(),
     send: () => {},
-    meta: async () => ({ id: 'test', title: 'Test', contentBase: '', warnings: [], version: 1 }),
+    meta: async () => ({
+      id: 'test',
+      title: 'Test',
+      contentBase: '',
+      warnings: [],
+      version: 1,
+    }),
     state: async () => ({
       snapshot: Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64'),
       lineage: doc.getTree('lexical').roots()[0]!.id,
@@ -224,27 +232,52 @@ function localTransport(doc: LoroDoc): DocumentTransport {
   };
 }
 
-test('history replaces the comment rail inside the same document layout', async () => {
-  viewport(1600);
-  const { doc } = fixture();
-  const host = await mount(
-    createElement(DocumentView, { id: 'test', transport: localTransport(doc), live: true }),
-  );
-  await vi.waitFor(() => expect(host.querySelector('[contenteditable]')).not.toBeNull());
-  const main = host.querySelector('main');
-  const editor = host.querySelector('[contenteditable]');
-  expect(host.querySelector('aside[aria-label="Comments"]')).not.toBeNull();
-  await act(async () => button(host, 'History').click());
-  await historyReady(host);
-  expect(host.querySelector('main')).toBe(main);
-  expect(main!.querySelector('aside[aria-label="History"]')).not.toBeNull();
-  expect(host.querySelector('aside[aria-label="Comments"]')).toBeNull();
-  expect(main!.querySelector('article [aria-label="Diff"]')).not.toBeNull();
-  expect(host.querySelector('[contenteditable]')).toBe(editor);
-  await act(async () => button(host, 'Comments').click());
-  expect(host.querySelector('[aria-label="Diff"]')).toBeNull();
-  expect(host.querySelector('aside[aria-label="Comments"]')).not.toBeNull();
-});
+test.each([false, true])(
+  'history replaces the comment rail inside the same document layout (feedback=%s)',
+  async (feedback) => {
+    viewport(1600);
+    const { doc } = fixture();
+    const view = createElement(DocumentView, {
+      id: 'test',
+      transport: localTransport(doc),
+      live: true,
+    });
+    if (feedback) {
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(
+          async (url) =>
+            new Response(
+              JSON.stringify(
+                String(url).endsWith('/connections')
+                  ? { connections: [] }
+                  : String(url).endsWith('/tasks')
+                    ? { tasks: [] }
+                    : { threads: [], selection: [] },
+              ),
+            ),
+        );
+      cleanup.push(() => fetchMock.mockRestore());
+    }
+    const host = await mount(
+      feedback ? <FeedbackProvider createApi={feedbackApi}>{view}</FeedbackProvider> : view,
+    );
+    await vi.waitFor(() => expect(host.querySelector('[contenteditable]')).not.toBeNull());
+    const main = host.querySelector('main');
+    const editor = host.querySelector('[contenteditable]');
+    expect(host.querySelector('aside[aria-label="Comments"]')).not.toBeNull();
+    await act(async () => button(host, 'History').click());
+    await historyReady(host);
+    expect(host.querySelector('main')).toBe(main);
+    expect(main!.querySelector('aside[aria-label="History"]')).not.toBeNull();
+    expect(host.querySelector('aside[aria-label="Comments"]')).toBeNull();
+    expect(main!.querySelector('article [aria-label="Diff"]')).not.toBeNull();
+    expect(host.querySelector('[contenteditable]')).toBe(editor);
+    await act(async () => button(host, 'Comments').click());
+    expect(host.querySelector('[aria-label="Diff"]')).toBeNull();
+    expect(host.querySelector('aside[aria-label="Comments"]')).not.toBeNull();
+  },
+);
 
 test('each change names the edit that made it', async () => {
   const { doc } = fixture();

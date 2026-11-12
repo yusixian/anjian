@@ -4,6 +4,12 @@
 source, then push before check/reply. Local live-file and streaming instructions
 below do not synchronize a remote server; upload complete valid artifacts.
 
+**Connected feedback tasks:** follow the task protocol in `remote.md` instead of
+ordinary push/reply or a legacy `comment submit` marker. Read the task's
+`roundContext` for the submitted choices, recommendations and related feedback;
+`threads: []` is valid for a selection-only round. Preserve the submitted boundary
+and board IDs, return changes through the fenced result endpoint, and leave task
+acceptance to the user. Unconnected local/manual rounds retain the workflow below.
 
 An artboard is the space of a business requirement: boards are options,
 groups are questions, pages are areas. You put design explorations on it by

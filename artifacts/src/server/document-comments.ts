@@ -95,7 +95,12 @@ export function asAgentOp(value: unknown): AgentOp | null {
 
 export interface Store<F, H, G> {
   apply: (op: H, admit?: CommentAdmission) => F;
-  applyAgent: (op: G, name?: string, admit?: CommentAdmission) => { file: F; threadId: string; messageId?: string };
+  applyAgent: (
+    op: G,
+    name?: string,
+    admit?: CommentAdmission,
+    messageId?: string,
+  ) => { file: F; threadId: string; messageId?: string };
   current: () => F;
   sync: (admit?: CommentAdmission) => boolean;
   warnings: () => string[];
@@ -167,8 +172,11 @@ export function createStore<F, H, G>(
     if (persist) persist(next, admit);
     else {
       let previous = 0;
-      try { previous = fs.statSync(file).size; }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      try {
+        previous = fs.statSync(file).size;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
       admit?.(Buffer.byteLength(text) - previous);
       writeJsonAtomic(file, next);
     }
@@ -227,9 +235,15 @@ export function createStore<F, H, G>(
       write(next, admit);
       return current;
     },
-    applyAgent: (op, name, admit) => {
+    applyAgent: (op, name, admit, messageId) => {
       sync(admit);
-      const result = rules.agent(current, op, now(), newId, name ?? names.agent());
+      const result = rules.agent(
+        current,
+        op,
+        now(),
+        messageId ? () => messageId : newId,
+        name ?? names.agent(),
+      );
       write(result.file, admit);
       return result;
     },

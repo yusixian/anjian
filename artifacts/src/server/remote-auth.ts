@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import type http from 'node:http';
 import path from 'node:path';
 
-import type { RemoteDevicesResponse, RemotePairingResponse, RemoteProject } from '../shared/devices';
+import type {
+  RemoteDevicesResponse,
+  RemotePairingResponse,
+  RemoteProject,
+} from '../shared/devices';
 import { send, sendJson } from './http';
 
 export type { RemoteProject } from '../shared/devices';
@@ -15,43 +19,46 @@ const MAX_PENDING = 64;
 const MAX_DEVICES = 1_000;
 const MAX_STORE_BYTES = 512 * 1024;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const TOKEN_PATTERN = /^Bearer ([A-Za-z0-9_-]{43})$/;
-const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+const TOKEN_PATTERN = /^Bearer ([\w-]{43})$/;
+const ID_PATTERN = /^[\w-]{22}$/;
 
 export interface RemoteDevice {
+  expiresAt: number;
   id: string;
   name: string;
   projects: string[];
-  expiresAt: number;
 }
 
 interface StoredDevice extends RemoteDevice {
-  tokenHash: string;
   createdAt: number;
   ownerId?: string;
   ownerVersion?: number;
+  tokenHash: string;
 }
 
 interface Pairing {
   deviceCode: string;
-  userCode: string;
-  name: string;
   expiresAt: number;
-  state: 'pending' | 'approved' | 'denied';
-  projects: string[];
   lastPollAt: number;
+  name: string;
   ownerId?: string;
   ownerVersion?: number;
+  projects: string[];
+  state: 'pending' | 'approved' | 'denied';
+  userCode: string;
 }
 
 export interface RemoteAuthOptions {
-  home: string;
-  origin: string;
-  isAdmin: (req: http.IncomingMessage, url: URL) => boolean;
-  projects: (req: http.IncomingMessage) => RemoteProject[];
-  principal?: (req: http.IncomingMessage, url: URL) => { id: string; role: 'owner' | 'member'; sessionVersion: number } | null;
   deviceAllowed?: (ownerId: string, ownerVersion: number, projects: string[]) => boolean;
+  home: string;
+  isAdmin: (req: http.IncomingMessage, url: URL) => boolean;
   now?: () => number;
+  origin: string;
+  principal?: (
+    req: http.IncomingMessage,
+    url: URL,
+  ) => { id: string; role: 'owner' | 'member'; sessionVersion: number } | null;
+  projects: (req: http.IncomingMessage) => RemoteProject[];
   viewerPages?: boolean;
 }
 
@@ -60,7 +67,10 @@ const secret = (bytes: number) => crypto.randomBytes(bytes).toString('base64url'
 const equal = (a: string, b: string) =>
   a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const esc = (value: string) =>
-  value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+  value.replaceAll(
+    /[&<>"']/g,
+    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!,
+  );
 const code = () => {
   const bytes = crypto.randomBytes(12);
   const chars = [...bytes].map((byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('');
@@ -74,14 +84,17 @@ const html = (res: http.ServerResponse, status: number, title: string, body: str
     `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · 案间</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:42rem;margin:2rem auto;padding:0 1rem;color:#222;background:#faf9f6}main{background:#fff;border:1px solid #e5e3dd;border-radius:16px;padding:1.5rem;overflow-wrap:anywhere}code{font-size:.875em}button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #517d9e;outline-offset:3px}@media(max-width:480px){body{margin:1rem auto}main{padding:1rem}}@media(prefers-color-scheme:dark){body{background:#171918;color:#eee}main{background:#212422;border-color:#424842}a{color:#a7c9eb}}h1{line-height:1.3}form{margin:1rem 0}fieldset{border:1px solid #aaa;border-radius:.5rem;padding:1rem}label{display:block;margin:.5rem 0}input[type=text]{font:inherit;padding:.5rem;max-width:100%;box-sizing:border-box}button{font:inherit;padding:.55rem .8rem;margin:.25rem .5rem .25rem 0;cursor:pointer}a{color:#175fa4}</style><main><h1>${esc(title)}</h1>${body}<p><a href="/devices">设备管理</a> · <a href="/">返回工作台</a></p></main></html>`,
     {
       'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy':
+        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
       // Form POSTs need a non-null Origin for the strict CSRF check.
       'Referrer-Policy': 'same-origin',
       'X-Content-Type-Options': 'nosniff',
     },
   );
 
-async function bodyOf(req: http.IncomingMessage): Promise<Record<string, unknown> | null | 'too-large'> {
+async function bodyOf(
+  req: http.IncomingMessage,
+): Promise<Record<string, unknown> | null | 'too-large'> {
   const text = await new Promise<string | 'too-large'>((resolve) => {
     const parts: Buffer[] = [];
     let size = 0;
@@ -99,8 +112,14 @@ async function bodyOf(req: http.IncomingMessage): Promise<Record<string, unknown
         resolve('too-large');
       } else parts.push(chunk);
     };
-    const end = () => { cleanup(); resolve(Buffer.concat(parts).toString('utf8')); };
-    const error = () => { cleanup(); resolve(''); };
+    const end = () => {
+      cleanup();
+      resolve(Buffer.concat(parts).toString('utf8'));
+    };
+    const error = () => {
+      cleanup();
+      resolve('');
+    };
     req.on('data', data);
     req.on('end', end);
     req.on('error', error);
@@ -127,32 +146,50 @@ function readStore(file: string): StoredDevice[] {
   const home = path.dirname(file);
   try {
     const stat = fs.lstatSync(home);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Invalid device store directory');
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw new Error('Invalid device store directory');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
   let stat: fs.Stats;
-  try { stat = fs.lstatSync(file); }
-  catch (error) {
+  try {
+    stat = fs.lstatSync(file);
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_STORE_BYTES)
     throw new Error('Invalid device store');
   const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!parsed || typeof parsed !== 'object' || !('devices' in parsed)) throw new Error('Invalid device store');
+  if (!parsed || typeof parsed !== 'object' || !('devices' in parsed))
+    throw new Error('Invalid device store');
   const devices = (parsed as { devices: unknown }).devices;
-  if (!Array.isArray(devices) || devices.length > MAX_DEVICES || !devices.every((device) => {
-    const d = device as Partial<StoredDevice>;
-    return d && typeof d.id === 'string' && typeof d.name === 'string' &&
-      Array.isArray(d.projects) && d.projects.every((p) => typeof p === 'string') &&
-      typeof d.tokenHash === 'string' && /^[a-f0-9]{64}$/.test(d.tokenHash) &&
-      Number.isFinite(d.createdAt) && Number.isFinite(d.expiresAt) &&
-      (d.ownerId === undefined ? d.ownerVersion === undefined :
-        typeof d.ownerId === 'string' && /^(owner|github:[1-9]\d*)$/.test(d.ownerId) &&
-        Number.isSafeInteger(d.ownerVersion) && Number(d.ownerVersion) >= 0);
-  })) throw new Error('Invalid device store');
+  if (
+    !Array.isArray(devices) ||
+    devices.length > MAX_DEVICES ||
+    !devices.every((device) => {
+      const d = device as Partial<StoredDevice>;
+      return (
+        d &&
+        typeof d.id === 'string' &&
+        typeof d.name === 'string' &&
+        Array.isArray(d.projects) &&
+        d.projects.every((p) => typeof p === 'string') &&
+        typeof d.tokenHash === 'string' &&
+        /^[a-f0-9]{64}$/.test(d.tokenHash) &&
+        Number.isFinite(d.createdAt) &&
+        Number.isFinite(d.expiresAt) &&
+        (d.ownerId === undefined
+          ? d.ownerVersion === undefined
+          : typeof d.ownerId === 'string' &&
+            /^(?:owner|github:[1-9]\d*)$/.test(d.ownerId) &&
+            Number.isSafeInteger(d.ownerVersion) &&
+            Number(d.ownerVersion) >= 0)
+      );
+    })
+  )
+    throw new Error('Invalid device store');
   return devices as StoredDevice[];
 }
 
@@ -177,11 +214,17 @@ function writeStore(file: string, devices: StoredDevice[]) {
     try {
       fs.writeFileSync(fd, data);
       fs.fsyncSync(fd);
-    } finally { fs.closeSync(fd); }
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, file);
     fs.chmodSync(file, 0o600);
   } finally {
-    try { fs.unlinkSync(tmp); } catch { /* renamed or already removed */ }
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      /* renamed or already removed */
+    }
   }
 }
 
@@ -211,11 +254,27 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
     if (!match) return null;
     const hash = digest(match[1]!);
     const device = devices.find((item) => item.expiresAt > now() && equal(item.tokenHash, hash));
-    return device && (options.deviceAllowed?.(device.ownerId ?? 'owner', device.ownerVersion ?? 0, device.projects) ?? true) ? { id: device.id, name: device.name, projects: [...device.projects], expiresAt: device.expiresAt } : null;
+    return device &&
+      (options.deviceAllowed?.(
+        device.ownerId ?? 'owner',
+        device.ownerVersion ?? 0,
+        device.projects,
+      ) ??
+        true)
+      ? {
+          id: device.id,
+          name: device.name,
+          projects: [...device.projects],
+          expiresAt: device.expiresAt,
+        }
+      : null;
   };
-  const principal = (req: http.IncomingMessage, url: URL) => options.principal
-    ? options.principal(req, url)
-    : options.isAdmin(req, url) ? { id: 'owner', role: 'owner' as const, sessionVersion: 0 } : null;
+  const principal = (req: http.IncomingMessage, url: URL) =>
+    options.principal
+      ? options.principal(req, url)
+      : options.isAdmin(req, url)
+        ? { id: 'owner', role: 'owner' as const, sessionVersion: 0 }
+        : null;
   const admin = (req: http.IncomingMessage, url: URL) => Boolean(principal(req, url));
   const manages = (req: http.IncomingMessage, url: URL, device: StoredDevice) => {
     const actor = principal(req, url);
@@ -223,44 +282,94 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
   };
   const sameOriginRead = (req: http.IncomingMessage) =>
     (req.headers.origin === undefined || req.headers.origin === origin) &&
-    (req.headers['sec-fetch-site'] === undefined || req.headers['sec-fetch-site'] === 'same-origin');
-  const sameOriginPost = (req: http.IncomingMessage) => req.headers.origin === origin &&
-    (req.headers['sec-fetch-site'] === undefined || req.headers['sec-fetch-site'] === 'same-origin');
+    (req.headers['sec-fetch-site'] === undefined ||
+      req.headers['sec-fetch-site'] === 'same-origin');
+  const sameOriginPost = (req: http.IncomingMessage) =>
+    req.headers.origin === origin &&
+    (req.headers['sec-fetch-site'] === undefined ||
+      req.headers['sec-fetch-site'] === 'same-origin');
 
-  const handle = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<boolean> => {
+  const handle = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL,
+  ): Promise<boolean> => {
     const route = url.pathname;
-    if (!['/connect', '/devices'].includes(route) && !route.startsWith('/api/remote/auth/')) return false;
+    if (!['/connect', '/devices'].includes(route) && !route.startsWith('/api/remote/auth/'))
+      return false;
     prune();
     if (route === '/api/remote/auth/device' && req.method === 'POST') {
       const remote = req.socket.remoteAddress ?? '';
       const window = attempts.get(remote) ?? { since: now(), count: 0 };
-      if (window.since + 60_000 <= now()) { window.since = now(); window.count = 0; }
+      if (window.since + 60_000 <= now()) {
+        window.since = now();
+        window.count = 0;
+      }
       attempts.set(remote, window);
       if (++window.count > 12 || pending.size >= MAX_PENDING) {
         res.setHeader('Retry-After', '2');
         sendJson(res, 429, { error: 'too many pending device requests' });
         return true;
       }
-      if (req.headers.origin !== undefined) { sendJson(res, 403, { error: 'CLI request required' }); return true; }
+      if (req.headers.origin !== undefined) {
+        sendJson(res, 403, { error: 'CLI request required' });
+        return true;
+      }
       const body = await bodyOf(req);
-      if (body === 'too-large') { res.setHeader('Connection', 'close'); sendJson(res, 413, { error: 'body too large' }); return true; }
+      if (body === 'too-large') {
+        res.setHeader('Connection', 'close');
+        sendJson(res, 413, { error: 'body too large' });
+        return true;
+      }
       const name = typeof body?.name === 'string' ? body.name.trim() : '';
-      if (!name || name.length > 100) { sendJson(res, 400, { error: 'name must be 1-100 characters' }); return true; }
+      if (!name || name.length > 100) {
+        sendJson(res, 400, { error: 'name must be 1-100 characters' });
+        return true;
+      }
       let userCode = code();
-      while ([...pending.values()].some((pairing) => pairing.userCode === userCode)) userCode = code();
+      while ([...pending.values()].some((pairing) => pairing.userCode === userCode))
+        userCode = code();
       const deviceCode = secret(32);
-      pending.set(deviceCode, { deviceCode, userCode, name, expiresAt: now() + PAIRING_MS, state: 'pending', projects: [], lastPollAt: 0 });
-      sendJson(res, 200, { deviceCode, userCode, verificationUri: `${origin}/connect`, expiresIn: PAIRING_MS / 1000, interval: 2 });
+      pending.set(deviceCode, {
+        deviceCode,
+        userCode,
+        name,
+        expiresAt: now() + PAIRING_MS,
+        state: 'pending',
+        projects: [],
+        lastPollAt: 0,
+      });
+      sendJson(res, 200, {
+        deviceCode,
+        userCode,
+        verificationUri: `${origin}/connect`,
+        expiresIn: PAIRING_MS / 1000,
+        interval: 2,
+      });
       return true;
     }
     if (route === '/api/remote/auth/token' && req.method === 'POST') {
-      if (req.headers.origin !== undefined) { sendJson(res, 403, { error: 'CLI request required' }); return true; }
+      if (req.headers.origin !== undefined) {
+        sendJson(res, 403, { error: 'CLI request required' });
+        return true;
+      }
       const body = await bodyOf(req);
-      if (body === 'too-large') { res.setHeader('Connection', 'close'); sendJson(res, 413, { error: 'body too large' }); return true; }
+      if (body === 'too-large') {
+        res.setHeader('Connection', 'close');
+        sendJson(res, 413, { error: 'body too large' });
+        return true;
+      }
       const deviceCode = typeof body?.deviceCode === 'string' ? body.deviceCode : '';
       const pairing = pending.get(deviceCode);
-      if (!pairing) { sendJson(res, 410, { status: 'expired' }); return true; }
-      if (pairing.state === 'denied') { pending.delete(deviceCode); sendJson(res, 403, { status: 'denied' }); return true; }
+      if (!pairing) {
+        sendJson(res, 410, { status: 'expired' });
+        return true;
+      }
+      if (pairing.state === 'denied') {
+        pending.delete(deviceCode);
+        sendJson(res, 403, { status: 'denied' });
+        return true;
+      }
       if (pairing.state === 'pending') {
         if (pairing.lastPollAt && now() - pairing.lastPollAt < 1_000) {
           res.setHeader('Retry-After', '2');
@@ -271,27 +380,59 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
         }
         return true;
       }
-      if (!(options.deviceAllowed?.(pairing.ownerId ?? 'owner', pairing.ownerVersion ?? 0, pairing.projects) ?? true)) {
-        pending.delete(deviceCode); sendJson(res, 403, { status: 'denied' }); return true;
+      if (!(
+        options.deviceAllowed?.(
+          pairing.ownerId ?? 'owner',
+          pairing.ownerVersion ?? 0,
+          pairing.projects,
+        ) ?? true
+      )) {
+        pending.delete(deviceCode);
+        sendJson(res, 403, { status: 'denied' });
+        return true;
       }
       const token = secret(32);
       const device: StoredDevice = {
-        id: secret(16), name: pairing.name, projects: pairing.projects,
-        createdAt: now(), expiresAt: now() + TOKEN_MS, tokenHash: digest(token),
-        ownerId: pairing.ownerId ?? 'owner', ownerVersion: pairing.ownerVersion ?? 0,
+        id: secret(16),
+        name: pairing.name,
+        projects: pairing.projects,
+        createdAt: now(),
+        expiresAt: now() + TOKEN_MS,
+        tokenHash: digest(token),
+        ownerId: pairing.ownerId ?? 'owner',
+        ownerVersion: pairing.ownerVersion ?? 0,
       };
-      try { persist([...devices, device]); } catch { sendJson(res, 503, { error: 'credential storage unavailable' }); return true; }
+      try {
+        persist([...devices, device]);
+      } catch {
+        sendJson(res, 503, { error: 'credential storage unavailable' });
+        return true;
+      }
       pending.delete(deviceCode);
-      sendJson(res, 200, { token, device: { id: device.id, name: device.name, projects: device.projects }, expiresAt: device.expiresAt });
+      sendJson(res, 200, {
+        token,
+        device: { id: device.id, name: device.name, projects: device.projects },
+        expiresAt: device.expiresAt,
+      });
       return true;
     }
     if (route === '/api/remote/auth/session') {
       const device = authenticate(req);
-      if (!device) { sendJson(res, 401, { error: 'invalid device token' }); return true; }
-      if (req.method === 'GET') { sendJson(res, 200, { device }); return true; }
+      if (!device) {
+        sendJson(res, 401, { error: 'invalid device token' });
+        return true;
+      }
+      if (req.method === 'GET') {
+        sendJson(res, 200, { device });
+        return true;
+      }
       if (req.method === 'DELETE') {
-        try { persist(devices.filter((item) => item.id !== device.id)); }
-        catch { sendJson(res, 503, { error: 'credential storage unavailable' }); return true; }
+        try {
+          persist(devices.filter((item) => item.id !== device.id));
+        } catch {
+          sendJson(res, 503, { error: 'credential storage unavailable' });
+          return true;
+        }
         sendJson(res, 200, { revoked: true });
         return true;
       }
@@ -299,10 +440,20 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
       return true;
     }
     if (route === '/api/remote/auth/devices' && req.method === 'GET') {
-      if (!admin(req, url) || !sameOriginRead(req)) { sendJson(res, 403, { error: 'forbidden' }); return true; }
+      if (!admin(req, url) || !sameOriginRead(req)) {
+        sendJson(res, 403, { error: 'forbidden' });
+        return true;
+      }
       const response: RemoteDevicesResponse = {
-        devices: devices.filter((item) => item.expiresAt > now() && manages(req, url, item)).map(({ id, name, projects, createdAt, expiresAt }) =>
-          ({ id, name, projects: [...projects], createdAt, expiresAt })),
+        devices: devices
+          .filter((item) => item.expiresAt > now() && manages(req, url, item))
+          .map(({ id, name, projects, createdAt, expiresAt }) => ({
+            id,
+            name,
+            projects: [...projects],
+            createdAt,
+            expiresAt,
+          })),
         projects: options.projects(req),
         origin,
       };
@@ -310,10 +461,18 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
       return true;
     }
     if (route === '/api/remote/auth/pairing' && req.method === 'GET') {
-      if (!admin(req, url) || !sameOriginRead(req)) { sendJson(res, 403, { error: 'forbidden' }); return true; }
+      if (!admin(req, url) || !sameOriginRead(req)) {
+        sendJson(res, 403, { error: 'forbidden' });
+        return true;
+      }
       const entered = url.searchParams.get('code')?.trim().toUpperCase() ?? '';
-      const pairing = [...pending.values()].find((entry) => entry.userCode === entered && entry.state === 'pending');
-      if (!pairing) { sendJson(res, 410, { error: 'pairing code expired or invalid' }); return true; }
+      const pairing = [...pending.values()].find(
+        (entry) => entry.userCode === entered && entry.state === 'pending',
+      );
+      if (!pairing) {
+        sendJson(res, 410, { error: 'pairing code expired or invalid' });
+        return true;
+      }
       const response: RemotePairingResponse = {
         pairing: { code: pairing.userCode, name: pairing.name, expiresAt: pairing.expiresAt },
         projects: options.projects(req),
@@ -323,70 +482,174 @@ export function createRemoteAuth(options: RemoteAuthOptions) {
     }
     if (route === '/connect' && req.method === 'GET') {
       if (!admin(req, url)) {
-        html(res, 403, '连接设备', '<p>请先通过带访问密钥的完整作品库链接打开案间，再返回本页批准设备。</p>');
+        html(
+          res,
+          403,
+          '连接设备',
+          '<p>请先通过带访问密钥的完整作品库链接打开案间，再返回本页批准设备。</p>',
+        );
         return true;
       }
       if (options.viewerPages) return false;
       const entered = url.searchParams.get('code')?.trim().toUpperCase() ?? '';
-      const pairing = [...pending.values()].find((entry) => entry.userCode === entered && entry.state === 'pending');
+      const pairing = [...pending.values()].find(
+        (entry) => entry.userCode === entered && entry.state === 'pending',
+      );
       const choices = options.projects(req);
-      const fieldset = pairing ? `<p>设备：<strong>${esc(pairing.name)}</strong></p><fieldset><legend>允许访问的项目</legend>${choices.map((project) => `<label><input type="checkbox" name="project" value="${esc(project.id)}"> ${esc(project.name)}</label>`).join('')}</fieldset><button formaction="/api/remote/auth/approve">批准此设备</button><button formaction="/api/remote/auth/deny">拒绝</button>` : entered ? '<p>配对码无效或已过期。</p>' : '';
-      html(res, 200, '连接设备', `<p>在本地 CLI 中运行 <code>anjian login ${esc(origin)}</code>，输入显示的配对码。批准后，本地设备仅能访问所选项目。</p><form method="get" action="/connect"><label>配对码 <input type="text" name="code" value="${esc(entered)}" required autocomplete="off" spellcheck="false"></label><button type="submit">查看设备</button></form>${pairing ? `<form method="post" action="/api/remote/auth/approve"><input type="hidden" name="code" value="${esc(pairing.userCode)}">${fieldset}</form>` : fieldset}`);
+      const fieldset = pairing
+        ? `<p>设备：<strong>${esc(pairing.name)}</strong></p><fieldset><legend>允许访问的项目</legend>${choices.map((project) => `<label><input type="checkbox" name="project" value="${esc(project.id)}"> ${esc(project.name)}</label>`).join('')}</fieldset><button formaction="/api/remote/auth/approve">批准此设备</button><button formaction="/api/remote/auth/deny">拒绝</button>`
+        : entered
+          ? '<p>配对码无效或已过期。</p>'
+          : '';
+      html(
+        res,
+        200,
+        '连接设备',
+        `<p>在本地 CLI 中运行 <code>anjian login ${esc(origin)}</code>，输入显示的配对码。批准后，本地设备仅能访问所选项目。</p><form method="get" action="/connect"><label>配对码 <input type="text" name="code" value="${esc(entered)}" required autocomplete="off" spellcheck="false"></label><button type="submit">查看设备</button></form>${pairing ? `<form method="post" action="/api/remote/auth/approve"><input type="hidden" name="code" value="${esc(pairing.userCode)}">${fieldset}</form>` : fieldset}`,
+      );
       return true;
     }
     if (route === '/devices' && req.method === 'GET') {
-      if (!admin(req, url)) { html(res, 403, '设备管理', '<p>请先通过带访问密钥的完整作品库链接打开案间。</p>'); return true; }
+      if (!admin(req, url)) {
+        html(res, 403, '设备管理', '<p>请先通过带访问密钥的完整作品库链接打开案间。</p>');
+        return true;
+      }
       if (options.viewerPages) return false;
-      html(res, 200, '设备管理', `<p>这里可以撤销本地 CLI 设备的访问权限。</p><ul>${devices.filter((item) => item.expiresAt > now() && manages(req, url, item)).map((item) => `<li><strong>${esc(item.name)}</strong> · ${new Date(item.expiresAt).toLocaleDateString('zh-CN')} 到期 · ${item.projects.length} 个项目<form action="/api/remote/auth/revoke" method="post"><input type="hidden" name="id" value="${esc(item.id)}"><button type="submit">撤销</button></form></li>`).join('') || '<li>尚无授权设备。</li>'}</ul><p><a href="/connect">连接新设备</a></p>`);
+      html(
+        res,
+        200,
+        '设备管理',
+        `<p>这里可以撤销本地 CLI 设备的访问权限。</p><ul>${
+          devices
+            .filter((item) => item.expiresAt > now() && manages(req, url, item))
+            .map(
+              (item) =>
+                `<li><strong>${esc(item.name)}</strong> · ${new Date(item.expiresAt).toLocaleDateString('zh-CN')} 到期 · ${item.projects.length} 个项目<form action="/api/remote/auth/revoke" method="post"><input type="hidden" name="id" value="${esc(item.id)}"><button type="submit">撤销</button></form></li>`,
+            )
+            .join('') || '<li>尚无授权设备。</li>'
+        }</ul><p><a href="/connect">连接新设备</a></p>`,
+      );
       return true;
     }
-    if (['/api/remote/auth/approve', '/api/remote/auth/deny', '/api/remote/auth/revoke'].includes(route) && req.method === 'POST') {
+    if (
+      ['/api/remote/auth/approve', '/api/remote/auth/deny', '/api/remote/auth/revoke'].includes(
+        route,
+      ) &&
+      req.method === 'POST'
+    ) {
       const wantsJson = req.headers['content-type']?.startsWith('application/json') ?? false;
       const respond = (status: number, error: string, title: string, description: string) => {
         if (wantsJson) sendJson(res, status, { error });
         else html(res, status, title, `<p>${description}</p>`);
       };
-      if (!admin(req, url) || !sameOriginPost(req)) { respond(403, 'forbidden', '无权操作', '请从案间页面发起操作。'); return true; }
+      if (!admin(req, url) || !sameOriginPost(req)) {
+        respond(403, 'forbidden', '无权操作', '请从案间页面发起操作。');
+        return true;
+      }
       const body = await bodyOf(req);
-      if (!admin(req, url) || !sameOriginPost(req)) { respond(403, 'forbidden', '无权操作', '请从案间页面发起操作。'); return true; }
-      if (body === 'too-large') { res.setHeader('Connection', 'close'); respond(413, 'body too large', '请求过大', '提交的数据过大。'); return true; }
-      if (!body) { respond(400, 'invalid body', '请求无效', '提交的数据无效。'); return true; }
+      if (!admin(req, url) || !sameOriginPost(req)) {
+        respond(403, 'forbidden', '无权操作', '请从案间页面发起操作。');
+        return true;
+      }
+      if (body === 'too-large') {
+        res.setHeader('Connection', 'close');
+        respond(413, 'body too large', '请求过大', '提交的数据过大。');
+        return true;
+      }
+      if (!body) {
+        respond(400, 'invalid body', '请求无效', '提交的数据无效。');
+        return true;
+      }
       if (route === '/api/remote/auth/revoke') {
         const id = typeof body.id === 'string' ? body.id : '';
-        if (!ID_PATTERN.test(id)) { respond(400, 'invalid device', '设备无效', '设备编号无效。'); return true; }
+        if (!ID_PATTERN.test(id)) {
+          respond(400, 'invalid device', '设备无效', '设备编号无效。');
+          return true;
+        }
         const device = devices.find((item) => item.id === id);
-        if (device && !manages(req, url, device)) { respond(404, 'device not found', '设备不存在', '设备不存在。'); return true; }
-        try { persist(devices.filter((item) => item.id !== id)); }
-        catch { respond(503, 'credential storage unavailable', '撤销失败', '设备凭证暂时无法更新。'); return true; }
+        if (device && !manages(req, url, device)) {
+          respond(404, 'device not found', '设备不存在', '设备不存在。');
+          return true;
+        }
+        try {
+          persist(devices.filter((item) => item.id !== id));
+        } catch {
+          respond(503, 'credential storage unavailable', '撤销失败', '设备凭证暂时无法更新。');
+          return true;
+        }
         if (wantsJson) sendJson(res, 200, { revoked: true });
         else html(res, 200, '设备已撤销', '<p>设备凭证现在无法再访问案间。</p>');
         return true;
       }
       const userCode = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
       const pairing = [...pending.values()].find((entry) => equal(entry.userCode, userCode));
-      if (!pairing || pairing.state !== 'pending') { respond(410, 'pairing code expired or invalid', '配对码无效', '请重新运行本地 CLI 生成配对码。'); return true; }
+      if (!pairing || pairing.state !== 'pending') {
+        respond(
+          410,
+          'pairing code expired or invalid',
+          '配对码无效',
+          '请重新运行本地 CLI 生成配对码。',
+        );
+        return true;
+      }
       if (route === '/api/remote/auth/deny') pairing.state = 'denied';
       else {
         const selected = Array.isArray(body.projects) ? body.projects : [];
         const available = new Set(options.projects(req).map((project) => project.id));
-        if (selected.length === 0 || selected.length > available.size || !selected.every((id) => typeof id === 'string' && available.has(id)) || new Set(selected).size !== selected.length) {
+        if (
+          selected.length === 0 ||
+          selected.length > available.size ||
+          !selected.every((id) => typeof id === 'string' && available.has(id)) ||
+          new Set(selected).size !== selected.length
+        ) {
           respond(400, 'invalid projects', '项目无效', '请返回配对页面，至少选择一个有效项目。');
           return true;
         }
         const actor = principal(req, url);
-        if (!actor) { respond(403, 'forbidden', '无权操作', '登录状态已变化。'); return true; }
+        if (!actor) {
+          respond(403, 'forbidden', '无权操作', '登录状态已变化。');
+          return true;
+        }
         pairing.ownerId = actor.id;
         pairing.ownerVersion = actor.sessionVersion;
         pairing.projects = selected as string[];
         pairing.state = 'approved';
       }
-      if (wantsJson) sendJson(res, 200, route.endsWith('deny') ? { denied: true } : { approved: true });
-      else html(res, 200, route.endsWith('deny') ? '已拒绝连接' : '设备已授权', '<p>可以返回本地终端继续使用。</p>');
+      if (wantsJson)
+        sendJson(res, 200, route.endsWith('deny') ? { denied: true } : { approved: true });
+      else
+        html(
+          res,
+          200,
+          route.endsWith('deny') ? '已拒绝连接' : '设备已授权',
+          '<p>可以返回本地终端继续使用。</p>',
+        );
       return true;
     }
     sendJson(res, 405, { error: 'method not allowed' });
     return true;
   };
 
-  return { handle, authenticate, close: () => { pending.clear(); attempts.clear(); } };
+  const deviceAuthorized = (id: string, project: string) =>
+    devices.some(
+      (device) =>
+        device.id === id &&
+        device.expiresAt > now() &&
+        device.projects.includes(project) &&
+        (options.deviceAllowed?.(
+          device.ownerId ?? 'owner',
+          device.ownerVersion ?? 0,
+          device.projects,
+        ) ??
+          true),
+    );
+  return {
+    handle,
+    authenticate,
+    deviceAuthorized,
+    close: () => {
+      pending.clear();
+      attempts.clear();
+    },
+  };
 }
