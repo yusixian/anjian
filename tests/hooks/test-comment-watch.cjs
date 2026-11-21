@@ -233,18 +233,33 @@ function launcher(t) {
   for (const name of fs.readdirSync(source))
     if (/\.(?:cjs|json)$/.test(name))
       fs.copyFileSync(path.join(source, name), path.join(app, name));
-  fs.writeFileSync(path.join(app, 'cli.cjs'), "console.log('{}');\n");
-  return (project, session, ...args) => {
+  fs.writeFileSync(
+    path.join(app, 'cli.cjs'),
+    `
+const args = process.argv.slice(2);
+const option = (name) => args[args.indexOf(name) + 1];
+process.send?.({ type: 'artifact-opened', project: option('--project-dir'), artifact: option('--artifact') });
+console.log('{}');
+`,
+  );
+  const serverHome = path.join(app, 'server');
+  const run = (project, session, ...args) => {
     const result = spawnSync(
       process.execPath,
       [path.join(app, 'anjian.cjs'), ...args, '--json', '--project-dir', project],
       {
-        env: { ...process.env, CODEX_THREAD_ID: undefined, CLAUDE_CODE_SESSION_ID: session },
+        env: {
+          ...process.env,
+          CODEX_THREAD_ID: undefined,
+          CLAUDE_CODE_SESSION_ID: session,
+          ANJIAN_SERVER_HOME: serverHome,
+        },
         encoding: 'utf8',
       },
     );
     assert.equal(result.status, 0, result.stderr);
   };
+  return { run, serverHome };
 }
 
 async function until(check, deadlineMs = 3500) {
@@ -254,10 +269,13 @@ async function until(check, deadlineMs = 3500) {
 
 test('a Claude Code session hears only comments on artifacts it opened through the launcher', async (t) => {
   const f = fixture(t);
-  const run = launcher(t);
+  const { run, serverHome } = launcher(t);
   const mine = randomUUID();
   const other = randomUUID();
-  const watcher = monitor(t, f.project, { CLAUDE_CODE_SESSION_ID: mine });
+  const watcher = monitor(t, f.project, {
+    CLAUDE_CODE_SESSION_ID: mine,
+    ANJIAN_SERVER_HOME: serverHome,
+  });
   run(f.project, mine, 'start', '--artifact', 'artboard/chat');
   run(f.project, other, 'start', '--artifact', 'artboard/mac-app-shell');
   run(f.project, mine, 'start');
@@ -276,6 +294,23 @@ test('a Claude Code session hears only comments on artifacts it opened through t
     ['artboard/chat'],
     watcher.errors,
   );
+});
+
+test('Claude receives feedback from a separately opened project in the same session', async (t) => {
+  const local = fixture(t);
+  const external = fixture(t);
+  const { run, serverHome } = launcher(t);
+  const session = randomUUID();
+  const watcher = monitor(t, local.project, {
+    CLAUDE_CODE_SESSION_ID: session,
+    ANJIAN_SERVER_HOME: serverHome,
+  });
+  run(external.project, session, 'start', '--artifact', 'document/plan');
+  external.save('document/other', [thread()]);
+  external.save('document/plan', [thread()]);
+  await until(() => watcher.output.includes('document/plan'));
+  assert.ok(watcher.output.includes(external.project));
+  assert.equal(watcher.output.trim().split('\n').length, 1, watcher.errors);
 });
 
 test('the declared plugin monitor notices artifacts created later from a repository subdirectory', async (t) => {

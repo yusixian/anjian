@@ -1,5 +1,6 @@
 'use strict';
 
+const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -38,13 +39,23 @@ function aliveFile(project, host, session) {
   return path.join(project, '.anjian/artifacts/.state', HOSTS[host].dir, `${session}.alive`);
 }
 
-function beat(project, host, session, now = Date.now()) {
+function beatFile(file, now = Date.now()) {
   try {
-    const file = aliveFile(project, host, session);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, String(now));
   } catch {
     // A missing heartbeat only makes the viewer say "tell the terminal"; never fail the watch.
+  }
+}
+
+function beatSources(project, host, session, sources) {
+  beatFile(aliveFile(project, host, session));
+  for (const [target, artifacts] of sources) {
+    for (const artifact of artifacts) {
+      if (!ARTIFACT.test(artifact)) continue;
+      const dir = path.dirname(aliveFile(target, host, session));
+      beatFile(path.join(dir, 'opened', artifact, `${session}.alive`));
+    }
   }
 }
 
@@ -56,6 +67,68 @@ function sessionOf(host, env = process.env) {
 function subscriptions(project, host, session) {
   const file = readJson(subscriptionFile(project, host, session));
   return new Set(Array.isArray(file?.artifacts) ? file.artifacts : []);
+}
+
+function indexDir(host, session, env = process.env) {
+  const home = env.ANJIAN_SERVER_HOME || path.join(os.homedir(), '.anjian', 'server');
+  return path.join(home, HOSTS[host].dir, 'subscriptions', session);
+}
+
+// Opened artifacts follow the session across watcher restarts. Only live watchers refresh heartbeats.
+function registerOpened(project, artifact, env = process.env) {
+  const host = sessionOf('codex', env) ? 'codex' : sessionOf('claude', env) ? 'claude' : null;
+  if (
+    !host ||
+    typeof project !== 'string' ||
+    !path.isAbsolute(project) ||
+    !ARTIFACT.test(artifact || '')
+  )
+    return;
+  const dir = indexDir(host, sessionOf(host, env), env);
+  const key = createHash('sha256')
+    .update(JSON.stringify([project, artifact]))
+    .digest('hex');
+  const temp = path.join(dir, `.${randomUUID()}.tmp`);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.writeFileSync(temp, JSON.stringify({ project, artifact }), { mode: 0o600 });
+    fs.renameSync(temp, path.join(dir, `${key}.json`));
+  } finally {
+    fs.rmSync(temp, { force: true });
+  }
+}
+
+function subscriptionSources(project, host, session) {
+  // Claude's Bash hook uses forward slashes for Windows drive paths.
+  const local = path.normalize(project);
+  const sources = new Map([[local, subscriptions(local, host, session)]]);
+  const dir = indexDir(host, session);
+  let files;
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return sources;
+  }
+  for (const file of files) {
+    if (!/^[a-f0-9]{64}\.json$/.test(file)) continue;
+    const opened = readJson(path.join(dir, file));
+    if (
+      typeof opened?.project !== 'string' ||
+      !path.isAbsolute(opened.project) ||
+      !ARTIFACT.test(opened.artifact || '')
+    )
+      continue;
+    let target;
+    try {
+      target = fs.realpathSync(opened.project);
+    } catch {
+      continue;
+    }
+    if (target !== opened.project) continue;
+    if (!sources.has(target)) sources.set(target, new Set());
+    sources.get(target).add(opened.artifact);
+  }
+  return sources;
 }
 
 // The launcher knows the real argv and cwd; hook text cannot safely reconstruct shell commands.
@@ -86,11 +159,12 @@ function register(args, env = process.env) {
 
 module.exports = {
   aliveFile,
-  beat,
+  beatSources,
   projectRoot,
   register,
+  registerOpened,
   sessionOf,
   subscriptionFile,
-  subscriptions,
+  subscriptionSources,
   UUID,
 };

@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { unreadThreadCount } = require('./comment-threads.cjs');
-const { beat, sessionOf, subscriptions } = require('./comment-subscriptions.cjs');
+const { beatSources, sessionOf, subscriptionSources } = require('./comment-subscriptions.cjs');
 
 const cursorKey = (env) => (env.CLAUDE_CODE_IS_COWORK ? 'Claude Cowork' : 'Claude Code');
 
@@ -150,15 +150,35 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
   };
 }
 
+function createProjectPoll(key) {
+  const polls = new Map();
+  return (sources) => {
+    const events = [];
+    for (const project of polls.keys()) {
+      if (!sources.has(project)) polls.delete(project);
+    }
+    for (const [project, artifacts] of sources) {
+      if (!polls.has(project)) polls.set(project, createCommentWatch(project, key));
+      for (const event of polls.get(project)(artifacts)) events.push({ project, event });
+    }
+    return events;
+  };
+}
+
 function main() {
   const project = process.argv[2] || process.cwd();
-  const poll = createCommentWatch(project);
   // Without a session ID (older Claude Code) there is nothing to route by, so every artifact counts.
   const session = sessionOf('claude');
+  const write = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+  const poll = session ? createProjectPoll() : createCommentWatch(project);
   const emit = () => {
-    if (session) beat(project, 'claude', session);
-    const artifacts = session ? subscriptions(project, 'claude', session) : undefined;
-    for (const event of poll(artifacts)) process.stdout.write(`${JSON.stringify(event)}\n`);
+    if (session) {
+      const sources = subscriptionSources(project, 'claude', session);
+      beatSources(project, 'claude', session, sources);
+      for (const { event } of poll(sources)) write(event);
+    } else {
+      for (const event of poll()) write(event);
+    }
   };
   emit();
   const timer = setInterval(emit, 1000);
@@ -170,5 +190,5 @@ function main() {
   process.on('SIGTERM', stop);
 }
 
-module.exports = { createCommentWatch, main, unreadCount };
+module.exports = { createCommentWatch, createProjectPoll, main, unreadCount };
 if (require.main === module) main();

@@ -4,12 +4,12 @@ const { execFile, execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createCommentWatch, unreadCount } = require('./comment-watch.cjs');
+const { createProjectPoll, unreadCount } = require('./comment-watch.cjs');
 const {
-  beat,
+  beatSources,
   projectRoot,
   register,
-  subscriptionFile,
+  subscriptionSources,
   UUID,
 } = require('./comment-subscriptions.cjs');
 
@@ -75,7 +75,6 @@ function context(input, env = process.env) {
     session: input.session_id,
     project,
     file: path.join(data, 'codex-comment-watch', 'workers', `${input.session_id}.json`),
-    subscriptions: subscriptionFile(project, 'codex', input.session_id),
   };
 }
 
@@ -186,7 +185,7 @@ function watch(ctx, input) {
   if (!state) return;
   state.remote = remote;
   fs.writeFileSync(ctx.file, JSON.stringify(state), { mode: 0o600 });
-  const poll = createCommentWatch(ctx.project, 'Codex');
+  const poll = createProjectPoll('Codex');
   const pending = new Map();
   const controller = new AbortController();
   let running = false;
@@ -205,22 +204,22 @@ function watch(ctx, input) {
   };
   const tick = async () => {
     if (readJson(ctx.file)?.token !== state.token) return stop();
-    beat(ctx.project, 'codex', ctx.session);
+    const sources = subscriptionSources(ctx.project, 'codex', ctx.session);
+    beatSources(ctx.project, 'codex', ctx.session, sources);
     if (running) return;
-    const subscriptions = new Set(readJson(ctx.subscriptions)?.artifacts || []);
-    for (const event of poll(subscriptions))
-      pending.set(
-        event.type === 'anjian-choices' ? `${event.artifact}#${event.round}` : event.artifact,
-        event,
-      );
+    for (const { project, event } of poll(sources)) {
+      const key = JSON.stringify([project, event.artifact, event.round]);
+      pending.set(key, { project, event });
+    }
     if (!pending.size || Date.now() < nextAttempt) return;
-    const [key, event] = pending.entries().next().value;
-    if (!subscriptions.has('*') && !subscriptions.has(event.artifact)) {
+    const [key, { project, event }] = pending.entries().next().value;
+    const artifacts = sources.get(project);
+    if (!artifacts?.has('*') && !artifacts?.has(event.artifact)) {
       pending.delete(key);
       return;
     }
     if (event.type !== 'anjian-choices') {
-      const unread = unreadCount(ctx.project, event.artifact, 'Codex');
+      const unread = unreadCount(project, event.artifact, 'Codex');
       if (unread === null) return;
       if (!unread) {
         pending.delete(key);

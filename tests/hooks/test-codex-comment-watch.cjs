@@ -45,6 +45,7 @@ function fixture(t) {
     ...process.env,
     PLUGIN_ROOT: repo,
     PLUGIN_DATA: data,
+    ANJIAN_SERVER_HOME: path.join(root, 'server'),
     CODEX_THREAD_ID: inherited,
     ANJIAN_CODEX_REMOTE: 'unix:///tmp/anjian-test.sock',
     PATH: `${bin}${path.delimiter}${process.env.PATH}`,
@@ -63,26 +64,23 @@ function fixture(t) {
       fs.copyFileSync(path.join(path.dirname(adapter), name), path.join(app, name));
   fs.writeFileSync(
     path.join(app, 'cli.cjs'),
-    "console.log(JSON.stringify({type:'server-started'}));\n",
+    `
+const args = process.argv.slice(2);
+const option = (name) => args[args.indexOf(name) + 1];
+if (args.includes('--fail-start')) process.exit(1);
+process.send?.({ type: 'artifact-opened', project: option('--project-dir'), artifact: option('--artifact') });
+if (args.includes('--foreground')) setInterval(() => {}, 1000);
+console.log(JSON.stringify({ type: 'server-started' }));
+`,
   );
-  const open = (artifact, session = id) => {
+  const launcher = path.join(app, 'anjian.cjs');
+  const open = (artifact, session = id, target = project, extra = []) => {
     const result = spawnSync(
       process.execPath,
-      [
-        path.join(app, 'anjian.cjs'),
-        'start',
-        '--json',
-        '--project-dir',
-        project,
-        '--artifact',
-        artifact,
-      ],
-      {
-        env: { ...env, CODEX_THREAD_ID: session },
-        encoding: 'utf8',
-      },
+      [launcher, 'start', '--json', '--project-dir', target, '--artifact', artifact, ...extra],
+      { env: { ...env, CODEX_THREAD_ID: session }, encoding: 'utf8' },
     );
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, extra.includes('--fail-start') ? 1 : 0, result.stderr);
   };
   const read = () =>
     fs.existsSync(log)
@@ -93,8 +91,8 @@ function fixture(t) {
           .filter(Boolean)
           .map((line) => JSON.parse(line))
       : [];
-  const write = (artifact, value) => {
-    const file = path.join(project, '.anjian/artifacts', artifact, 'comments.json');
+  const write = (artifact, value, target = project) => {
+    const file = path.join(target, '.anjian/artifacts', artifact, 'comments.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value));
   };
@@ -135,7 +133,21 @@ function fixture(t) {
     }
     fs.rmSync(root, { recursive: true, force: true });
   });
-  return { root, project, data, env, input, read, write, comments, start, fail, open };
+  return {
+    root,
+    project,
+    data,
+    env,
+    input,
+    read,
+    write,
+    comments,
+    start,
+    fail,
+    open,
+    launcher,
+    children,
+  };
 }
 
 function hooks() {
@@ -205,6 +217,87 @@ test('comments wake only the session that opened that artifact through the launc
   f.write('artboard/unrelated', f.comments());
   await delay(1200);
   assert.equal(f.read().length, 1);
+});
+
+test('an explicit successful worktree open queues only its exact artifact to the active session', async (t) => {
+  const f = fixture(t);
+  const worktree = path.join(f.root, 'linked worktree');
+  for (const args of [
+    ['init', '-q'],
+    [
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=test@example.com',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'base',
+    ],
+    ['worktree', 'add', '-q', '--detach', worktree],
+  ]) {
+    const result = spawnSync('git', args, { cwd: f.project, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const bareStart = spawnSync(process.execPath, [f.launcher, 'start', '--project-dir', worktree], {
+    env: { ...f.env, CODEX_THREAD_ID: id },
+  });
+  assert.equal(bareStart.status, 0);
+  f.open('document/other-session', inherited, worktree);
+  f.open('document/failed', id, worktree, ['--fail-start']);
+  const rounds = (target, state) => {
+    const file = path.join(target, '.anjian/artifacts/.state/artboard/settings/rounds.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ rounds: [{ id: 'r1', state }] }));
+  };
+  for (const target of [f.project, worktree]) {
+    f.open('artboard/settings', id, target);
+    f.write('artboard/settings', { version: 1, threads: [] }, target);
+    rounds(target, 'open');
+  }
+  f.open('document/plan');
+  f.write('document/other-session', f.comments(), worktree);
+  f.write('document/failed', f.comments(), worktree);
+  f.write('document/unrelated', f.comments(), worktree);
+  const foreground = spawn(
+    process.execPath,
+    [f.launcher, 'start', '--project-dir', worktree, '--artifact', 'document/plan', '--foreground'],
+    { env: { ...f.env, CODEX_THREAD_ID: id }, stdio: 'ignore' },
+  );
+  f.children.push(foreground);
+  const worktreeBeat = path.join(
+    worktree,
+    '.anjian/artifacts/.state/codex-comment-watch/opened/document/plan',
+    `${id}.alive`,
+  );
+  f.start({}, false);
+  await until(
+    () => fs.existsSync(worktreeBeat),
+    'foreground start never subscribed before exiting',
+  );
+  assert.equal(foreground.exitCode, null);
+  const broadBeat = path.join(
+    worktree,
+    '.anjian/artifacts/.state/codex-comment-watch',
+    `${id}.alive`,
+  );
+  assert.equal(fs.existsSync(broadBeat), false, 'external wildcard must not appear active');
+  f.write('document/plan', f.comments());
+  f.write('document/plan', f.comments(), worktree);
+  await until(() => f.read().length === 2, 'same-name artifacts were not delivered separately');
+  await delay(1200);
+  const comments = f.read();
+  assert.equal(comments.length, 2);
+  for (const target of [f.project, worktree]) rounds(target, 'submitted');
+  await until(() => f.read().length === 4, 'same-name rounds were not delivered separately');
+  const queued = f.read();
+  for (const args of queued) assert.equal(args[args.indexOf('--thread') + 1], id);
+  const messages = (commands) => commands.map((args) => args[args.indexOf('--message') + 1]);
+  for (const batch of [comments, queued.slice(2)]) {
+    assert.ok(messages(batch).some((message) => message.includes('linked worktree')));
+    assert.ok(messages(batch).some((message) => message.includes('project with')));
+  }
+  assert.ok(messages(queued.slice(2)).every((message) => message.includes('round r1')));
 });
 
 test('hosts without PLUGIN_DATA keep worker ownership separate from launcher subscriptions', async (t) => {

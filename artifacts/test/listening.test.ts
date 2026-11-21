@@ -46,3 +46,13 @@ test('a Codex session subscribed to everything is listening', () => {
   const dir = stateDir([{ host: 'codex', artifacts: ['*'], beat: NOW }]);
   expect(listeningOn(dir, 'artboard/pick', NOW)).toBe(true);
 });
+
+test('an exact opened-artifact heartbeat does not activate an older wildcard subscription', () => {
+  const dir = stateDir([{ host: 'codex', artifacts: ['*'] }]);
+  const opened = path.join(dir, 'codex-comment-watch/opened/artboard/pick');
+  fs.mkdirSync(opened, { recursive: true });
+  fs.writeFileSync(path.join(opened, '00000000-0000-4000-8000-000000000000.alive'), String(NOW));
+  expect(listeningOn(dir, 'artboard/pick', NOW)).toBe(true);
+  expect(listeningOn(dir, 'artboard/other', NOW)).toBe(false);
+  expect(listeningOn(dir, 'artboard/pick', NOW + 11_000)).toBe(false);
+});
