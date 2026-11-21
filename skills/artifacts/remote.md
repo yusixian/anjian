@@ -240,6 +240,27 @@ print or copy claim-file contents. A missing private record needs explicit recov
 not token retrieval. Same-operation retries reuse the record; a later recovery round
 uses a new file. Recheck returned state before editing; a replay may already be done.
 
+### Reply to a document question
+
+When the task contains `questionContext`, read its saved `definition` and
+`answer`. For a question with options, use the option's saved ID to look up its
+label. That snapshot governs the reply even if the document wording has changed.
+Claim using the same command and private claim file described above. Write a
+private result manifest with `operationId` and `questionReply`, then submit it
+with `remote feedback result`. This reply belongs to the question task and leaves
+the document content as it was.
+
+```json
+{ "operationId": "acknowledge-ship-date", "questionReply": "I recorded your preferred ship date." }
+```
+
+Re-read the task through `remote feedback show` to confirm
+`awaiting_review` and `questionResult.reply`. Retry an interrupted result with
+the same manifest and claim file. The reader can review the reply in the question
+and accept it from the feedback panel.
+
+### Return a revision for other feedback
+
 For fresh execution, safe-pull the current artifact, preserving local changes, and
 compare against the claimed `inputRevision`. Read the type reference, edit only the
 requested content, and validate source and relevant browser behavior. Renew with

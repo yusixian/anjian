@@ -583,6 +583,28 @@
     "waitingDocument": "等待文档内容…",
     "waitingCanvas": "等待画布内容…"
   },
+  "question": {
+    "recommended": "推荐",
+    "placeholder": "写下你的回答…",
+    "previous": "此回答对应修改前的问题。",
+    "replyReady": "Agent 已回复，可以查看回答和回复。",
+    "submittedAnswer": "已提交的回答",
+    "conflict": "已保存的回答变为“{{answer}}”。你刚编辑的内容仍保留在这里。",
+    "empty": "暂无回答",
+    "restore": "使用已保存的回答",
+    "keep": "保留我的修改",
+    "target": "选择 Agent",
+    "save": "保存草稿",
+    "submit": "发送给 {{agent}}",
+    "noAgent": "连接此文档的 Agent 后即可发送回答。你可以先保存草稿。",
+    "withdraw": "撤回提交",
+    "saved": "草稿已保存",
+    "changed": "问题或任务已更新，请核对后重试。",
+    "failed": "无法确认操作结果。你的回答仍保留在这里。",
+    "syncing": "正在等待最新题目载入。",
+    "loadFailed": "暂时无法获取最新回答。",
+    "reload": "刷新"
+  },
   "questions": {
     "previous": "上一题",
     "next": "下一题",

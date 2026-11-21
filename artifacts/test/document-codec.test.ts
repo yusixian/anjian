@@ -1,12 +1,17 @@
+import { $reconcileRoot, createLoroBinding } from '@haklex/rich-collab-loro';
+import { $getRoot } from 'lexical';
+import { LoroDoc } from 'loro-crdt';
 import { describe, expect, test } from 'vitest';
 
 import {
   boxDrawingDiagrams,
+  documentQuestions,
   documentTitle,
   parseDocument,
   serializeDocument,
   stampBlockIds,
 } from '../src/server/document-codec';
+import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 
 const sample = `<doc>
   <h2 id="h1">Relay <b>sync</b></h2>
@@ -41,6 +46,81 @@ describe('parseDocument', () => {
       state.root.children.map((node) => node.type),
     );
     expect(serializeDocument(again)).toContain('const a = 1 &lt; 2');
+  });
+
+  test('round trips presets and open questions with stable keys independent of block ids', () => {
+    const state = parseDocument(`<doc>
+      <p>请回答两个问题。</p>
+      <ask key="delivery" prompt="A &amp; B &lt; C？"
+        options='[{"id":"now","label":"现在 &amp; 今日"},{"id":"later","label":"稍后"}]'
+        recommended="now"/>
+      <ask key="notes" prompt="还有什么需要补充？"/>
+    </doc>`);
+    const stamped = stampBlockIds(state);
+    const xml = serializeDocument(stamped);
+    const reloaded = parseDocument(xml);
+    expect(reloaded).toEqual(stamped);
+    expect(documentQuestions(reloaded)).toEqual([
+      {
+        id: 'delivery',
+        prompt: 'A & B < C？',
+        options: [
+          { id: 'now', label: '现在 & 今日' },
+          { id: 'later', label: '稍后' },
+        ],
+        recommended: 'now',
+      },
+      { id: 'notes', prompt: '还有什么需要补充？' },
+    ]);
+  });
+
+  test('reconciles a question edit through Loro without replacing its node', () => {
+    const editor = createDocumentHeadlessEditor();
+    const doc = new LoroDoc();
+    const binding = createLoroBinding(editor, doc);
+    const question = (prompt: string) =>
+      parseDocument(`<doc><ask id="b1" key="question" prompt="${prompt}"/></doc>`);
+    editor.update(() => $reconcileRoot(question('Before').root as never), { discrete: true });
+    const peer = new LoroDoc();
+    peer.import(doc.export({ mode: 'snapshot' }));
+    const peerEditor = createDocumentHeadlessEditor();
+    const peerBinding = createLoroBinding(peerEditor, peer);
+    const key = () => peerEditor.getEditorState().read(() => $getRoot().getFirstChild()?.getKey());
+
+    try {
+      const originalKey = key();
+      expect(originalKey).toBeDefined();
+
+      const from = doc.oplogVersion();
+      try {
+        editor.update(() => $reconcileRoot(question('After').root as never), { discrete: true });
+        peerBinding.import(doc.export({ mode: 'update', from }));
+      } finally {
+        from.free();
+      }
+      expect(key()).toBe(originalKey);
+      const reloaded = parseDocument(serializeDocument(peerEditor.getEditorState().toJSON()));
+      expect(documentQuestions(reloaded)).toEqual([{ id: 'question', prompt: 'After' }]);
+    } finally {
+      peerBinding.dispose();
+      binding.dispose();
+    }
+  });
+
+  test.each([
+    ['<ask prompt="缺少标识"/>', 'key must contain'],
+    ['<ask key="empty" prompt="  "/>', 'prompt must contain'],
+    ['<ask key="bad" prompt="Bad" options="{"/>', 'options must be a JSON array'],
+    ['<ask key="open" prompt="Why?" recommended="a"/>', 'recommended must match'],
+    [
+      `<ask key="bad" prompt="Bad" options='[{"id":"a","label":"1"},{"id":"a","label":"2"}]'/>`,
+      'duplicate option id',
+    ],
+    ['<p><ask key="nested" prompt="Why?"/></p>', 'top-level block'],
+    ['<ask key="same" prompt="First"/><ask key="same" prompt="Second"/>', 'duplicate key'],
+    ['<ask key="nonempty" prompt="First"><p>Body</p></ask>', 'must be empty'],
+  ])('rejects malformed questions in %s', (xml, error) => {
+    expect(() => parseDocument(xml)).toThrow(error);
   });
 
   test('a chart keeps its spec and block id through a round trip', () => {

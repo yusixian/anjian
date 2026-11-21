@@ -4,7 +4,6 @@
 source, then push before check/reply. Local live-file and streaming instructions
 below do not synchronize a remote server; upload complete valid artifacts.
 
-
 A living doc at `.anjian/artifacts/document/<id>/`. You write it; your human
 partner reads it in their browser, comments on passages, and can fix text in
 place. Their edits and yours merge live.
@@ -34,6 +33,32 @@ tables.
   parse `doc.xml` yourself. A rejected edit names the tag; the file stays as
   you wrote it until you fix it. `"merging": true` means a long edit is
   still playing into the document: run `check` again.
+
+## Questions in a document
+
+Use a top-level `<ask>` when the reader should answer inside the document. Use
+stable, distinct keys and option IDs made of ASCII letters, digits, hyphens or
+underscores. Keep those identifiers when moving a question or editing its wording.
+
+```xml
+<ask key="ship-date" prompt="When should we ship?"
+     options='[{"id":"now","label":"Ship now"},{"id":"later","label":"Next week"}]'
+     recommended="now" />
+<ask key="ship-constraints" prompt="What constraints should we account for?" />
+```
+
+Supply two to twenty options for a choice. `recommended` marks an option that
+the reader may select. A question without options accepts a typed answer. Escape
+XML attribute characters such as `&amp;` and `&gt;`. Run the document check
+before sending the artifact link.
+
+The reader can save a draft, reload it, and explicitly submit it to a connected
+Agent. Readers with document access share one draft per question. While
+withdrawal is available, it cancels that submission and retains the draft.
+Treat a submitted answer as a snapshot of that wording and those options.
+The answer, draft and reply are stored separately from `doc.xml`. Public views
+show the question and its options. See [remote.md](remote.md) for reading and
+replying to submitted answers.
 
 ## Before writing: choose how to tell it
 

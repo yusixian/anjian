@@ -5,10 +5,21 @@ import path from 'node:path';
 import { createLoroBinding } from '@haklex/rich-collab-loro';
 import { allHeadlessNodes } from '@haklex/rich-headless';
 import { createHeadlessEditor } from '@lexical/headless';
-import { $getRoot, $isElementNode, $isTextNode, type LexicalNode, type TextNode } from 'lexical';
+import {
+  $getRoot,
+  $isElementNode,
+  $isTextNode,
+  $parseSerializedNode,
+  $setSelection,
+  type LexicalNode,
+  SELECTION_INSERT_CLIPBOARD_NODES_COMMAND,
+  type TextNode,
+} from 'lexical';
 import { LoroDoc } from 'loro-crdt';
 import { afterEach, expect, test, vi } from 'vitest';
 
+import { registerQuestionClipboard } from '../src/shared/document-question-node';
+import { documentQuestions, parseDocument } from '../src/server/document-codec';
 import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 import {
   createDocumentSession,
@@ -375,6 +386,83 @@ test('a client that declares pending support edits a document that has pending b
   binding.dispose();
   await session.flush();
   expect(read(file)).toContain('one by hand');
+});
+
+test.each([
+  ['copy', ['first', expect.stringMatching(/^q-/)]],
+  ['cut', ['first']],
+])('pasting after a %s preserves the original question identity', (action, expectedKeys) => {
+  const editor = createDocumentHeadlessEditor();
+  const unregister = registerQuestionClipboard(editor);
+  const source = parseDocument('<doc><ask key="first" prompt="Ready?"/><p>text</p></doc>');
+  editor.setEditorState(editor.parseEditorState(source));
+  if (action === 'cut')
+    editor.update(() => $getRoot().getFirstChild()!.remove(), { discrete: true });
+  editor.update(() => {
+    const copy = $parseSerializedNode(source.root.children[0]!);
+    const selection = $getRoot().getLastChild()!.selectEnd();
+    $setSelection(selection);
+    expect(
+      editor.dispatchCommand(SELECTION_INSERT_CLIPBOARD_NODES_COMMAND, { nodes: [copy], selection }),
+    ).toBe(false);
+    selection.insertNodes([copy]);
+  }, { discrete: true });
+  const questions = documentQuestions(editor.getEditorState().toJSON());
+  expect(questions.map(({ id }) => id)).toEqual(expectedKeys);
+  unregister();
+});
+
+test('rejects a duplicate question update without changing the live or saved document', async () => {
+  const xml = '<doc><ask id="block" key="first" prompt="Ready?"/></doc>';
+  const { file, snapshotFile } = setup(xml);
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const before = read(file);
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  const source = parseDocument(xml);
+  editor.update(() => {
+    $getRoot().append($parseSerializedNode(source.root.children[0]!));
+  }, { discrete: true });
+  const update = peer.export({ mode: 'update', from });
+  from.free();
+  binding.dispose();
+
+  expect(() => session.importUpdate(update, ['question'])).toThrow('duplicate key "first"');
+  expect(() => session.saveUpdate(update, ['question'])).toThrow('duplicate key "first"');
+  await session.flush();
+  expect(documentQuestions(session.state())).toEqual([{ id: 'first', prompt: 'Ready?' }]);
+  expect(read(file)).toBe(before);
+  expect(documentQuestions(parseDocument(read(file)))).toEqual(documentQuestions(session.state()));
+});
+
+test('rejects an Agent upload that conflicts with a question added since its base', async () => {
+  const { file, snapshotFile } = setup('<doc><p id="intro">One</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const base = read(file);
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  const source = parseDocument('<ask id="browser" key="first" prompt="Browser question"/>');
+  editor.update(() => {
+    $getRoot().append($parseSerializedNode(source.root.children[0]!));
+  }, { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }), ['question']);
+  from.free();
+  binding.dispose();
+  await session.flush();
+  const before = read(file);
+
+  const incoming = base.replace('</doc>', '  <ask id="agent" key="first" prompt="Agent question"/>\n</doc>');
+  expect(() => session.prepareRemoteText(incoming)).toThrow('duplicate key "first"');
+  expect(documentQuestions(session.state())).toEqual([{ id: 'first', prompt: 'Browser question' }]);
+  expect(read(file)).toBe(before);
 });
 
 test('agent activity survives a restart even when a human autosave touched the file since', async () => {

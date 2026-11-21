@@ -2,13 +2,25 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { FeedbackConnection, FeedbackTask } from '../../shared/feedback';
+import { type DocumentQuestion, validateDocumentQuestion } from '../../shared/document-questions';
+import {
+  type FeedbackConnection,
+  type FeedbackTask,
+  MAX_QUESTION_ANSWER_LENGTH,
+} from '../../shared/feedback';
 import { RemoteTransferError } from '../remote-transfer';
 
 export interface FeedbackData {
   connections: FeedbackConnection[];
+  questionDrafts?: QuestionDraft[];
   tasks: FeedbackTask[];
   version: 1;
+}
+export interface QuestionDraft {
+  answer?: string;
+  artifact: string;
+  definition: DocumentQuestion;
+  version: string;
 }
 export const feedbackError = (code: string, message = code, status = 409): never => {
   throw new RemoteTransferError(status, code, message);
@@ -37,6 +49,78 @@ const states = new Set([
   'accepted',
   'cancelled',
 ]);
+const isDocument = (artifact: unknown): artifact is string =>
+  typeof artifact === 'string' && artifact.startsWith('document/') && artifact.length > 9;
+
+function validDefinition(value: DocumentQuestion): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  try {
+    validateDocumentQuestion(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validAnswer(answer: unknown, definition: DocumentQuestion): boolean {
+  return (
+    typeof answer === 'string' &&
+    answer.length > 0 &&
+    answer.length <= MAX_QUESTION_ANSWER_LENGTH &&
+    answer.trim() === answer &&
+    (!definition.options || definition.options.some(({ id }) => id === answer))
+  );
+}
+
+function validQuestionDrafts(drafts: QuestionDraft[] | undefined): boolean {
+  if (drafts === undefined) return true;
+  if (!Array.isArray(drafts)) return false;
+  const seen = new Set<string>();
+  for (const draft of drafts) {
+    if (
+      !draft ||
+      !isDocument(draft.artifact) ||
+      !validDefinition(draft.definition) ||
+      (draft.answer !== undefined && !validAnswer(draft.answer, draft.definition)) ||
+      typeof draft.version !== 'string' ||
+      !draft.version
+    )
+      return false;
+    const key = JSON.stringify([draft.artifact, draft.definition.id]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}
+
+function validQuestionTask(task: FeedbackTask): boolean {
+  const { questionId, questionContext, questionResult } = task;
+  if (questionId === undefined)
+    return questionContext === undefined && questionResult === undefined;
+  if (
+    !isDocument(task.artifact) ||
+    !questionContext ||
+    !validDefinition(questionContext.definition) ||
+    questionContext.definition.id !== questionId ||
+    !validAnswer(questionContext.answer, questionContext.definition) ||
+    task.threads.length !== 0 ||
+    task.roundId !== undefined ||
+    task.roundContext !== undefined
+  )
+    return false;
+  return (
+    questionResult === undefined ||
+    (!!questionResult &&
+      typeof questionResult.id === 'string' &&
+      questionResult.id.length > 0 &&
+      typeof questionResult.payloadHash === 'string' &&
+      /^[a-f0-9]{64}$/.test(questionResult.payloadHash) &&
+      typeof questionResult.reply === 'string' &&
+      questionResult.reply.trim().length > 0 &&
+      questionResult.reply.length <= 20000)
+  );
+}
+
 function validate(value: unknown): asserts value is FeedbackData {
   const data = value as FeedbackData;
   if (
@@ -44,6 +128,7 @@ function validate(value: unknown): asserts value is FeedbackData {
     data.version !== 1 ||
     !Array.isArray(data.connections) ||
     !Array.isArray(data.tasks) ||
+    !validQuestionDrafts(data.questionDrafts) ||
     !data.connections.every(
       (c) =>
         c &&
@@ -70,6 +155,7 @@ function validate(value: unknown): asserts value is FeedbackData {
         Array.isArray(t.claimRequests) &&
         t.claimRequests.every((r) => typeof r === 'string') &&
         Array.isArray(t.threads) &&
+        validQuestionTask(t) &&
         typeof t.submissionHash === 'string' &&
         data.connections.some((c) => c.id === t.connectionId),
     ) ||

@@ -13,6 +13,25 @@ import {
 import { feedbackError, hash } from './store';
 import { text } from './tasks';
 
+/** Commit an answer reply with the task in one feedback-store write. */
+export function applyQuestionReply(task: FeedbackTask, body: Record<string, unknown>): boolean {
+  if (!task.questionContext || body.upload !== undefined || body.replies !== undefined)
+    feedbackError('invalid_result', undefined, 400);
+  const id = text(body.operationId, 'operationId');
+  const reply = text(body.questionReply, 'questionReply', 20000).trim();
+  const payloadHash = hash({ reply });
+  if (task.questionResult) {
+    if (task.questionResult.id !== id || task.questionResult.payloadHash !== payloadHash)
+      feedbackError('idempotency_conflict');
+    return false;
+  }
+  task.questionResult = { id, payloadHash, reply };
+  task.state = 'awaiting_review';
+  task.updatedAt = Date.now();
+  delete task.errorCode;
+  return true;
+}
+
 /** The caller holds quota and project locks. Every await is followed by reauthorization/fencing. */
 export async function applyResult(options: {
   project: string;

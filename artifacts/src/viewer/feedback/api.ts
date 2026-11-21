@@ -1,3 +1,5 @@
+import type { FeedbackQuestionContext, FeedbackQuestionInput } from '../../shared/feedback';
+
 /** Browser-only feedback DTOs. Execution credentials never belong in this adapter. */
 export interface FeedbackConnection {
   artifacts: string[];
@@ -50,6 +52,15 @@ export interface FeedbackInput {
 }
 export type FeedbackState =
   'queued' | 'running' | 'needs_attention' | 'awaiting_review' | 'accepted' | 'cancelled';
+export type QuestionItem = FeedbackQuestionInput;
+export interface QuestionMutation {
+  action: 'draft' | 'submit' | 'withdraw';
+  answer?: string;
+  connectionId?: string;
+  id: string;
+  submissionKey?: string;
+  version: string;
+}
 export interface FeedbackTask {
   attempt: number;
   connectionId: string;
@@ -63,6 +74,9 @@ export interface FeedbackTask {
     replies?: { threadId: string; messageId: string; text: string }[];
   };
   outputRevision?: string;
+  questionContext?: FeedbackQuestionContext;
+  questionId?: string;
+  questionResult?: { reply: string };
   roundContext?: {
     id: string;
     title?: string;
@@ -105,6 +119,10 @@ export function createFeedbackApi(base: string) {
     return data as T;
   }
   return {
+    questions: () =>
+      request<{ items: QuestionItem[]; connections: FeedbackConnection[] }>('questions'),
+    answerQuestion: (mutation: QuestionMutation) =>
+      request<{ item: QuestionItem }>('questions', mutation),
     connections: () => request<{ connections: FeedbackConnection[] }>('connections'),
     input: () => request<FeedbackInput>('input'),
     tasks: () => request<{ tasks: FeedbackTask[] }>('tasks'),

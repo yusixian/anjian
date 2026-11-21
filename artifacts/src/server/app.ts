@@ -4,11 +4,17 @@ import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
 import type { Thread } from '../shared/comments';
+import type { DocumentQuestion } from '../shared/document-questions';
 import type { ArtifactType, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
 import { artifactPath, resolveArtifactAddress } from './artifact-address';
 import { watchArtifacts } from './artifact-watcher';
-import { type ArtifactRef, isArtifactLocator, listArtifacts } from './artifacts';
+import {
+  type ArtifactRef,
+  isArtifactLocator,
+  listArtifacts,
+  resolveArtifactDir,
+} from './artifacts';
 import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
 import {
@@ -18,6 +24,7 @@ import {
   type MountSettings,
   type ServerOptions,
 } from './context';
+import { documentQuestions } from './document-codec';
 import type { CommentAdmission } from './document-comments';
 import { type PreparedRemoteDocument, prepareNewRemoteDocument } from './document-session';
 import { readFeedbackComments } from './feedback/comments';
@@ -38,6 +45,7 @@ export interface ArtifactsServer {
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
   contentToken: string;
   feedbackComments?: (type: 'document' | 'artboard', id: string) => Thread<unknown>[];
+  feedbackQuestions: (id: string) => Promise<(() => DocumentQuestion[]) | null>;
   feedbackReply?: (
     type: 'document' | 'artboard',
     id: string,
@@ -386,6 +394,14 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     liveClients: () => clients.size,
     onMessage: (listener) => {
       ctx.messageListeners.push(listener);
+    },
+    feedbackQuestions: async (id) => {
+      const session = resolveArtifactDir(root, 'document', id)
+        ? await ctx.documents.open(id)
+        : null;
+      if (!session) return null;
+      await session.settled();
+      return () => documentQuestions(session.state());
     },
     settleDocument: async (id, source, admit) => {
       const session = await ctx.documents.open(id);

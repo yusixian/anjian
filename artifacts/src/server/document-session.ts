@@ -12,7 +12,15 @@ import { $getRoot, type SerializedEditorState } from 'lexical';
 import { decodeImportBlobMeta, LoroDoc, type OpId } from 'loro-crdt';
 
 import { DOCUMENT_FEATURES } from '../shared/document-features';
-import { boxDrawingDiagrams, parseDocument, serializeDocument, stampBlockIds } from './document-codec';
+import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
+import {
+  boxDrawingDiagrams,
+  DocumentRejected,
+  documentQuestions,
+  parseDocument,
+  serializeDocument,
+  stampBlockIds,
+} from './document-codec';
 import { createDocumentHeadlessEditor } from './document-headless';
 import type { CommentAdmission } from './document-comments';
 import { createPreparedStateFiles } from './storage/prepared-files';
@@ -115,6 +123,30 @@ export class OutdatedClient extends Error {}
 export class DocumentPersistenceError extends Error {}
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+function validateQuestionTree(candidate: LoroDoc) {
+  const root = candidate.getTree(TREE_NAME).roots()[0];
+  if (!root) return;
+  const stack = root.children() ?? [];
+  const ids = new Set<string>();
+  while (stack.length) {
+    const node = stack.pop()!;
+    const children = node.children();
+    if (children) for (const child of children) stack.push(child);
+    if (node.data.get('type') !== 'question') continue;
+    if (node.parent()?.id !== root.id)
+      throw new DocumentRejected('<ask> must be a top-level block');
+    const definition = node.data.get('definition') as DocumentQuestion;
+    try {
+      validateDocumentQuestion(definition);
+    } catch (error) {
+      throw new DocumentRejected(messageOf(error));
+    }
+    if (ids.has(definition.id))
+      throw new DocumentRejected(`<ask> duplicate key "${definition.id}"`);
+    ids.add(definition.id);
+  }
+}
 
 function lcsLength(a: string[], b: string[]) {
   const table = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
@@ -276,6 +308,13 @@ export async function createDocumentSession(
       target as never,
       `agent: ${stats}`,
     );
+    const candidate = loro.fork();
+    try {
+      candidate.import(update);
+      validateQuestionTree(candidate);
+    } finally {
+      candidate.free();
+    }
     remember(text, headsAfter(base, update));
     return { stats, update };
   };
@@ -294,19 +333,18 @@ export async function createDocumentSession(
       setOutcome({ kind: 'rejected', message: messageOf(err) });
       return;
     }
-    const fallback = lastGoodText ?? serializeDocument(editor.getEditorState().toJSON());
-    const floor = lastAgentText;
-    lastAgentText = text;
     const queued = streaming > 0;
-    lastGoodText = text;
     streaming += 1;
     emitStatus();
     playing = playing.then(() => {
       try {
         // Autosaves pause during streaming, so queued file edits build on the preceding agent write.
-        const baseText = queued ? fallback : closestBase(written, text, fallback, floor);
+        const fallback = lastGoodText ?? serializeDocument(editor.getEditorState().toJSON());
+        const baseText = queued ? fallback : closestBase(written, text, fallback, lastAgentText);
         const { stats, update } = prepareAgentEdit(baseText, text, target);
         binding.import(update);
+        lastGoodText = text;
+        lastAgentText = text;
         revision++;
         emit({ type: 'update', bytes: update });
         log(`agent edit merged: ${stats}`);
@@ -315,7 +353,7 @@ export async function createDocumentSession(
       } catch (err) {
         log(`agent edit failed: ${messageOf(err)}`);
         streaming -= 1;
-        setOutcome({ kind: 'failed', message: messageOf(err) });
+        setOutcome({ kind: err instanceof DocumentRejected ? 'rejected' : 'failed', message: messageOf(err) });
       } finally {
         scheduleWrite();
       }
@@ -464,9 +502,16 @@ export async function createDocumentSession(
         `this page cannot show <${missing.join('>, <')}> blocks; reload the page`,
       );
     const probe = loro.fork();
-    probe.import(bytes);
-    if (probe.getTree(TREE_NAME).roots().length > 1)
-      throw new Error('update belongs to a different document; reload the page');
+    try {
+      probe.import(bytes);
+      if (probe.getTree(TREE_NAME).roots().length > 1)
+        throw new Error('update belongs to a different document; reload the page');
+      validateQuestionTree(probe);
+      return probe;
+    } catch (error) {
+      probe.free();
+      throw error;
+    }
   };
 
   return {
@@ -474,7 +519,7 @@ export async function createDocumentSession(
     state: () => editor.getEditorState().toJSON(),
     lineage: () => loro.getTree(TREE_NAME).roots()[0]?.id ?? '',
     importUpdate: (bytes, features = []) => {
-      validateUpdate(bytes, features);
+      validateUpdate(bytes, features).free();
       binding.import(bytes);
       emit({ type: 'update', bytes });
       scheduleWrite();
@@ -482,18 +527,17 @@ export async function createDocumentSession(
     saveUpdate: (bytes, features = [], admit) => {
       if (streaming > 0 || outcome.kind === 'rejected' || writeTimer || snapshotDirty)
         throw new Error('Document is not ready to save; retry after flushing');
-      validateUpdate(bytes, features);
       if (fsSync.readFileSync(file, 'utf8') !== lastFileText)
         throw new Error('Document source changed; retry after flushing');
-      const candidate = loro.fork();
+      const candidate = validateUpdate(bytes, features);
       const candidateEditor = createDocumentHeadlessEditor();
-      const candidateBinding = createLoroBinding(candidateEditor, candidate);
+      let candidateBinding: ReturnType<typeof createLoroBinding> | undefined;
       let xml: string;
       let snapshot: Uint8Array;
       let update: Uint8Array;
+      const from = loro.oplogVersion();
       try {
-        const from = candidate.oplogVersion();
-        candidateBinding.import(bytes);
+        candidateBinding = createLoroBinding(candidateEditor, candidate);
         const before = candidateEditor.getEditorState().toJSON();
         const stamped = stampBlockIds(before);
         if (JSON.stringify(stamped) !== JSON.stringify(before))
@@ -501,7 +545,11 @@ export async function createDocumentSession(
         xml = serializeDocument(candidateEditor.getEditorState().toJSON());
         snapshot = candidate.export({ mode: 'snapshot' });
         update = candidate.export({ mode: 'update', from });
-      } finally { candidateBinding.dispose(); }
+      } finally {
+        candidateBinding?.dispose();
+        from.free();
+        candidate.free();
+      }
       const finalize = persistDocument(xml, snapshot, admit);
       binding.import(update);
       revision++;
@@ -531,6 +579,8 @@ export async function createDocumentSession(
       const from = candidate.oplogVersion();
       candidateBinding.import(update);
       const beforeStamp = candidateEditor.getEditorState().toJSON();
+      try { documentQuestions(beforeStamp); }
+      catch (error) { candidateBinding.dispose(); throw error; }
       const stamped = stampBlockIds(beforeStamp);
       if (stamped !== beforeStamp && JSON.stringify(stamped) !== JSON.stringify(beforeStamp))
         candidateEditor.update(() => $reconcileRoot(stamped.root as never), { discrete: true });

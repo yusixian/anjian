@@ -23,8 +23,9 @@ import { ChangeNav, OnlyChanges, SOURCES, UpdateNotice } from './HistoryPanel';
 import { styles } from './historyStyles';
 import { historyWhen } from './historyTime';
 import { MermaidPreview } from './MermaidPreview';
+import { QuestionNode } from './QuestionNode';
 
-const renderNodes = [ChartNode, ExcalidrawNode, ...stepsNodes];
+const renderNodes = [ChartNode, ExcalidrawNode, ...stepsNodes, QuestionNode];
 const renderers: RendererConfig = {
   [ALERT_NODE_KEY]: AlertRenderer,
   [CODE_BLOCK_NODE_KEY]: CodeBlockRenderer,

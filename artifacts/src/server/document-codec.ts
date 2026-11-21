@@ -2,6 +2,8 @@ import { createDefaultRegistry, deserializeFromXml, serializeToXml } from '@hakl
 import type { SerializedEditorState, SerializedLexicalNode } from 'lexical';
 import { nanoid } from 'nanoid';
 
+import type { SerializedQuestionNode } from '../shared/document-question-node';
+import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
 import { DYNAMIC_URL } from '../shared/dynamic';
 import { stripOpaque, TAG, unbalancedTag } from './balance';
 
@@ -43,6 +45,7 @@ const BLOCK_TAGS = [
   'def',
   'dynamic',
   'pending',
+  'ask',
 ];
 const INLINE_TAGS = [
   'b',
@@ -98,6 +101,51 @@ registry.registerWriter('pending', (node) => {
   return {
     tag: 'pending',
     attrs: { ...(state?.blockId ? { id: state.blockId } : {}), intent: intent ?? '' },
+    selfClosing: true,
+  };
+});
+
+registry.registerReader('ask', (el) => {
+  if (el.parentElement?.tagName.toLowerCase() !== 'doc')
+    throw new Error('<ask> must be a top-level block');
+  if (el.children.length || el.textContent?.trim()) throw new Error('<ask> must be empty');
+  const definition: DocumentQuestion = {
+    id: el.getAttribute('key') ?? '',
+    prompt: el.getAttribute('prompt') ?? '',
+  };
+  const options = el.getAttribute('options');
+  if (options !== null) {
+    try {
+      definition.options = JSON.parse(options) as DocumentQuestion['options'];
+    } catch {
+      throw new Error('<ask> options must be a JSON array');
+    }
+  }
+  const recommended = el.getAttribute('recommended');
+  if (recommended !== null) definition.recommended = recommended;
+  validateDocumentQuestion(definition);
+  if (definition.options) {
+    definition.options = definition.options.map(({ id, label }) => ({ id, label }));
+  }
+  const id = el.getAttribute('id');
+  return {
+    type: 'question',
+    ...(id ? { $: { blockId: id } } : {}),
+    definition,
+    version: 1,
+  } satisfies SerializedQuestionNode;
+});
+registry.registerWriter('question', (node) => {
+  const { $: state, definition } = node as Block & SerializedQuestionNode;
+  return {
+    tag: 'ask',
+    attrs: {
+      ...(state?.blockId ? { id: state.blockId } : {}),
+      key: definition.id,
+      prompt: definition.prompt,
+      ...(definition.options ? { options: JSON.stringify(definition.options) } : {}),
+      ...(definition.recommended ? { recommended: definition.recommended } : {}),
+    },
     selfClosing: true,
   };
 });
@@ -163,6 +211,30 @@ function badDynamicUrl(nodes: Block[]): string | null {
   return null;
 }
 
+function questionBelow(block: Block): boolean {
+  return (block.children ?? []).some((child) => child.type === 'question' || questionBelow(child));
+}
+
+export function documentQuestions(state: SerializedEditorState): DocumentQuestion[] {
+  const definitions: DocumentQuestion[] = [];
+  const ids = new Set<string>();
+  for (const node of state.root.children) {
+    if (questionBelow(node)) throw new DocumentRejected('<ask> must be a top-level block');
+    if (node.type !== 'question') continue;
+    const { definition } = node as SerializedQuestionNode;
+    try {
+      validateDocumentQuestion(definition);
+    } catch (error) {
+      throw new DocumentRejected((error as Error).message);
+    }
+    if (ids.has(definition.id))
+      throw new DocumentRejected(`<ask> duplicate key "${definition.id}"`);
+    ids.add(definition.id);
+    definitions.push(definition);
+  }
+  return definitions;
+}
+
 export function parseDocument(xml: string): SerializedEditorState {
   const wrapped = /^\s*<doc[\s>]/.test(xml) ? xml : `<doc>${xml}</doc>`;
   const problem =
@@ -177,9 +249,10 @@ export function parseDocument(xml: string): SerializedEditorState {
   } catch (err) {
     throw new DocumentRejected((err as Error).message);
   }
-  const url =
+  const invalidNode =
     badDynamicUrl(state.root.children as Block[]) ?? nestedPending(state.root.children as Block[]);
-  if (url) throw new DocumentRejected(url);
+  if (invalidNode) throw new DocumentRejected(invalidNode);
+  documentQuestions(state);
   return state;
 }
 

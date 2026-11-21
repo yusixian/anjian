@@ -17,6 +17,7 @@ import type { ThreadActions } from './CommentCard';
 import { DesktopDocument } from './DesktopDocument';
 import { DocumentEditor, extraNodes } from './DocumentEditor';
 import { useDocumentHistory } from './DocumentHistory';
+import { DocumentQuestions } from './DocumentQuestions';
 import { type DynamicHost, DynamicHostContext } from './DynamicBlock';
 import { decodeBase64 } from './LoroSync';
 import { PendingContext, type PendingProgress } from './PendingBlock';
@@ -281,17 +282,19 @@ export function DocumentView({
   const editorView = (
     <DynamicHostContext.Provider value={dynamicHost}>
       <PendingContext.Provider value={pendingProgress}>
-        <DocumentEditor
-          agent={meta?.agent}
-          doc={doc}
-          theme={dark ? 'dark' : 'light'}
-          transport={transport}
-          onAgentPlayback={setPlayback}
-          onEditorReady={setEditor}
-          onOffline={setOffline}
-          onQuotaExceeded={setQuotaExceeded}
-          onState={onState}
-        />
+        <DocumentQuestions artifact={live && feedbackEnabled ? artifact : null}>
+          <DocumentEditor
+            agent={meta?.agent}
+            doc={doc}
+            theme={dark ? 'dark' : 'light'}
+            transport={transport}
+            onAgentPlayback={setPlayback}
+            onEditorReady={setEditor}
+            onOffline={setOffline}
+            onQuotaExceeded={setQuotaExceeded}
+            onState={onState}
+          />
+        </DocumentQuestions>
       </PendingContext.Provider>
     </DynamicHostContext.Provider>
   );

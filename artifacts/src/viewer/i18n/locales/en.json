@@ -599,6 +599,28 @@
     "waitingDocument": "Waiting for document content…",
     "waitingCanvas": "Waiting for canvas content…"
   },
+  "question": {
+    "recommended": "Recommended",
+    "placeholder": "Write your answer…",
+    "previous": "This answer refers to an earlier version of the question.",
+    "replyReady": "The Agent replied. You can review the answer and reply.",
+    "submittedAnswer": "Submitted answer",
+    "conflict": "The saved answer changed to “{{answer}}”. Your edits are still here.",
+    "empty": "No answer",
+    "restore": "Use saved answer",
+    "keep": "Keep my edits",
+    "target": "Choose an Agent",
+    "save": "Save draft",
+    "submit": "Send to {{agent}}",
+    "noAgent": "Connect an Agent to this document to send your answer. You can save a draft now.",
+    "withdraw": "Withdraw submission",
+    "saved": "Draft saved",
+    "syncing": "Waiting for the latest question to load.",
+    "changed": "The question or task changed. Review its current state and try again.",
+    "failed": "Couldn’t confirm the change. Your answer is still here.",
+    "loadFailed": "Couldn’t load the latest answers.",
+    "reload": "Refresh"
+  },
   "questions": {
     "previous": "Previous question",
     "next": "Next question",

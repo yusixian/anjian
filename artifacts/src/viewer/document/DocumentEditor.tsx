@@ -18,16 +18,19 @@ import { AlertEditRenderer } from '@haklex/rich-renderer-alert';
 import { CodeBlockEditRenderer } from '@haklex/rich-renderer-codeblock';
 import { ImageEditRenderer } from '@haklex/rich-renderer-image';
 import { katexEditNodes } from '@haklex/rich-renderer-katex';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
 import type { LexicalEditor } from 'lexical';
 import type { LoroDoc } from 'loro-crdt';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 
+import { registerQuestionClipboard } from '../../shared/document-question-node';
 import { AgentPlayback, type AgentPlaybackState } from './AgentPlayback';
 import { DynamicNode } from './DynamicNode';
 import { LoroSync } from './LoroSync';
 import { MermaidPreview } from './MermaidPreview';
 import { PendingNode } from './PendingNode';
+import { QuestionNode } from './QuestionNode';
 import type { DocumentState, DocumentTransport } from './transport';
 
 export const extraNodes = [
@@ -36,6 +39,7 @@ export const extraNodes = [
   ...stepsEditNodes,
   DynamicNode,
   PendingNode,
+  QuestionNode,
   ...katexEditNodes,
 ];
 
@@ -64,6 +68,12 @@ function BlockHandles() {
   return editable ? <BlockHandlePlugin /> : null;
 }
 
+function QuestionClipboard() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => registerQuestionClipboard(editor), [editor]);
+  return null;
+}
+
 export function DocumentEditor({
   transport,
   doc,
@@ -85,7 +95,14 @@ export function DocumentEditor({
         variant="article"
         onEditorReady={onEditorReady}
       >
-        <LoroSync doc={doc} transport={transport} onOffline={onOffline} onQuotaExceeded={onQuotaExceeded} onState={onState} />
+        <LoroSync
+          doc={doc}
+          transport={transport}
+          onOffline={onOffline}
+          onQuotaExceeded={onQuotaExceeded}
+          onState={onState}
+        />
+        <QuestionClipboard />
         <ExcalidrawPlugin />
         <FloatingLinkEditorPlugin />
         <EditorSurfacePlugins>

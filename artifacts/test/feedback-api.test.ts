@@ -131,7 +131,7 @@ async function fixture() {
 
 const encode = (text: string) => Buffer.from(text).toString('base64');
 
-async function ready() {
+async function ready(source = '<doc><p blockId="intro">draft</p></doc>') {
   const fx = await fixture();
   const login = await fx.login();
   const project = fx.id(fx.alpha);
@@ -165,7 +165,7 @@ async function ready() {
     headers: { ...login.headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       baseRevision: null,
-      files: { 'doc.xml': encode('<doc><p blockId="intro">draft</p></doc>') },
+      files: { 'doc.xml': encode(source) },
     }),
   });
   expect(put.status).toBe(200);
@@ -214,6 +214,92 @@ async function ready() {
     snapshot,
   };
 }
+
+test('document question drafts persist and only explicit submission reaches the connected Agent', async () => {
+  const f = await ready(
+    '<doc><p blockId="intro">draft</p>' +
+      '<ask key="timing" prompt="When?" options=\'[{"id":"now","label":"Now"},{"id":"later","label":"Later"}]\' recommended="now"/>' +
+      '<ask key="notes" prompt="What else?"/></doc>',
+  );
+  const first = (await f.browser('questions')).body.items;
+  expect(first.map((item: { id: string }) => item.id)).toEqual(['timing', 'notes']);
+  const original = first[0];
+  expect((await f.browser('questions', {
+    action: 'draft', id: 'timing', version: original.version, answer: 'other',
+  })).status).toBe(400);
+  const saved = await f.browser('questions', {
+    action: 'draft', id: 'timing', version: original.version, answer: 'now',
+  });
+  expect(saved.status).toBe(200);
+  expect(saved.body.item).toMatchObject({ id: 'timing', answer: 'now' });
+  expect((await f.call('tasks')).body.tasks.map((task: { questionId?: string }) => task.questionId))
+    .toEqual([undefined]);
+  await f.fx.restart();
+  const items = (await f.browser('questions')).body.items;
+  expect(items[0]).toEqual(saved.body.item);
+  expect((await f.browser('questions', {
+    action: 'draft', id: 'timing', version: original.version, answer: 'later',
+  })).body.code).toBe('feedback_changed');
+
+  const submit = {
+    action: 'submit', id: 'timing', version: items[0].version, answer: 'now',
+    submissionKey: 'answer-timing', connectionId: f.connection.id,
+  };
+  const submitted = await f.browser('questions', submit);
+  expect(submitted.status).toBe(200);
+  const queued = submitted.body.item;
+  expect(queued.task).toMatchObject({ state: 'queued', withdrawable: true });
+  expect((await f.browser('questions', submit)).body.item).toEqual(queued);
+  expect((await f.browser('questions', { ...submit, answer: 'later' })).body.code)
+    .toBe('idempotency_conflict');
+  const pending = (await f.call('tasks')).body.tasks.find((task: { id: string }) => task.id === queued.task.id);
+  expect(pending).toMatchObject({ questionId: 'timing' });
+  expect(pending).not.toHaveProperty('questionContext');
+  const detail = (await f.call(`tasks/${queued.task.id}`)).body.task;
+  expect(detail.questionContext).toMatchObject({
+    definition: { id: 'timing', prompt: 'When?', recommended: 'now' },
+    answer: 'now',
+  });
+  const claimInput = { connectionId: f.connection.id, generation: 1, claimant: 'fixture-session' };
+  const claimed = await f.call(`tasks/${queued.task.id}/claim`, {
+    ...claimInput, requestId: 'claim-first-question',
+  });
+  expect(claimed.status).toBe(200);
+  const withdrawn = await f.browser('questions', {
+    action: 'withdraw', id: 'timing', version: queued.version,
+  });
+  expect(withdrawn.body.item).toMatchObject({ id: 'timing', answer: 'now' });
+  expect(withdrawn.body.item).not.toHaveProperty('task');
+  expect((await f.call(`tasks/${queued.task.id}/result`, {
+    ...claimed.body.task, operationId: 'withdrawn-question-reply', questionReply: 'Seen',
+  })).body.code).toBe('stale_claim');
+
+  const notes = await f.browser('questions', {
+    action: 'submit', id: 'notes', version: items[1].version, answer: '  Keep the title.  ',
+    submissionKey: 'answer-notes', connectionId: f.connection.id,
+  });
+  expect(notes.status).toBe(200);
+  const taskId = notes.body.item.task.id;
+  expect(notes.body.item.answer).toBe('Keep the title.');
+  const nextClaim = await f.call(`tasks/${taskId}/claim`, {
+    ...claimInput, requestId: 'claim-notes',
+  });
+  expect(nextClaim.status).toBe(200);
+  const reply = {
+    ...nextClaim.body.task, operationId: 'reply-notes', questionReply: 'The title stays.',
+  };
+  expect((await f.call(`tasks/${taskId}/result`, reply)).body.task.state).toBe('awaiting_review');
+  expect((await f.call(`tasks/${taskId}/result`, reply)).status).toBe(200);
+  expect((await f.call(`tasks/${taskId}/result`, { ...reply, questionReply: 'Changed' })).body.code)
+    .toBe('idempotency_conflict');
+  expect((await f.browser(`tasks/${taskId}/accept`, {})).body.task.state).toBe('accepted');
+  expect((await f.call(`tasks/${taskId}/result`, reply)).status).toBe(200);
+  await f.fx.restart();
+  expect((await f.browser('questions')).body.items[1]).toMatchObject({
+    answer: 'Keep the title.',
+    task: { state: 'accepted', reply: 'The title stays.', withdrawable: false },
+  });
+});
 
 test('real hub persists a batch across restart, claims once, returns revision/reply, and accepts only by browser action', async () => {
   const f = await ready();
