@@ -1,6 +1,25 @@
 # Anjian 本地安装
 
-本项目尚未发布 npm 包或插件市场版本。请使用这份源码，避免安装同名的未知软件包或上游 Ryugi 最新版。
+从案间 GitHub Releases 获取适合你的 macOS 安装包，也可以从本仓库源码构建。[Anjian Releases](https://github.com/yusixian/anjian/releases)
+
+## macOS 安装包
+
+Apple 芯片使用 `darwin-arm64`，Intel 使用 `darwin-x64`。运行 `uname -m` 可查看当前终端架构。下载同一发行页上对应的 `.tar.gz` 和 `.tar.gz.sha256`。发行流程分别在 Apple 芯片和 Intel 的 macOS 15 环境中验证安装包。
+
+以下以 Apple 芯片为例，将 `版本` 替换为实际版本号。
+
+```bash
+file=anjian-v版本-darwin-arm64
+shasum -a 256 -c "$file.tar.gz.sha256"
+tar -xzf "$file.tar.gz"
+"./$file/anjian" version
+"./$file/anjian" start --project-dir /绝对路径/项目 --no-open --background
+"./$file/anjian" stop
+```
+
+包内附 Node.js、构建信息和许可证，解压后即可使用。录屏裁剪等功能仍需系统提供 `ffmpeg` 和 `ffprobe`。
+
+离线更新时，先将新版归档和校验文件复制到目标机器。用旧版执行 `stop`，将新版解压到另一个目录，核对 `version` 后从新目录启动。作品和服务状态独立于安装目录。保留旧版目录即可再次使用旧入口。没有安装包的发行仍可使用该版本的源码。
 
 ## 构建与运行
 

@@ -6,12 +6,13 @@ description: Keep your artifacts on your own computer. Build Anjian, then open i
 <Environment />
 
 <Notice title="Before you start">
-  Anjian has not published an npm installation package. Use this repository's source code, not the
-  upstream Ryugi package or an unknown package with the same name. The commands below require Git,
-  Node.js, and pnpm.
+  Use a package from Anjian's GitHub Releases or build from this repository. The source build below
+  requires Git, Node.js, and pnpm.
 </Notice>
 
 ## Install and start
+
+On macOS, [download the archive for your Mac](https://github.com/yusixian/anjian/releases), verify its SHA-256 checksum, and extract it. Run the included `anjian` command to start your project. See [macOS installation and offline updates](https://github.com/yusixian/anjian/blob/main/docs/install.md#macos-安装包).
 
 <Steps>
 <Step title="Get the source and build">
@@ -52,4 +53,4 @@ A local service can register multiple projects. Stopping a shared service affect
 
 ## Update Anjian
 
-Back up artifacts and service state, get the new source from this repository, reinstall dependencies, rebuild, and restart the service. Do not use upstream automatic update commands.
+Back up your artifacts and service state. To update a packaged installation, download the new archive and checksum, extract it offline, and start from the new folder. If you built from source, rebuild the new version and restart the service.

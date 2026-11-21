@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { checkRelease } from '../check-release.mjs';
-import { buildInfo } from './build-info.mjs';
+import { buildInfo, hashFile } from './build-info.mjs';
 import { releaseBody } from './notes.mjs';
 
 const repository = 'yusixian/anjian';
@@ -25,7 +26,47 @@ function request(endpoint, method = 'GET', data) {
   }
 }
 
-export function publishRelease({ sha, info, previousVersion }, api = request, gate = checkRelease) {
+function releaseAssets(directory, tag) {
+  return ['arm64', 'x64'].flatMap((arch) => {
+    const archive = `anjian-${tag}-darwin-${arch}.tar.gz`;
+    const checksum = `${archive}.sha256`;
+    const archivePath = path.resolve(directory, archive);
+    const checksumPath = path.resolve(directory, checksum);
+    const digest = hashFile(archivePath);
+    const [expectedDigest, expectedName] = fs
+      .readFileSync(checksumPath, 'utf8')
+      .trim()
+      .split(/\s+/);
+    if (digest !== expectedDigest || archive !== expectedName)
+      throw new Error(`Checksum mismatch: ${archive}`);
+    return [
+      { name: archive, file: archivePath, digest: `sha256:${digest}` },
+      { name: checksum, file: checksumPath, digest: `sha256:${hashFile(checksumPath)}` },
+    ];
+  });
+}
+
+function uploadAssets(tag, files) {
+  execFileSync('gh', ['release', 'upload', tag, '--repo', repository, '--', ...files], {
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+}
+
+function missingAssets(expected, uploaded) {
+  return expected.filter((asset) => {
+    const match = uploaded.find((item) => item.name === asset.name);
+    if (match && (match.state !== 'uploaded' || match.digest !== asset.digest))
+      throw new Error(`Release asset conflict: ${asset.name}`);
+    return !match;
+  });
+}
+
+export function publishRelease(
+  { sha, info, previousVersion, assetsDirectory },
+  api = request,
+  gate = checkRelease,
+  upload = uploadAssets,
+) {
   if (!/^[a-f0-9]{40}$/.test(sha ?? '') || info.sha !== sha || info.state !== 'clean') {
     throw new Error('Release requires the exact clean checked-out commit');
   }
@@ -33,6 +74,7 @@ export function publishRelease({ sha, info, previousVersion }, api = request, ga
     throw new Error('This commit does not introduce a product version');
   const body = releaseBody(info.version, info.notes);
   const tag = `v${info.version}`;
+  const assets = assetsDirectory === undefined ? null : releaseAssets(assetsDirectory, tag);
   const comparison = api(`compare/${sha}...main`);
   if (!['ahead', 'identical'].includes(comparison.status))
     throw new Error('Commit must belong to main');
@@ -54,7 +96,7 @@ export function publishRelease({ sha, info, previousVersion }, api = request, ga
     release &&
     (!existing ||
       release.target_commitish !== sha ||
-      release.draft ||
+      (release.draft && !assets) ||
       release.prerelease ||
       release.body !== expectedBody)
   ) {
@@ -67,9 +109,22 @@ export function publishRelease({ sha, info, previousVersion }, api = request, ga
       target_commitish: sha,
       name: `Anjian ${info.version}`,
       body: expectedBody,
-      draft: false,
+      draft: Boolean(assets),
       prerelease: false,
     });
+  if (assets) {
+    const endpoint = `releases/${release.id}/assets?per_page=100`;
+    let missing = missingAssets(assets, api(endpoint));
+    if (release.draft && missing.length) {
+      upload(
+        tag,
+        missing.map((asset) => asset.file),
+      );
+      missing = missingAssets(assets, api(endpoint));
+    }
+    if (missing.length) throw new Error(`Release assets incomplete: ${tag}`);
+    if (release.draft) release = api(`releases/${release.id}`, 'PATCH', { draft: false });
+  }
   return { tag, sha, release: release.html_url, ci: checks.url, deployment: 'not checked' };
 }
 
@@ -78,7 +133,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const previous = JSON.parse(
     execFileSync('git', ['show', 'HEAD^:package.json'], { encoding: 'utf8' }),
   );
-  const result = publishRelease({ sha: process.argv[2], info, previousVersion: previous.version });
+  const result = publishRelease({
+    sha: process.argv[2],
+    info,
+    previousVersion: previous.version,
+    assetsDirectory: process.argv[3],
+  });
   console.info(JSON.stringify(result, null, 2));
   if (process.env.GITHUB_STEP_SUMMARY)
     fs.appendFileSync(
