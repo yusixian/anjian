@@ -486,3 +486,48 @@ test('the heartbeat keeps beating while a queue call is in flight', async (t) =>
   await delay(2500);
   assert.ok(Number(fs.readFileSync(alive, 'utf8')) > during, 'heartbeat stopped while queueing');
 });
+
+test('HTML selection sends use the subscribed Codex session, retry, and acknowledge separately', async (t) => {
+  const { selectionSend, text: previewText } = require('./selection-dispatch-fixture.cjs');
+  const f = fixture(t);
+  f.open('html/mockup');
+  f.open('html/private', inherited);
+  const first = selectionSend(f.project, 'codex', id);
+  const second = selectionSend(f.project, 'codex', id);
+  const ignored = [
+    selectionSend(f.project, 'claude', id),
+    selectionSend(f.project, 'codex', inherited),
+    selectionSend(f.project, 'codex', id, { expiresAt: Date.now() - 1 }),
+    selectionSend(f.project, 'codex', id, { artifact: 'html/private' }),
+  ];
+  fs.writeFileSync(f.fail, '');
+  f.start({}, false);
+  const worker = path.join(f.data, 'codex-comment-watch/workers', `${id}.json`);
+  await until(
+    () =>
+      fs.existsSync(worker) && fs.readFileSync(worker, 'utf8').includes('transport unavailable'),
+    'the queue failure was not observed',
+  );
+  const heartbeat = path.join(
+    f.project,
+    '.anjian/artifacts/.state/codex-comment-watch/opened/html/mockup',
+    `${id}.alive`,
+  );
+  assert.ok(Number(fs.readFileSync(heartbeat, 'utf8')) > Date.now() - 10_000);
+  assert.ok(!fs.existsSync(first.marker) && !fs.existsSync(second.marker));
+  fs.rmSync(f.fail);
+  await until(
+    () => [first, second].every(({ marker }) => fs.existsSync(marker)),
+    'missing delivery marker',
+  );
+  const queue = f.read();
+  assert.equal(queue.length, 3);
+  for (const args of queue) {
+    assert.equal(args[0], 'queue');
+    assert.equal(args[args.indexOf('--thread') + 1], id);
+    const message = args[args.indexOf('--message') + 1];
+    assert.ok([first, second].some(({ snapshot }) => message.includes(JSON.stringify(snapshot))));
+    assert.ok(!message.includes(previewText));
+  }
+  assert.ok(ignored.every(({ marker }) => !fs.existsSync(marker)));
+});

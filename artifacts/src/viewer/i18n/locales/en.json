@@ -594,6 +594,16 @@
     "nextBoard": "Next board"
   },
   "preview": {
+    "selectionSend": "Send selection",
+    "selectionRecipient": "Choose an Agent",
+    "selectionDelivery": {
+      "queued": "Queued for the Agent",
+      "delivered": "Sent to the Agent",
+      "expired": "Delivery expired. Select the text again to retry.",
+      "stale": "Select the text again to send it.",
+      "failed": "Couldn’t send the selection. Try again.",
+      "noRecipient": "Open this preview from an Agent session to send a selection."
+    },
     "unavailable": "Preview unavailable",
     "loading": "Loading preview…",
     "waitingPage": "Waiting for page content…",

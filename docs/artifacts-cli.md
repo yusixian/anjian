@@ -23,6 +23,12 @@ Codex 和 Claude Code 的 `comment list` 使用当前会话的已读状态。其
 `list --all` 查看完整线程并保留未读状态。需要先看变更、再确认某个线程时，使用 `--peek` 保存 JSON 快照，随后用 `comment read` 确认。快照后新到或修改的消息仍待阅读。
 文档和画板中的「Agent 已读」表明有会话确认过消息的当前版本。修改消息后会清除该提示，直到新版本被确认。
 
+## 从本地 HTML 预览发送选区
+
+从 Codex 或 Claude Code 会话运行 `start --project-dir <项目> --artifact html/<作品>`，在打开的 HTML 页面选中文字，再点击「发送选区」。多个会话同时打开同一作品时，选择器用宿主名称和会话 ID 的后六位标识目标。需要新的上下文时重新选中文字。
+
+Agent 收到作品名和快照路径，可以读取点击时的选区、元素位置及预览版本。预览刷新、失焦切换到别的标签页或内容版本更新后，需要重新选择。发送提示表示快照已交给宿主队列或监听器。
+
 ```bash
 node skills/artifacts/app/anjian.cjs comment list --artifact document/design --session review-1 --peek --json > comments.json
 node skills/artifacts/app/anjian.cjs comment read --artifact document/design --snapshot comments.json --thread < 线程ID > --json

@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
+const { selectionSend, text: previewText } = require('./selection-dispatch-fixture.cjs');
 
 const repo = path.resolve(__dirname, '../..');
 const watcher = path.join(repo, 'hooks/watch-comments.cjs');
@@ -440,4 +441,35 @@ test('a last comment and the submit in one tick wake once', (t) => {
     poll().map((event) => event.type),
     ['anjian-choices'],
   );
+});
+
+test('the Claude monitor emits a snapshot reference only for an exact HTML subscription', async (t) => {
+  const f = fixture(t);
+  const session = randomUUID();
+  f.write(`.state/claude-comment-watch/${session}.json`, { artifacts: ['*', 'html/mockup'] });
+  const selection = selectionSend(f.project, 'claude', session);
+  const wildcard = selectionSend(f.project, 'claude', session, { artifact: 'html/private' });
+  const child = spawn(process.execPath, [watcher, f.project], {
+    env: {
+      ...process.env,
+      CLAUDE_CODE_SESSION_ID: session,
+      ANJIAN_RUNTIME_DIR: path.join(f.project, 'runtime'),
+    },
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  t.after(() => child.kill());
+  let output = '';
+  child.stdout.on('data', (chunk) => {
+    output += chunk;
+  });
+  const deadline = Date.now() + 5000;
+  while ((!output.includes('\n') || !fs.existsSync(selection.marker)) && Date.now() < deadline)
+    await delay(25);
+  const event = JSON.parse(output.trim());
+  assert.equal(event.type, 'anjian-selection');
+  assert.equal(event.snapshot, selection.snapshot);
+  assert.ok(event.instruction.includes('preview data'));
+  assert.ok(!output.includes(previewText));
+  assert.ok(fs.existsSync(selection.marker));
+  assert.ok(!fs.existsSync(wildcard.marker));
 });
