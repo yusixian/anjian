@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { validateArtifactReference } from '../shared/artifact-reference';
 import type { CommandSpec } from './command';
+import { parseDesignSpec } from './design-spec';
 import { CliError } from './paths';
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -59,21 +60,54 @@ function fileIdentity(file: string): string {
   }
 }
 
-function evidence(root: string, name: string) {
+function evidence(root: string, name: string, label = 'output') {
   const requested = path.resolve(root, name);
   if (path.isAbsolute(name) || outside(root, requested))
-    throw new CliError('output must be a file relative to the report input directory');
+    throw new CliError(`${label} must be a file relative to the report input directory`);
   const actual = fileIdentity(requested);
   if (outside(root, actual))
-    throw new CliError('output must be a regular file inside the report input directory');
+    throw new CliError(`${label} must be a regular file inside the report input directory`);
   try {
     if (!fs.statSync(actual).isFile())
-      throw new CliError('output must be a regular file inside the report input directory');
+      throw new CliError(`${label} must be a regular file inside the report input directory`);
     return { actual, bytes: fs.readFileSync(actual) };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return { actual, bytes: null };
   }
+}
+
+function readDesignSpec(value: unknown, directory: string, sources: Set<string>) {
+  if (value === undefined) return undefined;
+  const entry = record(value, 'designSpec');
+  const file = field(entry, 'file');
+  const revision = field(entry, 'revision');
+  const target = field(entry, 'target');
+  validateArtifactReference({ type: 'document', target });
+  if (!/^[a-f0-9]{64}$/.test(revision))
+    throw new CliError('designSpec.revision must be a lowercase SHA-256 digest');
+  const { actual, bytes } = evidence(directory, file, 'designSpec.file');
+  if (!bytes) throw new CliError(`designSpec.file is missing: ${file}`);
+  if (sha256(bytes) !== revision)
+    throw new CliError(`designSpec.revision does not match the bytes of ${file}`);
+  sources.add(actual);
+  const { title, rules } = parseDesignSpec(bytes);
+  return { file, revision, target, title, rules };
+}
+
+function linkedRules(row: Record<string, unknown>, byId: Map<string, string>) {
+  const { rules } = row;
+  if (rules === undefined) return [];
+  if (!Array.isArray(rules) || rules.some((id) => typeof id !== 'string'))
+    throw new CliError('rules must be an array of rule IDs');
+  if (rules.length && !byId.size)
+    throw new CliError('rules require a designSpec with matching rule IDs');
+  if (new Set(rules).size !== rules.length)
+    throw new CliError('rules must not contain duplicate rule IDs');
+  for (const id of rules) {
+    if (!byId.has(id)) throw new CliError(`Unknown design rule: ${id}`);
+  }
+  return rules as string[];
 }
 
 function renderReport(source: string, lang: string) {
@@ -86,8 +120,25 @@ function renderReport(source: string, lang: string) {
   const title = field(report, 'title');
   const build = field(report, 'build');
   const environment = field(report, 'environment');
+  const spec = readDesignSpec(report.designSpec, directory, sources);
+  const ruleLabels = new Map(spec?.rules.map(({ id, title }) => [id, `${id} · ${title}`]));
+  const ruleParagraph = (rules: string[]) =>
+    rules.length
+      ? [
+          paragraph(
+            `${tr('设计规则', 'Design rules')} ${rules.map((id) => ruleLabels.get(id)).join(', ')}`,
+          ),
+        ]
+      : [];
+  const statusLabels = {
+    pass: tr('通过', 'Passed'),
+    fail: tr('失败', 'Failed'),
+    missing: tr('证据缺失，待复核', 'Evidence missing. Review required.'),
+    stale: tr('证据已变更，待复核', 'Evidence changed. Review required.'),
+  };
   const checks = rows(report, 'checks').map((row) => {
     const title = field(row, 'title');
+    const rules = linkedRules(row, ruleLabels);
     const command = field(row, 'command');
     const output = field(row, 'output');
     const time = capturedAt(row);
@@ -99,36 +150,37 @@ function renderReport(source: string, lang: string) {
     const { actual: sourceFile, bytes } = evidence(directory, output);
     sources.add(sourceFile);
     const actual = bytes && sha256(bytes);
-    const status = !bytes ? 'missing' : actual === expected ? result : 'stale';
+    const status: keyof typeof statusLabels = !bytes
+      ? 'missing'
+      : actual === expected
+        ? result
+        : 'stale';
     let body = '';
     if (bytes && actual === expected) {
       const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
       body = `<details summary="${tr('原始输出', 'Raw output')}"><codeblock lang="text">${escape(text)}</codeblock></details>`;
     }
-    const label = {
-      pass: tr('通过', 'Passed'),
-      fail: tr('失败', 'Failed'),
-      missing: tr('证据缺失，待复核', 'Evidence missing. Review required.'),
-      stale: tr('证据已变更，待复核', 'Evidence changed. Review required.'),
-    }[status];
     return {
       status,
       title,
+      rules,
       xml: [
-        `<h3>${escape(title)} · ${label}</h3>`,
+        `<h3>${escape(title)} · ${statusLabels[status]}</h3>`,
         paragraph(`${tr('命令', 'Command')} ${command}`),
         paragraph(`${tr('采集时间', 'Captured')} ${time}`),
         paragraph(`${output} · SHA-256 ${expected}`),
         ...(status === 'stale' ? [paragraph(`${tr('当前摘要', 'Current digest')} ${actual}`)] : []),
+        ...ruleParagraph(rules),
         body,
       ].join('\n'),
-    };
+    } satisfies { status: keyof typeof statusLabels; title: string; rules: string[]; xml: string };
   });
 
-  const reviews = rows(report, 'reviews').flatMap((row) => {
+  const reviews = rows(report, 'reviews').map((row) => {
     const title = field(row, 'title');
     const target = field(row, 'target');
     const group = field(row, 'group');
+    const rules = linkedRules(row, ruleLabels);
     const ask = field(row, 'ask');
     const time = capturedAt(row);
     validateArtifactReference({
@@ -137,12 +189,57 @@ function renderReport(source: string, lang: string) {
       label: title,
       focus: { kind: 'group', id: group },
     });
-    return [
-      paragraph(ask),
-      paragraph(`${tr('采集时间', 'Captured')} ${time}`),
-      `<ref type="artboard" target="${escape(target)}" group="${escape(group)}" label="${escape(title)}" />`,
-    ];
+    return {
+      title,
+      target,
+      group,
+      rules,
+      xml: [
+        paragraph(ask),
+        paragraph(`${tr('采集时间', 'Captured')} ${time}`),
+        `<ref type="artboard" target="${escape(target)}" group="${escape(group)}" label="${escape(title)}" />`,
+        ...ruleParagraph(rules),
+      ],
+    };
   });
+  const designSpec = spec && {
+    ...spec,
+    rules: spec.rules.map((rule) => ({
+      ...rule,
+      checks: checks
+        .filter(({ rules }) => rules.includes(rule.id))
+        .map(({ title, status }) => ({ title, status })),
+      reviews: reviews
+        .filter(({ rules }) => rules.includes(rule.id))
+        .map(({ title, target, group }) => ({ title, target, group })),
+    })),
+  };
+  const categoryLabels = {
+    typography: tr('字体排印', 'Typography'),
+    color: tr('色彩', 'Color'),
+    layout: tr('布局', 'Layout'),
+    component: tr('组件', 'Component'),
+  };
+  const designXml = designSpec
+    ? [
+        `<h2>${tr('设计规范', 'Design specification')}</h2>`,
+        paragraph(designSpec.title),
+        paragraph(`${tr('规范修订', 'Specification revision')} · SHA-256 ${designSpec.revision}`),
+        `<ref type="document" target="${escape(designSpec.target)}" label="${tr('设计规范原文', 'Design specification document')}" />`,
+        ...designSpec.rules.flatMap(
+          ({ id, title, category, requirement, source, checks, reviews }) => [
+            `<h3>${escape(`${id} · ${title} · ${categoryLabels[category]}`)}</h3>`,
+            paragraph(requirement),
+            paragraph(`${tr('来源', 'Source')} ${source}`),
+            ...(!checks.length && !reviews.length ? [paragraph(tr('未检查', 'Unchecked'))] : []),
+            ...checks.map(({ title, status }) => paragraph(`${title} · ${statusLabels[status]}`)),
+            ...reviews.map(({ title }) =>
+              paragraph(`${tr('人工验收', 'Human review')} · ${title}`),
+            ),
+          ],
+        ),
+      ]
+    : [];
   const gaps = rows(report, 'gaps').map((row) =>
     paragraph(`${field(row, 'title')} · ${field(row, 'reason')}`),
   );
@@ -151,15 +248,23 @@ function renderReport(source: string, lang: string) {
     `<h1>${escape(title)}</h1>`,
     paragraph(`${tr('构建', 'Build')} ${build}`),
     paragraph(`${tr('环境', 'Environment')} ${environment}`),
+    ...designXml,
     ...(checks.length
       ? [`<h2>${tr('机器检查', 'Automated checks')}</h2>`, ...checks.map(({ xml }) => xml)]
       : []),
-    ...(reviews.length ? [`<h2>${tr('人工验收', 'Human review')}</h2>`, ...reviews] : []),
+    ...(reviews.length
+      ? [`<h2>${tr('人工验收', 'Human review')}</h2>`, ...reviews.flatMap(({ xml }) => xml)]
+      : []),
     ...(gaps.length ? [`<h2>${tr('未验证', 'Unverified')}</h2>`, ...gaps] : []),
     '</doc>',
     '',
   ].join('\n');
-  return { xml, checks: checks.map(({ status, title }) => ({ status, title })), sources };
+  return {
+    xml,
+    checks: checks.map(({ status, title }) => ({ status, title })),
+    sources,
+    designSpec,
+  };
 }
 
 export const verifyReportCommand: CommandSpec = {
@@ -187,9 +292,10 @@ export const verifyReportCommand: CommandSpec = {
     }
     if (typeof input !== 'string' || (lang !== 'zh' && lang !== 'en'))
       throw new CliError('Use --input <path> and optionally --lang zh|en');
-    const { xml, checks, sources } = renderReport(resolve(input), lang);
+    const { xml, checks, sources, designSpec } = renderReport(resolve(input), lang);
+    const design = designSpec ? { designSpec } : {};
     if (typeof output !== 'string') {
-      emit({ type: 'verification-report', xml, checks });
+      emit({ type: 'verification-report', xml, checks, ...design });
       return 0;
     }
     const dest = resolve(output);
@@ -203,7 +309,7 @@ export const verifyReportCommand: CommandSpec = {
     } finally {
       fs.rmSync(temp, { force: true });
     }
-    emit({ type: 'verification-report', output: dest, checks });
+    emit({ type: 'verification-report', output: dest, checks, ...design });
     return 0;
   },
   text: (value) => {

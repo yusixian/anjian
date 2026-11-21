@@ -81,6 +81,26 @@ reader's access. The destination is resolved when the reference is opened. A
 public source snapshot shows the reference text. Readers access a separately
 shared destination through its own share link.
 
+## Reuse design rules in implementation reviews
+
+When the team has selected a direction, keep the approved rules in a separate
+versioned JSON manifest. Give each rule a stable ID and record its decision
+source, such as a design review or source commit. Render a readable document
+with `node app/anjian.cjs design-spec --input design.json`. Use `--json`
+to get its SHA-256 `revision`. The manifest starts with `schema: 1`,
+`title` and `rules`. Each rule has `id`, `category` (typography,
+color, layout or component), `title`, `requirement` and `source`.
+
+Keep the exact reviewed manifest alongside its evidence. In the
+`verify-report` input set `designSpec` to `{ file, revision, target }`,
+where `file` is relative to the report manifest and `target` is the stable
+address of the design document. Put the matching IDs in `rules` on each check
+or human review. Deliver the verification report as the single reader-facing
+entry when the reader asks for one link. It includes the pinned rule text, links to
+the reusable design document and the live artboard verdict, and identifies unchecked
+rules. Preserve a separate file for a new spec revision and set its
+`previous` digest so older reports still identify the original rules.
+
 ## Before writing: choose how to tell it
 
 Before the outline, decide what the reader must come away understanding,

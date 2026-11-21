@@ -133,3 +133,132 @@ test.skipIf(process.platform === 'win32')(
     expect(fs.statSync(path.join(dir, 'doc.xml')).mode & 0o777).toBe(0o600);
   },
 );
+
+const typographyRule = {
+  id: 'body-type',
+  title: '正文 & 标签',
+  category: 'typography',
+  requirement: '正文统一使用系统字体。',
+  source: '页面正文',
+};
+const colorRule = {
+  ...typographyRule,
+  id: 'text-color',
+  title: '正文色彩',
+  category: 'color',
+};
+const layoutRule = {
+  ...typographyRule,
+  id: 'mobile-layout',
+  title: '移动端布局',
+  category: 'layout',
+};
+
+async function createDesignReport() {
+  const base = await createReport();
+  const file = 'design.json';
+  fs.writeFileSync(
+    path.join(dir, file),
+    JSON.stringify({
+      schema: 1,
+      title: '案间 & 规范',
+      rules: [typographyRule, colorRule, layoutRule],
+    }),
+  );
+  const { sha256 } = await run({ digest: file });
+  return {
+    ...base,
+    designSpec: { file, revision: String(sha256), target: '123456789012345678901' },
+    checks: base.checks.map((check) => ({ ...check, rules: [typographyRule.id] })),
+    reviews: base.reviews.map((review) => ({ ...review, rules: [colorRule.id] })),
+  };
+}
+
+function writeReport(report: unknown) {
+  fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(report));
+}
+
+test('links pinned design rules to automated and manual evidence and identifies unchecked rules', async () => {
+  const report = await createDesignReport();
+  writeReport(report);
+  const { xml, designSpec, checks } = await run({ input: 'report.json', lang: 'en' });
+  expect(checks).toEqual([{ title: '实测 CLI', status: 'pass' }]);
+  expect(designSpec).toEqual({
+    ...report.designSpec,
+    title: '案间 & 规范',
+    rules: [
+      {
+        ...typographyRule,
+        checks,
+        reviews: [],
+      },
+      {
+        ...colorRule,
+        checks: [],
+        reviews: [{ title: '核对提案', target: 'ABCDEFGHIJKLMNOPQRSTU', group: 'proposal' }],
+      },
+      {
+        ...layoutRule,
+        checks: [],
+        reviews: [],
+      },
+    ],
+  });
+  const nativeXml = serializeDocument(parseDocument(String(xml)));
+  expect(nativeXml).toContain('Design specification');
+  expect(nativeXml).toContain(report.designSpec.revision);
+  expect(nativeXml).toContain('type="document" target="123456789012345678901"');
+  expect(nativeXml).toContain('body-type · 正文 &amp; 标签 · Typography');
+  expect(nativeXml).toContain('Human review · 核对提案');
+  expect(nativeXml).toContain('正文统一使用系统字体。');
+  expect(nativeXml).toContain('Source 页面正文');
+  expect(nativeXml).toMatch(/mobile-layout · 移动端布局 · Layout[\s\S]*<p>Unchecked<\/p>/);
+
+  fs.writeFileSync(path.join(dir, 'output.txt'), 'unreviewed output');
+  const written = await run({ input: 'report.json', output: 'doc.xml' });
+  expect(written.designSpec).toMatchObject({ rules: [{ checks: [{ status: 'stale' }] }, {}, {}] });
+  const updated = fs.readFileSync(path.join(dir, 'doc.xml'), 'utf8');
+  expect(updated).toContain('未检查');
+  expect(updated).toContain('证据已变更，待复核');
+  expect(updated).not.toContain('通过');
+});
+
+test('requires matching design bytes within the manifest directory and protects the spec from output', async () => {
+  const report = await createDesignReport();
+  writeReport(report);
+  await expect(run({ input: 'report.json', output: 'design.json' })).rejects.toThrow(
+    '--output must differ',
+  );
+  const file = path.join(dir, 'design.json');
+  fs.appendFileSync(file, '\n');
+  await expect(run({ input: 'report.json' })).rejects.toThrow('revision does not match');
+  fs.unlinkSync(file);
+  await expect(run({ input: 'report.json' })).rejects.toThrow('designSpec.file is missing');
+  report.designSpec.file = '../escaped.json';
+  writeReport(report);
+  await expect(run({ input: 'report.json' })).rejects.toThrow(
+    'relative to the report input directory',
+  );
+});
+
+test('validates the document reference and rule associations in both evidence sections', async () => {
+  const report = await createDesignReport();
+  for (const [manifest, reason] of [
+    [
+      { ...report, designSpec: { ...report.designSpec, target: '/document/new' } },
+      'stable artifact ID',
+    ],
+    [{ ...report, designSpec: undefined }, 'rules require a designSpec'],
+    [
+      { ...report, checks: [{ ...report.checks[0], rules: ['unknown-rule'] }] },
+      'Unknown design rule',
+    ],
+    [
+      { ...report, reviews: [{ ...report.reviews[0], rules: [colorRule.id, colorRule.id] }] },
+      'duplicate rule IDs',
+    ],
+  ] as const) {
+    writeReport(manifest);
+    await expect(run({ input: 'report.json' })).rejects.toThrow(reason);
+  }
+});

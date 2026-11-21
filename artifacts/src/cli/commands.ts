@@ -1,6 +1,7 @@
 import { checkCommand } from './check';
 import type { CommandSpec } from './command';
 import { commentCommand } from './comment';
+import { designSpecCommand } from './design-spec';
 import { remoteCommands } from './remote-commands';
 import { skillsCommand } from './skills';
 import { startCommand } from './start';
@@ -14,6 +15,7 @@ export const COMMANDS: CommandSpec[] = [
   startCommand,
   stopCommand,
   checkCommand,
+  designSpecCommand,
   verifyReportCommand,
   commentCommand,
   ...remoteCommands,
