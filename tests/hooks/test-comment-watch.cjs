@@ -242,7 +242,7 @@ process.send?.({ type: 'artifact-opened', project: option('--project-dir'), arti
 console.log('{}');
 `,
   );
-  const serverHome = path.join(app, 'server');
+  const runtime = path.join(app, 'runtime');
   const run = (project, session, ...args) => {
     const result = spawnSync(
       process.execPath,
@@ -252,14 +252,14 @@ console.log('{}');
           ...process.env,
           CODEX_THREAD_ID: undefined,
           CLAUDE_CODE_SESSION_ID: session,
-          ANJIAN_SERVER_HOME: serverHome,
+          ANJIAN_RUNTIME_DIR: runtime,
         },
         encoding: 'utf8',
       },
     );
     assert.equal(result.status, 0, result.stderr);
   };
-  return { run, serverHome };
+  return { run, runtime };
 }
 
 async function until(check, deadlineMs = 3500) {
@@ -269,12 +269,12 @@ async function until(check, deadlineMs = 3500) {
 
 test('a Claude Code session hears only comments on artifacts it opened through the launcher', async (t) => {
   const f = fixture(t);
-  const { run, serverHome } = launcher(t);
+  const { run, runtime } = launcher(t);
   const mine = randomUUID();
   const other = randomUUID();
   const watcher = monitor(t, f.project, {
     CLAUDE_CODE_SESSION_ID: mine,
-    ANJIAN_SERVER_HOME: serverHome,
+    ANJIAN_RUNTIME_DIR: runtime,
   });
   run(f.project, mine, 'start', '--artifact', 'artboard/chat');
   run(f.project, other, 'start', '--artifact', 'artboard/mac-app-shell');
@@ -299,11 +299,11 @@ test('a Claude Code session hears only comments on artifacts it opened through t
 test('Claude receives feedback from a separately opened project in the same session', async (t) => {
   const local = fixture(t);
   const external = fixture(t);
-  const { run, serverHome } = launcher(t);
+  const { run, runtime } = launcher(t);
   const session = randomUUID();
   const watcher = monitor(t, local.project, {
     CLAUDE_CODE_SESSION_ID: session,
-    ANJIAN_SERVER_HOME: serverHome,
+    ANJIAN_RUNTIME_DIR: runtime,
   });
   run(external.project, session, 'start', '--artifact', 'document/plan');
   external.save('document/other', [thread()]);

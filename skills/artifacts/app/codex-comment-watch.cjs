@@ -212,20 +212,27 @@ function watch(ctx, input) {
       pending.set(key, { project, event });
     }
     if (!pending.size || Date.now() < nextAttempt) return;
-    const [key, { project, event }] = pending.entries().next().value;
-    const artifacts = sources.get(project);
-    if (!artifacts?.has('*') && !artifacts?.has(event.artifact)) {
-      pending.delete(key);
-      return;
-    }
-    if (event.type !== 'anjian-choices') {
-      const unread = unreadCount(project, event.artifact, 'Codex');
-      if (unread === null) return;
-      if (!unread) {
+    let delivery;
+    for (const item of pending) {
+      const [key, { project, event }] = item;
+      const artifacts = sources.get(project);
+      if (!artifacts?.has('*') && !artifacts?.has(event.artifact)) {
         pending.delete(key);
-        return;
+        continue;
       }
+      if (event.type !== 'anjian-choices') {
+        const unread = unreadCount(project, event.artifact, 'Codex');
+        if (unread === null) continue;
+        if (!unread) {
+          pending.delete(key);
+          continue;
+        }
+      }
+      delivery = item;
+      break;
     }
+    if (!delivery) return;
+    const [key, { event }] = delivery;
     running = true;
     try {
       const { receipt, warning } = await queueComment(ctx, remote, event, controller.signal);

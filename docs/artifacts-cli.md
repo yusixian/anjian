@@ -14,6 +14,8 @@ node skills/artifacts/app/anjian.cjs stop --json
 
 作品目录：`<项目>/.anjian/artifacts/`。服务状态：`~/.anjian/server/`，可由 `ANJIAN_SERVER_HOME` 修改。此目录与上游 Ryugi 的状态隔离。
 
+在 Codex 或 Claude Code 的案间启动器中用 `start --project-dir <目录> --artifact <作品>`，成功打开后将该作品的本地反馈订阅到当前会话。订阅与 Hub 状态目录分开，启动器和监听器须使用相同的 `ANJIAN_RUNTIME_DIR`（如果配置了该变量），订阅索引按用户主目录解析相对路径。当嵌套宿主同时提供两种会话 ID 时，在启动器调用中设置 `ANJIAN_COMMENT_HOST=codex` 或 `ANJIAN_COMMENT_HOST=claude`，以选择实际接收会话。
+
 本项目不提供官方云登录、`publish`、云链接 `get`、自动发布配置或上游 `update` 命令。更新由用户从本项目源码构建并自行部署。
 
 非回环地址启动时必须保留输出链接中的访问密钥。不要把这个链接贴到公开渠道。HTTPS 部署使用独立主界面和 HTML 预览 origin，见 [self-hosting.md](self-hosting.md)。

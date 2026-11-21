@@ -64,19 +64,30 @@ function sessionOf(host, env = process.env) {
   return UUID.test(session || '') ? session : null;
 }
 
+function hostOf(env, explicit = true) {
+  const codex = sessionOf('codex', env);
+  const claude = sessionOf('claude', env);
+  if (!codex || !claude) return codex ? 'codex' : claude ? 'claude' : null;
+  const choice = env.ANJIAN_COMMENT_HOST;
+  if (choice === 'codex' || choice === 'claude') return choice;
+  if (!explicit) return null;
+  throw new Error('Set ANJIAN_COMMENT_HOST=codex or claude when both session IDs are present');
+}
+
 function subscriptions(project, host, session) {
   const file = readJson(subscriptionFile(project, host, session));
   return new Set(Array.isArray(file?.artifacts) ? file.artifacts : []);
 }
 
 function indexDir(host, session, env = process.env) {
-  const home = env.ANJIAN_SERVER_HOME || path.join(os.homedir(), '.anjian', 'server');
-  return path.join(home, HOSTS[host].dir, 'subscriptions', session);
+  // A session can open projects served by different local Hubs.
+  const home = path.resolve(os.homedir(), env.ANJIAN_RUNTIME_DIR || '.anjian');
+  return path.join(home, 'comment-subscriptions', HOSTS[host].dir, session);
 }
 
 // Opened artifacts follow the session across watcher restarts. Only live watchers refresh heartbeats.
 function registerOpened(project, artifact, env = process.env) {
-  const host = sessionOf('codex', env) ? 'codex' : sessionOf('claude', env) ? 'claude' : null;
+  const host = hostOf(env);
   if (
     !host ||
     typeof project !== 'string' ||
@@ -133,17 +144,19 @@ function subscriptionSources(project, host, session) {
 
 // The launcher knows the real argv and cwd; hook text cannot safely reconstruct shell commands.
 function register(args, env = process.env) {
-  const host = sessionOf('codex', env) ? 'codex' : sessionOf('claude', env) ? 'claude' : null;
-  if (!host) return;
-  const session = sessionOf(host, env);
   const option = (name) => {
     const index = args.indexOf(name);
     return index >= 0
       ? args[index + 1]
       : args.find((arg) => arg.startsWith(`${name}=`))?.slice(name.length + 1);
   };
+  const requested = option('--artifact');
+  if (!requested && args[0] !== 'start') return;
+  const host = hostOf(env, Boolean(requested));
+  if (!host) return;
+  const session = sessionOf(host, env);
   // Claude Code's SessionStart hook runs a bare start in every session; it must not subscribe them all.
-  const artifact = option('--artifact') || (host === 'codex' && args[0] === 'start' ? '*' : null);
+  const artifact = requested || (host === 'codex' && args[0] === 'start' ? '*' : null);
   if (artifact !== '*' && !ARTIFACT.test(artifact || '')) return;
   const project = projectRoot(option('--project-dir') || process.cwd());
   const artifacts = subscriptions(project, host, session);

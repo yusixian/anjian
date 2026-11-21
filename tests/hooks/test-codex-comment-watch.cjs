@@ -45,6 +45,7 @@ function fixture(t) {
     ...process.env,
     PLUGIN_ROOT: repo,
     PLUGIN_DATA: data,
+    ANJIAN_RUNTIME_DIR: path.join(root, 'runtime'),
     ANJIAN_SERVER_HOME: path.join(root, 'server'),
     CODEX_THREAD_ID: inherited,
     ANJIAN_CODEX_REMOTE: 'unix:///tmp/anjian-test.sock',
@@ -74,11 +75,11 @@ console.log(JSON.stringify({ type: 'server-started' }));
 `,
   );
   const launcher = path.join(app, 'anjian.cjs');
-  const open = (artifact, session = id, target = project, extra = []) => {
+  const open = (artifact, session = id, target = project, extra = [], overrides = {}) => {
     const result = spawnSync(
       process.execPath,
       [launcher, 'start', '--json', '--project-dir', target, '--artifact', artifact, ...extra],
-      { env: { ...env, CODEX_THREAD_ID: session }, encoding: 'utf8' },
+      { env: { ...env, CODEX_THREAD_ID: session, ...overrides }, encoding: 'utf8' },
     );
     assert.equal(result.status, extra.includes('--fail-start') ? 1 : 0, result.stderr);
   };
@@ -310,6 +311,62 @@ test('hosts without PLUGIN_DATA keep worker ownership separate from launcher sub
   f.write('document/plan', f.comments());
   await until(() => f.read().length > 0, 'launcher registration stopped its own watcher');
   assert.equal(child.exitCode, null);
+});
+
+test('an unavailable external comment never blocks local delivery and can resume later', async (t) => {
+  const f = fixture(t);
+  const external = path.join(f.root, 'external');
+  fs.mkdirSync(external);
+  f.start({}, false);
+  f.open('document/external', id, external);
+  f.open('document/plan');
+  fs.writeFileSync(f.fail, 'offline');
+  f.write('document/external', f.comments(), external);
+  await until(() => f.read().length === 1, 'no first external delivery attempt');
+  fs.unlinkSync(path.join(external, '.anjian/artifacts/document/external/comments.json'));
+  f.write('document/plan', f.comments());
+  fs.unlinkSync(f.fail);
+  await until(() => f.read().length === 2, 'unavailable external comment blocked local notice');
+  const messageAt = (index) => {
+    const args = f.read()[index];
+    return args[args.indexOf('--message') + 1];
+  };
+  assert.match(messageAt(1), /--artifact document\/plan/);
+  f.write('document/external', f.comments(), external);
+  await until(() => f.read().length === 3, 'external comment did not resume');
+  assert.match(messageAt(2), /--artifact document\/external/);
+});
+
+test('an explicit open with a different Hub home still reaches the session watcher', async (t) => {
+  const f = fixture(t);
+  f.env.ANJIAN_RUNTIME_DIR = path.relative(os.homedir(), f.env.ANJIAN_RUNTIME_DIR);
+  f.start({}, false);
+  f.open('document/plan', id, f.project, [], {
+    ANJIAN_SERVER_HOME: path.join(f.root, 'other-hub'),
+  });
+  f.write('document/plan', f.comments());
+  await until(() => f.read().length === 1, 'different Hub home hid the subscription');
+});
+
+test('nested hosts can run commands without subscribing a session', () => {
+  const { register } = require(path.join(path.dirname(adapter), 'comment-subscriptions.cjs'));
+  const env = { CODEX_THREAD_ID: id, CLAUDE_CODE_SESSION_ID: inherited };
+  assert.doesNotThrow(() => register(['stop'], env));
+  assert.doesNotThrow(() => register(['start'], env));
+});
+
+test('an ambiguous launcher does not wake the inherited Codex session', async (t) => {
+  const f = fixture(t);
+  f.start({}, false);
+  f.open('document/plan', id, f.project, [], { CLAUDE_CODE_SESSION_ID: inherited });
+  f.write('document/plan', f.comments());
+  await delay(1400);
+  assert.equal(f.read().length, 0);
+  f.open('document/plan', id, f.project, [], {
+    CLAUDE_CODE_SESSION_ID: inherited,
+    ANJIAN_COMMENT_HOST: 'codex',
+  });
+  await until(() => f.read().length === 1, 'explicit host did not activate the watcher');
 });
 
 test('a comment resolved during an outage is not delivered when transport recovers', async (t) => {
