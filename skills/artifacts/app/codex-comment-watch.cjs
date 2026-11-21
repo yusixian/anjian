@@ -205,13 +205,14 @@ function watch(ctx, input) {
   const tick = async () => {
     if (readJson(ctx.file)?.token !== state.token) return stop();
     const sources = subscriptionSources(ctx.project, 'codex', ctx.session);
-    beatSources(ctx.project, 'codex', ctx.session, sources);
-    if (running) return;
-    for (const { project, event } of poll(sources)) {
-      const key = JSON.stringify([project, event.artifact, event.round]);
-      pending.set(key, { project, event });
+    if (!running) {
+      for (const { project, event } of poll(sources)) {
+        const key = JSON.stringify([project, event.artifact, event.round]);
+        pending.set(key, { project, event });
+      }
     }
-    if (!pending.size || Date.now() < nextAttempt) return;
+    beatSources(ctx.project, 'codex', ctx.session, sources);
+    if (running || !pending.size || Date.now() < nextAttempt) return;
     let delivery;
     for (const item of pending) {
       const [key, { project, event }] = item;
