@@ -5,6 +5,7 @@ import { remoteCommands } from './remote-commands';
 import { skillsCommand } from './skills';
 import { startCommand } from './start';
 import { stopCommand } from './stop';
+import { verifyReportCommand } from './verify-report';
 import { versionCommand } from './version';
 
 export const COMMANDS: CommandSpec[] = [
@@ -13,6 +14,7 @@ export const COMMANDS: CommandSpec[] = [
   startCommand,
   stopCommand,
   checkCommand,
+  verifyReportCommand,
   commentCommand,
   ...remoteCommands,
 ];
