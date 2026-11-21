@@ -37,10 +37,12 @@ export function HtmlView({
   id,
   feed,
   actions,
+  selectionSendEndpoint,
 }: {
   id: string;
   feed: ArtifactFeed;
   actions?: ReactNode;
+  selectionSendEndpoint?: string;
 }) {
   const { data, send } = useHtmlData(id, feed);
 
@@ -54,10 +56,10 @@ export function HtmlView({
   const selection = usePreviewSelection();
   const { frameRef, src, onLoad } = useSandboxFrame(target, {
     onError: (message) => send({ type: 'runtime-error', artifact: `html/${id}`, message }),
-    onMessage: selection.receive,
+    onMessage: selectionSendEndpoint ? selection.receive : undefined,
     onLoaded: (loaded) => {
       const version = Number(new URL(loaded, location.href).searchParams.get('v'));
-      selection.open(frameRef.current?.contentWindow, loaded);
+      if (selectionSendEndpoint) selection.open(frameRef.current?.contentWindow, loaded);
       send({ type: 'loaded', artifact: `html/${id}`, version });
     },
   });
@@ -66,16 +68,20 @@ export function HtmlView({
     <div {...stylex.props(styles.root)}>
       <LibraryBar
         actions={
-          <>
-            {selection.capture && selection.capture.selection.revision === data?.version && (
+          selectionSendEndpoint &&
+          selection.capture &&
+          selection.capture.selection.revision === data?.version ? (
+            <>
               <PreviewSelectionSend
                 capture={selection.capture}
-                id={id}
+                endpoint={selectionSendEndpoint}
                 key={selection.capture.id}
               />
-            )}
-            {actions}
-          </>
+              {actions}
+            </>
+          ) : (
+            actions
+          )
         }
       />
       {ready && src ? (

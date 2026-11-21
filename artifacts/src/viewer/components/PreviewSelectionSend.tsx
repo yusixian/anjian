@@ -44,14 +44,13 @@ const styles = stylex.create({
 const hostName = { codex: 'Codex', claude: 'Claude Code' };
 
 export function PreviewSelectionSend({
-  id,
+  endpoint,
   capture,
 }: {
-  id: string;
+  endpoint: string;
   capture: CapturedPreviewSelection;
 }) {
   const { t } = useTranslation();
-  const endpoint = `/api/html/${encodeURIComponent(id)}/selection-send`;
   const [recipients, setRecipients] = useState<SelectionRecipient[] | null>(null);
   const [chosen, setChosen] = useState('');
   const [status, setStatus] = useState<SelectionDelivery | null>(null);

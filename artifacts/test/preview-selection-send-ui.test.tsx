@@ -65,7 +65,7 @@ test('losing a chosen Agent does not silently send the selection to the remainin
   await act(async () =>
     root.render(
       <PreviewSelectionSend
-        id="sample"
+        endpoint="/test/selection-send"
         capture={{
           id: 'capture',
           selection: { capturedAt: now, revision: 1, selector: '#selected', text: 'Preview text' },
