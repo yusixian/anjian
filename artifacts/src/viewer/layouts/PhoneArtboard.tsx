@@ -12,7 +12,7 @@ import {
 } from 'react';
 
 import type { BoardHumanOp } from '../../shared/board-comments';
-import { type CanvasLayout, type CanvasSpec, isMediaBoard } from '../../shared/types';
+import { type Bounds, type CanvasLayout, type CanvasSpec, isMediaBoard } from '../../shared/types';
 import { SubmitBar } from '../choices/SubmitBar';
 import { Canvas } from '../components/Canvas';
 import { CanvasErrorBoundary } from '../components/CanvasErrorBoundary';
@@ -152,7 +152,12 @@ export function PhoneArtboard({
     [fit],
   );
   const fitPage = useCallback(
-    (page: string) => {
+    (page: string, bounds?: Bounds) => {
+      if (bounds) {
+        setCurrent(null);
+        fit(bounds, INSETS);
+        return true;
+      }
       const pageLayout = layout?.pages[page];
       if (!canvas || !pageLayout) return false;
       if (show(openingQuestion(roundsOf(canvas, layout, page), canvas.focus?.target))) return true;
@@ -162,7 +167,7 @@ export function PhoneArtboard({
     },
     [canvas, layout, fit, show],
   );
-  const { page, changePage } = useArtboardPage({
+  const { page, changePage, focusUnavailable } = useArtboardPage({
     canvas,
     layout,
     fitPage,
@@ -324,6 +329,8 @@ export function PhoneArtboard({
       : loose(openQuestion)
         ? openRound!.questions.filter(loose).map((q) => q.id)
         : openQuestion.boards;
+
+  if (focusUnavailable) return <p role="status">{t('reference.unavailable')}</p>;
 
   return (
     <div {...stylex.props(styles.root)} style={readOnly ? { position: 'absolute' } : undefined}>

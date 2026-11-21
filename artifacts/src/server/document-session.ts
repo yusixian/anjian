@@ -1,5 +1,5 @@
-import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -11,18 +11,18 @@ import {
 import { $getRoot, type SerializedEditorState } from 'lexical';
 import { decodeImportBlobMeta, LoroDoc, type OpId } from 'loro-crdt';
 
+import { validateArtifactReference } from '../shared/artifact-reference';
 import { DOCUMENT_FEATURES } from '../shared/document-features';
 import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
 import {
   boxDrawingDiagrams,
   DocumentRejected,
-  documentQuestions,
   parseDocument,
   serializeDocument,
   stampBlockIds,
 } from './document-codec';
-import { createDocumentHeadlessEditor } from './document-headless';
 import type { CommentAdmission } from './document-comments';
+import { createDocumentHeadlessEditor } from './document-headless';
 import { createPreparedStateFiles } from './storage/prepared-files';
 
 export type DocumentOutcome =
@@ -37,27 +37,27 @@ export type DocumentEvent =
   | { type: 'saved' };
 
 export interface DocumentSessionOptions {
+  enqueueWrite?: (work: (admit: CommentAdmission) => void) => void;
   file: string;
-  stateRoot?: string;
   log?: (line: string) => void;
   snapshotFile: string;
   snapshotIntervalMs?: number;
+  stateRoot?: string;
   writeDelayMs?: number;
-  enqueueWrite?: (work: (admit: CommentAdmission) => void) => void;
 }
 
 export interface DocumentSession {
   agentActiveAt: () => number;
   close: (admit?: CommentAdmission) => Promise<void>;
   flush: (admit?: CommentAdmission) => Promise<void>;
-  quiesce: (admit?: CommentAdmission) => Promise<() => void>;
   importUpdate: (bytes: Uint8Array, features?: readonly string[]) => void;
-  saveUpdate: (bytes: Uint8Array, features?: readonly string[], admit?: CommentAdmission) => void;
   lineage: () => string;
   onFileText: (text: string) => void;
-  prepareRemoteText: (text: string) => PreparedRemoteDocument;
-  readyForRemoteUpload: (admit?: CommentAdmission) => Promise<void>;
   outcome: () => DocumentOutcome;
+  prepareRemoteText: (text: string) => PreparedRemoteDocument;
+  quiesce: (admit?: CommentAdmission) => Promise<() => void>;
+  readyForRemoteUpload: (admit?: CommentAdmission) => Promise<void>;
+  saveUpdate: (bytes: Uint8Array, features?: readonly string[], admit?: CommentAdmission) => void;
   settled: () => Promise<void>;
   snapshot: () => Uint8Array;
   state: () => SerializedEditorState;
@@ -66,16 +66,16 @@ export interface DocumentSession {
 }
 
 export interface PreparedRemoteDocument {
-  xml: string;
-  warnings: string[];
+  abort: () => void;
+  addStateFile: (file: string, data: string | Uint8Array) => void;
+  commit: () => void;
+  finalize: () => void;
+  stage: () => void;
   /** Signed change in persisted document state, excluding doc.xml itself. */
   stateDeltaBytes: number;
   validate: () => void;
-  stage: () => void;
-  addStateFile: (file: string, data: string | Uint8Array) => void;
-  abort: () => void;
-  commit: () => void;
-  finalize: () => void;
+  warnings: string[];
+  xml: string;
 }
 
 function snapshotSignature(file: string): string | null {
@@ -124,7 +124,7 @@ export class DocumentPersistenceError extends Error {}
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-function validateQuestionTree(candidate: LoroDoc) {
+function validateDocumentBlockTree(candidate: LoroDoc) {
   const root = candidate.getTree(TREE_NAME).roots()[0];
   if (!root) return;
   const stack = root.children() ?? [];
@@ -133,18 +133,22 @@ function validateQuestionTree(candidate: LoroDoc) {
     const node = stack.pop()!;
     const children = node.children();
     if (children) for (const child of children) stack.push(child);
-    if (node.data.get('type') !== 'question') continue;
+    const type = node.data.get('type');
+    if (type !== 'question' && type !== 'artifact-reference') continue;
     if (node.parent()?.id !== root.id)
-      throw new DocumentRejected('<ask> must be a top-level block');
-    const definition = node.data.get('definition') as DocumentQuestion;
+      throw new DocumentRejected(`<${type === 'question' ? 'ask' : 'ref'}> must be a top-level block`);
     try {
+      if (type === 'artifact-reference') {
+        validateArtifactReference(node.data.get('reference'));
+        continue;
+      }
+      const definition = node.data.get('definition') as DocumentQuestion;
       validateDocumentQuestion(definition);
+      if (ids.has(definition.id)) throw new Error(`<ask> duplicate key "${definition.id}"`);
+      ids.add(definition.id);
     } catch (error) {
       throw new DocumentRejected(messageOf(error));
     }
-    if (ids.has(definition.id))
-      throw new DocumentRejected(`<ask> duplicate key "${definition.id}"`);
-    ids.add(definition.id);
   }
 }
 
@@ -311,7 +315,7 @@ export async function createDocumentSession(
     const candidate = loro.fork();
     try {
       candidate.import(update);
-      validateQuestionTree(candidate);
+      validateDocumentBlockTree(candidate);
     } finally {
       candidate.free();
     }
@@ -506,7 +510,7 @@ export async function createDocumentSession(
       probe.import(bytes);
       if (probe.getTree(TREE_NAME).roots().length > 1)
         throw new Error('update belongs to a different document; reload the page');
-      validateQuestionTree(probe);
+      validateDocumentBlockTree(probe);
       return probe;
     } catch (error) {
       probe.free();
@@ -579,7 +583,7 @@ export async function createDocumentSession(
       const from = candidate.oplogVersion();
       candidateBinding.import(update);
       const beforeStamp = candidateEditor.getEditorState().toJSON();
-      try { documentQuestions(beforeStamp); }
+      try { validateDocumentBlockTree(candidate); }
       catch (error) { candidateBinding.dispose(); throw error; }
       const stamped = stampBlockIds(beforeStamp);
       if (stamped !== beforeStamp && JSON.stringify(stamped) !== JSON.stringify(beforeStamp))

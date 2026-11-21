@@ -13,6 +13,7 @@ import { useTypeFavicon } from '../hooks/useTypeFavicon';
 import { t } from '../i18n';
 import { agentActivity } from './agentActivity';
 import type { AgentPlaybackState } from './AgentPlayback';
+import { type ArtifactReferenceResolver, LiveReferenceContext } from './ArtifactReferenceCard';
 import type { ThreadActions } from './CommentCard';
 import { DesktopDocument } from './DesktopDocument';
 import { DocumentEditor, extraNodes } from './DocumentEditor';
@@ -89,12 +90,14 @@ export function DocumentView({
   id,
   transport,
   live,
+  resolveReference,
   fallback,
   actions: barActions,
 }: {
   id: string;
   transport: DocumentTransport;
   live: boolean;
+  resolveReference?: ArtifactReferenceResolver;
   fallback?: ReactNode;
   actions?: ReactNode;
 }) {
@@ -281,21 +284,23 @@ export function DocumentView({
 
   const editorView = (
     <DynamicHostContext.Provider value={dynamicHost}>
-      <PendingContext.Provider value={pendingProgress}>
-        <DocumentQuestions artifact={live && feedbackEnabled ? artifact : null}>
-          <DocumentEditor
-            agent={meta?.agent}
-            doc={doc}
-            theme={dark ? 'dark' : 'light'}
-            transport={transport}
-            onAgentPlayback={setPlayback}
-            onEditorReady={setEditor}
-            onOffline={setOffline}
-            onQuotaExceeded={setQuotaExceeded}
-            onState={onState}
-          />
-        </DocumentQuestions>
-      </PendingContext.Provider>
+      <LiveReferenceContext.Provider value={historyVisible ? null : (resolveReference ?? null)}>
+        <PendingContext.Provider value={pendingProgress}>
+          <DocumentQuestions artifact={live && feedbackEnabled ? artifact : null}>
+            <DocumentEditor
+              agent={meta?.agent}
+              doc={doc}
+              theme={dark ? 'dark' : 'light'}
+              transport={transport}
+              onAgentPlayback={setPlayback}
+              onEditorReady={setEditor}
+              onOffline={setOffline}
+              onQuotaExceeded={setQuotaExceeded}
+              onState={onState}
+            />
+          </DocumentQuestions>
+        </PendingContext.Provider>
+      </LiveReferenceContext.Provider>
     </DynamicHostContext.Provider>
   );
 

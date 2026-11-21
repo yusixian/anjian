@@ -611,6 +611,10 @@
     "jumpTo": "跳到",
     "boards_other": "{{count}} 张"
   },
+  "reference": {
+    "static": "作品引用",
+    "unavailable": "引用不可用"
+  },
   "release": {
     "closeNotes": "关闭",
     "fullCommit": "查看完整提交标识",

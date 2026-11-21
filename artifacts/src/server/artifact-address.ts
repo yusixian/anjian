@@ -11,6 +11,8 @@ import {
   resolveArtifactDir,
 } from './artifacts';
 
+class InvalidArtifactId extends Error {}
+
 function artifactId(dir: string): string {
   const file = path.join(dir, '.artifact-id');
   let id: string;
@@ -26,7 +28,7 @@ function artifactId(dir: string): string {
       return artifactId(dir);
     }
   }
-  if (!isArtifactAddress(id)) throw new Error(`Invalid artifact ID in ${file}`);
+  if (!isArtifactAddress(id)) throw new InvalidArtifactId(`Invalid artifact ID in ${file}`);
   return id;
 }
 
@@ -39,13 +41,22 @@ export function artifactPath(root: string, type: ArtifactType, slug: string): st
 }
 
 export function resolveArtifactAddress(root: string, type: ArtifactType, address: string) {
-  const matches = listArtifacts(root).artifacts.filter(
-    (entry) => entry.type === type && artifactId(entry.dir) === address,
-  );
+  let invalidSlug: InvalidArtifactId | undefined;
+  const matches = listArtifacts(root).artifacts.filter((entry) => {
+    if (entry.type !== type) return false;
+    try {
+      return artifactId(entry.dir) === address;
+    } catch (error) {
+      if (!(error instanceof InvalidArtifactId)) throw error;
+      if (entry.id === address) invalidSlug = error;
+      return false;
+    }
+  });
   if (matches.length > 1)
     throw new Error(
       `Duplicate artifact ID: ${type}/${address} (${matches.map((entry) => entry.id).join(', ')})`,
     );
+  if (matches.length === 0 && invalidSlug) throw invalidSlug;
   return (
     matches[0] ??
     (resolveArtifactDir(root, type, address)

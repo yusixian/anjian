@@ -628,6 +628,10 @@
     "boards_one": "{{count}} board",
     "boards_other": "{{count}} boards"
   },
+  "reference": {
+    "static": "Artifact reference",
+    "unavailable": "Reference unavailable"
+  },
   "release": {
     "closeNotes": "Close",
     "fullCommit": "Show full commit",

@@ -24,8 +24,9 @@ import { styles } from './historyStyles';
 import { historyWhen } from './historyTime';
 import { MermaidPreview } from './MermaidPreview';
 import { QuestionNode } from './QuestionNode';
+import { ReferenceNode } from './ReferenceNode';
 
-const renderNodes = [ChartNode, ExcalidrawNode, ...stepsNodes, QuestionNode];
+const renderNodes = [ChartNode, ExcalidrawNode, ...stepsNodes, QuestionNode, ReferenceNode];
 const renderers: RendererConfig = {
   [ALERT_NODE_KEY]: AlertRenderer,
   [CODE_BLOCK_NODE_KEY]: CodeBlockRenderer,

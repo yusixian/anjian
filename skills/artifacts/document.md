@@ -60,6 +60,27 @@ The answer, draft and reply are stored separately from `doc.xml`. Public views
 show the question and its options. See [remote.md](remote.md) for reading and
 replying to submitted answers.
 
+## Reference another artifact
+
+Place a top-level `<ref>` where the reader should open another work. Use the
+stable address from its verified artifact link, without the origin, query,
+access key or share token.
+
+```xml
+<ref type="artboard" target="A12345678901234567890" group="proposal" label="Proposal review" />
+<ref type="html" target="B12345678901234567890" label="Interactive preview" />
+```
+
+Use `type="document"`, `type="html"`, or `type="artboard"`. For an artboard use
+either `group` or `board` to focus an exact ID, even when a group and a board
+have the same ID. Omit both to open the whole artboard. When the target group
+uses human verification, the authenticated document shows its current verdict.
+
+Run the document check and open each reference in the browser with the intended
+reader's access. The destination is resolved when the reference is opened. A
+public source snapshot shows the reference text. Readers access a separately
+shared destination through its own share link.
+
 ## Before writing: choose how to tell it
 
 Before the outline, decide what the reader must come away understanding,

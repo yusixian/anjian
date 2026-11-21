@@ -31,6 +31,7 @@ import { LoroSync } from './LoroSync';
 import { MermaidPreview } from './MermaidPreview';
 import { PendingNode } from './PendingNode';
 import { QuestionNode } from './QuestionNode';
+import { ReferenceNode } from './ReferenceNode';
 import type { DocumentState, DocumentTransport } from './transport';
 
 export const extraNodes = [
@@ -40,6 +41,7 @@ export const extraNodes = [
   DynamicNode,
   PendingNode,
   QuestionNode,
+  ReferenceNode,
   ...katexEditNodes,
 ];
 

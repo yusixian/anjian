@@ -285,6 +285,94 @@ describe('parseDocument', () => {
   });
 });
 
+describe('artifact reference blocks', () => {
+  const target = 'AB12ab12ab12ab12ab12x';
+  const board = `type="artboard" target="${target}"`;
+
+  test('round-trips whole artifacts and artboard focus with independent block IDs', () => {
+    const state = stampBlockIds(
+      parseDocument(
+        `<ref id="review" ${board} group="review" label="对比 A &amp; B > C" />
+      <ref ${board} board="details-v2" />
+      <ref type="document" target="${target}" />
+      <ref type="html" target="${target}" />`,
+      ),
+    );
+    expect(state.root.children).toEqual([
+      {
+        $: { blockId: 'review' },
+        type: 'artifact-reference',
+        reference: {
+          type: 'artboard',
+          target,
+          focus: { kind: 'group', id: 'review' },
+          label: '对比 A & B > C',
+        },
+        version: 1,
+      },
+      expect.objectContaining({
+        reference: { type: 'artboard', target, focus: { kind: 'board', id: 'details-v2' } },
+      }),
+      expect.objectContaining({ reference: { type: 'document', target } }),
+      expect.objectContaining({ reference: { type: 'html', target } }),
+    ]);
+    expect(parseDocument(serializeDocument(state))).toEqual(state);
+  });
+
+  test.each([
+    ['<blockquote><ref ' + board + ' /></blockquote>', 'top-level'],
+    ['<footnote-section><def ref="1"><ref ' + board + ' /></def></footnote-section>', 'top-level'],
+    ['<p><ref ' + board + ' /></p>', 'top-level'],
+    ['<ref ' + board + '>text</ref>', 'empty'],
+    ['<ref ' + board + '><p>text</p></ref>', 'empty'],
+    ['<ref ' + board + ' board="b" group="g" />', 'either board or group'],
+    [`<ref type="document" target="${target}" board="b" />`, 'only supported for artboards'],
+    ['<ref ' + board + ' group="x?key=private" />', 'URL-safe ID'],
+    ['<ref ' + board + ' group="' + 'a'.repeat(129) + '" />', 'URL-safe ID'],
+    ['<ref ' + board + ' label=" " />', '1–160 characters'],
+    ['<ref ' + board + ' key="private" />', 'invalid or repeated attributes'],
+    ['<ref ' + board + ' target="slug" />', 'invalid or repeated attributes'],
+    ['<ref type="html" target="slug" />', 'stable artifact ID'],
+    ['<ref type="html" target="https://example.com/x?key=private" />', 'stable artifact ID'],
+    ['<ref type="other" target="' + target + '" />', 'type must be'],
+  ])('rejects malformed source %s', (xml, message) => {
+    expect(() => parseDocument(xml)).toThrow(message);
+  });
+
+  test('retains references and block IDs through Loro snapshot and updates', () => {
+    const xml = `<ref id="ref-a" ${board} group="review" label="Review" />`;
+    const state = parseDocument(xml);
+    const doc = new LoroDoc();
+    const editor = createDocumentHeadlessEditor();
+    const binding = createLoroBinding(editor, doc);
+    const copy = new LoroDoc();
+    try {
+      editor.update(() => $reconcileRoot(state.root as never), { discrete: true });
+      copy.import(doc.export({ mode: 'snapshot' }));
+      const copyEditor = createDocumentHeadlessEditor();
+      const copyBinding = createLoroBinding(copyEditor, copy);
+      try {
+        expect(parseDocument(serializeDocument(copyEditor.getEditorState().toJSON()))).toEqual(
+          state,
+        );
+        const updated = parseDocument(xml.replace('label="Review"', 'label="Updated review"'));
+        const from = doc.oplogVersion();
+        editor.update(() => $reconcileRoot(updated.root as never), { discrete: true });
+        copyBinding.import(doc.export({ mode: 'update', from }));
+        expect(parseDocument(serializeDocument(copyEditor.getEditorState().toJSON()))).toEqual(
+          updated,
+        );
+      } finally {
+        copyBinding.dispose();
+      }
+    } finally {
+      copy.free();
+      binding.dispose();
+      doc.free();
+    }
+  });
+});
+
 describe('stampBlockIds', () => {
   test('gives every top-level block a unique id and keeps existing ones', () => {
     const state = stampBlockIds(parseDocument('<doc><h2 id="keep">a</h2><p>b</p><p>c</p></doc>'));

@@ -2,6 +2,8 @@ import { createDefaultRegistry, deserializeFromXml, serializeToXml } from '@hakl
 import type { SerializedEditorState, SerializedLexicalNode } from 'lexical';
 import { nanoid } from 'nanoid';
 
+import { validateArtifactReference } from '../shared/artifact-reference';
+import type { SerializedReferenceNode } from '../shared/artifact-reference-node';
 import type { SerializedQuestionNode } from '../shared/document-question-node';
 import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
 import { DYNAMIC_URL } from '../shared/dynamic';
@@ -46,6 +48,7 @@ const BLOCK_TAGS = [
   'dynamic',
   'pending',
   'ask',
+  'ref',
 ];
 const INLINE_TAGS = [
   'b',
@@ -150,6 +153,49 @@ registry.registerWriter('question', (node) => {
   };
 });
 
+const REFERENCE_ATTRS = new Set(['id', 'type', 'target', 'label', 'board', 'group']);
+const REFERENCE_ATTR = /\s+([a-z]+)\s*=\s*(?:"[^"]*"|'[^']*')/gy;
+
+registry.registerReader('ref', (el) => {
+  if ([...el.childNodes].some((node) => node.nodeType !== 3 || node.textContent?.trim()))
+    throw new Error('<ref> must be empty');
+  const id = el.getAttribute('id');
+  const label = el.getAttribute('label');
+  const board = el.getAttribute('board');
+  const group = el.getAttribute('group');
+  if (board !== null && group !== null) throw new Error('<ref> allows either board or group');
+  const focus = board !== null ? { kind: 'board', id: board } : { kind: 'group', id: group };
+  const reference = {
+    type: el.getAttribute('type'),
+    target: el.getAttribute('target'),
+    ...(label !== null ? { label } : {}),
+    ...(focus.id !== null ? { focus } : {}),
+  };
+  validateArtifactReference(reference);
+  return {
+    type: 'artifact-reference',
+    ...(id ? { $: { blockId: id } } : {}),
+    reference,
+    version: 1,
+  } satisfies SerializedReferenceNode & Pick<Block, '$'>;
+});
+registry.registerWriter('artifact-reference', (node) => {
+  const { $: state, reference } = node as Block & SerializedReferenceNode;
+  validateArtifactReference(reference);
+  const { type, target, label, focus } = reference;
+  return {
+    tag: 'ref',
+    attrs: {
+      ...(state?.blockId ? { id: state.blockId } : {}),
+      type,
+      target,
+      ...(label === undefined ? {} : { label }),
+      ...(focus ? { [focus.kind]: focus.id } : {}),
+    },
+    selfClosing: true,
+  };
+});
+
 export class DocumentRejected extends Error {}
 
 export const URL_ATTR = /\surl\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
@@ -235,6 +281,36 @@ export function documentQuestions(state: SerializedEditorState): DocumentQuestio
   return definitions;
 }
 
+function countSourceReferences(xml: string): number {
+  const ancestors: string[] = [];
+  let count = 0;
+  for (const [raw, closing, rawTag, selfClosing] of stripOpaque(xml).matchAll(TAG)) {
+    const tag = rawTag!.toLowerCase();
+    if (closing) {
+      ancestors.pop();
+      continue;
+    }
+    if (tag === 'ref') {
+      if (ancestors.length !== 1 || ancestors[0] !== 'doc')
+        throw new DocumentRejected('<ref> must be a top-level block');
+      const attrs = raw.slice(4, selfClosing ? -2 : -1).trimEnd();
+      const seen = new Set<string>();
+      let cursor = 0;
+      while (cursor < attrs.length) {
+        REFERENCE_ATTR.lastIndex = cursor;
+        const match = REFERENCE_ATTR.exec(attrs);
+        if (!match || !REFERENCE_ATTRS.has(match[1]!) || seen.has(match[1]!))
+          throw new DocumentRejected('<ref> contains invalid or repeated attributes');
+        seen.add(match[1]!);
+        cursor = REFERENCE_ATTR.lastIndex;
+      }
+      count++;
+    }
+    if (!selfClosing && tag !== 'br' && tag !== 'hr' && tag !== 'img') ancestors.push(tag);
+  }
+  return count;
+}
+
 export function parseDocument(xml: string): SerializedEditorState {
   const wrapped = /^\s*<doc[\s>]/.test(xml) ? xml : `<doc>${xml}</doc>`;
   const problem =
@@ -243,6 +319,7 @@ export function parseDocument(xml: string): SerializedEditorState {
     strayDef(wrapped) ??
     badDynamicProps(wrapped);
   if (problem) throw new DocumentRejected(problem);
+  const references = /<ref\b/i.test(wrapped) ? countSourceReferences(wrapped) : 0;
   let state: SerializedEditorState;
   try {
     state = deserializeFromXml(wrapped, registry);
@@ -253,6 +330,10 @@ export function parseDocument(xml: string): SerializedEditorState {
     badDynamicUrl(state.root.children as Block[]) ?? nestedPending(state.root.children as Block[]);
   if (invalidNode) throw new DocumentRejected(invalidNode);
   documentQuestions(state);
+  if (
+    state.root.children.filter((node) => node.type === 'artifact-reference').length !== references
+  )
+    throw new DocumentRejected('<ref> must be a top-level block');
   return state;
 }
 
