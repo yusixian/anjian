@@ -52,7 +52,7 @@ function outside(root: string, file: string) {
 
 function fileIdentity(file: string): string {
   try {
-    return fs.realpathSync(file);
+    return fs.realpathSync.native(file);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     const parent = path.dirname(file);
@@ -111,7 +111,7 @@ function linkedRules(row: Record<string, unknown>, byId: Map<string, string>) {
 }
 
 function renderReport(source: string, lang: string) {
-  const manifest = fs.realpathSync(source);
+  const manifest = fs.realpathSync.native(source);
   const directory = path.dirname(manifest);
   const sources = new Set([manifest]);
   const report = record(JSON.parse(fs.readFileSync(manifest, 'utf8')), 'Report');

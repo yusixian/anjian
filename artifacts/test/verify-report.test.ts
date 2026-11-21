@@ -262,3 +262,16 @@ test('validates the document reference and rule associations in both evidence se
     await expect(run({ input: 'report.json' })).rejects.toThrow(reason);
   }
 });
+
+test('protects a pinned manifest addressed with different case on case-insensitive disks', async () => {
+  const report = await createDesignReport();
+  writeReport(report);
+  const original = path.join(dir, report.designSpec.file);
+  const alias = path.join(dir, report.designSpec.file.toUpperCase());
+  if (!fs.existsSync(alias)) return;
+  const bytes = fs.readFileSync(original);
+  await expect(run({ input: 'report.json', output: alias })).rejects.toThrow(
+    '--output must differ',
+  );
+  expect(fs.readFileSync(original)).toEqual(bytes);
+});
