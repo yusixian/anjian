@@ -340,6 +340,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               return;
             if (!('artifact' in message)) return;
             storageRuntime.changed(members.projectOwner(project));
+            if ('receiptOnly' in message && message.receiptOnly) return;
             try {
               remoteEvents.append(projectId(project), message.artifact, message.type, {
                 action: 'Read current comments or pull the changed artifact',

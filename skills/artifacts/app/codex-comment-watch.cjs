@@ -185,7 +185,8 @@ function watch(ctx, input) {
   if (!state) return;
   state.remote = remote;
   fs.writeFileSync(ctx.file, JSON.stringify(state), { mode: 0o600 });
-  const poll = createProjectPoll('Codex');
+  const session = `codex:${ctx.session}`;
+  const poll = createProjectPoll('Codex', session);
   const pending = new Map();
   const controller = new AbortController();
   let running = false;
@@ -222,7 +223,7 @@ function watch(ctx, input) {
         continue;
       }
       if (event.type !== 'anjian-choices') {
-        const unread = unreadCount(project, event.artifact, 'Codex');
+        const unread = unreadCount(project, event.artifact, 'Codex', session);
         if (unread === null) continue;
         if (!unread) {
           pending.delete(key);

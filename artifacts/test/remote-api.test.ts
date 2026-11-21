@@ -461,6 +461,38 @@ test('CLI unread cursor writes cannot bypass storage quota', async () => {
   expect((await (await post()).json()).threads).toHaveLength(0);
 });
 
+test('comment receipts bind to the authenticated device even when session names match', async () => {
+  const fx = await fixture();
+  const first = await fx.login();
+  const second = await fx.login();
+  const artifact = 'document/receipt-device';
+  const dir = path.join(fx.alpha, '.anjian/artifacts', artifact);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'doc.xml'), '<doc><p id="b1">Review</p></doc>');
+  const human = await fx.request(`/api/${artifact}/comments?key=${MASTER}`, {
+    method: 'POST', headers: { Origin: fx.origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'create', blockId: 'b1', quote: 'Review', text: 'Please review' }),
+  });
+  expect(human.status).toBe(200);
+  const post = (headers: Record<string, string>, body: object, project = fx.id(fx.alpha)) =>
+    fx.request(`/api/remote/projects/${project}/agent/${artifact}/comments`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: 'codex:shared-name', ...body }),
+    });
+  const original = await post(first.headers, { op: 'receipt-list' });
+  expect(original.status).toBe(200);
+  const { threads: [{ receipts }] } = await original.json();
+  expect(await (await post(second.headers, { op: 'confirm-read', receipts })).json()).toEqual({ confirmed: 0 });
+  const settings = createStorageSettings(fx.home);
+  settings.setSharedLimit(0);
+  expect((await post(first.headers, { op: 'confirm-read', receipts })).status).toBe(413);
+  settings.setSharedLimit(1024 * 1024);
+  expect(await (await post(first.headers, { op: 'confirm-read', receipts })).json()).toEqual({ confirmed: 2 });
+  expect((await (await post(first.headers, { op: 'receipt-list' })).json()).threads).toEqual([]);
+  expect((await (await post(second.headers, { op: 'receipt-list' })).json()).threads).toHaveLength(1);
+  expect((await post(first.headers, { op: 'receipt-list' }, fx.id(fx.beta))).status).toBe(404);
+});
+
 test('document download at zero quota returns persisted bytes without uncharged normalization', async () => {
   const fx = await fixture();
   const { headers } = await fx.login();

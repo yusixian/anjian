@@ -214,7 +214,7 @@ export function createServerContext(options: ServerOptions) {
     streaming: session.streaming(),
     agentActiveAt: session.agentActiveAt(),
     now: Date.now(),
-    comments: documents.comments(id),
+    comments: documents.viewerComments(id),
   });
 
   const verdictPreparing = (id: string, op: NonNullable<ReturnType<typeof asBoardHumanOp>>) => {
@@ -239,7 +239,7 @@ export function createServerContext(options: ServerOptions) {
     ...(ref.type !== 'html' ? { agent: names.agent() } : {}),
     ...(ref.type === 'artboard'
       ? {
-          comments: boardComments.comments(ref.id),
+          comments: boardComments.viewerComments(ref.id),
           staleThreads: boardComments.stale(ref.id),
           listening: boardComments.listening(ref.id),
         }

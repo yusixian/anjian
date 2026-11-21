@@ -3,6 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { useState } from 'react';
 
 import type { BoardThread } from '../../shared/board-comments';
+import { AgentReadReceipt } from '../comments/ThreadView';
 import { BottomSheet } from '../components/BottomSheet';
 import { Composer } from '../document/Composer';
 import { useTranslation } from '../i18n';
@@ -71,6 +72,7 @@ export function FeedbackSheet({
         <FeedbackPanel
           artifact={artifact}
           key={artifact}
+          threads={threads}
           onOpenThread={(id) => {
             setThreadId(id);
             setSnap(1);
@@ -84,6 +86,7 @@ export function FeedbackSheet({
               .map((message) => (
                 <p key={message.id} {...stylex.props(styles.message)}>
                   {message.text}
+                  <AgentReadReceipt message={message} />
                 </p>
               ))}
             <Composer

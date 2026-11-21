@@ -155,6 +155,101 @@ describe('anjian comment', () => {
     expect(thread.messages.at(-1)).toMatchObject({ author: 'human', text: '人的回复' });
   });
 
+  test('explicit sessions can inspect and confirm only the captured messages', async () => {
+    const dir = await project();
+    const args = ['comment', 'list', ...doc(dir)];
+    const threadId = (await run(['comment', 'add', ...doc(dir), '--block', 'b1', '--text', 'q?']))
+      .out.threadId;
+    await humanReply(dir, threadId, 'First reply');
+    const first = await run([...args, '--session', 'codex:first', '--all']);
+    expect(first.out.threads).toMatchObject([{ id: threadId, unread: true }]);
+    const snapshot = path.join(dir, 'read-snapshot.json');
+    fs.writeFileSync(snapshot, first.stdout);
+    expect((await run([...args, '--session', 'codex:first', '--peek'])).out.threads).toHaveLength(
+      1,
+    );
+
+    await humanReply(dir, threadId, 'Second reply');
+    const confirm = await run([
+      'comment',
+      'read',
+      ...doc(dir),
+      '--snapshot',
+      snapshot,
+      '--thread',
+      threadId,
+    ]);
+    expect(confirm.out).toMatchObject({ type: 'comment-read', confirmed: 1 });
+    const later = await run([...args, '--session', 'codex:first']);
+    expect(later.out.threads[0]).toMatchObject({
+      id: threadId,
+      changes: ['new-message'],
+      messageIds: [comments(dir).threads[0].messages[2].id],
+    });
+    const second = await run([...args, '--session', 'codex:second']);
+    expect(second.out.threads[0].messageIds).toHaveLength(2);
+    expect((await run([...args, '--session', 'codex:first', '--all'])).out.threads[0].unread).toBe(
+      false,
+    );
+    expect((await run(args)).out.threads).toHaveLength(1);
+    expect((await run(args)).out.threads).toEqual([]);
+  });
+
+  test('Codex and Claude use the same session names as their notification watchers', async () => {
+    const dir = await project();
+    const args = ['comment', 'list', ...doc(dir)];
+    const threadId = (await run(['comment', 'add', ...doc(dir), '--block', 'b1', '--text', 'q?']))
+      .out.threadId;
+    await humanReply(dir, threadId, 'Review the new draft');
+    const uuid = '8f46e9e2-96ca-4489-aa20-caf3f3e516f6';
+    for (const [agent, host] of [
+      [{ CODEX_THREAD_ID: uuid }, 'codex'],
+      [{ CLAUDE_CODE_SESSION_ID: uuid }, 'claude'],
+    ] as const) {
+      const first = await run(args, { agent });
+      expect(first.out).toMatchObject({ session: `${host}:${uuid}`, threads: [{ unread: true }] });
+      expect((await run([...args, '--session', `${host}:${uuid}`])).out.threads).toEqual([]);
+    }
+    const nested = { CODEX_THREAD_ID: uuid, CLAUDE_CODE_SESSION_ID: uuid };
+    expect((await run(args, { agent: nested })).out.error).toContain('--session');
+    expect(
+      (await run(args, { agent: { ...nested, ANJIAN_COMMENT_HOST: 'claude' } })).out.session,
+    ).toBe(`claude:${uuid}`);
+  });
+
+  test('large comment histories are acknowledged in separate requests', async () => {
+    const dir = await project({ running: false });
+    const time = '2026-11-22T10:00:00.000Z';
+    fs.writeFileSync(
+      path.join(dir, '.anjian/artifacts/document/relay/comments.json'),
+      JSON.stringify({
+        version: 1,
+        threads: [
+          {
+            id: 'batch',
+            anchor: { blockId: 'b1', quote: '' },
+            status: 'open',
+            statusAt: time,
+            messages: Array.from({ length: 1450 }, (_, index) => ({
+              id: `m-${index}`,
+              author: 'human',
+              at: time,
+              text: 'Feedback',
+            })),
+          },
+        ],
+      }),
+    );
+    expect((await run(['start', '--project-dir', dir, '--background'])).out.type).toBe(
+      'server-started',
+    );
+    const args = ['comment', 'list', ...doc(dir), '--session', 'large-session'];
+    const first = await run(args);
+    expect(first.code).toBe(0);
+    expect(first.out.threads[0].messages).toHaveLength(1450);
+    expect((await run(args)).out.threads).toEqual([]);
+  });
+
   test('rejects a missing message, a non-document artifact and an unknown action', async () => {
     const dir = await project({ running: false });
     expect(
@@ -164,7 +259,7 @@ describe('anjian comment', () => {
       (await run(['comment', 'list', '--project-dir', dir, '--artifact', 'html/x'])).out.error,
     ).toContain('document/<id>');
     expect((await run(['comment', 'erase', ...doc(dir)])).out.error).toContain(
-      'list, add, reply, resolve, choose or submit',
+      'list, read, add, reply, resolve, choose or submit',
     );
     expect((await run(['comment', 'reply', ...doc(dir), '--text', 'x'])).out.error).toContain(
       '--thread',

@@ -16,6 +16,18 @@ node skills/artifacts/app/anjian.cjs stop --json
 
 在 Codex 或 Claude Code 的案间启动器中用 `start --project-dir <目录> --artifact <作品>`，成功打开后将该作品的本地反馈订阅到当前会话。订阅与 Hub 状态目录分开，启动器和监听器须使用相同的 `ANJIAN_RUNTIME_DIR`（如果配置了该变量），订阅索引按用户主目录解析相对路径。当嵌套宿主同时提供两种会话 ID 时，在启动器调用中设置 `ANJIAN_COMMENT_HOST=codex` 或 `ANJIAN_COMMENT_HOST=claude`，以选择实际接收会话。
 
+## 批注已读状态
+
+Codex 和 Claude Code 的 `comment list` 使用当前会话的已读状态。其他客户端可传 `--session <id>`。相同作品的不同会话独立确认，远程调用同时按已授权设备隔离。无会话的调用沿用旧游标。
+
+`list --all` 查看完整线程并保留未读状态。需要先看变更、再确认某个线程时，使用 `--peek` 保存 JSON 快照，随后用 `comment read` 确认。快照后新到或修改的消息仍待阅读。
+文档和画板中的「Agent 已读」表明有会话确认过消息的当前版本。修改消息后会清除该提示，直到新版本被确认。
+
+```bash
+node skills/artifacts/app/anjian.cjs comment list --artifact document/design --session review-1 --peek --json > comments.json
+node skills/artifacts/app/anjian.cjs comment read --artifact document/design --snapshot comments.json --thread < 线程ID > --json
+```
+
 本项目不提供官方云登录、`publish`、云链接 `get`、自动发布配置或上游 `update` 命令。更新由用户从本项目源码构建并自行部署。
 
 非回环地址启动时必须保留输出链接中的访问密钥。不要把这个链接贴到公开渠道。HTTPS 部署使用独立主界面和 HTML 预览 origin，见 [self-hosting.md](self-hosting.md)。

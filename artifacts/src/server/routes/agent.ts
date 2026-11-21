@@ -20,6 +20,20 @@ const API_AGENT_BOARD_COMMENTS_ROUTE = /^\/api\/agent\/artboard\/([^/]+)\/commen
 const API_AGENT_CHECK_ROUTE = /^\/api\/agent\/([^/]+)\/([^/]+)\/check$/;
 const CHECK_WATCH_WAIT_MS = 2_000;
 const CHECK_MERGE_WAIT_MS = 60_000;
+const COMMENT_SESSION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const RECEIPT_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+function receiptInput(req: http.IncomingMessage, fields: Record<string, unknown>) {
+  if (fields.op !== 'receipt-list' && fields.op !== 'confirm-read') return null;
+  if (typeof fields.session !== 'string' || !COMMENT_SESSION.test(fields.session))
+    throw new RemoteTransferError(400, 'invalid_comment_session', 'A valid comment session is required');
+  const reader = { scope: remoteCommentCursor(req, 'local'), session: fields.session };
+  if (fields.op === 'receipt-list') return { reader, tokens: null };
+  const tokens = fields.receipts;
+  if (!Array.isArray(tokens) || !tokens.every((token) => typeof token === 'string' && RECEIPT_TOKEN.test(token)))
+    throw new RemoteTransferError(400, 'invalid_comment_receipts', 'Expected comment receipt tokens');
+  return { reader, tokens: tokens as string[], initialize: fields.initialize === true };
+}
 
 const agentName = (fields: Record<string, unknown>) =>
   typeof fields.agent === 'string' && fields.agent.length > 0 && fields.agent.length <= 100
@@ -51,6 +65,14 @@ async function serveAgentComments(
   const body = await readCommentBody(req);
   const fields = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const agent = agentName(fields);
+  const receipt = receiptInput(req, fields);
+  if (receipt) {
+    const admit = requestStorageAdmission(req);
+    sendJson(res, 200, receipt.tokens
+      ? { confirmed: documents.confirmCommentReads(id, receipt.reader, receipt.tokens, admit, receipt.initialize) }
+      : documents.receiptSnapshot(id, receipt.reader, fields.all === true, admit));
+    return;
+  }
   if (fields.op === 'list') {
     sendJson(res, 200, {
       type: 'comments',
@@ -105,6 +127,18 @@ async function serveAgentBoardComments(
   const body = await readCommentBody(req);
   const fields = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const agent = agentName(fields);
+  const receipt = receiptInput(req, fields);
+  if (receipt) {
+    const admit = requestStorageAdmission(req);
+    sendJson(res, 200, receipt.tokens
+      ? { confirmed: boardComments.confirmCommentReads(id, receipt.reader, receipt.tokens, admit, receipt.initialize) }
+      : {
+          ...boardComments.receiptSnapshot(id, receipt.reader, fields.all === true, admit),
+          groups: boardComments.groups(id),
+          rounds: boardComments.rounds(id),
+        });
+    return;
+  }
   if (fields.op === 'list') {
     const threads = boardComments.list(id, remoteCommentCursor(req, agent ?? 'Agent'), fields.all === true, requestStorageAdmission(req));
     sendJson(res, 200, {

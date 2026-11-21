@@ -74,6 +74,11 @@ function hostOf(env, explicit = true) {
   throw new Error('Set ANJIAN_COMMENT_HOST=codex or claude when both session IDs are present');
 }
 
+function clientCommentSession(env = process.env) {
+  const host = hostOf(env);
+  return host ? `${host}:${sessionOf(host, env)}` : null;
+}
+
 function subscriptions(project, host, session) {
   const file = readJson(subscriptionFile(project, host, session));
   return new Set(Array.isArray(file?.artifacts) ? file.artifacts : []);
@@ -173,6 +178,7 @@ function register(args, env = process.env) {
 module.exports = {
   aliveFile,
   beatSources,
+  clientCommentSession,
   projectRoot,
   register,
   registerOpened,

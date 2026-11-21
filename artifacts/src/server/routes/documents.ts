@@ -41,7 +41,8 @@ async function serveDocumentComments(
     sendJson(res, 400, { error: 'not a comment op' });
     return;
   }
-  sendJson(res, 200, { comments: ctx.documents.applyCommentOp(id, op, requestStorageAdmission(req)) });
+  ctx.documents.applyCommentOp(id, op, requestStorageAdmission(req));
+  sendJson(res, 200, { comments: ctx.documents.viewerComments(id) });
 }
 
 async function serveDocumentUpdate(

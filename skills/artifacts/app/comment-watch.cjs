@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { unreadThreadCount } = require('./comment-threads.cjs');
+const { unreadReceiptCount, unreadThreadCount } = require('./comment-threads.cjs');
 const { beatSources, sessionOf, subscriptionSources } = require('./comment-subscriptions.cjs');
 
 const cursorKey = (env) => (env.CLAUDE_CODE_IS_COWORK ? 'Claude Cowork' : 'Claude Code');
@@ -69,21 +69,26 @@ function draftCheck(rounds) {
   };
 }
 
-function unreadCount(project, artifact, key) {
+function unreadCount(project, artifact, key, session) {
   const root = path.join(project, '.anjian/artifacts');
   const file = readJson(path.join(root, artifact, 'comments.json'));
   if (!humanChanges(file)) return null;
+  const open = file.threads.filter((thread) => thread.status !== 'resolved');
+  if (session) {
+    const book = readJson(path.join(root, '.state', artifact, 'comment-receipts.json'));
+    return unreadReceiptCount({ threads: open }, book, session);
+  }
   const cursors = readJson(path.join(root, '.state', artifact, 'comment-cursors.json'));
   const cursor = typeof cursors?.[key] === 'string' ? cursors[key] : null;
-  const open = file.threads.filter((thread) => thread.status !== 'resolved');
   return unreadThreadCount({ threads: open }, cursor);
 }
 
-const command = (project, artifact) =>
-  `node ${quote(LAUNCHER)} comment list --json --project-dir ${quote(project)} --artifact ${artifact}`;
+const command = (project, artifact, session) =>
+  `node ${quote(LAUNCHER)} comment list --json --project-dir ${quote(project)} --artifact ${artifact}` +
+  (session ? ` --session ${session}` : '');
 
 // Notification state is separate from the CLI's read cursor: only comment list consumes comments.
-function createCommentWatch(project, key = cursorKey(process.env)) {
+function createCommentWatch(project, key = cursorKey(process.env), session) {
   const root = path.join(project, '.anjian/artifacts');
   const seen = new Map();
   const roundStates = new Map();
@@ -111,7 +116,7 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
             artifact,
             round,
             ...(submitted ? {} : { withdrawn: true }),
-            command: command(project, artifact),
+            command: command(project, artifact, session),
             instruction: submitted
               ? 'Read anjian:artifacts and its artboard guide, then run command: groups holds each choice and rounds the submitted round. Draw the next round from these answers and the threads.'
               : 'Your human partner withdrew this round. If you have not written the next round, stop and wait for a new submit.',
@@ -132,13 +137,13 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
         // Keep human status stamps when an agent changes the status, so its resolve cannot wake itself.
         seen.set(artifact, previous);
         if (!changed) continue;
-        const unread = unreadCount(project, artifact, key);
+        const unread = unreadCount(project, artifact, key, session);
         if (!unread) continue;
         events.push({
           type: 'anjian-comments',
           artifact,
           unread,
-          command: command(project, artifact),
+          command: command(project, artifact, session),
           instruction:
             `Read anjian:artifacts and its ${type} guide, then run command to read the changed comment threads. ` +
             "Handle the human's requests within the current task and permissions; reply through the comment CLI and resolve fulfilled change requests. " +
@@ -150,7 +155,7 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
   };
 }
 
-function createProjectPoll(key) {
+function createProjectPoll(key, session) {
   const polls = new Map();
   return (sources) => {
     const events = [];
@@ -158,7 +163,7 @@ function createProjectPoll(key) {
       if (!sources.has(project)) polls.delete(project);
     }
     for (const [project, artifacts] of sources) {
-      if (!polls.has(project)) polls.set(project, createCommentWatch(project, key));
+      if (!polls.has(project)) polls.set(project, createCommentWatch(project, key, session));
       for (const event of polls.get(project)(artifacts)) events.push({ project, event });
     }
     return events;
@@ -170,7 +175,9 @@ function main() {
   // Without a session ID (older Claude Code) there is nothing to route by, so every artifact counts.
   const session = sessionOf('claude');
   const write = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
-  const poll = session ? createProjectPoll() : createCommentWatch(project);
+  const poll = session
+    ? createProjectPoll(undefined, `claude:${session}`)
+    : createCommentWatch(project);
   const emit = () => {
     if (session) {
       const sources = subscriptionSources(project, 'claude', session);
