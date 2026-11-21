@@ -600,6 +600,19 @@
     "waitingCanvas": "Waiting for canvas content…"
   },
   "question": {
+    "approvalOwner": "Owner",
+    "approvalAssetsChanged": "Attachments changed. Reopen the document before reviewing.",
+    "reopenDocument": "Reopen document",
+    "recordApproval": "Record decision",
+    "approvalRecorded": "“{{choice}}” recorded by {{reviewer}} on {{time}}",
+    "approvalChanged": "The document or question changed. Review it and select an option again.",
+    "approvalFailed": "Couldn’t confirm the decision. Check its status and try again.",
+    "approvalState": {
+      "pending": "Awaiting review",
+      "approved": "Current revision approved",
+      "changes_requested": "Changes requested for the current revision",
+      "needs_review": "The document changed since the last decision. Review the current revision."
+    },
     "recommended": "Recommended",
     "placeholder": "Write your answer…",
     "previous": "This answer refers to an earlier version of the question.",

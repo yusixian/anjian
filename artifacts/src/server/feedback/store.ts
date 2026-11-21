@@ -4,14 +4,17 @@ import path from 'node:path';
 
 import { type DocumentQuestion, validateDocumentQuestion } from '../../shared/document-questions';
 import {
+  type DesignDecision,
   type FeedbackConnection,
   type FeedbackTask,
   MAX_QUESTION_ANSWER_LENGTH,
 } from '../../shared/feedback';
+import { isArtifactAddress } from '../../shared/ids';
 import { RemoteTransferError } from '../remote-transfer';
 
 export interface FeedbackData {
   connections: FeedbackConnection[];
+  decisions?: DesignDecision[];
   questionDrafts?: QuestionDraft[];
   tasks: FeedbackTask[];
   version: 1;
@@ -60,6 +63,30 @@ function validDefinition(value: DocumentQuestion): boolean {
   } catch {
     return false;
   }
+}
+
+function validDecisions(decisions: DesignDecision[] | undefined): boolean {
+  return (
+    decisions === undefined ||
+    (Array.isArray(decisions) &&
+      decisions.every(
+        (decision) =>
+          decision &&
+          typeof decision.documentId === 'string' &&
+          isArtifactAddress(decision.documentId) &&
+          typeof decision.revision === 'string' &&
+          /^sha256:[a-f0-9]{64}$/.test(decision.revision) &&
+          validDefinition(decision.question) &&
+          decision.question.approve !== undefined &&
+          decision.question.options?.some(({ id }) => id === decision.choice) &&
+          decision.by &&
+          typeof decision.by.id === 'string' &&
+          decision.by.id.length > 0 &&
+          (decision.by.login === undefined || typeof decision.by.login === 'string') &&
+          Number.isSafeInteger(decision.at) &&
+          decision.at >= 0,
+      ))
+  );
 }
 
 function validAnswer(answer: unknown, definition: DocumentQuestion): boolean {
@@ -129,6 +156,7 @@ function validate(value: unknown): asserts value is FeedbackData {
     !Array.isArray(data.connections) ||
     !Array.isArray(data.tasks) ||
     !validQuestionDrafts(data.questionDrafts) ||
+    !validDecisions(data.decisions) ||
     !data.connections.every(
       (c) =>
         c &&

@@ -38,6 +38,15 @@ export function serverClient(projectDir: string) {
     return {
       project: paths.project,
       async call(method: string, route: string, body?: unknown): Promise<ServerResponse> {
+        const document = /^\/api\/document\/([\w-]+)\/feedback\/approvals$/.exec(route)?.[1];
+        if (document && method === 'GET') {
+          const result = await request(
+            binding.origin,
+            `/api/remote/projects/${encodeURIComponent(binding.projectId)}/feedback/approvals/${encodeURIComponent(document)}`,
+            { method, token: credential.token },
+          );
+          return { status: result.status, json: result.json };
+        }
         const match = /^\/api\/agent\/(document|artboard)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/.exec(route);
         if (!match) throw new CliError('This command cannot use the remote agent API');
         const remoteRoute = `/api/remote/projects/${encodeURIComponent(binding.projectId)}/agent/${match[1]}/${match[2]}/${match[3]}`;

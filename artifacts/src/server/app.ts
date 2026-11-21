@@ -45,6 +45,7 @@ export interface ArtifactsServer {
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
   contentToken: string;
   feedbackComments?: (type: 'document' | 'artboard', id: string) => Thread<unknown>[];
+  documentApprovalView?: (id: string) => Promise<(() => string | null) | null>;
   feedbackQuestions: (id: string) => Promise<(() => DocumentQuestion[]) | null>;
   feedbackReply?: (
     type: 'document' | 'artboard',
@@ -394,6 +395,13 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     liveClients: () => clients.size,
     onMessage: (listener) => {
       ctx.messageListeners.push(listener);
+    },
+    documentApprovalView: async (id) => {
+      if (!resolveArtifactDir(root, 'document', id)) return null;
+      const session = await ctx.documents.open(id);
+      if (!session) return null;
+      await session.settled();
+      return session.approvalView;
     },
     feedbackQuestions: async (id) => {
       const session = resolveArtifactDir(root, 'document', id)

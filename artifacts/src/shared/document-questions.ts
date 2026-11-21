@@ -1,4 +1,5 @@
 export interface DocumentQuestion {
+  approve?: string;
   id: string;
   options?: { id: string; label: string }[];
   prompt: string;
@@ -8,6 +9,7 @@ export interface DocumentQuestion {
 export function sameDocumentQuestion(left: DocumentQuestion, right: DocumentQuestion): boolean {
   return (
     left.id === right.id &&
+    left.approve === right.approve &&
     left.prompt === right.prompt &&
     left.recommended === right.recommended &&
     left.options?.length === right.options?.length &&
@@ -50,6 +52,12 @@ export function validateDocumentQuestion(value: DocumentQuestion): void {
       if (ids.has(option.id)) throw new Error(`<ask> duplicate option id "${option.id}"`);
       ids.add(option.id);
     }
+  }
+  if (value.approve !== undefined) {
+    if (!options?.some((option) => option.id === value.approve))
+      throw new Error('<ask> approve must match an option id');
+    if (value.recommended !== undefined)
+      throw new Error('<ask> approval cannot specify recommended');
   }
   if (
     value.recommended !== undefined &&

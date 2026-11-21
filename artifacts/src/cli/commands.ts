@@ -1,3 +1,4 @@
+import { approvalCommand } from './approval';
 import { checkCommand } from './check';
 import type { CommandSpec } from './command';
 import { commentCommand } from './comment';
@@ -14,5 +15,6 @@ export const COMMANDS: CommandSpec[] = [
   stopCommand,
   checkCommand,
   commentCommand,
+  approvalCommand,
   ...remoteCommands,
 ];

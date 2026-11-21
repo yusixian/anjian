@@ -53,14 +53,21 @@ export interface FeedbackInput {
 export type FeedbackState =
   'queued' | 'running' | 'needs_attention' | 'awaiting_review' | 'accepted' | 'cancelled';
 export type QuestionItem = FeedbackQuestionInput;
-export interface QuestionMutation {
-  action: 'draft' | 'submit' | 'withdraw';
-  answer?: string;
-  connectionId?: string;
-  id: string;
-  submissionKey?: string;
-  version: string;
-}
+export type QuestionMutation = { id: string; version: string } & (
+  | {
+      action: 'decide';
+      answer: string;
+      assetsRevision: string;
+      revision: string;
+      viewVersion: string;
+    }
+  | {
+      action: 'draft' | 'submit' | 'withdraw';
+      answer?: string;
+      connectionId?: string;
+      submissionKey?: string;
+    }
+);
 export interface FeedbackTask {
   attempt: number;
   connectionId: string;

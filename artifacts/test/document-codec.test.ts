@@ -74,6 +74,16 @@ describe('parseDocument', () => {
     ]);
   });
 
+  test('round trips approval questions', () => {
+    const state = parseDocument(`<doc><ask key="design" prompt="批准当前设计？"
+      options='[{"id":"yes","label":"批准"},{"id":"revise","label":"要求修改"}]'
+      approve="yes"/></doc>`);
+    const xml = serializeDocument(state);
+    expect(xml).toContain('approve="yes"');
+    expect(parseDocument(xml)).toEqual(state);
+    expect(documentQuestions(state)[0]?.approve).toBe('yes');
+  });
+
   test('reconciles a question edit through Loro without replacing its node', () => {
     const editor = createDocumentHeadlessEditor();
     const doc = new LoroDoc();
@@ -115,6 +125,15 @@ describe('parseDocument', () => {
     [
       `<ask key="bad" prompt="Bad" options='[{"id":"a","label":"1"},{"id":"a","label":"2"}]'/>`,
       'duplicate option id',
+    ],
+    ['<ask key="design" prompt="Review" approve="yes"/>', 'approve must match'],
+    [
+      `<ask key="design" prompt="Review" options='[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]' approve="other"/>`,
+      'approve must match',
+    ],
+    [
+      `<ask key="design" prompt="Review" options='[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]' approve="yes" recommended="no"/>`,
+      'approval cannot specify recommended',
     ],
     ['<p><ask key="nested" prompt="Why?"/></p>', 'top-level block'],
     ['<ask key="same" prompt="First"/><ask key="same" prompt="Second"/>', 'duplicate key'],

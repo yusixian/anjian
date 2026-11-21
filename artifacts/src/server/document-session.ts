@@ -11,6 +11,7 @@ import {
 import { $getRoot, type SerializedEditorState } from 'lexical';
 import { decodeImportBlobMeta, LoroDoc, type OpId } from 'loro-crdt';
 
+import { approvalViewKey } from '../shared/approval-view';
 import { DOCUMENT_FEATURES } from '../shared/document-features';
 import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
 import {
@@ -48,6 +49,7 @@ export interface DocumentSessionOptions {
 
 export interface DocumentSession {
   agentActiveAt: () => number;
+  approvalView: () => string | null;
   close: (admit?: CommentAdmission) => Promise<void>;
   flush: (admit?: CommentAdmission) => Promise<void>;
   quiesce: (admit?: CommentAdmission) => Promise<() => void>;
@@ -515,6 +517,18 @@ export async function createDocumentSession(
   };
 
   return {
+    approvalView: () => {
+      if (streaming || outcome.kind === 'rejected' || outcome.kind === 'failed' ||
+          versionKey() !== persistedVersion || !loro.frontiers().length)
+        return null;
+      try {
+        return fsSync.readFileSync(file, 'utf8') === lastFileText
+          ? approvalViewKey(loro.frontiers())
+          : null;
+      } catch {
+        return null;
+      }
+    },
     snapshot: () => loro.export({ mode: 'snapshot' }),
     state: () => editor.getEditorState().toJSON(),
     lineage: () => loro.getTree(TREE_NAME).roots()[0]?.id ?? '',

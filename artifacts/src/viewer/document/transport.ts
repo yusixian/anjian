@@ -11,6 +11,7 @@ export interface DocumentMeta extends DocumentPayload {
 
 export interface DocumentState {
   agentActiveAt?: number;
+  approvalAssetsRevision?: string;
   comments?: CommentsFile;
   lineage: string;
   now?: number;

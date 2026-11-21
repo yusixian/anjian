@@ -5,6 +5,7 @@ import type { LexicalEditor } from 'lexical';
 import { LoroDoc } from 'loro-crdt';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { approvalViewKey } from '../../shared/approval-view';
 import { type CommentsFile, emptyComments, type HumanOp } from '../../shared/comments';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
@@ -100,7 +101,10 @@ export function DocumentView({
 }) {
   const feedbackEnabled = useFeedbackEnabled();
   const [meta, setMeta] = useState<DocumentMeta | null>(null);
-  const [doc, setDoc] = useState<LoroDoc | null>(null);
+  const [loaded, setLoaded] = useState<{ doc: LoroDoc; assetsRevision?: string } | null>(null);
+  const doc = loaded?.doc ?? null;
+  const getAssetsRevision = useCallback(() => loaded?.assetsRevision, [loaded]);
+  const getViewVersion = useCallback(() => (doc ? approvalViewKey(doc.frontiers()) : null), [doc]);
   const [comments, setComments] = useState<CommentsFile>(emptyComments);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -148,7 +152,7 @@ export function DocumentView({
         const scroll = preserveScroll
           ? { left: window.scrollX, top: window.scrollY, behavior: 'instant' as const }
           : null;
-        setDoc(loro);
+        setLoaded({ doc: loro, assetsRevision: state.approvalAssetsRevision });
         // The editor binding fills its initially empty DOM after mounting.
         if (scroll)
           requestAnimationFrame(() => {
@@ -282,7 +286,11 @@ export function DocumentView({
   const editorView = (
     <DynamicHostContext.Provider value={dynamicHost}>
       <PendingContext.Provider value={pendingProgress}>
-        <DocumentQuestions artifact={live && feedbackEnabled ? artifact : null}>
+        <DocumentQuestions
+          artifact={live && feedbackEnabled ? artifact : null}
+          getAssetsRevision={getAssetsRevision}
+          getViewVersion={getViewVersion}
+        >
           <DocumentEditor
             agent={meta?.agent}
             doc={doc}

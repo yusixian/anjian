@@ -169,16 +169,29 @@ function snapshot(files: Map<string, Buffer>, revision: string | null): RemoteAr
   };
 }
 
-export function readRemoteArtifact(projectDir: string, artifact: string): RemoteArtifactSnapshot {
+function readManagedSource(projectDir: string, artifact: string): Map<string, Buffer> | null {
   const { dir, type } = pathsFor(projectDir, artifact);
-  if (!fs.existsSync(dir)) return { revision: null, files: {} };
+  if (!fs.existsSync(dir)) return null;
   const files = collect(dir, type);
   // Mounting can create metadata before the first source file is uploaded.
-  if (files.size === 0) return { revision: null, files: {} };
+  if (files.size === 0) return null;
   const primary =
     type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
   if (!files.has(primary)) throw unsafe(`artifact is missing ${primary}`);
-  return snapshot(files, digest(files));
+  return files;
+}
+
+export function readDocumentApprovalRevisions(projectDir: string, id: string) {
+  const files = readManagedSource(projectDir, `document/${id}`);
+  if (!files) return null;
+  const assets = new Map(files);
+  assets.delete('doc.xml');
+  return { revision: digest(files), assetsRevision: digest(assets) };
+}
+
+export function readRemoteArtifact(projectDir: string, artifact: string): RemoteArtifactSnapshot {
+  const files = readManagedSource(projectDir, artifact);
+  return files ? snapshot(files, digest(files)) : { revision: null, files: {} };
 }
 
 function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknown) {
