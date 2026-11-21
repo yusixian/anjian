@@ -50,12 +50,14 @@ function setup() {
   };
 }
 
-const runHook = (project, env) =>
+const runHook = (project, env, signal) =>
   new Promise((resolve) => {
     const child = require('node:child_process').spawn(process.execPath, [hook, project], {
       env,
+      signal,
       stdio: 'ignore',
     });
+    child.on('error', resolve);
     child.on('close', resolve);
   });
 
@@ -80,6 +82,27 @@ test('registers the project with a running server when it has nothing published'
   } finally {
     fake.server.close();
   }
+});
+
+test('registration exits when the server keeps sending an unfinished response', async (t) => {
+  const { project, serverHome, env } = setup();
+  const server = http.createServer((req, res) => {
+    req.resume();
+    res.writeHead(200);
+    res.write(' ');
+    const timer = setInterval(() => res.write(' '), 200);
+    res.on('close', () => clearInterval(timer));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  fs.writeFileSync(
+    path.join(serverHome, 'server-info'),
+    JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/` }),
+  );
+  assert.equal(await runHook(project, env, AbortSignal.timeout(7500)), 0);
 });
 
 test('does nothing when no server runs and nothing is published', () => {

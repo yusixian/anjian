@@ -2,7 +2,7 @@
 
 面向个人使用的画板、文档与 HTML 作品工作台，以本地运行、中文体验和自主维护为方向。
 
-本项目基于 [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2) 分叉，独立演进。它不是 Ryugi 官方版本，也不以持续跟随上游功能或版本为目标。中文名称为「案间」，英文名称为 Anjian。
+案间（Anjian）基于 Ryugi `v1.51.2` 分叉，独立维护和发布。项目持续对照上游正式版本，复用具备授权的改动，并在案间逐步实现适合本地和自托管工作流的能力。[分叉基线](https://github.com/Innei/ryugi/tree/v1.51.2) · [能力对照](docs/upstream-capabilities.md)
 
 ## 产品方向
 

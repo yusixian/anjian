@@ -210,7 +210,7 @@ function watch(ctx, input) {
     const subscriptions = new Set(readJson(ctx.subscriptions)?.artifacts || []);
     for (const event of poll(subscriptions))
       pending.set(
-        event.type === 'anjian-choices' ? `${event.artifact}#choices` : event.artifact,
+        event.type === 'anjian-choices' ? `${event.artifact}#${event.round}` : event.artifact,
         event,
       );
     if (!pending.size || Date.now() < nextAttempt) return;

@@ -238,7 +238,10 @@ function launcher(t) {
     const result = spawnSync(
       process.execPath,
       [path.join(app, 'anjian.cjs'), ...args, '--json', '--project-dir', project],
-      { env: { ...process.env, CLAUDE_CODE_SESSION_ID: session }, encoding: 'utf8' },
+      {
+        env: { ...process.env, CODEX_THREAD_ID: undefined, CLAUDE_CODE_SESSION_ID: session },
+        encoding: 'utf8',
+      },
     );
     assert.equal(result.status, 0, result.stderr);
   };

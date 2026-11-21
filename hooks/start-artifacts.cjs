@@ -5,7 +5,6 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
-
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -36,7 +35,7 @@ function registerWithRunningServer(project) {
         method: 'POST',
         path: `/api/hub/projects?key=${encodeURIComponent(key)}`,
         headers: { 'Content-Type': 'application/json' },
-        timeout: 5000,
+        signal: AbortSignal.timeout(5000),
       },
       (res) => {
         res.resume();
@@ -44,7 +43,6 @@ function registerWithRunningServer(project) {
       },
     );
     req.on('error', resolve);
-    req.on('timeout', () => req.destroy());
     req.end(JSON.stringify({ dir: project }));
   });
 }

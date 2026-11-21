@@ -297,14 +297,19 @@ test('the shipped lifecycle hooks invoke the portable watcher and stop it on ses
   );
 });
 
-test('a submitted round is queued even with no unread comments, and the watcher beats', async (t) => {
+test('each submitted round is queued even when two rounds change in the same poll', async (t) => {
   const f = fixture(t);
   const rounds = (state) => {
     const file = path.join(f.project, '.anjian/artifacts/.state/artboard/settings/rounds.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
-      JSON.stringify({ rounds: [{ id: 'r1', page: 'p', state, groups: ['q1'], boards: ['a'] }] }),
+      JSON.stringify({
+        rounds: [
+          { id: 'r1', state },
+          { id: 'r2', state },
+        ],
+      }),
     );
   };
   f.write('artboard/settings', { version: 1, threads: [] });
@@ -313,11 +318,10 @@ test('a submitted round is queued even with no unread comments, and the watcher 
   const alive = path.join(f.project, '.anjian/artifacts/.state/codex-comment-watch', `${id}.alive`);
   await until(() => fs.existsSync(alive), 'codex watcher never wrote a heartbeat');
   rounds('submitted');
-  await until(() => f.read().length > 0, 'submitted round never reached codex queue');
-  const args = f.read()[0];
-  const message = args[args.indexOf('--message') + 1];
-  assert.ok(message.includes('artboard/settings'));
-  assert.ok(message.includes('submitted'));
+  await until(() => f.read().length === 2, 'both submitted rounds must reach codex queue');
+  const messages = f.read().map((args) => args[args.indexOf('--message') + 1]);
+  assert.match(messages[0], /round r1 on artboard\/settings were submitted/);
+  assert.match(messages[1], /round r2 on artboard\/settings were submitted/);
 });
 
 test('the heartbeat keeps beating while a queue call is in flight', async (t) => {
