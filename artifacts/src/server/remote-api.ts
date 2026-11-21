@@ -22,7 +22,7 @@ interface Options {
 }
 const MAX_BODY = 46 * 1024 * 1024;
 const ARTIFACT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/artifacts\/(document|artboard|html)\/([a-z0-9][a-z0-9-]*)$/;
-const AGENT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/agent\/(document|artboard|html)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/;
+const AGENT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/agent\/(document|artboard|html)\/([a-z0-9][a-z0-9-]*)\/(comments|check|changes|review)$/;
 const EVENTS_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/events$/;
 
 async function readBody(req: http.IncomingMessage) {
@@ -74,7 +74,12 @@ export function createRemoteApi(options: Options) {
       const id = match[3]!;
       const artifact = `${type}/${id}`;
       if (agentMatch) {
-        if (req.method !== 'POST' || (agentMatch[4] === 'comments' && type === 'html')) {
+        const action = agentMatch[4];
+        if (
+          req.method !== 'POST' ||
+          ((action === 'comments' || action === 'review') && type === 'html') ||
+          (action === 'changes' && type !== 'document')
+        ) {
           sendJson(res, 405, { error: 'Method not allowed' }); return true;
         }
         const forward = async (prepare?: () => Promise<(delta: number) => void>) => {
