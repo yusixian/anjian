@@ -171,6 +171,8 @@ try {
       '--gname',
       'wheel',
       '--no-recursion',
+      '--options',
+      'gzip:!timestamp',
       '-czf',
       archive,
       '-C',

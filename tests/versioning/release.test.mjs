@@ -97,6 +97,12 @@ function publishing() {
       store.writes++;
       return (store.release = { ...store.release, ...data });
     }
+    if (method === 'DELETE' && endpoint === 'releases/assets/2') {
+      assert.equal(store.release.draft, true);
+      store.assets = store.assets.filter((item) => item.id !== 2);
+      store.writes++;
+      return;
+    }
     if (endpoint.startsWith('releases/1/assets?')) return store.assets;
     if (endpoint.startsWith('compare/')) return { status: 'ahead' };
     if (endpoint.startsWith('git/matching')) return store.tag ? [store.tag] : [];
@@ -191,7 +197,12 @@ test('resumes a partially uploaded draft and verifies published assets without c
         assert.equal(tag, 'v0.2.0');
         assert.equal(store.release.draft, true);
         assert.equal(files.length, 4);
-        store.assets.push(asset(files[0]));
+        store.assets.push(asset(files[0]), {
+          id: 2,
+          state: 'starter',
+          size: 0,
+          name: path.basename(files[1]),
+        });
         throw new Error('upload interrupted');
       }),
     /upload interrupted/,
@@ -210,7 +221,7 @@ test('resumes a partially uploaded draft and verifies published assets without c
   assert.throws(() => publish(unexpectedUpload), /Release assets incomplete/);
   store.assets[0].digest = 'sha256:conflicting';
   assert.throws(() => publish(unexpectedUpload), /Release asset conflict/);
-  assert.equal(store.writes, 3);
+  assert.equal(store.writes, 4);
 });
 
 test('legacy bump command cannot decide a new version', () => {

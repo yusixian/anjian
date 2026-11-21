@@ -12,13 +12,12 @@ function request(endpoint, method = 'GET', data) {
   const args = ['api', `repos/${repository}/${endpoint}`, '--method', method];
   if (data) args.push('--input', '-');
   try {
-    return JSON.parse(
-      execFileSync('gh', args, {
-        input: data ? JSON.stringify(data) : undefined,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }),
-    );
+    const result = execFileSync('gh', args, {
+      input: data ? JSON.stringify(data) : undefined,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return method === 'DELETE' ? undefined : JSON.parse(result);
   } catch {
     throw new Error(
       `GitHub ${method} failed for ${endpoint}; stop and inspect the run before retrying`,
@@ -33,11 +32,7 @@ function releaseAssets(directory, tag) {
     const archivePath = path.resolve(directory, archive);
     const checksumPath = path.resolve(directory, checksum);
     const digest = hashFile(archivePath);
-    const [expectedDigest, expectedName] = fs
-      .readFileSync(checksumPath, 'utf8')
-      .trim()
-      .split(/\s+/);
-    if (digest !== expectedDigest || archive !== expectedName)
+    if (fs.readFileSync(checksumPath, 'utf8').trim() !== `${digest}  ${archive}`)
       throw new Error(`Checksum mismatch: ${archive}`);
     return [
       { name: archive, file: archivePath, digest: `sha256:${digest}` },
@@ -114,7 +109,22 @@ export function publishRelease(
     });
   if (assets) {
     const endpoint = `releases/${release.id}/assets?per_page=100`;
-    let missing = missingAssets(assets, api(endpoint));
+    const uploaded = api(endpoint);
+    // GitHub can leave an empty starter entry behind when an upload returns 502.
+    const starters = release.draft
+      ? uploaded.filter(
+          (item) =>
+            item.state === 'starter' &&
+            item.size === 0 &&
+            Number.isSafeInteger(item.id) &&
+            assets.some((asset) => asset.name === item.name),
+        )
+      : [];
+    let missing = missingAssets(
+      assets,
+      uploaded.filter((item) => !starters.includes(item)),
+    );
+    for (const { id } of starters) api(`releases/assets/${id}`, 'DELETE');
     if (release.draft && missing.length) {
       upload(
         tag,
