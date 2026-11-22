@@ -121,6 +121,26 @@ test('a scoped device transfers its project with revision checks but cannot cont
   const second = await put(project, created.revision, '<doc><p>newer</p></doc>');
   expect(second.status, await second.clone().text()).toBe(200);
   expect((await put(project, created.revision, '<doc><p>stale</p></doc>')).status).toBe(409);
+  const review = (projectId: string) =>
+    fx.request(`/api/remote/projects/${projectId}/agent/document/plan/review`, {
+      method: 'POST', headers,
+    });
+  expect((await review(other)).status).toBe(404);
+  const reviewed = await review(project);
+  expect(reviewed.status).toBe(200);
+  expect(await reviewed.json()).toMatchObject({ type: 'review', artifact: 'document/plan', empty: true });
+
+  const versions = (projectId: string) =>
+    fx.request(`/api/remote/projects/${projectId}/agent/document/plan/changes`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versions: true }),
+    });
+  expect((await versions(other)).status).toBe(404);
+  const listed = await versions(project);
+  expect(listed.status).toBe(200);
+  expect(await listed.json()).toMatchObject({ type: 'document-changes', latest: expect.any(String) });
+
   const fetched = await fx.request(`/api/remote/projects/${project}/artifacts/document/plan`, { headers });
   expect(fetched.status).toBe(200);
   expect(Buffer.from((await fetched.json()).files['doc.xml'], 'base64').toString()).toContain('newer');

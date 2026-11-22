@@ -39,6 +39,7 @@ export interface DocumentRegistry {
   commentsChanged: (id: string) => void;
   commentWarnings: (id: string) => string[];
   fileChanged: (id: string) => void;
+  historySnapshot: (id: string) => Promise<Uint8Array | null>;
   listComments: (
     id: string,
     agent: string,
@@ -219,6 +220,16 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
 
   return {
     open,
+    async historySnapshot(id) {
+      const active = await sessions.get(id);
+      if (active) return active.snapshot();
+      try {
+        return await fs.promises.readFile(path.join(options.stateDir, 'document', id, 'doc.loro'));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+      }
+    },
     fileChanged: (id) => {
       if (quiescing) return;
       const known = sessions.has(id);

@@ -64,3 +64,17 @@ anjian approval --artifact "document/$DOCUMENT_ID" --require implementation --js
 ```
 
 将浏览器文档地址的最后一段设为 `DOCUMENT_ID`。第一条命令显示当前修订和决定历史。实施前用第二条命令核对指定题目，只有当前修订获批才会返回退出码 0。自托管项目可将返回的修订同 `remote pull` 返回的修订核对。文档或随附资源变更后，需要对新修订重新作出决定。附件发生变化时，先在浏览器重新打开文档，确认加载的是新版附件。
+
+## 查看人工改动与评审
+
+```bash
+node skills/artifacts/app/anjian.cjs changes --project-dir /绝对路径/项目 --artifact document/design --versions --json
+node skills/artifacts/app/anjian.cjs changes --project-dir /绝对路径/项目 --artifact document/design --from "$START_VERSION" --to "$END_VERSION" --json
+node skills/artifacts/app/anjian.cjs review --project-dir /绝对路径/项目 --artifact artboard/design --json
+```
+
+从 `--versions` 的结果复制同一文档的版本标识。省略 `--to` 会查询到服务端记录的最新版本。结果包含 Loro 编辑者标识、已记录的时间、文档块和操作 ID。来源未知的记录另行计数，只有保留了历史的区间可查询。
+
+`review` 适用于文档和画板。它返回已保存的评论及其位置，还可查看画板的选择和验收状态。两条命令均保留作品和评论的未读状态，可通过本地服务或已绑定的自托管项目运行。
+
+验收报告保存规范文件及检查输出的摘要。`approval --require` 核对当前文档与附件的修订。作品引用打开链接目标，目标作品的最新验收通过 `review --artifact artboard/<id>` 检查。部署前可分别核对设计批准与画板验收。

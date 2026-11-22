@@ -13,7 +13,10 @@ export interface ServerResponse {
 
 const readUrl = (file: string) => {
   try {
-    const { url, localUrl } = JSON.parse(readText(file) ?? '') as { url?: unknown; localUrl?: unknown };
+    const { url, localUrl } = JSON.parse(readText(file) ?? '') as {
+      url?: unknown;
+      localUrl?: unknown;
+    };
     return typeof localUrl === 'string' ? localUrl : typeof url === 'string' ? url : null;
   } catch {
     return null;
@@ -47,10 +50,17 @@ export function serverClient(projectDir: string) {
           );
           return { status: result.status, json: result.json };
         }
-        const match = /^\/api\/agent\/(document|artboard)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/.exec(route);
+        const match =
+          /^\/api\/agent\/(document|artboard)\/([a-z0-9][a-z0-9-]*)\/(comments|check|changes|review)$/.exec(
+            route,
+          );
         if (!match) throw new CliError('This command cannot use the remote agent API');
         const remoteRoute = `/api/remote/projects/${encodeURIComponent(binding.projectId)}/agent/${match[1]}/${match[2]}/${match[3]}`;
-        const result = await request(binding.origin, remoteRoute, { method, body, token: credential.token });
+        const result = await request(binding.origin, remoteRoute, {
+          method,
+          body,
+          token: credential.token,
+        });
         return { status: result.status, json: result.json };
       },
     };
