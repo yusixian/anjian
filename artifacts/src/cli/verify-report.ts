@@ -29,6 +29,13 @@ function field(row: Record<string, unknown>, key: string) {
   return value;
 }
 
+function optionalLine(row: Record<string, unknown>, key: string) {
+  if (row[key] === undefined) return undefined;
+  const line = field(row, key).trim();
+  if (/[\r\n]/.test(line)) throw new CliError(`${key} must be a single line`);
+  return line;
+}
+
 function rows(report: Record<string, unknown>, key: string) {
   const value = report[key];
   if (!Array.isArray(value)) throw new CliError(`${key} must be an array`);
@@ -120,6 +127,7 @@ function renderReport(source: string, lang: string) {
   const title = field(report, 'title');
   const build = field(report, 'build');
   const environment = field(report, 'environment');
+  const routineChecks = optionalLine(report, 'routineChecks');
   const spec = readDesignSpec(report.designSpec, directory, sources);
   const ruleLabels = new Map(spec?.rules.map(({ id, title }) => [id, `${id} · ${title}`]));
   const ruleParagraph = (rules: string[]) =>
@@ -144,6 +152,10 @@ function renderReport(source: string, lang: string) {
     const time = capturedAt(row);
     const expected = field(row, 'sha256');
     const result = field(row, 'result');
+    const observation = optionalLine(row, 'observation');
+    const context = row.context === undefined ? null : record(row.context, 'context');
+    const sourceBuild = context ? field(context, 'build') : build;
+    const sourceEnvironment = context ? field(context, 'environment') : environment;
     if (!/^[a-f0-9]{64}$/.test(expected))
       throw new CliError('sha256 must be a lowercase SHA-256 digest');
     if (result !== 'pass' && result !== 'fail') throw new CliError('result must be pass or fail');
@@ -155,26 +167,70 @@ function renderReport(source: string, lang: string) {
       : actual === expected
         ? result
         : 'stale';
-    let body = '';
-    if (bytes && actual === expected) {
-      const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-      body = `<details summary="${tr('原始输出', 'Raw output')}"><codeblock lang="text">${escape(text)}</codeblock></details>`;
-    }
+    const metadata = [
+      paragraph(`${tr('命令', 'Command')} ${command}`),
+      paragraph(`${tr('采集时间', 'Captured')} ${time}`),
+      paragraph(`${output} · SHA-256 ${expected}`),
+      ...(status === 'stale' ? [paragraph(`${tr('当前摘要', 'Current digest')} ${actual}`)] : []),
+      ...ruleParagraph(rules),
+    ];
+    const raw =
+      bytes && actual === expected
+        ? `<codeblock lang="text">${escape(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes))}</codeblock>`
+        : '';
+    const details = (label: string, content: string) =>
+      `<details summary="${label}">${content}</details>`;
     return {
       status,
       title,
       rules,
+      sourceBuild,
+      sourceEnvironment,
       xml: [
-        `<h3>${escape(title)} · ${statusLabels[status]}</h3>`,
-        paragraph(`${tr('命令', 'Command')} ${command}`),
-        paragraph(`${tr('采集时间', 'Captured')} ${time}`),
-        paragraph(`${output} · SHA-256 ${expected}`),
-        ...(status === 'stale' ? [paragraph(`${tr('当前摘要', 'Current digest')} ${actual}`)] : []),
-        ...ruleParagraph(rules),
-        body,
-      ].join('\n'),
-    } satisfies { status: keyof typeof statusLabels; title: string; rules: string[]; xml: string };
+        observation && (status === 'pass' || status === 'fail') ? paragraph(observation) : '',
+        ...(observation
+          ? [
+              details(
+                tr('查看证据', 'View evidence'),
+                [...metadata, raw].filter(Boolean).join('\n'),
+              ),
+            ]
+          : [...metadata, raw ? details(tr('原始输出', 'Raw output'), raw) : '']),
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    };
   });
+  const checkHeading = (check: (typeof checks)[number], level: 'h3' | 'h4') =>
+    `<${level}>${escape(check.title)} · ${statusLabels[check.status]}</${level}>`;
+  const alternateSources = checks.some(
+    (check) => check.sourceBuild !== build || check.sourceEnvironment !== environment,
+  );
+  const bySource = new Map<string, typeof checks>();
+  if (alternateSources) {
+    for (const check of checks) {
+      const source = JSON.stringify([check.sourceBuild, check.sourceEnvironment]);
+      const group = bySource.get(source);
+      if (group) group.push(check);
+      else bySource.set(source, [check]);
+    }
+  }
+  const checkXml = alternateSources
+    ? Array.from(bySource.values(), (group) => {
+        const { sourceBuild, sourceEnvironment } = group[0]!;
+        const defaultSource = sourceBuild === build && sourceEnvironment === environment;
+        return [
+          `<h3>${tr('证据来源', 'Evidence source')}${defaultSource ? tr(' · 报告环境', ' · Report environment') : ''}</h3>`,
+          ...(!defaultSource
+            ? [
+                paragraph(`${tr('构建', 'Build')} ${sourceBuild}`),
+                paragraph(`${tr('环境', 'Environment')} ${sourceEnvironment}`),
+              ]
+            : []),
+          ...group.flatMap((check) => [checkHeading(check, 'h4'), check.xml]),
+        ];
+      }).flat()
+    : checks.flatMap((check) => [checkHeading(check, 'h3'), check.xml]);
 
   const reviews = rows(report, 'reviews').map((row) => {
     const title = field(row, 'title');
@@ -248,10 +304,9 @@ function renderReport(source: string, lang: string) {
     `<h1>${escape(title)}</h1>`,
     paragraph(`${tr('构建', 'Build')} ${build}`),
     paragraph(`${tr('环境', 'Environment')} ${environment}`),
+    ...(routineChecks ? [paragraph(`${tr('常规检查', 'Routine checks')} ${routineChecks}`)] : []),
     ...designXml,
-    ...(checks.length
-      ? [`<h2>${tr('机器检查', 'Automated checks')}</h2>`, ...checks.map(({ xml }) => xml)]
-      : []),
+    ...(checks.length ? [`<h2>${tr('机器检查', 'Automated checks')}</h2>`, ...checkXml] : []),
     ...(reviews.length
       ? [`<h2>${tr('人工验收', 'Human review')}</h2>`, ...reviews.flatMap(({ xml }) => xml)]
       : []),

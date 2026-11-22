@@ -6,6 +6,14 @@
 
 ## 当前对照版本
 
+2026-11-22 核对 Ryugi 正式版 `v1.102.0`（`c0d1b866a831f192bc035844c29e432f1a1b6529`）。相对 `v1.101.2` 新增 4 个提交，累计审计 172 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.0) · [增量差异](https://github.com/Innei/ryugi/compare/v1.101.2...v1.102.0)
+
+- `46abf08`、`4efc47a` 调整验收报告的结论、证据、画板和规格工作单。案间已有输出摘要校验、可展开的原始日志及实时画板引用。跨环境展示、人工决定和规格记录保留由 [#95](https://github.com/yusixian/anjian/issues/95) 跟踪。增量不在上游 MIT 保留范围内，案间根据公开行为独立实现，未引入上游代码或指导原文。[上游许可证](https://github.com/Innei/ryugi/blob/v1.102.0/LICENSE)
+- `f07cbfd` 支持模型根据提交写发行说明，失败时使用固定模板。案间的发布说明由每批双语 Changeset 生成，作为案间发行的用户入口。[发版流程](docs/versioned-releases.md)
+- `c0d1b86` 更新公开清单的版本号。
+
+### v1.101.2 的变化
+
 2026-11-22 核对 Ryugi 正式版 `v1.101.2`（`cda303f53fe96d1f2285d576469207b8aedbb717`）。相对 `v1.101.1` 新增一个提交，累计审计 168 个提交。12 个公开文件只更新版本号。用户和 Agent 的任务清单无需新增条目。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.101.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.101.1...v1.101.2)
 
 ### v1.101.1 的能力差异
