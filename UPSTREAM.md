@@ -6,13 +6,13 @@
 
 ## 当前对照版本
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871325f3f892858a482bc7dafd2665ff64f9`）。相对 `v1.102.1` 新增 1 个公开提交，累计审计 176 个提交。公开差异只更新版本清单。发布说明披露白板和幻灯片的长讨论可在卡片内滚动，打开时显示最新消息。案间已在桌面和 390 px Chrome 复现长讨论超出视口，按 [#100](https://github.com/yusixian/anjian/issues/100) 独立实现。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.1...v1.102.2)
+2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871325f3f892858a482bc7dafd2665ff64f9`）。相对 `v1.102.1` 新增 1 个公开提交，累计审计 176 个提交。公开差异只更新版本清单。发布说明披露白板和幻灯片的长讨论可在卡片内滚动，打开时显示最新消息。案间按 [#100](https://github.com/yusixian/anjian/issues/100) 独立实现。桌面和 390 px Chrome 验证通过，已随 [v0.7.1](https://github.com/yusixian/anjian/releases/tag/v0.7.1) 发布。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.1...v1.102.2)
 
 ### v1.102.1 的能力差异
 
 2026-11-22 核对 Ryugi 正式版 `v1.102.1`（`608491634da2f02cd9241364302b803268298f28`）。相对 `v1.102.0` 新增 3 个公开提交，累计审计 175 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.1) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.0...v1.102.1)
 
-- 上游发布说明披露恢复或切换分支时保留人工批注。公开增量缺少 Viewer 实现。案间对正在运行的评论存储复现了恢复后丢弃新出现的人工批注，已登记 [#98](https://github.com/yusixian/anjian/issues/98)，需要独立实现可信恢复。
+- 上游发布说明披露恢复或切换分支时保留人工批注。公开增量缺少 Viewer 实现。案间对正在运行的评论存储复现了恢复后丢弃新出现的人工批注，按 [#98](https://github.com/yusixian/anjian/issues/98) 独立实现并验证了五类作品的人工批注恢复，已随 [v0.7.2](https://github.com/yusixian/anjian/releases/tag/v0.7.2) 发布。
 - `dd3c6d0` 改为只构建 Apple 芯片的 Ryugi daemon。案间自产安装包继续通过 Apple 芯片和 Intel 的构建、安装测试。[案间 v0.6.1](https://github.com/yusixian/anjian/releases/tag/v0.6.1)
 - `d4dc16c` 将 Ryugi Cloud 的已交付变更纳入模型生成的发行说明。案间继续发布自己的双语 Changesets。`6084916` 更新公开清单版本。
 
@@ -20,7 +20,7 @@
 
 2026-11-22 核对 Ryugi 正式版 `v1.102.0`（`c0d1b866a831f192bc035844c29e432f1a1b6529`）。相对 `v1.101.2` 新增 4 个提交，累计审计 172 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.0) · [增量差异](https://github.com/Innei/ryugi/compare/v1.101.2...v1.102.0)
 
-- `46abf08`、`4efc47a` 调整验收报告的结论、证据、画板和规格工作单。案间已有输出摘要校验、可展开的原始日志及实时画板引用。跨环境展示、人工决定和规格记录保留由 [#95](https://github.com/yusixian/anjian/issues/95) 跟踪。增量不在上游 MIT 保留范围内，案间根据公开行为独立实现，未引入上游代码或指导原文。[上游许可证](https://github.com/Innei/ryugi/blob/v1.102.0/LICENSE)
+- `46abf08`、`4efc47a` 调整验收报告的结论、证据、画板和规格工作单。案间已有输出摘要校验、可展开的原始日志及实时画板引用。跨环境展示、人工决定和规格记录保留按 [#95](https://github.com/yusixian/anjian/issues/95) 补齐并随 [v0.7.0](https://github.com/yusixian/anjian/releases/tag/v0.7.0) 发布。增量不在上游 MIT 保留范围内，案间根据公开行为独立实现，未引入上游代码或指导原文。[上游许可证](https://github.com/Innei/ryugi/blob/v1.102.0/LICENSE)
 - `f07cbfd` 支持模型根据提交写发行说明，失败时使用固定模板。案间的发布说明由每批双语 Changeset 生成，作为案间发行的用户入口。[发版流程](docs/versioned-releases.md)
 - `c0d1b86` 更新公开清单的版本号。
 

@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871`）。案间以 `0.4.0`（`04d711a`）为实施起点。首批同步及两个后续能力已发布至 `0.5.0`（`26d574a`），本地画板摘要和文档问答随后发布至 `0.6.0`（`80c64d6`）。[案间 0.5.0 发布说明与安装包](https://github.com/yusixian/anjian/releases/tag/v0.5.0) · [上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.7.3`（`a71a1ef`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.7.3) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -41,11 +41,17 @@
 
 打开评审文档查看常规检查摘要、待人工决定的事项和画板验收汇总。展开记录可查看原始证据，点击画板汇总可跳回作品。规格工作单保留至完成验收或合入分支。[上手指南](https://anjian.cosine.ren/zh/docs/review-workflows/) · [验收证据 #95](https://github.com/yusixian/anjian/issues/95) · [v0.7.0](https://github.com/yusixian/anjian/releases/tag/v0.7.0)
 
-## 新版差距
+## v0.7.1 至 v0.7.3 评审和预览修复
 
-- [#100](https://github.com/yusixian/anjian/issues/100) 跟踪白板和幻灯片长批注的最新消息及卡片内滚动。
-- [#98](https://github.com/yusixian/anjian/issues/98) 跟踪运行中恢复评论文件时保留已有人工批注。
-- [#52](https://github.com/yusixian/anjian/issues/52) 跟踪向已经运行的普通 Antigravity 交互会话投递反馈。
+| 用户或 Agent 的任务 | 案间入口和验证证据 |
+| --- | --- |
+| 从最新消息开始阅读白板或幻灯片的长讨论，向上查看历史 | 白板「评论」和幻灯片「本页批注」的卡片可以独立滚动。桌面及 390 px Chrome 核对初始位置、键盘和刷新。[验收 PR #101](https://github.com/yusixian/anjian/pull/101) · [v0.7.1 更新说明](https://anjian.cosine.ren/zh/docs/updates/#071) |
+| 在 Hub 运行时切换或合并 Git 分支，核对并恢复带入的人工批注 | 在原文档、画板、白板、幻灯片或分镜点「恢复批注」，预览并确认合并，也可导入原作品的备份。五类作品的隔离 Hub、Git、CLI 和 Chrome 验收见 [PR #103](https://github.com/yusixian/anjian/pull/103)。[上手指南](https://anjian.cosine.ren/zh/docs/review-workflows/#恢复批注) · [v0.7.2 更新说明](https://anjian.cosine.ren/zh/docs/updates/#072) |
+| 在 HTML 预览中查看页面启动时上报的运行错误 | 保留首次文件监听事件前上报的运行警告。编辑源文件后清除旧警告。[Hub 回归 PR #106](https://github.com/yusixian/anjian/pull/106) · [v0.7.3 主分支检查](https://github.com/yusixian/anjian/actions/runs/45011465868) · [v0.7.3 更新说明](https://anjian.cosine.ren/zh/docs/updates/#073) |
+
+## 待验证能力
+
+- 把反馈自动投递给已经运行的普通 Antigravity 交互会话。已验证由案间启动的流式会话接收反馈、普通会话主动读取批注，以及 Pi 会话的投递和回执。普通 Antigravity 会话的外部投递仍待找到公开接口并完成两路会话隔离验证。[宿主证据和缺口 #52](https://github.com/yusixian/anjian/issues/52)
 
 ## 后续同步
 
