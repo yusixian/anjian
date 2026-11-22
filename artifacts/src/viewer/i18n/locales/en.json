@@ -671,6 +671,8 @@
     "boards_other": "{{count}} boards"
   },
   "reference": {
+    "choicePending": "No confirmed choice",
+    "choiceSelected": "Selected “{{title}}”",
     "reviewSummary": "{{pass}} passed, {{pending}} pending, {{reject}} rejected, {{unavailable}} unavailable",
     "static": "Artifact reference",
     "unavailable": "Reference unavailable"

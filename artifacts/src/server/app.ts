@@ -3,6 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
+import { groupChoice, roundSubmission } from '../shared/choices';
 import type { Thread } from '../shared/comments';
 import type { DocumentQuestion } from '../shared/document-questions';
 import type { FeedbackArtifactType } from '../shared/feedback-artifact';
@@ -89,6 +90,7 @@ export interface ArtifactsServer {
   ) => Promise<PreparedRemoteDocument>;
   /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
   quiesce: <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>) => Promise<T>;
+  referenceChoice: (id: string, round: string, group: string, recommend?: string) => string | null;
   referenceVerdict: (id: string, group: string) => VerdictState;
   resolve: (type: ArtifactType, idOrAddress: string) => string | null;
   root: string;
@@ -482,6 +484,12 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     resolve: (type, idOrAddress) => {
       if (!isArtifactLocator(idOrAddress)) return null;
       return resolveArtifactAddress(root, type, idOrAddress)?.id ?? null;
+    },
+    referenceChoice: (id, round, group, recommend) => {
+      const { threads } = ctx.boardComments.comments(id);
+      return roundSubmission(threads, round).submitted
+        ? groupChoice(threads, group, recommend).choice
+        : null;
     },
     referenceVerdict: (id, group) =>
       groupVerdict(

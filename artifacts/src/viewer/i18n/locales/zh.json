@@ -654,6 +654,8 @@
     "boards_other": "{{count}} 张"
   },
   "reference": {
+    "choicePending": "尚未选定方案",
+    "choiceSelected": "已选「{{title}}」",
     "reviewSummary": "{{pass}} 项通过，{{pending}} 项待验收，{{reject}} 项未通过，{{unavailable}} 项不可用",
     "static": "作品引用",
     "unavailable": "引用不可用"

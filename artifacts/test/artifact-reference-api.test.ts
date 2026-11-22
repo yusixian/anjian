@@ -174,6 +174,83 @@ test('duplicate stable IDs across projects fail closed', async () => {
   expect(await result.text()).not.toContain('Private preview');
 });
 
+test('choice references only expose the current submitted option', async () => {
+  const { root, get, post, request } = await fixture();
+  const canvas = {
+    version: 1,
+    pages: [{ id: 'p', name: 'Review' }],
+    boards: {
+      first: {
+        title: 'First option',
+        page: 'p',
+        file: 'pages/option.html',
+        x: 0,
+        y: 0,
+        w: 300,
+        h: 200,
+      },
+      second: {
+        title: 'Second option',
+        page: 'p',
+        file: 'pages/option.html',
+        x: 400,
+        y: 0,
+        w: 300,
+        h: 200,
+      },
+    },
+    groups: {
+      pick: { title: 'Choose a layout', boards: ['first', 'second'], choose: true },
+    },
+  };
+  const dir = writeArtboard(root, 'choices', canvas, {
+    '.artifact-id': stableId + '\n',
+    'pages/option.html': '<title>Option</title>',
+  });
+  const route = artboardReference + stableId;
+  const href = `/artboard/${stableId}?ref=1&group=pick`;
+  async function expectChoice(choice: string | null) {
+    const response = await get(route + '?group=pick');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ choice, href, title: 'Choose a layout' });
+  }
+  async function record(
+    anchor: { group: string; choice: string | null } | { round: string; submit: boolean },
+  ) {
+    const response = await post('/api/artboard/choices/comments', {
+      op: 'create',
+      anchor: { page: 'p', x: 0, y: 0, ...anchor },
+      text: 'Choice record',
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+  }
+  await expectChoice(null);
+  await record({ group: 'pick', choice: 'first' });
+  await expectChoice(null);
+  await record({ round: 'page:p', submit: true });
+  await expectChoice('First option');
+  expect((await get(href)).status).toBe(200);
+  expect((await request(route + '?group=pick')).status).toBe(404);
+  expect(await (await get(route + '?board=first')).json()).not.toHaveProperty('choice');
+
+  canvas.boards.first.title = 'Renamed option';
+  fs.writeFileSync(path.join(dir, 'canvas.json'), JSON.stringify(canvas));
+  await expectChoice('Renamed option');
+  await record({ round: 'page:p', submit: false });
+  await expectChoice(null);
+  await record({ group: 'pick', choice: null });
+  await record({ round: 'page:p', submit: true });
+  await expectChoice(null);
+  await record({ round: 'page:p', submit: false });
+  await record({ group: 'pick', choice: 'first' });
+  await record({ round: 'page:p', submit: true });
+
+  canvas.groups.pick.boards = ['second'];
+  const { second } = canvas.boards;
+  fs.writeFileSync(path.join(dir, 'canvas.json'), JSON.stringify({ ...canvas, boards: { second } }));
+  await expectChoice(null);
+});
+
 test('same-name artboard groups and boards resolve independently and only verify groups expose a verdict', async () => {
   const { root, get, post, project, request } = await fixture();
   const dir = writeArtboard(
