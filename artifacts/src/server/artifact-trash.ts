@@ -222,12 +222,17 @@ export function listTrash(projectDir: string, now = Date.now()): TrashEntry[] {
     .map((r) => r.entry).sort((a, b) => b.deletedAt - a.deletedAt);
 }
 
-export function findTrashedArtifact(projectDir: string, type: ArtifactType, locator: string): TrashEntry | null {
+export function findTrashedArtifact(
+  projectDir: string,
+  type: ArtifactType,
+  locator: string,
+  match: 'locator' | 'address' = 'locator',
+): TrashEntry | null {
   if (!isArtifactType(type) || !isArtifactId(locator) && !isArtifactAddress(locator)) return null;
-  const match = records(projectDir).records.find((r) =>
+  const found = records(projectDir).records.find((r) =>
     r.phase !== 'restored' && r.entry.type === type &&
-    (r.entry.id === locator || entryAddress(r.entry) === locator));
-  return match?.entry ?? null;
+    ((match === 'locator' && r.entry.id === locator) || entryAddress(r.entry) === locator));
+  return found?.entry ?? null;
 }
 
 export function assertArtifactNotTrashed(projectDir: string, type: ArtifactType, id: string) {

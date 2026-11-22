@@ -1,6 +1,6 @@
 const VOID_TAGS = new Set(['br', 'hr', 'img']);
 
-export const TAG = /<(\/?)([a-z][\w-]*)\b[^>]*?(\/?)>/gi;
+export const TAG = /<(\/?)([a-z][\w-]*)\b(?:[^'"<>]|"[^"]*"|'[^']*')*?(\/?)>/gi;
 
 const OPAQUE: Array<[string, string]> = [
   ['<![CDATA[', ']]>'],

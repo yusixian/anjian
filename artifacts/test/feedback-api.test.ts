@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
+import { LoroDoc } from 'loro-crdt';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { feedbackStore } from '../src/server/feedback/store';
@@ -13,6 +14,7 @@ import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageUsage } from '../src/server/storage/usage';
+import { approvalViewKey } from '../src/shared/approval-view';
 import { emptyWhiteboardScene, whiteboardPageFile } from '../src/shared/whiteboard';
 import { tempRoot } from './helpers';
 
@@ -134,7 +136,7 @@ async function fixture() {
 const encode = (text: string) => Buffer.from(text).toString('base64');
 const encodeJson = (value: unknown) => encode(JSON.stringify(value));
 
-async function ready() {
+async function ready(source = '<doc><p blockId="intro">draft</p></doc>') {
   const fx = await fixture();
   const login = await fx.login();
   const project = fx.id(fx.alpha);
@@ -168,7 +170,7 @@ async function ready() {
     headers: { ...login.headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       baseRevision: null,
-      files: { 'doc.xml': encode('<doc><p blockId="intro">draft</p></doc>') },
+      files: { 'doc.xml': encode(source) },
     }),
   });
   expect(put.status).toBe(200);
@@ -217,6 +219,140 @@ async function ready() {
     snapshot,
   };
 }
+
+test('document question drafts persist and only explicit submission reaches the connected Agent', async () => {
+  const f = await ready(
+    '<doc><p blockId="intro">draft</p>' +
+      '<ask key="timing" prompt="When?" options=\'[{"id":"now","label":"Now"},{"id":"later","label":"Later"}]\' recommended="now"/>' +
+      '<ask key="notes" prompt="What else?"/></doc>',
+  );
+  const first = (await f.browser('questions')).body.items;
+  expect(first.map((item: { id: string }) => item.id)).toEqual(['timing', 'notes']);
+  const original = first[0];
+  expect(
+    (
+      await f.browser('questions', {
+        action: 'draft',
+        id: 'timing',
+        version: original.version,
+        answer: 'other',
+      })
+    ).status,
+  ).toBe(400);
+  const saved = await f.browser('questions', {
+    action: 'draft',
+    id: 'timing',
+    version: original.version,
+    answer: 'now',
+  });
+  expect(saved.status).toBe(200);
+  expect(saved.body.item).toMatchObject({ id: 'timing', answer: 'now' });
+  expect(
+    (await f.call('tasks')).body.tasks.map((task: { questionId?: string }) => task.questionId),
+  ).toEqual([undefined]);
+  await f.fx.restart();
+  const items = (await f.browser('questions')).body.items;
+  expect(items[0]).toEqual(saved.body.item);
+  expect(
+    (
+      await f.browser('questions', {
+        action: 'draft',
+        id: 'timing',
+        version: original.version,
+        answer: 'later',
+      })
+    ).body.code,
+  ).toBe('feedback_changed');
+
+  const submit = {
+    action: 'submit',
+    id: 'timing',
+    version: items[0].version,
+    answer: 'now',
+    submissionKey: 'answer-timing',
+    connectionId: f.connection.id,
+  };
+  const submitted = await f.browser('questions', submit);
+  expect(submitted.status).toBe(200);
+  const queued = submitted.body.item;
+  expect(queued.task).toMatchObject({ state: 'queued', withdrawable: true });
+  const savedTasks = feedbackStore(f.fx.home, f.project).load().tasks;
+  const commentTask = savedTasks.find(({ id }) => id === f.task.id);
+  expect(commentTask?.artifactAddress).toBeDefined();
+  expect(savedTasks.find(({ id }) => id === queued.task.id)?.artifactAddress).toBe(
+    commentTask?.artifactAddress,
+  );
+  expect((await f.browser('questions', submit)).body.item).toEqual(queued);
+  expect((await f.browser('questions', { ...submit, answer: 'later' })).body.code).toBe(
+    'idempotency_conflict',
+  );
+  const pending = (await f.call('tasks')).body.tasks.find(
+    (task: { id: string }) => task.id === queued.task.id,
+  );
+  expect(pending).toMatchObject({ questionId: 'timing' });
+  expect(pending).not.toHaveProperty('questionContext');
+  const detail = (await f.call(`tasks/${queued.task.id}`)).body.task;
+  expect(detail.questionContext).toMatchObject({
+    definition: { id: 'timing', prompt: 'When?', recommended: 'now' },
+    answer: 'now',
+  });
+  const claimInput = { connectionId: f.connection.id, generation: 1, claimant: 'fixture-session' };
+  const claimed = await f.call(`tasks/${queued.task.id}/claim`, {
+    ...claimInput,
+    requestId: 'claim-first-question',
+  });
+  expect(claimed.status).toBe(200);
+  const withdrawn = await f.browser('questions', {
+    action: 'withdraw',
+    id: 'timing',
+    version: queued.version,
+  });
+  expect(withdrawn.body.item).toMatchObject({ id: 'timing', answer: 'now' });
+  expect(withdrawn.body.item).not.toHaveProperty('task');
+  expect(
+    (
+      await f.call(`tasks/${queued.task.id}/result`, {
+        ...claimed.body.task,
+        operationId: 'withdrawn-question-reply',
+        questionReply: 'Seen',
+      })
+    ).body.code,
+  ).toBe('stale_claim');
+
+  const notes = await f.browser('questions', {
+    action: 'submit',
+    id: 'notes',
+    version: items[1].version,
+    answer: '  Keep the title.  ',
+    submissionKey: 'answer-notes',
+    connectionId: f.connection.id,
+  });
+  expect(notes.status).toBe(200);
+  const taskId = notes.body.item.task.id;
+  expect(notes.body.item.answer).toBe('Keep the title.');
+  const nextClaim = await f.call(`tasks/${taskId}/claim`, {
+    ...claimInput,
+    requestId: 'claim-notes',
+  });
+  expect(nextClaim.status).toBe(200);
+  const reply = {
+    ...nextClaim.body.task,
+    operationId: 'reply-notes',
+    questionReply: 'The title stays.',
+  };
+  expect((await f.call(`tasks/${taskId}/result`, reply)).body.task.state).toBe('awaiting_review');
+  expect((await f.call(`tasks/${taskId}/result`, reply)).status).toBe(200);
+  expect(
+    (await f.call(`tasks/${taskId}/result`, { ...reply, questionReply: 'Changed' })).body.code,
+  ).toBe('idempotency_conflict');
+  expect((await f.browser(`tasks/${taskId}/accept`, {})).body.task.state).toBe('accepted');
+  expect((await f.call(`tasks/${taskId}/result`, reply)).status).toBe(200);
+  await f.fx.restart();
+  expect((await f.browser('questions')).body.items[1]).toMatchObject({
+    answer: 'Keep the title.',
+    task: { state: 'accepted', reply: 'The title stays.', withdrawable: false },
+  });
+});
 
 test('real hub restores a legacy batch across restart, claims once, returns revision/reply, and accepts only by browser action', async () => {
   const f = await ready();
@@ -1666,4 +1802,151 @@ test('a round committed before a dropped HTTP response replays the original inte
   expect(retry.body.task.id).toBe(before[0].id);
   expect((await f.request(`${f.remote}/feedback/tasks`)).body.tasks).toHaveLength(1);
   expect(retry.body.task.roundContext.groups[0].choice).toBe('b');
+});
+
+test('records explicit browser decisions for the visible revision and gives the scoped Agent a read-only implementation check', async () => {
+  const question =
+    '<ask key="implementation" prompt="Implement this revision?" options=\'[{"id":"ship","label":"Approve"},{"id":"revise","label":"Request changes"}]\' approve="ship"/>';
+  const f = await ready(`<doc><p blockId="intro">draft</p>${question}</doc>`);
+  const documentId = 'Z'.repeat(21);
+  const directory = path.join(f.fx.alpha, '.anjian/artifacts/document/plan');
+  fs.writeFileSync(path.join(directory, '.artifact-id'), documentId);
+  const route = `approvals/${documentId}`;
+  const getItem = async () => (await f.browser('questions')).body.items[0];
+  await vi.waitFor(async () => {
+    expect((await f.call(route)).status).toBe(200);
+    expect((await getItem()).approval?.currentRevision).toMatch(/^sha256:/);
+  });
+  const versionOfView = async () => {
+    const response = await f.fx.request(`/api/document/plan/state?key=${MASTER}`);
+    expect(response.status).toBe(200);
+    const { snapshot, approvalAssetsRevision } = await response.json();
+    const loro = new LoroDoc();
+    try {
+      loro.import(Buffer.from(snapshot, 'base64'));
+      return {
+        viewVersion: approvalViewKey(loro.frontiers()),
+        assetsRevision: approvalAssetsRevision,
+      };
+    } finally {
+      loro.free();
+    }
+  };
+  const item = await getItem();
+  const request = {
+    action: 'decide',
+    id: item.id,
+    version: item.version,
+    answer: 'ship',
+    revision: item.approval.currentRevision,
+    ...(await versionOfView()),
+    by: { id: 'forged' },
+  };
+  expect((await f.call(route, request)).status).toBe(405);
+  expect(
+    (
+      await f.fx.request('/api/document/plan/feedback/questions', {
+        method: 'POST',
+        headers: { ...f.login.headers, 'Origin': f.fx.origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await f.fx.request(`/api/remote/projects/${f.fx.id(f.fx.beta)}/feedback/${route}`, {
+        headers: f.login.headers,
+      })
+    ).status,
+  ).toBe(404);
+  expect((await f.browser('questions', { ...request, action: 'draft' })).status).toBe(400);
+  expect((await f.browser('questions', { ...request, answer: '' })).status).toBe(400);
+  expect((await f.browser('questions', { ...request, viewVersion: '[]' })).status).toBe(409);
+  const first = await f.browser('questions', request);
+  expect(first.status, JSON.stringify(first.body)).toBe(200);
+  expect(first.body.item.approval).toMatchObject({
+    state: 'approved',
+    decision: { documentId, revision: request.revision, choice: 'ship', by: { id: 'owner' } },
+  });
+  expect((await f.browser('questions', request)).status).toBe(200);
+  expect((await f.call(route)).body.decisions).toHaveLength(1);
+
+  const local = path.join(f.fx.home, 'approval-cli-project');
+  const client = path.join(f.fx.home, 'approval-client');
+  fs.mkdirSync(local);
+  fs.mkdirSync(client);
+  fs.writeFileSync(
+    path.join(client, 'connections.json'),
+    JSON.stringify({
+      servers: {
+        [f.fx.origin]: {
+          token: f.login.token,
+          deviceId: 'fixture',
+          deviceName: 'Fixture',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+      bindings: { [local]: { origin: f.fx.origin, projectId: f.project, revisions: {} } },
+    }),
+    { mode: 0o600 },
+  );
+  const cli = () =>
+    promisify(execFile)(
+      process.execPath,
+      [
+        path.resolve('dist/cli.cjs'),
+        'approval',
+        '--artifact',
+        `document/${documentId}`,
+        '--require',
+        'implementation',
+        '--project-dir',
+        local,
+        '--json',
+      ],
+      { env: { ...process.env, ANJIAN_CLIENT_HOME: client } },
+    );
+  expect(JSON.parse((await cli()).stdout)).toMatchObject({ currentRevision: request.revision });
+
+  fs.mkdirSync(path.join(directory, 'assets'));
+  fs.writeFileSync(path.join(directory, 'assets', 'annotation.txt'), 'new revision evidence');
+  const latestView = await versionOfView();
+  expect(latestView.viewVersion).toBe(request.viewVersion);
+  expect(latestView.assetsRevision).not.toBe(request.assetsRevision);
+  expect((await f.browser('questions', request)).body.code).toBe('approval_view_changed');
+  await expect(cli()).rejects.toMatchObject({
+    code: 1,
+    stdout: expect.stringContaining('needs_review'),
+  });
+  const updated = await getItem();
+  expect(updated.approval).toMatchObject({
+    state: 'needs_review',
+    decision: { revision: request.revision },
+  });
+  expect(updated.approval.currentRevision).not.toBe(request.revision);
+  expect(
+    (
+      await f.browser('questions', {
+        ...request,
+        revision: updated.approval.currentRevision,
+      })
+    ).body.code,
+  ).toBe('approval_view_changed');
+  const revised = await f.browser('questions', {
+    ...request,
+    revision: updated.approval.currentRevision,
+    answer: 'revise',
+    ...latestView,
+  });
+  expect(revised.status, JSON.stringify(revised.body)).toBe(200);
+  expect(revised.body.item.approval.state).toBe('changes_requested');
+  await f.fx.restart();
+  await vi.waitFor(async () => {
+    const final = await f.call(route);
+    expect(final.body.items[0].state).toBe('changes_requested');
+    expect(final.body.decisions.map(({ choice }: { choice: string }) => choice)).toEqual([
+      'ship',
+      'revise',
+    ]);
+  });
 });

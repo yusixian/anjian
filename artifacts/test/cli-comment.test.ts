@@ -4,6 +4,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
+import { TREE_NAME } from '@haklex/rich-collab-loro';
+import { LoroDoc } from 'loro-crdt';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { commentText } from '../src/cli/comment';
@@ -489,4 +491,77 @@ describe('artboard comments', () => {
       ].join('\n'),
     );
   });
+});
+
+test('reads document changes and saved review evidence without consuming comments', async () => {
+  const dir = await project({ running: false });
+  const root = path.join(dir, '.anjian', 'artifacts');
+  const state = path.join(root, '.state', 'document', 'relay');
+  const source = path.join(root, 'document', 'relay', 'doc.xml');
+  const commentFile = path.join(root, 'document', 'relay', 'comments.json');
+  const snapshotFile = path.join(state, 'doc.loro');
+  const original = fs.readFileSync(source, 'utf8');
+  const at = '2026-01-01T00:00:00.000Z';
+  const saved = `${JSON.stringify({
+    version: 1,
+    threads: [{
+      id: 'review',
+      anchor: { blockId: 'b1', quote: '事件' },
+      status: 'open',
+      statusAt: at,
+      messages: [{ id: 'initial', author: 'human', name: 'Reviewer', text: 'Please verify.', at }],
+    }],
+  }, null, 2)}\n`;
+  const loro = new LoroDoc();
+  loro.setPeerId('1');
+  const block = loro.getTree(TREE_NAME).createNode().createNode();
+  block.data.set('$', { blockId: 'b1' });
+  loro.commit({ timestamp: 100, message: 'session start' });
+  block.data.set('change', 'reviewed by a human');
+  loro.commit({ timestamp: 200, message: 'human' });
+  const snapshot = loro.export({ mode: 'snapshot' });
+  loro.free();
+
+  fs.mkdirSync(state, { recursive: true });
+  fs.writeFileSync(commentFile, saved);
+  fs.writeFileSync(snapshotFile, snapshot);
+  expect((await run(['start', '--project-dir', dir, '--background'])).out.type).toBe('server-started');
+
+  const versions = await run(['changes', ...doc(dir), '--versions']);
+  expect(versions.code).toBe(0);
+  expect(versions.out).toMatchObject({ type: 'document-changes', versions: [
+    { source: 'human', version: expect.any(String) },
+    { source: 'session', version: expect.any(String) },
+  ] });
+  const from = versions.out.versions[1].version;
+  const latest = versions.out.latest;
+  const changes = await run(['changes', ...doc(dir), '--from', from]);
+  expect(changes.code).toBe(0);
+  expect(changes.out).toMatchObject({ from, to: latest, empty: false, changes: [{
+    author: { source: 'human', peer: '1' },
+    blocks: [{ blockId: 'b1' }],
+  }] });
+  expect((await run(['changes', ...doc(dir), '--from', latest])).out).toMatchObject({ empty: true });
+  expect((await run(['changes', ...doc(dir), '--from', 'invalid'])).code).toBe(1);
+
+  const review = await run(['review', ...doc(dir)]);
+  expect(review.code).toBe(0);
+  expect(review.out).toMatchObject({ type: 'review', threads: [{ id: 'review', messages: [{ id: 'initial' }] }] });
+  expect((await run(['review', ...doc(dir)])).out).toEqual(review.out);
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  fs.writeFileSync(path.join(root, 'document', 'relay', '.artifact-id'), address + '\n');
+  const addressed = ['--project-dir', dir, '--artifact', 'document/' + address];
+  expect((await run(['changes', ...addressed, '--versions'])).out).toMatchObject({
+    type: 'document-changes',
+    latest,
+  });
+  expect((await run(['review', ...addressed])).out).toEqual({
+    ...review.out,
+    artifact: 'document/' + address,
+  });
+  expect(fs.readFileSync(source, 'utf8')).toBe(original);
+  expect(fs.readFileSync(commentFile, 'utf8')).toBe(saved);
+  expect(fs.readFileSync(snapshotFile)).toEqual(Buffer.from(snapshot));
+  const unread = await run(['comment', 'list', ...doc(dir)]);
+  expect(JSON.stringify(unread.out)).toContain('Please verify.');
 });

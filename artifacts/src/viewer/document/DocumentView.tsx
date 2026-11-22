@@ -5,6 +5,7 @@ import type { LexicalEditor } from 'lexical';
 import { LoroDoc } from 'loro-crdt';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { approvalViewKey } from '../../shared/approval-view';
 import { type CommentsFile, emptyComments, type HumanOp } from '../../shared/comments';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
@@ -13,10 +14,12 @@ import { useTypeFavicon } from '../hooks/useTypeFavicon';
 import { t } from '../i18n';
 import { agentActivity } from './agentActivity';
 import type { AgentPlaybackState } from './AgentPlayback';
+import { type ArtifactReferenceResolver, LiveReferenceContext } from './ArtifactReferenceCard';
 import type { ThreadActions } from './CommentCard';
 import { DesktopDocument } from './DesktopDocument';
 import { DocumentEditor, extraNodes } from './DocumentEditor';
 import { useDocumentHistory } from './DocumentHistory';
+import { DocumentQuestions } from './DocumentQuestions';
 import { type DynamicHost, DynamicHostContext } from './DynamicBlock';
 import { decodeBase64 } from './LoroSync';
 import { PendingContext, type PendingProgress } from './PendingBlock';
@@ -88,18 +91,23 @@ export function DocumentView({
   id,
   transport,
   live,
+  resolveReference,
   fallback,
   actions: barActions,
 }: {
   id: string;
   transport: DocumentTransport;
   live: boolean;
+  resolveReference?: ArtifactReferenceResolver;
   fallback?: ReactNode;
   actions?: ReactNode;
 }) {
   const feedbackEnabled = useFeedbackEnabled();
   const [meta, setMeta] = useState<DocumentMeta | null>(null);
-  const [doc, setDoc] = useState<LoroDoc | null>(null);
+  const [loaded, setLoaded] = useState<{ doc: LoroDoc; assetsRevision?: string } | null>(null);
+  const doc = loaded?.doc ?? null;
+  const getAssetsRevision = useCallback(() => loaded?.assetsRevision, [loaded]);
+  const getViewVersion = useCallback(() => (doc ? approvalViewKey(doc.frontiers()) : null), [doc]);
   const [comments, setComments] = useState<CommentsFile>(emptyComments);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -147,7 +155,7 @@ export function DocumentView({
         const scroll = preserveScroll
           ? { left: window.scrollX, top: window.scrollY, behavior: 'instant' as const }
           : null;
-        setDoc(loro);
+        setLoaded({ doc: loro, assetsRevision: state.approvalAssetsRevision });
         // The editor binding fills its initially empty DOM after mounting.
         if (scroll)
           requestAnimationFrame(() => {
@@ -280,19 +288,27 @@ export function DocumentView({
 
   const editorView = (
     <DynamicHostContext.Provider value={dynamicHost}>
-      <PendingContext.Provider value={pendingProgress}>
-        <DocumentEditor
-          agent={meta?.agent}
-          doc={doc}
-          theme={dark ? 'dark' : 'light'}
-          transport={transport}
-          onAgentPlayback={setPlayback}
-          onEditorReady={setEditor}
-          onOffline={setOffline}
-          onQuotaExceeded={setQuotaExceeded}
-          onState={onState}
-        />
-      </PendingContext.Provider>
+      <LiveReferenceContext.Provider value={historyVisible ? null : (resolveReference ?? null)}>
+        <PendingContext.Provider value={pendingProgress}>
+          <DocumentQuestions
+            artifact={live && feedbackEnabled ? artifact : null}
+            getAssetsRevision={getAssetsRevision}
+            getViewVersion={getViewVersion}
+          >
+            <DocumentEditor
+              agent={meta?.agent}
+              doc={doc}
+              theme={dark ? 'dark' : 'light'}
+              transport={transport}
+              onAgentPlayback={setPlayback}
+              onEditorReady={setEditor}
+              onOffline={setOffline}
+              onQuotaExceeded={setQuotaExceeded}
+              onState={onState}
+            />
+          </DocumentQuestions>
+        </PendingContext.Provider>
+      </LiveReferenceContext.Provider>
     </DynamicHostContext.Provider>
   );
 

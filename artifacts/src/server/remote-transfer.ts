@@ -282,12 +282,12 @@ export function readRemoteArtifactAddress(projectDir: string, artifact: string):
   }
 }
 
-export function readRemoteArtifact(projectDir: string, artifact: string): RemoteArtifactSnapshot {
+function readManagedSource(projectDir: string, artifact: string): Map<string, Buffer> | null {
   const { dir, type } = pathsFor(projectDir, artifact);
-  if (!fs.existsSync(dir)) return { revision: null, files: {} };
+  if (!fs.existsSync(dir)) return null;
   const files = collect(dir, type);
   // Mounting can create metadata before the first source file is uploaded.
-  if (files.size === 0) return { revision: null, files: {} };
+  if (files.size === 0) return null;
   const primary = PRIMARY_FILE[type];
   const source = files.get(primary);
   if (!source) throw unsafe(`artifact is missing ${primary}`);
@@ -297,7 +297,20 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
     const problem = whiteboardProblem(files);
     if (problem) throw unsafe(problem);
   }
-  return snapshot(files, digest(files));
+  return files;
+}
+
+export function readDocumentApprovalRevisions(projectDir: string, id: string) {
+  const files = readManagedSource(projectDir, `document/${id}`);
+  if (!files) return null;
+  const assets = new Map(files);
+  assets.delete('doc.xml');
+  return { revision: digest(files), assetsRevision: digest(assets) };
+}
+
+export function readRemoteArtifact(projectDir: string, artifact: string): RemoteArtifactSnapshot {
+  const files = readManagedSource(projectDir, artifact);
+  return files ? snapshot(files, digest(files)) : { revision: null, files: {} };
 }
 
 function validateSlideDeck(source: Buffer) {

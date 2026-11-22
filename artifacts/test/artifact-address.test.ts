@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 
 import { type ArtifactsServer, startArtifactsServer } from '../src/server/app';
+import { resolveArtifactAddress } from '../src/server/artifact-address';
 import { get, tempRoot, writeArtboard, writeDocument, writeHtml } from './helpers';
 
 let server: ArtifactsServer | undefined;
@@ -134,4 +135,18 @@ test('a copied identity never silently opens a different artifact', async () => 
   const result = await request(pathname);
   expect(result.status).toBe(500);
   expect(result.body).toContain('Duplicate artifact ID');
+});
+
+test('read-only address discovery does not assign missing identities', () => {
+  const { root } = tempRoot();
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  const existing = writeHtml(root, 'existing', {
+    'index.html': '<title>Existing</title>',
+    '.artifact-id': address + '\n',
+  });
+  const legacy = writeHtml(root, 'legacy', { 'index.html': '<title>Legacy</title>' });
+
+  expect(resolveArtifactAddress(root, 'html', address, { mintMissing: false })?.dir).toBe(existing);
+  expect(resolveArtifactAddress(root, 'html', 'legacy', { mintMissing: false })?.dir).toBe(legacy);
+  expect(fs.existsSync(path.join(legacy, '.artifact-id'))).toBe(false);
 });

@@ -34,6 +34,7 @@ When multiple skills apply, process skills come first — they set the approach,
 - "Let's build X" → anjian:brainstorming first, then implementation skills.
 - "Fix this bug" → anjian:systematic-debugging first, then domain skills.
 - UI built, or a visible bug to fix → anjian:verifying-ui before calling it done; the project's own app-checking skill can make the evidence, not the verdict.
+- An acceptance report covering several checks, evidence sources or decisions → anjian:verifying.
 
 When the project has its own skill for a step — its design system, checking the running app, shipping — that skill does that step. Anjian sets the process; the project's skills carry its domain.
 

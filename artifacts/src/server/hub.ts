@@ -20,6 +20,7 @@ import {
 import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
 import { createArtifactIndex } from './artifact-index';
+import { createArtifactReferenceRoute } from './artifact-reference-route';
 import {
   ArtifactTrashError,
   findTrashedArtifact,
@@ -496,6 +497,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
   const projectAccess = createProjectAccess({ members, github, isOwner: authorized, registered });
+  const artifactReference = createArtifactReferenceRoute({
+    list: index.list,
+    mount: mountOf,
+    visible: (req, url, project) =>
+      originAllowed(policy, req.headers.origin) &&
+      navigationAllowed(req.headers['sec-fetch-site'] as string | undefined) &&
+      projectAccess.canAccess(projectAccess.principal(req, url), project),
+  });
   const contentAccess = createContentAccess(projectAccess.canAccess);
   const privateContent = async (
     req: http.IncomingMessage,
@@ -1034,6 +1043,13 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     projects: remoteProjects,
     mount: mountOf,
     upload: writeQuota,
+    resolveDocument: (dir, documentId) =>
+      index
+        .list()
+        .find(
+          (entry) =>
+            entry.project === dir && entry.type === 'document' && entry.address === documentId,
+        )?.id,
     browserProject: (req, artifact) => {
       if (
         (req.method !== 'GET' && !req.headers.origin) ||
@@ -1045,7 +1061,28 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const found = index.find(type, id);
       if (!found || !projectAccess.authorized(req, found.project) || !available(found.project))
         return null;
-      return { id: projectId(found.project), dir: found.project, artifact: `${type}/${found.id}` };
+      const principal = projectAccess.principal(req, new URL(req.url ?? '/', origin));
+      if (!principal) return null;
+      const login =
+        principal.role === 'member'
+          ? members.list().members.find((member) => member.id === principal.id)?.login
+          : undefined;
+      const documentId =
+        type === 'document'
+          ? (index
+              .list(1000)
+              .find(
+                (entry) =>
+                  entry.project === found.project && entry.type === type && entry.id === found.id,
+              )?.address ?? undefined)
+          : undefined;
+      return {
+        id: projectId(found.project),
+        dir: found.project,
+        artifact: `${type}/${found.id}`,
+        documentId,
+        actor: { id: principal.id, ...(login ? { login } : {}) },
+      };
     },
   });
   const remoteApi = createRemoteApi({
@@ -1229,6 +1266,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (options.docsDir && url.pathname === '/login' && !url.searchParams.has('returnTo'))
         url.searchParams.set('returnTo', '/library');
       if (await browserAuth(req, res, url)) return;
+      if (await artifactReference(req, res, url)) return;
       if (await shareApi(req, res, url)) return;
       if (await memberApi(req, res, url)) return;
       if (await storageApi(req, res, url)) return;

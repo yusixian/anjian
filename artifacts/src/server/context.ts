@@ -17,6 +17,7 @@ import { originsFor } from './board-port';
 import { commentNames } from './comment-names';
 import { ensureConfig } from './config';
 import type { createGitHubAuth, GitHubConfig } from './github-auth';
+import { documentQuestions } from './document-codec';
 import { readDocument } from './document';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
@@ -29,6 +30,7 @@ import { listStoryboardAssets, readStoryboard } from './storyboard-source';
 import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
+import { readDocumentApprovalRevisions } from './remote-transfer';
 import { createSelectionStore } from './selection';
 import { socketAuthorized } from './socket-access';
 import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactState } from './state';
@@ -238,15 +240,29 @@ export function createServerContext(options: ServerOptions) {
   const documentState = (
     id: string,
     session: NonNullable<Awaited<ReturnType<typeof documents.open>>>,
-  ) => ({
-    snapshot: Buffer.from(session.snapshot()).toString('base64'),
-    lineage: session.lineage(),
-    outcome: session.outcome(),
-    streaming: session.streaming(),
-    agentActiveAt: session.agentActiveAt(),
-    now: Date.now(),
-    comments: documents.comments(id),
-  });
+  ) => {
+    let approvalAssetsRevision: string | undefined;
+    try {
+      if (options.mount && documentQuestions(session.state()).some((question) => question.approve)) {
+        approvalAssetsRevision = readDocumentApprovalRevisions(
+          path.resolve(root, '../..'),
+          id,
+        )?.assetsRevision;
+      }
+    } catch {
+      // Unsafe or oversized source cannot be approved, but can still be opened for repair.
+    }
+    return {
+      snapshot: Buffer.from(session.snapshot()).toString('base64'),
+      lineage: session.lineage(),
+      outcome: session.outcome(),
+      streaming: session.streaming(),
+      agentActiveAt: session.agentActiveAt(),
+      now: Date.now(),
+      comments: documents.comments(id),
+      ...(approvalAssetsRevision ? { approvalAssetsRevision } : {}),
+    };
+  };
 
   const verdictPreparing = (id: string, op: NonNullable<ReturnType<typeof asBoardHumanOp>>) => {
     if (op.op !== 'create' || !op.anchor.verdict) return false;

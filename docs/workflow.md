@@ -33,7 +33,7 @@ Two-hour autonomous stretches without "should I continue?" are normal. Because t
 
 ## What's inside
 
-- **Process** — `brainstorming`, `artifacts`, `executing-specs`, `verifying-ui`
+- **Process** — `brainstorming`, `artifacts`, `executing-specs`, `verifying-ui`, `verifying` for reports that combine automated results, human review and coverage gaps
 - **Discipline** — `test-driven-development`, `systematic-debugging`
 - **Workspace** — `using-git-worktrees`
 - **Meta** — `using-ryugi` (bootstrap, plus evidence before claims)

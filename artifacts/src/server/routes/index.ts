@@ -10,6 +10,7 @@ import {
 import { boardCommentsRoute } from './comments';
 import { contentRoute, robotsRoute, statusRoute } from './content';
 import { documentStateRoute, documentWriteRoute } from './documents';
+import { reviewEvidenceRoute } from './review-evidence';
 import { slideDeckRoute } from './slides';
 import { slidesAgentCommentRoute, slidesCommentRoute } from './slides-comments';
 import { clientSocketRoute } from './sockets';
@@ -36,6 +37,7 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   agentCommentsRoute,
   agentBoardCommentsRoute,
   agentCheckRoute,
+  reviewEvidenceRoute,
   boardCommentsRoute,
   storyboardAssetsRoute,
   storyboardRenderRoute,

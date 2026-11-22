@@ -600,12 +600,51 @@
     "waitingDocument": "Waiting for document content…",
     "waitingCanvas": "Waiting for canvas content…"
   },
+  "question": {
+    "approvalOwner": "Owner",
+    "approvalAssetsChanged": "Attachments changed. Reopen the document before reviewing.",
+    "reopenDocument": "Reopen document",
+    "recordApproval": "Record decision",
+    "approvalRecorded": "“{{choice}}” recorded by {{reviewer}} on {{time}}",
+    "approvalChanged": "The document or question changed. Review it and select an option again.",
+    "approvalFailed": "Couldn’t confirm the decision. Check its status and try again.",
+    "approvalState": {
+      "pending": "Awaiting review",
+      "approved": "Current revision approved",
+      "changes_requested": "Changes requested for the current revision",
+      "needs_review": "The document changed since the last decision. Review the current revision."
+    },
+    "recommended": "Recommended",
+    "placeholder": "Write your answer…",
+    "previous": "This answer refers to an earlier version of the question.",
+    "replyReady": "The Agent replied. You can review the answer and reply.",
+    "submittedAnswer": "Submitted answer",
+    "conflict": "The saved answer changed to “{{answer}}”. Your edits are still here.",
+    "empty": "No answer",
+    "restore": "Use saved answer",
+    "keep": "Keep my edits",
+    "target": "Choose an Agent",
+    "save": "Save draft",
+    "submit": "Send to {{agent}}",
+    "noAgent": "Connect an Agent to this document to send your answer. You can save a draft now.",
+    "withdraw": "Withdraw submission",
+    "saved": "Draft saved",
+    "syncing": "Waiting for the latest question to load.",
+    "changed": "The question or task changed. Review its current state and try again.",
+    "failed": "Couldn’t confirm the change. Your answer is still here.",
+    "loadFailed": "Couldn’t load the latest answers.",
+    "reload": "Refresh"
+  },
   "questions": {
     "previous": "Previous question",
     "next": "Next question",
     "jumpTo": "Jump to",
     "boards_one": "{{count}} board",
     "boards_other": "{{count}} boards"
+  },
+  "reference": {
+    "static": "Artifact reference",
+    "unavailable": "Reference unavailable"
   },
   "release": {
     "closeNotes": "Close",

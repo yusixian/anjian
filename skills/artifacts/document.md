@@ -4,7 +4,6 @@
 source, then push before check/reply. Local live-file and streaming instructions
 below do not synchronize a remote server; upload complete valid artifacts.
 
-
 A living doc at `.anjian/artifacts/document/<id>/`. You write it; your human
 partner reads it in their browser, comments on passages, and can fix text in
 place. Their edits and yours merge live.
@@ -34,6 +33,75 @@ tables.
   parse `doc.xml` yourself. A rejected edit names the tag; the file stays as
   you wrote it until you fix it. `"merging": true` means a long edit is
   still playing into the document: run `check` again.
+
+## Questions in a document
+
+Use a top-level `<ask>` when the reader should answer inside the document. Use
+stable, distinct keys and option IDs made of ASCII letters, digits, hyphens or
+underscores. Keep those identifiers when moving a question or editing its wording.
+
+```xml
+<ask key="ship-date" prompt="When should we ship?"
+     options='[{"id":"now","label":"Ship now"},{"id":"later","label":"Next week"}]'
+     recommended="now" />
+<ask key="ship-constraints" prompt="What constraints should we account for?" />
+```
+
+Supply two to twenty options for a choice. `recommended` marks an option that
+the reader may select. A question without options accepts a typed answer. Escape
+XML attribute characters such as `&amp;` and `&gt;`. Run the document check
+before sending the artifact link.
+
+The reader can save a draft, reload it, and explicitly submit it to a connected
+Agent. Readers with document access share one draft per question. While
+withdrawal is available, it cancels that submission and retains the draft.
+Treat a submitted answer as a snapshot of that wording and those options.
+The answer, draft and reply are stored separately from `doc.xml`. Public views
+show the question and its options. See [remote.md](remote.md) for reading and
+replying to submitted answers.
+
+## Reference another artifact
+
+Place a top-level `<ref>` where the reader should open another work. Use the
+stable address from its verified artifact link, without the origin, query,
+access key or share token.
+
+```xml
+<ref type="artboard" target="A12345678901234567890" group="proposal" label="Proposal review" />
+<ref type="html" target="B12345678901234567890" label="Interactive preview" />
+<ref type="storyboard" target="C12345678901234567890" label="Launch walkthrough" />
+```
+
+Use the target type: `document`, `html`, `artboard`, `whiteboard`, `slides`, or
+`storyboard`. A reference opens the whole artifact by default. For an artboard
+only, use either `group` or `board` to focus an exact ID, even when a group and
+a board have the same ID. When the target group
+uses human verification, the authenticated document shows its current verdict.
+
+Run the document check and open each reference in the browser with the intended
+reader's access. The destination is resolved when the reference is opened. A
+public source snapshot shows the reference text. Readers access a separately
+shared destination through its own share link.
+
+## Reuse design rules in implementation reviews
+
+When the team has selected a direction, keep the approved rules in a separate
+versioned JSON manifest. Give each rule a stable ID and record its decision
+source, such as a design review or source commit. Render a readable document
+with `node app/anjian.cjs design-spec --input design.json`. Use `--json`
+to get its SHA-256 `revision`. The manifest starts with `schema: 1`,
+`title` and `rules`. Each rule has `id`, `category` (typography,
+color, layout or component), `title`, `requirement` and `source`.
+
+Keep the exact reviewed manifest alongside its evidence. In the
+`verify-report` input set `designSpec` to `{ file, revision, target }`,
+where `file` is relative to the report manifest and `target` is the stable
+address of the design document. Put the matching IDs in `rules` on each check
+or human review. Deliver the verification report as the single reader-facing
+entry when the reader asks for one link. It includes the pinned rule text, links to
+the reusable design document and the live artboard verdict, and identifies unchecked
+rules. Preserve a separate file for a new spec revision and set its
+`previous` digest so older reports still identify the original rules.
 
 ## Before writing: choose how to tell it
 

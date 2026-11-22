@@ -8,6 +8,53 @@ import {
   type Spread,
 } from 'lexical';
 
+import { BaseReferenceNode, type SerializedReferenceNode } from '../shared/artifact-reference-node';
+import { BaseQuestionNode, type SerializedQuestionNode } from '../shared/document-question-node';
+
+class QuestionNode extends BaseQuestionNode<null> {
+  static getType() {
+    return 'question';
+  }
+
+  static clone(node: QuestionNode) {
+    return new QuestionNode(node.__definition, node.__key);
+  }
+
+  static importJSON(json: SerializedQuestionNode) {
+    return new QuestionNode(json.definition).updateFromJSON(json);
+  }
+
+  createDOM(): HTMLElement {
+    throw new Error('headless');
+  }
+
+  decorate() {
+    return null;
+  }
+}
+
+class ReferenceNode extends BaseReferenceNode<null> {
+  static getType() {
+    return 'artifact-reference';
+  }
+
+  static clone(node: ReferenceNode) {
+    return new ReferenceNode(node.__reference, node.__key);
+  }
+
+  static importJSON(json: SerializedReferenceNode) {
+    return new ReferenceNode(json.reference).updateFromJSON(json);
+  }
+
+  createDOM(): HTMLElement {
+    throw new Error('headless');
+  }
+
+  decorate() {
+    return null;
+  }
+}
+
 type SerializedPendingNode = Spread<{ intent: string }, SerializedLexicalNode>;
 
 class PendingNode extends DecoratorNode<null> {
@@ -53,7 +100,7 @@ class PendingNode extends DecoratorNode<null> {
 
 export const createDocumentHeadlessEditor = (): LexicalEditor =>
   createHeadlessEditor({
-    nodes: [...allHeadlessNodes, PendingNode],
+    nodes: [...allHeadlessNodes, PendingNode, QuestionNode, ReferenceNode],
     onError: (err) => {
       throw err;
     },

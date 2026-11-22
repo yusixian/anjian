@@ -2,20 +2,32 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createLoroBinding } from '@haklex/rich-collab-loro';
+import { createLoroBinding, TREE_NAME } from '@haklex/rich-collab-loro';
 import { allHeadlessNodes } from '@haklex/rich-headless';
 import { createHeadlessEditor } from '@lexical/headless';
-import { $getRoot, $isElementNode, $isTextNode, type LexicalNode, type TextNode } from 'lexical';
+import {
+  $getRoot,
+  $isElementNode,
+  $isTextNode,
+  $parseSerializedNode,
+  $setSelection,
+  type LexicalNode,
+  SELECTION_INSERT_CLIPBOARD_NODES_COMMAND,
+  type TextNode,
+} from 'lexical';
 import { LoroDoc } from 'loro-crdt';
 import { afterEach, expect, test, vi } from 'vitest';
 
+import { documentQuestions, parseDocument } from '../src/server/document-codec';
 import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 import {
   createDocumentSession,
-  prepareNewRemoteDocument,
   type DocumentEvent,
   type DocumentSession,
+  prepareNewRemoteDocument,
 } from '../src/server/document-session';
+import { DOCUMENT_FEATURES } from '../src/shared/document-features';
+import { registerQuestionClipboard } from '../src/shared/document-question-node';
 
 let sessions: DocumentSession[] = [];
 
@@ -334,47 +346,174 @@ test('agent activity starts at the file time and moves only with agent writes', 
   ).toBe(true);
 });
 
-test('a client that cannot show pending blocks is refused instead of wiping the document', async () => {
-  const { file, snapshotFile } = setup(
-    '<doc><h2>One</h2><p>keep me</p><pending intent="first"/></doc>',
-  );
+const protectedBlocks = [
+  {
+    feature: 'pending',
+    xml: '<pending intent="first" />',
+    marker: 'intent="first"',
+  },
+  {
+    feature: 'artifact-reference',
+    xml: '<ref type="artboard" target="AB12ab12ab12ab12ab12x" label="Review" />',
+    marker: 'label="Review"',
+  },
+];
+
+test.each(protectedBlocks)(
+  'a client that cannot show $feature blocks is refused instead of wiping the document',
+  async ({ xml, marker }) => {
+    const { file, snapshotFile } = setup(`<doc><h2>One</h2><p>keep me</p>${xml}</doc>`);
+    const session = await open(file, snapshotFile);
+    await session.flush();
+
+    const peer = new LoroDoc();
+    const updates: Uint8Array[] = [];
+    peer.subscribeLocalUpdates((bytes) => updates.push(bytes));
+    const binding = createLoroBinding(
+      createHeadlessEditor({ nodes: allHeadlessNodes, onError: () => {} }),
+      peer,
+    );
+    binding.import(session.snapshot());
+    binding.dispose();
+    expect(updates.length).toBeGreaterThan(0);
+
+    for (const update of updates)
+      expect(() => session.importUpdate(update)).toThrow('reload the page');
+    await session.flush();
+    expect(read(file)).toContain('keep me');
+    expect(read(file)).toContain(marker);
+  },
+);
+
+test('a document with questions and references rejects a nested reference and still accepts edits', async () => {
+  const xml = '<doc><p>one</p><ask key="ready" prompt="Ready?"/>' + protectedBlocks[1]!.xml + '</doc>';
+  const { file, snapshotFile } = setup(xml);
   const session = await open(file, snapshotFile);
   await session.flush();
+  const before = read(file);
 
-  const peer = new LoroDoc();
-  const updates: Uint8Array[] = [];
-  peer.subscribeLocalUpdates((bytes) => updates.push(bytes));
-  const binding = createLoroBinding(
-    createHeadlessEditor({ nodes: allHeadlessNodes, onError: () => {} }),
-    peer,
-  );
-  binding.import(session.snapshot());
-  binding.dispose();
-  expect(updates.length).toBeGreaterThan(0);
-
-  for (const update of updates)
-    expect(() => session.importUpdate(update)).toThrow('reload the page');
+  const invalidPeer = new LoroDoc();
+  invalidPeer.import(session.snapshot());
+  const invalidFrom = invalidPeer.oplogVersion();
+  const [paragraph, , reference] = invalidPeer.getTree(TREE_NAME).roots()[0]!.children()!;
+  reference!.move(paragraph);
+  const invalidUpdate = invalidPeer.export({ mode: 'update', from: invalidFrom });
+  expect(() => session.importUpdate(invalidUpdate, DOCUMENT_FEATURES)).toThrow('<ref> must be a top-level block');
+  expect(() => session.saveUpdate(invalidUpdate, DOCUMENT_FEATURES)).toThrow('<ref> must be a top-level block');
   await session.flush();
-  expect(read(file)).toContain('keep me');
-  expect(read(file)).toContain('intent="first"');
-});
+  expect(read(file)).toBe(before);
 
-test('a client that declares pending support edits a document that has pending blocks', async () => {
-  const { file, snapshotFile } = setup('<doc><p>one</p><pending intent="first"/></doc>');
-  const session = await open(file, snapshotFile);
-  await session.flush();
   const peer = new LoroDoc();
   peer.import(session.snapshot());
   const editor = createDocumentHeadlessEditor();
   const binding = createLoroBinding(editor, peer);
   const from = peer.oplogVersion();
-  editor.update(() => $findText($getRoot(), 'one')!.setTextContent('one by hand'), {
-    discrete: true,
-  });
-  session.importUpdate(peer.export({ mode: 'update', from }), ['pending']);
+  editor.update(() => $findText($getRoot(), 'one')!.setTextContent('edited'), { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }), DOCUMENT_FEATURES);
   binding.dispose();
   await session.flush();
-  expect(read(file)).toContain('one by hand');
+  expect(read(file)).toContain('edited');
+  expect(read(file)).toContain('key="ready"');
+  expect(read(file)).toContain('label="Review"');
+});
+
+test.each(protectedBlocks)(
+  'a client that declares $feature support edits a document that has those blocks',
+  async ({ feature, xml, marker }) => {
+    const { file, snapshotFile } = setup(`<doc><p>one</p>${xml}</doc>`);
+    const session = await open(file, snapshotFile);
+    await session.flush();
+    const peer = new LoroDoc();
+    peer.import(session.snapshot());
+    const editor = createDocumentHeadlessEditor();
+    const binding = createLoroBinding(editor, peer);
+    const from = peer.oplogVersion();
+    editor.update(() => $findText($getRoot(), 'one')!.setTextContent('one by hand'), {
+      discrete: true,
+    });
+    session.importUpdate(peer.export({ mode: 'update', from }), [feature]);
+    binding.dispose();
+    await session.flush();
+    expect(read(file)).toContain('one by hand');
+    expect(read(file)).toContain(marker);
+  },
+);
+
+test.each([
+  ['copy', ['first', expect.stringMatching(/^q-/)]],
+  ['cut', ['first']],
+])('pasting after a %s preserves the original question identity', (action, expectedKeys) => {
+  const editor = createDocumentHeadlessEditor();
+  const unregister = registerQuestionClipboard(editor);
+  const source = parseDocument('<doc><ask key="first" prompt="Ready?"/><p>text</p></doc>');
+  editor.setEditorState(editor.parseEditorState(source));
+  if (action === 'cut')
+    editor.update(() => $getRoot().getFirstChild()!.remove(), { discrete: true });
+  editor.update(() => {
+    const copy = $parseSerializedNode(source.root.children[0]!);
+    const selection = $getRoot().getLastChild()!.selectEnd();
+    $setSelection(selection);
+    expect(
+      editor.dispatchCommand(SELECTION_INSERT_CLIPBOARD_NODES_COMMAND, { nodes: [copy], selection }),
+    ).toBe(false);
+    selection.insertNodes([copy]);
+  }, { discrete: true });
+  const questions = documentQuestions(editor.getEditorState().toJSON());
+  expect(questions.map(({ id }) => id)).toEqual(expectedKeys);
+  unregister();
+});
+
+test('rejects a duplicate question update without changing the live or saved document', async () => {
+  const xml = '<doc><ask id="block" key="first" prompt="Ready?"/></doc>';
+  const { file, snapshotFile } = setup(xml);
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const before = read(file);
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  const source = parseDocument(xml);
+  editor.update(() => {
+    $getRoot().append($parseSerializedNode(source.root.children[0]!));
+  }, { discrete: true });
+  const update = peer.export({ mode: 'update', from });
+  from.free();
+  binding.dispose();
+
+  expect(() => session.importUpdate(update, ['question'])).toThrow('duplicate key "first"');
+  expect(() => session.saveUpdate(update, ['question'])).toThrow('duplicate key "first"');
+  await session.flush();
+  expect(documentQuestions(session.state())).toEqual([{ id: 'first', prompt: 'Ready?' }]);
+  expect(read(file)).toBe(before);
+  expect(documentQuestions(parseDocument(read(file)))).toEqual(documentQuestions(session.state()));
+});
+
+test('rejects an Agent upload that conflicts with a question added since its base', async () => {
+  const { file, snapshotFile } = setup('<doc><p id="intro">One</p></doc>');
+  const session = await open(file, snapshotFile);
+  await session.flush();
+  const base = read(file);
+  const peer = new LoroDoc();
+  peer.import(session.snapshot());
+  const editor = createDocumentHeadlessEditor();
+  const binding = createLoroBinding(editor, peer);
+  const from = peer.oplogVersion();
+  const source = parseDocument('<ask id="browser" key="first" prompt="Browser question"/>');
+  editor.update(() => {
+    $getRoot().append($parseSerializedNode(source.root.children[0]!));
+  }, { discrete: true });
+  session.importUpdate(peer.export({ mode: 'update', from }), ['question']);
+  from.free();
+  binding.dispose();
+  await session.flush();
+  const before = read(file);
+
+  const incoming = base.replace('</doc>', '  <ask id="agent" key="first" prompt="Agent question"/>\n</doc>');
+  expect(() => session.prepareRemoteText(incoming)).toThrow('duplicate key "first"');
+  expect(documentQuestions(session.state())).toEqual([{ id: 'first', prompt: 'Browser question' }]);
+  expect(read(file)).toBe(before);
 });
 
 test('agent activity survives a restart even when a human autosave touched the file since', async () => {

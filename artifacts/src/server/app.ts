@@ -4,12 +4,19 @@ import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
 import type { Thread } from '../shared/comments';
+import type { DocumentQuestion } from '../shared/document-questions';
 import type { FeedbackArtifactType } from '../shared/feedback-artifact';
 import type { ArtifactType, ServerMessage } from '../shared/types';
+import { groupVerdict, type VerdictState } from '../shared/verdicts';
 import { accessPolicy, isLoopbackHost } from './access';
 import { artifactPath, resolveArtifactAddress } from './artifact-address';
 import { watchArtifacts } from './artifact-watcher';
-import { type ArtifactRef, isArtifactLocator, listArtifacts } from './artifacts';
+import {
+  type ArtifactRef,
+  isArtifactLocator,
+  listArtifacts,
+  resolveArtifactDir,
+} from './artifacts';
 import { BOARD_PORT_FILE } from './board-port';
 import { createBrowserAuth } from './browser-auth';
 import {
@@ -19,6 +26,7 @@ import {
   type MountSettings,
   type ServerOptions,
 } from './context';
+import { documentQuestions } from './document-codec';
 import type { CommentAdmission } from './document-comments';
 import { type PreparedRemoteDocument, prepareNewRemoteDocument } from './document-session';
 import { readFeedbackComments } from './feedback/comments';
@@ -42,7 +50,9 @@ export interface ArtifactsServer {
   boardPort: number;
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
   contentToken: string;
+  documentApprovalView?: (id: string) => Promise<(() => string | null) | null>;
   feedbackComments?: (type: FeedbackArtifactType, id: string) => Thread<unknown>[];
+  feedbackQuestions: (id: string) => Promise<(() => DocumentQuestion[]) | null>;
   feedbackReply?: (
     type: FeedbackArtifactType,
     id: string,
@@ -79,6 +89,7 @@ export interface ArtifactsServer {
   ) => Promise<PreparedRemoteDocument>;
   /** Caller excludes direct project mutations; external filesystem changes still need source validation. */
   quiesce: <T>(work: () => Promise<T>, prepare?: () => Promise<CommentAdmission>) => Promise<T>;
+  referenceVerdict: (id: string, group: string) => VerdictState;
   resolve: (type: ArtifactType, idOrAddress: string) => string | null;
   root: string;
   settleDocument: (id: string, source?: string, admit?: CommentAdmission) => Promise<void>;
@@ -399,6 +410,21 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     onMessage: (listener) => {
       ctx.messageListeners.push(listener);
     },
+    documentApprovalView: async (id) => {
+      if (!resolveArtifactDir(root, 'document', id)) return null;
+      const session = await ctx.documents.open(id);
+      if (!session) return null;
+      await session.settled();
+      return session.approvalView;
+    },
+    feedbackQuestions: async (id) => {
+      const session = resolveArtifactDir(root, 'document', id)
+        ? await ctx.documents.open(id)
+        : null;
+      if (!session) return null;
+      await session.settled();
+      return () => documentQuestions(session.state());
+    },
     settleDocument: async (id, source, admit) => {
       const session = await ctx.documents.open(id);
       if (!session) return;
@@ -455,6 +481,12 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
       if (!isArtifactLocator(idOrAddress)) return null;
       return resolveArtifactAddress(root, type, idOrAddress)?.id ?? null;
     },
+    referenceVerdict: (id, group) =>
+      groupVerdict(
+        ctx.boardComments.comments(id).threads,
+        group,
+        new Set(ctx.boardComments.stale(id)),
+      ).state,
     onArtifactChange: (listener) => {
       ctx.changeListeners.push(listener);
       for (const change of initialChanges) listener(change.ref, change.payload, change.files);

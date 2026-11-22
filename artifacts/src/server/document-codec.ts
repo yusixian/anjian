@@ -2,6 +2,10 @@ import { createDefaultRegistry, deserializeFromXml, serializeToXml } from '@hakl
 import type { SerializedEditorState, SerializedLexicalNode } from 'lexical';
 import { nanoid } from 'nanoid';
 
+import { validateArtifactReference } from '../shared/artifact-reference';
+import type { SerializedReferenceNode } from '../shared/artifact-reference-node';
+import type { SerializedQuestionNode } from '../shared/document-question-node';
+import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
 import { DYNAMIC_URL } from '../shared/dynamic';
 import { stripOpaque, TAG, unbalancedTag } from './balance';
 
@@ -43,6 +47,8 @@ const BLOCK_TAGS = [
   'def',
   'dynamic',
   'pending',
+  'ask',
+  'ref',
 ];
 const INLINE_TAGS = [
   'b',
@@ -98,6 +104,97 @@ registry.registerWriter('pending', (node) => {
   return {
     tag: 'pending',
     attrs: { ...(state?.blockId ? { id: state.blockId } : {}), intent: intent ?? '' },
+    selfClosing: true,
+  };
+});
+
+registry.registerReader('ask', (el) => {
+  if (el.parentElement?.tagName.toLowerCase() !== 'doc')
+    throw new Error('<ask> must be a top-level block');
+  if (el.children.length || el.textContent?.trim()) throw new Error('<ask> must be empty');
+  const definition: DocumentQuestion = {
+    id: el.getAttribute('key') ?? '',
+    prompt: el.getAttribute('prompt') ?? '',
+  };
+  const options = el.getAttribute('options');
+  if (options !== null) {
+    try {
+      definition.options = JSON.parse(options) as DocumentQuestion['options'];
+    } catch {
+      throw new Error('<ask> options must be a JSON array');
+    }
+  }
+  const approve = el.getAttribute('approve');
+  if (approve !== null) definition.approve = approve;
+  const recommended = el.getAttribute('recommended');
+  if (recommended !== null) definition.recommended = recommended;
+  validateDocumentQuestion(definition);
+  if (definition.options) {
+    definition.options = definition.options.map(({ id, label }) => ({ id, label }));
+  }
+  const id = el.getAttribute('id');
+  return {
+    type: 'question',
+    ...(id ? { $: { blockId: id } } : {}),
+    definition,
+    version: 1,
+  } satisfies SerializedQuestionNode;
+});
+registry.registerWriter('question', (node) => {
+  const { $: state, definition } = node as Block & SerializedQuestionNode;
+  return {
+    tag: 'ask',
+    attrs: {
+      ...(state?.blockId ? { id: state.blockId } : {}),
+      key: definition.id,
+      prompt: definition.prompt,
+      ...(definition.options ? { options: JSON.stringify(definition.options) } : {}),
+      ...(definition.approve ? { approve: definition.approve } : {}),
+      ...(definition.recommended ? { recommended: definition.recommended } : {}),
+    },
+    selfClosing: true,
+  };
+});
+
+const REFERENCE_ATTRS = new Set(['id', 'type', 'target', 'label', 'board', 'group']);
+const REFERENCE_ATTR = /\s+([a-z]+)\s*=\s*(?:"[^"]*"|'[^']*')/gy;
+
+registry.registerReader('ref', (el) => {
+  if ([...el.childNodes].some((node) => node.nodeType !== 3 || node.textContent?.trim()))
+    throw new Error('<ref> must be empty');
+  const id = el.getAttribute('id');
+  const label = el.getAttribute('label');
+  const board = el.getAttribute('board');
+  const group = el.getAttribute('group');
+  if (board !== null && group !== null) throw new Error('<ref> allows either board or group');
+  const focus = board !== null ? { kind: 'board', id: board } : { kind: 'group', id: group };
+  const reference = {
+    type: el.getAttribute('type'),
+    target: el.getAttribute('target'),
+    ...(label !== null ? { label } : {}),
+    ...(focus.id !== null ? { focus } : {}),
+  };
+  validateArtifactReference(reference);
+  return {
+    type: 'artifact-reference',
+    ...(id ? { $: { blockId: id } } : {}),
+    reference,
+    version: 1,
+  } satisfies SerializedReferenceNode & Pick<Block, '$'>;
+});
+registry.registerWriter('artifact-reference', (node) => {
+  const { $: state, reference } = node as Block & SerializedReferenceNode;
+  validateArtifactReference(reference);
+  const { type, target, label, focus } = reference;
+  return {
+    tag: 'ref',
+    attrs: {
+      ...(state?.blockId ? { id: state.blockId } : {}),
+      type,
+      target,
+      ...(label === undefined ? {} : { label }),
+      ...(focus ? { [focus.kind]: focus.id } : {}),
+    },
     selfClosing: true,
   };
 });
@@ -163,6 +260,60 @@ function badDynamicUrl(nodes: Block[]): string | null {
   return null;
 }
 
+function questionBelow(block: Block): boolean {
+  return (block.children ?? []).some((child) => child.type === 'question' || questionBelow(child));
+}
+
+export function documentQuestions(state: SerializedEditorState): DocumentQuestion[] {
+  const definitions: DocumentQuestion[] = [];
+  const ids = new Set<string>();
+  for (const node of state.root.children) {
+    if (questionBelow(node)) throw new DocumentRejected('<ask> must be a top-level block');
+    if (node.type !== 'question') continue;
+    const { definition } = node as SerializedQuestionNode;
+    try {
+      validateDocumentQuestion(definition);
+    } catch (error) {
+      throw new DocumentRejected((error as Error).message);
+    }
+    if (ids.has(definition.id))
+      throw new DocumentRejected(`<ask> duplicate key "${definition.id}"`);
+    ids.add(definition.id);
+    definitions.push(definition);
+  }
+  return definitions;
+}
+
+function countSourceReferences(xml: string): number {
+  const ancestors: string[] = [];
+  let count = 0;
+  for (const [raw, closing, rawTag, selfClosing] of stripOpaque(xml).matchAll(TAG)) {
+    const tag = rawTag!.toLowerCase();
+    if (closing) {
+      ancestors.pop();
+      continue;
+    }
+    if (tag === 'ref') {
+      if (ancestors.length !== 1 || ancestors[0] !== 'doc')
+        throw new DocumentRejected('<ref> must be a top-level block');
+      const attrs = raw.slice(4, selfClosing ? -2 : -1).trimEnd();
+      const seen = new Set<string>();
+      let cursor = 0;
+      while (cursor < attrs.length) {
+        REFERENCE_ATTR.lastIndex = cursor;
+        const match = REFERENCE_ATTR.exec(attrs);
+        if (!match || !REFERENCE_ATTRS.has(match[1]!) || seen.has(match[1]!))
+          throw new DocumentRejected('<ref> contains invalid or repeated attributes');
+        seen.add(match[1]!);
+        cursor = REFERENCE_ATTR.lastIndex;
+      }
+      count++;
+    }
+    if (!selfClosing && tag !== 'br' && tag !== 'hr' && tag !== 'img') ancestors.push(tag);
+  }
+  return count;
+}
+
 export function parseDocument(xml: string): SerializedEditorState {
   const wrapped = /^\s*<doc[\s>]/.test(xml) ? xml : `<doc>${xml}</doc>`;
   const problem =
@@ -171,15 +322,21 @@ export function parseDocument(xml: string): SerializedEditorState {
     strayDef(wrapped) ??
     badDynamicProps(wrapped);
   if (problem) throw new DocumentRejected(problem);
+  const references = /<ref\b/i.test(wrapped) ? countSourceReferences(wrapped) : 0;
   let state: SerializedEditorState;
   try {
     state = deserializeFromXml(wrapped, registry);
   } catch (err) {
     throw new DocumentRejected((err as Error).message);
   }
-  const url =
+  const invalidNode =
     badDynamicUrl(state.root.children as Block[]) ?? nestedPending(state.root.children as Block[]);
-  if (url) throw new DocumentRejected(url);
+  if (invalidNode) throw new DocumentRejected(invalidNode);
+  documentQuestions(state);
+  if (
+    state.root.children.filter((node) => node.type === 'artifact-reference').length !== references
+  )
+    throw new DocumentRejected('<ref> must be a top-level block');
   return state;
 }
 

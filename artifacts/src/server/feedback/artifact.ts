@@ -16,15 +16,15 @@ export function requireFeedbackArtifact(artifact: string) {
 }
 
 export function matchesFeedbackArtifact(
-  task: FeedbackTask,
+  saved: Pick<FeedbackTask, 'artifact' | 'artifactAddress'>,
   artifact: string,
   address?: string | null,
 ) {
   return (
-    task.artifact === artifact &&
-    (task.artifactAddress === undefined ||
+    saved.artifact === artifact &&
+    (saved.artifactAddress === undefined ||
       address === undefined ||
-      task.artifactAddress === address)
+      saved.artifactAddress === address)
   );
 }
 
