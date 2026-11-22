@@ -74,7 +74,7 @@ digraph process {
     "Final whole-branch review (fresh reviewer if you have one)" [shape=box];
     "Re-grade, then: Critical/Important → ONE fix pass, each fix RED→GREEN + green suite; Minor → ledger" [shape=box];
     "Project verification, if the project has a skill for it" [shape=box];
-    "Stop and report: rulings, deferred minors, what landed; verify link if the UI changed" [shape=box style=filled fillcolor=lightgreen];
+    "Stop and report: decisions affecting users, what landed; verify link if the UI changed" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: workspace + ledger, read the spec" -> "Slice the spec into tasks.md (skip if it exists)";
     "Slice the spec into tasks.md (skip if it exists)" -> "task-start: brief + BASE; read the brief";
@@ -91,7 +91,7 @@ digraph process {
     "More tasks remain?" -> "Final whole-branch review (fresh reviewer if you have one)" [label="no"];
     "Final whole-branch review (fresh reviewer if you have one)" -> "Re-grade, then: Critical/Important → ONE fix pass, each fix RED→GREEN + green suite; Minor → ledger";
     "Re-grade, then: Critical/Important → ONE fix pass, each fix RED→GREEN + green suite; Minor → ledger" -> "Project verification, if the project has a skill for it";
-    "Project verification, if the project has a skill for it" -> "Stop and report: rulings, deferred minors, what landed; verify link if the UI changed";
+    "Project verification, if the project has a skill for it" -> "Stop and report: decisions affecting users, what landed; verify link if the UI changed";
 }
 ```
 
@@ -286,7 +286,7 @@ silent has graded the spec, not the effect. Then:
 
 - **Critical and Important** enter the fix pass.
 - **Minor** goes to the ledger as `Final: minor (deferred): <one-liner>`
-  and to your final message under "Deferred minors". Minors never enter
+  and is surfaced according to Finish. Minors never enter
   the fix pass, and never become rulings — a ruling is a decision about a
   conflict, not a note that you declined a polish suggestion.
 
@@ -299,9 +299,9 @@ without a test that failed first is not verified; a suite that is not
 green after the pass means the pass is not over. Do not dispatch a
 re-review.
 
-A finding you decide not to fix is a ruling — `Final: Ruling: <finding> —
-<why the code stands> — <cost if wrong>` — and reaches your human partner
-in the rulings list. There is no second fix pass.
+A non-Minor finding you decide not to fix is a ruling — `Final: Ruling: <finding> —
+<why the code stands> — <cost if wrong>`. Apply the Finish reporting criteria.
+There is no second fix pass.
 
 ## Project Verification
 
@@ -313,16 +313,19 @@ under TDD like a Critical one, and ledger it.
 
 ## Finish
 
-Before you delete anything, collect every ledger line containing
-`Ruling:` into your final message under "Rulings I made", in the order you
-made them, each with what it costs if wrong, and every `minor (deferred)`
-line under "Deferred minors". Both lists are exhaustive. Your final
-message is the only place the decisions you took on your human partner's
-behalf — and the findings you chose not to act on — reach them.
+Read the entire ledger before reporting. Surface choices and deferred findings
+that change the delivered behavior, depart from the spec, or require the
+reader's judgment. Use the reader's language. Describe the question, your
+reason, and the consequence of choosing incorrectly. Put those decisions in
+the verification report when it exists. Otherwise include them in the final
+message. Keep the full ledger available for review, including internal choices
+and deferred findings without user impact.
 
-When the final review is clean and its fixes are committed, delete this
-spec's workspace directory — the git history is the record now. Sibling
-directories belong to other specs; leave them alone.
+Keep this spec's workspace while review, human verification, or landing is
+pending. For work committed in place on the default branch, clean up the
+workspace after completion and any required human verdicts. For branch work,
+clean it up after confirming that the intended changes landed in the base.
+Never clean up a sibling spec's workspace.
 
 Exploratory work instead keeps its workspace and `EXPLORING`, and stays
 uncommitted: end your final message with the listed paths and ask your
@@ -340,7 +343,7 @@ Committed work in place on the default branch has nothing to land: end your fina
 message with the commits from the ledger, and stop. Pushing is your
 human partner's call.
 
-On a branch, stop, and end your final message with the ways to land it:
+On a branch ready to land, end your final message with the ways to land it:
 
 1. **Squash into `<base>`** (default)
 2. **Rebase onto `<base>`**
@@ -376,8 +379,8 @@ git merge --ff-only <branch>      # on <base>
 **PR:** push the branch and open it against `<base>`. If you are asked to
 merge it, use `gh pr merge --squash` (or `--rebase` when asked).
 
-Once it has landed, remove the worktree if you made one, per
-anjian:using-git-worktrees, then delete the branch: `git branch -d
+Once it has landed, clean up this spec's workspace, remove the worktree if you
+made one per anjian:using-git-worktrees, then delete the branch: `git branch -d
 <branch>` after a rebase, `git branch -D <branch>` after a squash (git
 cannot see a squashed branch as merged).
 
@@ -431,10 +434,7 @@ Reviewer: one Important (progress interval hardcoded), one Minor.
 Rulings I made:
 - Task 2: back up a corrupt config before recovering (cost if wrong: one extra file)
 
-Deferred minors:
-- README lacks a usage example
-
-[Delete this spec's workspace]
+[Keep the README follow-up and complete ledger in the spec workspace until landing.]
 
 Ways to land feat/config-recovery:
 1. Squash into main (default)

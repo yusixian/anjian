@@ -5,8 +5,15 @@ import type { ArtifactReferenceResolver } from './ArtifactReferenceCard';
 import { DocumentView } from './DocumentView';
 import { useLocalTransport } from './useDocumentTransport';
 
-const resolveReference: ArtifactReferenceResolver = async ({ type, target, focus }, signal) => {
-  const query = focus ? '?' + new URLSearchParams([[focus.kind, focus.id]]) : '';
+const resolveReference: ArtifactReferenceResolver = async (
+  { type, target, focus, reviewGroups },
+  signal,
+) => {
+  const query = reviewGroups
+    ? '?' + new URLSearchParams({ groups: reviewGroups.join(',') })
+    : focus
+      ? '?' + new URLSearchParams([[focus.kind, focus.id]])
+      : '';
   const url = new URL(
     `/api/artifact-reference/${type}/${encodeURIComponent(target)}${query}`,
     window.location.origin,

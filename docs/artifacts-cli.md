@@ -74,6 +74,8 @@ anjian verify-report --input report.json --output .anjian/artifacts/document/rev
 
 验收清单可用 `routineChecks` 汇总类型检查、测试等常规检查，每条机器结果可用 `observation` 写一句实际观察。查看报告时可展开命令、采集时间、摘要和原始输出。证据缺失或摘要变更后，报告隐藏旧结论并提示复核。跨环境报告可给每条机器结果增加 `context: { build, environment }`，相同环境和构建只列一次。未提供 `context` 时使用报告顶层的环境和构建。
 
+报告可用 `decisions` 数组列出待确认的决定。每项填写 `title`、`ask`、`reason` 和 `impact`。报告中打开 `compactReviews: true` 可用每张画板的一条状态汇总替换逐组引用。读者可从汇总跳到原画板。公开文档快照按原有分享权限显示引用。
+
 在验收报告输入中增加 `designSpec`，字段包括相对于报告 JSON 的 `file`、规范的 `revision`，以及规范文档的稳定地址 `target`。在每条检查或人工验收项增加 `rules` 数组，填写相应规则 ID。报告会标明未覆盖的规则。人工验收项通过画板链接展示当前状态。
 
 ## 确认设计批准
