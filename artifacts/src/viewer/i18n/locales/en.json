@@ -658,6 +658,7 @@
     "boards_other": "{{count}} boards"
   },
   "reference": {
+    "reviewSummary": "{{pass}} passed, {{pending}} pending, {{reject}} rejected, {{unavailable}} unavailable",
     "static": "Artifact reference",
     "unavailable": "Reference unavailable"
   },

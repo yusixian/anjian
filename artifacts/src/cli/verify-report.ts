@@ -117,6 +117,19 @@ function linkedRules(row: Record<string, unknown>, byId: Map<string, string>) {
   return rules as string[];
 }
 
+function groupReviews(reviews: { target: string; group: string }[], label: string) {
+  const byArtboard = new Map<string, Set<string>>();
+  for (const { target, group } of reviews) {
+    if (!byArtboard.has(target)) byArtboard.set(target, new Set());
+    byArtboard.get(target)!.add(group);
+  }
+  return Array.from(byArtboard, ([target, groups]) => {
+    const reviewGroups = [...groups];
+    validateArtifactReference({ type: 'artboard', target, reviewGroups });
+    return `<ref type="artboard" target="${escape(target)}" label="${escape(label)}" groups="${escape(reviewGroups.join(','))}" />`;
+  });
+}
+
 function renderReport(source: string, lang: string) {
   const manifest = fs.realpathSync.native(source);
   const directory = path.dirname(manifest);
@@ -258,6 +271,12 @@ function renderReport(source: string, lang: string) {
       ],
     };
   });
+  const compactReviews = report.compactReviews;
+  if (compactReviews !== undefined && typeof compactReviews !== 'boolean')
+    throw new CliError('compactReviews must be a boolean');
+  const reviewXml = compactReviews
+    ? groupReviews(reviews, tr('画板验收状态', 'Artboard review status'))
+    : reviews.flatMap(({ xml }) => xml);
   const designSpec = spec && {
     ...spec,
     rules: spec.rules.map((rule) => ({
@@ -296,6 +315,15 @@ function renderReport(source: string, lang: string) {
         ),
       ]
     : [];
+  const decisions =
+    report.decisions === undefined
+      ? []
+      : rows(report, 'decisions').flatMap((row) => [
+          `<h3>${escape(field(row, 'title'))}</h3>`,
+          paragraph(field(row, 'ask')),
+          paragraph(`${tr('理由', 'Reason')} ${field(row, 'reason')}`),
+          paragraph(`${tr('影响', 'Impact')} ${field(row, 'impact')}`),
+        ]);
   const gaps = rows(report, 'gaps').map((row) =>
     paragraph(`${field(row, 'title')} · ${field(row, 'reason')}`),
   );
@@ -307,8 +335,9 @@ function renderReport(source: string, lang: string) {
     ...(routineChecks ? [paragraph(`${tr('常规检查', 'Routine checks')} ${routineChecks}`)] : []),
     ...designXml,
     ...(checks.length ? [`<h2>${tr('机器检查', 'Automated checks')}</h2>`, ...checkXml] : []),
-    ...(reviews.length
-      ? [`<h2>${tr('人工验收', 'Human review')}</h2>`, ...reviews.flatMap(({ xml }) => xml)]
+    ...(reviews.length ? [`<h2>${tr('人工验收', 'Human review')}</h2>`, ...reviewXml] : []),
+    ...(decisions.length
+      ? [`<h2>${tr('待确认的决定', 'Decisions to review')}</h2>`, ...decisions]
       : []),
     ...(gaps.length ? [`<h2>${tr('未验证', 'Unverified')}</h2>`, ...gaps] : []),
     '</doc>',

@@ -327,3 +327,51 @@ test('rejects multiline observations and routine check summaries', async () => {
   write({ ...report, checks: [{ ...report.checks[0], observation: 'ready\nmissing' }] });
   await expect(run({ input: 'report.json' })).rejects.toThrow('observation must be a single line');
 });
+
+test('lists decisions to review independently of automated evidence and artboard verdicts', async () => {
+  const report = await createReport();
+  const decision = {
+    title: 'Keep the existing upload limit',
+    ask: 'Should users be able to upload a larger file?',
+    reason: 'The export is below the current limit.',
+    impact: 'Larger project exports would still need a separate upload.',
+  };
+  fs.writeFileSync(
+    path.join(dir, 'report.json'),
+    JSON.stringify({ ...report, decisions: [decision] }),
+  );
+  const { xml, checks } = await run({ input: 'report.json', lang: 'en' });
+  expect(checks).toEqual([{ title: '实测 CLI', status: 'pass' }]);
+  const document = serializeDocument(parseDocument(String(xml)));
+  expect(document).toContain('Decisions to review');
+  expect(document).toContain(decision.ask);
+  expect(document).toContain('Reason ' + decision.reason);
+  expect(document).toContain('Impact ' + decision.impact);
+  expect(document).toContain('target="ABCDEFGHIJKLMNOPQRSTU"');
+  expect(document).toContain('没有可用设备');
+
+  fs.writeFileSync(
+    path.join(dir, 'report.json'),
+    JSON.stringify({ ...report, decisions: [{ ...decision, impact: '' }] }),
+  );
+  await expect(run({ input: 'report.json' })).rejects.toThrow('impact must be a nonempty string');
+});
+
+test('compact reviews produce one live reference per artboard and deduplicate groups', async () => {
+  const report = await createReport();
+  const first = report.reviews[0]!;
+  fs.writeFileSync(
+    path.join(dir, 'report.json'),
+    JSON.stringify({
+      ...report,
+      compactReviews: true,
+      reviews: [first, first, { ...first, group: 'footer' }],
+    }),
+  );
+  const { xml } = await run({ input: 'report.json', lang: 'en' });
+  const document = serializeDocument(parseDocument(String(xml)));
+  expect(document.match(/<ref /g)).toHaveLength(1);
+  expect(document).toContain('groups="proposal,footer"');
+  expect(document).not.toContain('核对提案');
+  expect(document).toContain('Artboard review status');
+});

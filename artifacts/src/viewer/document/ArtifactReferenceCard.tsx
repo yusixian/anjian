@@ -37,9 +37,11 @@ const styles = stylex.create({
 });
 
 type Review = 'pending' | 'pass' | 'reject';
+type ReviewSummary = Record<Review | 'unavailable', number>;
 interface Result {
   href: string;
   review?: Review;
+  reviewSummary?: ReviewSummary;
   title: string;
 }
 
@@ -48,6 +50,7 @@ function readResult(
   path: string,
   kind: 'board' | 'group' | undefined,
   id: string | undefined,
+  expectedGroups: number,
 ): Result | null {
   if (typeof value.href !== 'string' || typeof value.title !== 'string') return null;
   const url = new URL(value.href, window.location.origin);
@@ -64,9 +67,25 @@ function readResult(
   }
   if (kind && url.searchParams.get(kind) !== id) return null;
   const review = value.review;
+  const reviewSummary = value.reviewSummary;
+  if (expectedGroups) {
+    const counts = reviewSummary && [
+      reviewSummary.pass,
+      reviewSummary.reject,
+      reviewSummary.pending,
+      reviewSummary.unavailable,
+    ];
+    if (
+      !counts ||
+      counts.some((n) => !Number.isSafeInteger(n) || n < 0) ||
+      counts.reduce((sum, n) => sum + n, 0) !== expectedGroups
+    )
+      return null;
+  }
   return {
     href: url.href,
     title: value.title,
+    ...(expectedGroups ? { reviewSummary } : {}),
     review: review === 'pending' || review === 'pass' || review === 'reject' ? review : undefined,
   };
 }
@@ -77,7 +96,8 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
   const { type, target, focus, label } = reference;
   const query = focus ? '?' + new URLSearchParams([[focus.kind, focus.id]]) : '';
   const path = '/' + type + '/' + encodeURIComponent(target);
-  const endpoint = path + query;
+  const groupsKey = reference.reviewGroups?.join(',') ?? '';
+  const endpoint = path + query + (groupsKey ? '?groups=' + groupsKey : '');
   const [state, setState] = useState<{ endpoint: string; result: Result | null } | null>(null);
   const kind = focus?.kind;
   const id = focus?.id;
@@ -93,15 +113,17 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
       const current = ++request;
       let result: Result | null = null;
       try {
+        const reviewGroups = groupsKey ? groupsKey.split(',') : undefined;
         const value = await resolve(
           {
             type,
             target,
             ...(kind && id ? { focus: { kind, id } } : {}),
+            ...(reviewGroups ? { reviewGroups } : {}),
           },
           controller.signal,
         );
-        if (value) result = readResult(value, path, kind, id);
+        if (value) result = readResult(value, path, kind, id, reviewGroups?.length ?? 0);
       } catch {
         // Access failures and missing targets share the same presentation.
       }
@@ -115,12 +137,14 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
       window.removeEventListener('focus', load);
       window.removeEventListener('pageshow', load);
     };
-  }, [resolve, endpoint, path, kind, id, type, target]);
+  }, [resolve, endpoint, path, kind, id, type, target, groupsKey]);
 
   const resolved = resolve && state?.endpoint === endpoint ? state.result : null;
   const loading = resolve && state?.endpoint !== endpoint;
   const fallback = resolve ? 'reference.unavailable' : 'reference.static';
-  const title = label || resolved?.title || t(loading ? 'common.loading' : fallback);
+  const title =
+    (resolved?.reviewSummary ? resolved.title : label || resolved?.title) ||
+    t(loading ? 'common.loading' : fallback);
   const review = resolved?.review;
   const body = (
     <>
@@ -129,6 +153,7 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
         <strong>{title}</strong>
         <span {...stylex.props(styles.meta)}>
           {t('type.' + type)}
+          {resolved?.reviewSummary && ' · ' + t('reference.reviewSummary', resolved.reviewSummary)}
           {review &&
             ' · ' +
               t(

@@ -4,6 +4,7 @@ import { ARTIFACT_TYPES, type ArtifactType } from './types';
 export interface ArtifactReference {
   focus?: { kind: 'board' | 'group'; id: string };
   label?: string;
+  reviewGroups?: string[];
   target: string;
   type: ArtifactType;
 }
@@ -51,6 +52,23 @@ export function validateArtifactReference(value: unknown): asserts value is Arti
     if (Object.keys(focus).some((key) => key !== 'kind' && key !== 'id'))
       throw new Error('<ref> contains unsupported focus fields');
   }
-  if (Object.keys(value).some((key) => !['type', 'target', 'label', 'focus'].includes(key)))
+  if (value.reviewGroups !== undefined) {
+    const groups = value.reviewGroups;
+    if (
+      value.type !== 'artboard' ||
+      value.focus !== undefined ||
+      !Array.isArray(groups) ||
+      !groups.length ||
+      groups.length > 100 ||
+      new Set(groups).size !== groups.length ||
+      groups.some((id) => typeof id !== 'string' || !FOCUS_ID.test(id))
+    )
+      throw new Error('<ref> groups must be up to 100 distinct verify-group IDs on one artboard');
+  }
+  if (
+    Object.keys(value).some(
+      (key) => !['type', 'target', 'label', 'focus', 'reviewGroups'].includes(key),
+    )
+  )
     throw new Error('<ref> contains unsupported fields');
 }

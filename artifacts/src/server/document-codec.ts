@@ -156,7 +156,7 @@ registry.registerWriter('question', (node) => {
   };
 });
 
-const REFERENCE_ATTRS = new Set(['id', 'type', 'target', 'label', 'board', 'group']);
+const REFERENCE_ATTRS = new Set(['id', 'type', 'target', 'label', 'board', 'group', 'groups']);
 const REFERENCE_ATTR = /\s+([a-z]+)\s*=\s*(?:"[^"]*"|'[^']*')/gy;
 
 registry.registerReader('ref', (el) => {
@@ -166,6 +166,7 @@ registry.registerReader('ref', (el) => {
   const label = el.getAttribute('label');
   const board = el.getAttribute('board');
   const group = el.getAttribute('group');
+  const groups = el.getAttribute('groups');
   if (board !== null && group !== null) throw new Error('<ref> allows either board or group');
   const focus = board !== null ? { kind: 'board', id: board } : { kind: 'group', id: group };
   const reference = {
@@ -173,6 +174,7 @@ registry.registerReader('ref', (el) => {
     target: el.getAttribute('target'),
     ...(label !== null ? { label } : {}),
     ...(focus.id !== null ? { focus } : {}),
+    ...(groups !== null ? { reviewGroups: groups.split(',') } : {}),
   };
   validateArtifactReference(reference);
   return {
@@ -185,7 +187,7 @@ registry.registerReader('ref', (el) => {
 registry.registerWriter('artifact-reference', (node) => {
   const { $: state, reference } = node as Block & SerializedReferenceNode;
   validateArtifactReference(reference);
-  const { type, target, label, focus } = reference;
+  const { type, target, label, focus, reviewGroups } = reference;
   return {
     tag: 'ref',
     attrs: {
@@ -194,6 +196,7 @@ registry.registerWriter('artifact-reference', (node) => {
       target,
       ...(label === undefined ? {} : { label }),
       ...(focus ? { [focus.kind]: focus.id } : {}),
+      ...(reviewGroups ? { groups: reviewGroups.join(',') } : {}),
     },
     selfClosing: true,
   };

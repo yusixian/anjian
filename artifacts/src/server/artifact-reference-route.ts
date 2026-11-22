@@ -31,7 +31,8 @@ const PRIMARY: Record<ArtifactType, string> = {
 function referenceFrom(url: URL, match: RegExpExecArray): ArtifactReference | null {
   const board = url.searchParams.getAll('board');
   const group = url.searchParams.getAll('group');
-  if (board.length + group.length > 1) return null;
+  const summary = url.searchParams.getAll('groups');
+  if (board.length + group.length > 1 || summary.length > 1) return null;
   try {
     const focus = board.length
       ? { kind: 'board' as const, id: board[0]! }
@@ -42,6 +43,7 @@ function referenceFrom(url: URL, match: RegExpExecArray): ArtifactReference | nu
       type: match[1] as ArtifactType,
       target: decodeURIComponent(match[2]!),
       ...(focus ? { focus } : {}),
+      ...(summary.length ? { reviewGroups: summary[0]!.split(',') } : {}),
     };
     validateArtifactReference(reference);
     return reference;
@@ -75,7 +77,7 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       unavailable();
       return true;
     }
-    const { type, target, focus } = reference;
+    const { type, target, focus, reviewGroups } = reference;
     const matches = list().filter((entry) => entry.type === type && entry.address === target);
     const candidate = matches.length === 1 ? matches[0] : undefined;
     if (!candidate || !visible(req, url, candidate.project)) {
@@ -111,9 +113,10 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       )
         return unavailable();
       const canvas = 'canvas' in payload ? payload.canvas : null;
+      const layout = 'canvas' in payload ? payload.layout : null;
       const group = focus?.kind === 'group' ? canvas?.groups?.[focus.id] : undefined;
       const board = focus?.kind === 'board' ? canvas?.boards[focus.id] : undefined;
-      const mounted = !api || (group && group.verify) ? await mount(project) : null;
+      const mounted = !api || reviewGroups || group?.verify ? await mount(project) : null;
       if (!current()) return unavailable();
       if (!api) {
         await mounted!.handleRequest(req, res);
@@ -122,11 +125,24 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       const query = new URLSearchParams({ ref: '1' });
       if (focus) query.set(focus.kind, focus.id);
       const review = mounted && focus ? mounted.referenceVerdict(id, focus.id) : undefined;
+      const reviewSummary = reviewGroups && { pass: 0, reject: 0, pending: 0, unavailable: 0 };
+      if (reviewSummary && reviewGroups) {
+        for (const groupId of reviewGroups) {
+          const verify =
+            canvas &&
+            layout &&
+            Object.hasOwn(canvas.groups ?? {}, groupId) &&
+            canvas.groups?.[groupId]?.verify &&
+            resolveReferenceFocus(canvas, layout, { kind: 'group', id: groupId });
+          reviewSummary[verify ? mounted!.referenceVerdict(id, groupId) : 'unavailable']++;
+        }
+      }
       const title = group?.title ?? board?.title;
       sendJson(res, 200, {
         href: `/${type}/${target}?${query}`,
         title: (typeof title === 'string' && title.trim()) || titleOf(payload),
         ...(review ? { review } : {}),
+        ...(reviewSummary ? { reviewSummary } : {}),
       });
     });
     return true;

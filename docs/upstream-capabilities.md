@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.0`（`c0d1b86`）。案间以 `0.4.0`（`04d711a`）为实施起点。首批同步及两个后续能力已发布至 `0.5.0`（`26d574a`），本地画板摘要和文档问答随后发布至 `0.6.0`（`80c64d6`）。[案间 0.5.0 发布说明与安装包](https://github.com/yusixian/anjian/releases/tag/v0.5.0) · [上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.102.0) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.1`（`6084916`）。案间以 `0.4.0`（`04d711a`）为实施起点。首批同步及两个后续能力已发布至 `0.5.0`（`26d574a`），本地画板摘要和文档问答随后发布至 `0.6.0`（`80c64d6`）。[案间 0.5.0 发布说明与安装包](https://github.com/yusixian/anjian/releases/tag/v0.5.0) · [上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.102.1) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -40,6 +40,7 @@
 ## 新版差距
 
 - [#95](https://github.com/yusixian/anjian/issues/95) 跟踪验收报告的跨环境结果摘要、人工决定、视觉验收汇总和规格记录保留。
+- [#98](https://github.com/yusixian/anjian/issues/98) 跟踪运行中恢复评论文件时保留已有人工批注。
 - [#52](https://github.com/yusixian/anjian/issues/52) 跟踪向已经运行的普通 Antigravity 交互会话投递反馈。
 
 ## 后续同步

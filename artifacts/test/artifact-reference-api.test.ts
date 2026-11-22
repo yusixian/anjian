@@ -5,7 +5,7 @@ import { afterEach, expect, test } from 'vitest';
 
 import { startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
-import { tempRoot, writeArtboard, writeHtml } from './helpers';
+import { tempRoot, writeArtboard, writeDocument, writeHtml } from './helpers';
 
 const cleanup: (() => Promise<void>)[] = [];
 const stableId = 'A'.repeat(21);
@@ -175,7 +175,7 @@ test('duplicate stable IDs across projects fail closed', async () => {
 });
 
 test('same-name artboard groups and boards resolve independently and only verify groups expose a verdict', async () => {
-  const { root, get, post } = await fixture();
+  const { root, get, post, project, request } = await fixture();
   const dir = writeArtboard(
     root,
     'review',
@@ -226,6 +226,30 @@ test('same-name artboard groups and boards resolve independently and only verify
   expect(approve.status, await approve.clone().text()).toBe(200);
   expect(await (await get(route + '?group=same')).json()).toEqual({ ...group, review: 'pass' });
   expect(await (await get(route + '?board=same')).json()).toEqual(board);
+  const summary = route + '?groups=same,missing';
+  expect(await (await get(summary)).json()).toEqual({
+    href: `/artboard/${stableId}?ref=1`,
+    title: 'Design review',
+    reviewSummary: { pass: 1, pending: 0, reject: 0, unavailable: 1 },
+  });
+  expect((await request(summary)).status).toBe(404);
+  expect((await get(route + '?groups=same,same')).status).toBe(404);
+  writeDocument(root, 'report', {
+    'doc.xml': `<doc><ref type="artboard" target="${stableId}" groups="same,missing" label="Review status" /></doc>`,
+    '.artifact-id': missingId + '\n',
+  });
+  const published = await post('/api/hub/share', {
+    project,
+    type: 'document',
+    id: 'report',
+    action: 'publish',
+  });
+  expect(published.status, await published.clone().text()).toBe(200);
+  const publicPath = new URL((await published.json()).share.url).pathname;
+  const anonymous = await (await request(publicPath + '/data')).text();
+  expect(anonymous).toContain('Review status');
+  for (const privateValue of [stableId, 'reviewGroups', 'reviewSummary'])
+    expect(anonymous).not.toContain(privateValue);
 
   const canvasPath = path.join(dir, 'canvas.json');
   const canvas = JSON.parse(fs.readFileSync(canvasPath, 'utf8'));
@@ -245,6 +269,12 @@ test('same-name artboard groups and boards resolve independently and only verify
   delete canvas.groups.same;
   fs.writeFileSync(canvasPath, JSON.stringify(canvas));
   expect((await get(route + '?group=same')).status).toBe(404);
+  expect((await (await get(summary)).json()).reviewSummary).toEqual({
+    pass: 0,
+    pending: 0,
+    reject: 0,
+    unavailable: 2,
+  });
   expect(await (await get(route + '?board=same')).json()).toEqual(board);
   expect((await get(route + '?board=missing')).status).toBe(404);
   expect([400, 404]).toContain((await get(route + '?board=same&group=same')).status);
