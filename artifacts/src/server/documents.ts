@@ -123,9 +123,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   const commentStore = (id: string, admit?: CommentAdmission) => {
     let store = commentStores.get(id);
     if (!store) {
+      const names = options.names;
       store = createCommentStore(
         path.join(options.root, 'document', id, 'comments.json'),
-        options.names,
+        names && { human: names.human, agent: () => names.agent({ type: 'document', id }) },
         undefined,
         undefined,
         admit,

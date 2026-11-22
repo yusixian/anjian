@@ -6,6 +6,13 @@
 
 ## 当前对照版本
 
+2026-11-22 核对 Ryugi 正式版 `v1.102.6`（`de9f13d4fd98bed85132d0bd5de76e2b82daa4c6`）。相对上一正式版 `v1.102.4` 新增 2 个公开提交，累计审计 182 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.6) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.4...v1.102.6)
+
+- `8ad6bd6` 为启动器、钩子和监听器添加品牌进程名与版本。案间尚未设置这些标签。按 [#130](https://github.com/yusixian/anjian/issues/130) 独立实现并在 Linux 验证既有 Hub 启停与进程身份识别。该增量在上游 MIT 保留条款覆盖范围之外。[授权说明](https://github.com/Innei/ryugi/blob/v1.102.6/LICENSE)
+- `de9f13d` 更新发布清单。
+
+### v1.102.4 的能力差异
+
 2026-11-22 核对 Ryugi 正式版 `v1.102.4`（`ab04426ef7ee5c9171f3c46f1eefa5002754133f`）。相对 `v1.102.3` 新增 1 个公开提交，累计审计 180 个提交。发布说明披露了按作品保留启动 Agent，可避免同项目的其他 Agent 改变提交按钮与默认回复署名。公开增量仅包含发布清单和启动引导。案间仍使用项目级标记，按 [#127](https://github.com/yusixian/anjian/issues/127) 独立实现。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.4) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.3...v1.102.4)
 
 ### v1.102.3 的能力差异

@@ -40,7 +40,7 @@ import {
   isText,
   type Store,
 } from './document-comments';
-import { listeningOn } from './listening';
+import { type ListeningHost, listeningOn } from './listening';
 import { resolveBoardFile } from './paths';
 import { writeJsonFiles } from './storage/json-files';
 
@@ -264,22 +264,39 @@ interface Options {
 
 export type BoardCommentRegistry = ReturnType<typeof createBoardCommentRegistry>;
 
+const feedbackHosts: ReadonlyMap<string, ListeningHost> = new Map([
+  ['claude code', 'claude'],
+  ['claude cowork', 'claude'],
+  ['codex', 'codex'],
+  ['pi', 'pi'],
+  ['antigravity', 'agy'],
+]);
+
 export function createBoardCommentRegistry(options: Options) {
   const stores = new Map<string, BoardStore>();
   const hashes = new Map<string, Record<string, string>>();
   const lastStale = new Map<string, string>();
-  const lastListening = new Map<string, boolean>();
+  const lastListening = new Map<string, string>();
   const listening = (id: string) => listeningOn(options.stateDir, `artboard/${id}`);
+  const presence = (id: string) => {
+    const artifact = `artboard/${id}`;
+    const agent = options.names?.agent({ type: 'artboard', id });
+    const host = agent && feedbackHosts.get(agent.toLowerCase());
+    const submitAgent =
+      host && listeningOn(options.stateDir, artifact, Date.now(), host) ? agent : undefined;
+    return { listening: Boolean(submitAgent) || listening(id), submitAgent };
+  };
   const cursors = createCommentCursors(options.stateDir, 'artboard');
   const receipts = createCommentReceipts(options.stateDir, 'artboard');
   const dirOf = (id: string) => path.join(options.root, 'artboard', id);
   const store = (id: string, admit?: CommentAdmission) => {
     let found = stores.get(id);
     if (!found) {
+      const names = options.names;
       found = createStore(
         path.join(dirOf(id), 'comments.json'),
         boardRules,
-        options.names,
+        names && { human: names.human, agent: () => names.agent({ type: 'artboard', id }) },
         undefined,
         undefined,
         admit,
@@ -349,15 +366,15 @@ export function createBoardCommentRegistry(options: Options) {
   const push = (id: string, receiptOnly = false) => {
     const ids = stale(id);
     lastStale.set(id, JSON.stringify(ids));
-    const heard = listening(id);
-    lastListening.set(id, heard);
+    const heard = presence(id);
+    lastListening.set(id, JSON.stringify(heard));
     options.broadcast({
       type: 'board-comments',
       artifact: `artboard/${id}`,
       comments: viewerComments(id),
       ...(receiptOnly ? { receiptOnly: true as const } : {}),
       stale: ids,
-      listening: heard,
+      ...heard,
     });
   };
   const fresh = (id: string) => {
@@ -408,8 +425,11 @@ export function createBoardCommentRegistry(options: Options) {
       return restored;
     },
     listening,
+    presence,
     refreshListening: () => {
-      for (const id of stores.keys()) if (listening(id) !== lastListening.get(id)) push(id);
+      for (const id of stores.keys()) {
+        if (JSON.stringify(presence(id)) !== lastListening.get(id)) push(id);
+      }
     },
     stale,
     warnings: (id: string) => store(id).warnings(),
@@ -432,7 +452,7 @@ export function createBoardCommentRegistry(options: Options) {
         op.op === 'create' && !record ? { ...op, anchor: stamp(op.anchor, fresh(id), groups) } : op;
       store(id, admit).apply(stamped, admit);
       push(id);
-      return { comments: viewerComments(id), stale: stale(id), listening: listening(id) };
+      return { comments: viewerComments(id), stale: stale(id), ...presence(id) };
     },
     applyAgent: (
       id: string,

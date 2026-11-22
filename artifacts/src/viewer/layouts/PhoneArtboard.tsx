@@ -453,7 +453,7 @@ export function PhoneArtboard({
           <div data-chrome {...stylex.props(styles.dock)}>
             {!readOnly && choices.current && (
               <SubmitBar
-                agent={agent}
+                agent={comments?.submitAgent}
                 bottom={SHEET_PEEK + 12}
                 canAct={choices.canAct}
                 feedback={choices.feedback}

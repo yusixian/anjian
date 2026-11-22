@@ -686,7 +686,7 @@ function DesktopArtboard({
         )}
         {!readOnly && choices.current && !expanded && (
           <SubmitBar
-            agent={agent}
+            agent={comments?.submitAgent}
             canAct={choices.canAct}
             feedback={choices.feedback}
             listening={choices.listening}

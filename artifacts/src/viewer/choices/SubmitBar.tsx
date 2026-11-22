@@ -79,7 +79,9 @@ interface Props {
   summary: RoundSummary;
 }
 
-export function SubmitBar({ summary, feedback, bottom, canAct, onSubmit, onWithdraw }: Props) {
+export function SubmitBar({
+  agent, summary, feedback, bottom, canAct, listening, onSubmit, onWithdraw,
+}: Props) {
   const { t, i18n } = useTranslation();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const place = bottom === undefined ? undefined : { bottom, pointerEvents: 'auto' as const };
@@ -230,7 +232,7 @@ export function SubmitBar({ summary, feedback, bottom, canAct, onSubmit, onWithd
       {notes.length > 0 && <span {...stylex.props(styles.dim)}>{notes.join(' · ')}</span>}
       {canAct && (
         <button type="button" onClick={onSubmit} {...stylex.props(styles.primary)}>
-          {t('choices.submit')}
+          {agent && listening ? t('choices.submitTo', { agent }) : t('choices.submit')}
         </button>
       )}
     </div>

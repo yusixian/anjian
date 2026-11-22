@@ -291,12 +291,12 @@ export function createServerContext(options: ServerOptions) {
 
   const artifactMeta = (ref: ArtifactRef, dir: string, contentOrigin = '') => ({
     ...readArtifact(dir, ref, runtimeOf(ref, dir)),
-    ...(ref.type !== 'html' ? { agent: names.agent() } : {}),
+    ...(ref.type !== 'html' ? { agent: names.agent(ref) } : {}),
     ...(ref.type === 'artboard'
       ? {
           comments: boardComments.viewerComments(ref.id),
           staleThreads: boardComments.stale(ref.id),
-          listening: boardComments.listening(ref.id),
+          ...boardComments.presence(ref.id),
         }
       : {}),
     contentBase: `${contentOrigin}${contentPrefix}${ref.type}/${ref.id}/`,

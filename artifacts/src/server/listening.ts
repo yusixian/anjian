@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const HOSTS = ['claude', 'codex', 'pi', 'agy'];
+const HOSTS = ['claude', 'codex', 'pi', 'agy'] as const;
+export type ListeningHost = (typeof HOSTS)[number];
 const COMMENT_ARTIFACT = /^(?:document|artboard|whiteboard|slides|storyboard)\/[a-z0-9][a-z0-9-]*$/;
 const FRESH_MS = 10_000;
 
@@ -39,8 +40,10 @@ function hasOpenedBeat(dir: string, artifact: string, now: number): boolean {
   }
 }
 
-export function listeningOn(stateDir: string, artifact: string, now = Date.now()): boolean {
-  for (const host of HOSTS) {
+export function listeningOn(
+  stateDir: string, artifact: string, now = Date.now(), only?: ListeningHost,
+): boolean {
+  for (const host of only ? [only] : HOSTS) {
     const dir = path.join(stateDir, `${host}-comment-watch`);
     if (hasOpenedBeat(dir, artifact, now)) return true;
     let names: string[];

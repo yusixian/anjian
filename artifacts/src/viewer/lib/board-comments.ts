@@ -3,6 +3,7 @@ import type { BoardCommentsFile } from '../../shared/board-comments';
 export interface BoardCommentsState {
   comments: BoardCommentsFile;
   listening?: boolean;
+  submitAgent?: string;
   stale: string[];
 }
 
@@ -22,6 +23,7 @@ export function boardCommentsFromPayload(
         comments: payload.comments,
         stale: ids(payload.staleThreads),
         listening: payload.listening === true,
+        submitAgent: typeof payload.submitAgent === 'string' ? payload.submitAgent : undefined,
       }
     : null;
 }
@@ -38,5 +40,10 @@ export function boardCommentsFromMessage(
     !isFile(m.comments)
   )
     return null;
-  return { comments: m.comments, stale: ids(m.stale), listening: m.listening === true };
+  return {
+    comments: m.comments,
+    stale: ids(m.stale),
+    listening: m.listening === true,
+    submitAgent: typeof m.submitAgent === 'string' ? m.submitAgent : undefined,
+  };
 }

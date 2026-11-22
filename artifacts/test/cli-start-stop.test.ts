@@ -165,6 +165,51 @@ describe('anjian start', () => {
     expect(JSON.parse(fs.readFileSync(agentFile, 'utf8'))).toEqual({ CODEX_THREAD_ID: 't1' });
   }, 30000);
 
+  test('explicit launches keep each artifact agent and leave legacy attribution readable', async () => {
+    const project = newProject();
+    for (const id of ['one', 'two', 'legacy']) writeReadyArtboard(project, id);
+    const args = ['start', '--project-dir', project];
+    const initial = run(args, { AI_AGENT: 'gemini' });
+    expect(initial.code).toBe(0);
+    const origin = new URL(initial.out.url.replace('localhost', '127.0.0.1')).origin;
+    const launch = (id: string, env?: NodeJS.ProcessEnv) => {
+      expect(run([...args, '--artifact', `artboard/${id}`], env).code).toBe(0);
+    };
+    launch('one', { AI_AGENT: 'claude' });
+    launch('two', { AI_AGENT: 'codex' });
+    launch('one', { AGENT: '1' });
+    for (const [id, name] of [
+      ['one', 'Claude Code'],
+      ['two', 'Codex'],
+      ['legacy', 'Gemini CLI'],
+    ]) {
+      const response = await fetch(`${origin}/api/artifacts/artboard/${id}`);
+      expect(response.status).toBe(200);
+      expect((await response.json()).agent).toBe(name);
+    }
+    const artboard = path.join(project, '.anjian/artifacts/artboard/one');
+    const created = await fetch(`${origin}/api/artboard/one/comments`, {
+      method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        op: 'create',
+        anchor: { page: 'p', board: 'a', x: 10, y: 10 },
+        text: 'Check the default reply name',
+      }),
+    });
+    expect(created.status).toBe(200);
+    const { comments } = await created.json();
+    const reply = [
+      'comment', 'reply', '--project-dir', project, '--artifact', 'artboard/one',
+      '--thread', comments.threads[0].id, '--text', 'Reviewed',
+    ];
+    expect(run(reply).code).toBe(0);
+    expect(run(reply, { AI_AGENT: 'codex' }).code).toBe(0);
+    const saved = JSON.parse(fs.readFileSync(path.join(artboard, 'comments.json'), 'utf8'));
+    expect(saved.threads[0].messages.slice(1).map((message: { name: string }) => message.name))
+      .toEqual(['Claude Code', 'Codex']);
+  }, 30000);
+
   test('a start from a subdirectory of the repository registers the root', () => {
     const project = newProject();
     fs.mkdirSync(path.join(project, '.git'));

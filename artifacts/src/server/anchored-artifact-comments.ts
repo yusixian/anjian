@@ -170,6 +170,7 @@ function createAnchoredStore<A>(dir: string, stateDir: string, options: Anchored
     },
     commentNames({
       agentFile: path.join(stateDir, 'agent'),
+      artifact: { type, id: path.basename(dir) },
       projectDir: path.resolve(dir, '../../../..'),
     }),
     undefined,
