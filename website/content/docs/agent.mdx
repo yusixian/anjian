@@ -55,6 +55,28 @@ anjian comment reply --artifact document/plan --thread "实际线程ID" --text "
 
 这里的 `anjian` 指本仓库构建的 CLI，可用 `node /绝对路径/anjian/artifacts/dist/cli.cjs` 替代。在实际作品项目目录执行，或始终传入相同的 `--project-dir`。
 
+## GitHub Copilot CLI
+
+先准备可用的案间 CLI。用案间源码目录下的完整 `skills/artifacts/` 安装项目级 Skill。在作品项目根目录执行以下命令，并替换源码路径。
+
+```bash
+mkdir -p .github/skills/artifacts
+cp -R /绝对路径/anjian/skills/artifacts/. .github/skills/artifacts/
+copilot skill list
+```
+
+确认 `artifacts` 出现在项目 Skill 列表中。把案间 CLI 的绝对路径或包装器记进上文的项目指引。如果用 `copilot -p`，先在独立终端运行本地 Hub，再从作品项目启动 Copilot。
+
+```bash
+anjian start --project-dir "$PWD" --no-open --foreground
+```
+
+在 Copilot 会话里请它使用 `artifacts` Skill 创建 `document/plan` 并给出预览链接。在浏览器打开链接并提交批注，然后回到原会话，请它运行以下命令读回新批注。要查看全部批注，加上 `--all`。
+
+```bash
+anjian comment list --project-dir "$PWD" --artifact document/plan --json
+```
+
 ## 事件与自动处理
 
 `anjian watch --json` 输出事件，宿主需要自己订阅并调度任务。收到事件后再读取评论或拉取作品；事件输出不等于 Agent 已自动醒来处理。首次监听不重放全部历史评论，需要历史时使用 `comment list --all`。

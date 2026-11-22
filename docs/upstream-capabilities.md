@@ -73,6 +73,10 @@
 
 macOS 活动监视器实测显示案间 Hub 和反馈监听器的名字、版本。Linux 保留 Hub 的实例参数，Node 22 容器验证启动、复用、异常恢复和手动停止。[验收 #133](https://github.com/yusixian/anjian/pull/133) · [中文说明](https://anjian.cosine.ren/zh/docs/updates/#0112) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0112)
 
+## GitHub Copilot CLI 作品批注
+
+Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和本地 OpenAI 兼容模型替身验收了项目级 Skill 加载、创建案间文档与 CLI 校验、Chrome 提交批注及原会话恢复后主动回读。自动投递另作验证。[案间 #136](https://github.com/yusixian/anjian/issues/136) · [中文上手](../website/content/docs/agent.mdx#github-copilot-cli) · [English guide](../website/content/docs/agent.en.mdx#github-copilot-cli)
+
 ## 待验证能力
 
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
