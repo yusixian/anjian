@@ -17,6 +17,7 @@ const documents = Object.fromEntries(
     'document.md',
     'html.md',
     'icons.md',
+    'phone-mockups.md',
     'remote.md',
     'slides.md',
     'storyboard.md',
