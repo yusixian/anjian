@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.9.0`（`8433ffa`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.9.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.3`（`a9fe0fb`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.10.0`（`6854582`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.10.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.3) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -57,7 +57,14 @@
 | 在同一画板用动作或条件串起多个界面 | Agent 可用 `canvas.json` 的 `connections` 连接卡片。Chrome 核对跨页隔离、移动、平移和缩放。[验收 #115](https://github.com/yusixian/anjian/pull/115) · [v0.8.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#080) |
 | 在浏览器移动画板卡片、标题和便签，继续让 Agent 更新作品 | 「调整布局」支持拖动和键盘微调。隔离 Hub 核对并发冲突、上传与重启，Chrome 核对桌面和触摸。[验收 #119](https://github.com/yusixian/anjian/pull/119) · [v0.9.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#090) |
 
+## v0.10.0 画板对象选择
+
+画板上的「选择画布对象」支持标记画板卡片、标题和便签，Agent 在下一次提示中读取对象类型、页面和标识。桌面和 320、390 px Chrome 验证选择与清除，真实 Hub 和提示词 Hook 核对切页与删除后的状态。[功能验收 #122](https://github.com/yusixian/anjian/pull/122) · [中文说明](https://anjian.cosine.ren/zh/docs/updates/#0100) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0100)
+
 ## 待验证能力
+
+- 本地评论由 Hub 主动推送，订阅在 Hub 重启后恢复。案间现有监听器定时读取评论文件。Codex 已有 App Server 唤醒路径，实际空闲会话纳入验证。[实现 #125](https://github.com/yusixian/anjian/issues/125)
+- macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 
 - 把反馈自动投递给已经运行的普通 Antigravity 交互会话。已验证由案间启动的流式会话接收反馈、普通会话主动读取批注，以及 Pi 会话的投递和回执。普通 Antigravity 会话的外部投递仍待找到公开接口并完成两路会话隔离验证。[宿主证据和缺口 #52](https://github.com/yusixian/anjian/issues/52)
 
