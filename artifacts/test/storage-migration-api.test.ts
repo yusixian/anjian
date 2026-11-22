@@ -189,10 +189,12 @@ test('stops an in-flight copy when the server-planned ownership changes', async 
     scope, roots: [{ id: 'trusted', directory: f.source, owner: 'github:2' }], fingerprint: 'transferred',
   }));
   gate.resolve();
-  await vi.waitFor(async () => expect(await f.migration.status('shared', prepared.job.id)).toMatchObject({
-    state: 'failed', error: 'source_changed', verifiedFiles: 0,
-  }));
-  expect((await (await f.request('shared', 'owner')).json()).jobs[0].running).toBe(false);
+  await vi.waitFor(async () => {
+    const listed = await (await f.request('shared', 'owner')).json();
+    expect(listed.jobs[0]).toMatchObject({
+      id: prepared.job.id, state: 'failed', error: 'source_changed', verifiedFiles: 0, running: false,
+    });
+  });
 });
 
 test('rejects a symbolic-link migration scope directory when listing jobs', async () => {
