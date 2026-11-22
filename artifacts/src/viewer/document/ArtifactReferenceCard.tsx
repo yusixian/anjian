@@ -39,6 +39,7 @@ const styles = stylex.create({
 type Review = 'pending' | 'pass' | 'reject';
 type ReviewSummary = Record<Review | 'unavailable', number>;
 interface Result {
+  choice?: string | null;
   href: string;
   review?: Review;
   reviewSummary?: ReviewSummary;
@@ -66,6 +67,7 @@ function readResult(
     return null;
   }
   if (kind && url.searchParams.get(kind) !== id) return null;
+  const choice = value.choice;
   const review = value.review;
   const reviewSummary = value.reviewSummary;
   if (expectedGroups) {
@@ -85,6 +87,7 @@ function readResult(
   return {
     href: url.href,
     title: value.title,
+    ...(kind === 'group' && (choice === null || typeof choice === 'string') ? { choice } : {}),
     ...(expectedGroups ? { reviewSummary } : {}),
     review: review === 'pending' || review === 'pass' || review === 'reject' ? review : undefined,
   };
@@ -153,6 +156,11 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
         <strong>{title}</strong>
         <span {...stylex.props(styles.meta)}>
           {t('type.' + type)}
+          {resolved?.choice !== undefined &&
+            ' · ' +
+              (resolved.choice === null
+                ? t('reference.choicePending')
+                : t('reference.choiceSelected', { title: resolved.choice }))}
           {resolved?.reviewSummary && ' · ' + t('reference.reviewSummary', resolved.reviewSummary)}
           {review &&
             ' · ' +

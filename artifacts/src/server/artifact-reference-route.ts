@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { type ArtifactReference, validateArtifactReference } from '../shared/artifact-reference';
 import { resolveReferenceFocus } from '../shared/reference-focus';
+import { choiceRounds, roundOfGroup } from '../shared/rounds';
 import { SLIDE_DECK_FILE } from '../shared/slides';
 import { STORYBOARD_FILE } from '../shared/storyboard';
 import { ARTIFACT_TYPES, type ArtifactType } from '../shared/types';
@@ -116,7 +117,12 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       const layout = 'canvas' in payload ? payload.layout : null;
       const group = focus?.kind === 'group' ? canvas?.groups?.[focus.id] : undefined;
       const board = focus?.kind === 'board' ? canvas?.boards[focus.id] : undefined;
-      const mounted = !api || reviewGroups || group?.verify ? await mount(project) : null;
+      const choiceRound =
+        canvas && layout && group?.choose && !group.verify && focus
+          ? roundOfGroup(choiceRounds(canvas, layout), focus.id)
+          : undefined;
+      const mounted =
+        !api || reviewGroups || group?.verify || choiceRound ? await mount(project) : null;
       if (!current()) return unavailable();
       if (!api) {
         await mounted!.handleRequest(req, res);
@@ -124,7 +130,22 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       }
       const query = new URLSearchParams({ ref: '1' });
       if (focus) query.set(focus.kind, focus.id);
-      const review = mounted && focus ? mounted.referenceVerdict(id, focus.id) : undefined;
+      const review =
+        mounted && focus && group?.verify ? mounted.referenceVerdict(id, focus.id) : undefined;
+      const selected =
+        choiceRound && focus && group
+          ? mounted!.referenceChoice(id, choiceRound.id, focus.id, group.recommend)
+          : null;
+      const selectedBoard =
+        selected &&
+        group?.boards.includes(selected) &&
+        canvas &&
+        Object.hasOwn(canvas.boards, selected)
+          ? canvas.boards[selected]
+          : undefined;
+      const selectedTitle = selectedBoard
+        ? (typeof selectedBoard.title === 'string' && selectedBoard.title.trim()) || selected
+        : null;
       const reviewSummary = reviewGroups && { pass: 0, reject: 0, pending: 0, unavailable: 0 };
       if (reviewSummary && reviewGroups) {
         for (const groupId of reviewGroups) {
@@ -142,6 +163,7 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
         href: `/${type}/${target}?${query}`,
         title: (typeof title === 'string' && title.trim()) || titleOf(payload),
         ...(review ? { review } : {}),
+        ...(choiceRound ? { choice: selectedTitle } : {}),
         ...(reviewSummary ? { reviewSummary } : {}),
       });
     });
