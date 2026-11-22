@@ -5,16 +5,9 @@
   "category": "Developer Tools",
   "description": "Make your coding agent a better engineer",
   "displayName": "Anjian",
-  "keywords": [
-    "skills",
-    "tdd",
-    "debugging",
-    "collaboration",
-    "best-practices",
-    "workflows"
-  ],
+  "keywords": ["skills", "tdd", "debugging", "collaboration", "best-practices", "workflows"],
   "license": "MIT",
-  "logo": "./assets/anjian.svg",
+  "logo": "./assets/antigravity-logo.png",
   "name": "anjian",
   "suggestedPrompts": [
     "I've got an idea for something I'd like to build",

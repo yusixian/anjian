@@ -67,12 +67,25 @@ Agent 自行发现入口并完成接入命令；仅服务器未知或项目选�
 pi install /绝对路径/anjian
 ```
 
-在 Pi 中输入 `/anjian-open document/plan` 或 `/anjian-open artboard/design`。Agent 也可以调用 `anjian_open`。入口使用当前作品项目目录，跨项目时可在命令末尾附上目录，或给工具传 `projectDir`。
+在 Pi 中输入 `/anjian-open document/plan` 或 `/anjian-open artboard/design`。Agent 也可以调用 `anjian_open`。默认使用当前作品项目目录。跨项目时在命令末尾附上目录，或给工具传 `projectDir`。
 
-用这个入口打开的文档和画板才会订阅到当前会话。普通评论、画板选择提交和撤回会排在当前 Pi 任务之后处理。重新打开同一 Pi 会话会恢复当前分支的订阅。切换会话或用 `/tree` 返回尚未打开作品的分支时，原订阅会停止通知。
+经该入口打开的文档和画板会订阅到当前会话。普通评论、画板选择提交和撤回会排在当前 Pi 回复之后。重新打开同一会话会恢复当前分支的订阅。切换会话或用 `/tree` 返回尚未打开作品的分支时，原订阅停止通知。
 
-Pi 无法继续运行时，反馈仍保存在作品中。通知里包含手工读取命令。也可以用 Pi 的 `/session` 查看会话 ID，再执行下方命令。自托管项目继续使用设备绑定及远程反馈流程。
+反馈保存在作品中。通知里的命令可手工读取。也可以在 Pi 中用 `/session` 查看会话 ID。运行命令前将它设为 `PI_SESSION_ID`。
 
 ```bash
-anjian comment list --artifact document/plan --session pi: < Pi会话ID > --json
+anjian comment list --artifact document/plan --session "pi:$PI_SESSION_ID" --json
 ```
+
+## Antigravity CLI
+
+构建案间后，用本地源码目录安装插件。重新构建后，重新安装以更新 Antigravity 持有的插件副本。
+
+```bash
+agy plugin install /绝对路径/anjian
+agy plugin list --json
+```
+
+确认列表中的 `anjian` 已启用且包含 `artifacts`。普通 `agy` 会话可以按需读取已安装的案间指引和作品批注。需要自动接收本地文档和画板反馈时，使用[案间反馈会话](antigravity-feedback.md)启动 `agy` 并传入作品参数。
+
+以上本地宿主入口使用本机案间 Hub。自托管项目使用[设备绑定和远程反馈](../skills/artifacts/remote.md)。
