@@ -20,6 +20,7 @@ import {
   projectPaths,
 } from './paths';
 import { alive, hasServerId, readText, sleep, waitForExit } from './process';
+import { artifactSkillBody } from './skills';
 import { replaceDecision } from './upgrade-rule';
 
 declare const CLI_VERSION: string | undefined;
@@ -29,6 +30,7 @@ export interface StartOptions {
   background: boolean;
   foreground: boolean;
   host: string;
+  mockup?: boolean;
   open: boolean;
   openExisting?: boolean;
   port?: string;
@@ -247,8 +249,8 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
     const base = withLink(info, paths, options.artifact);
     if (reused) base.reused = true;
     if (hint) base.hint = hint;
-    const out = base;
-    emit(out);
+    if (options.mockup) base.mockupGuide = artifactSkillBody('phone-mockups.md');
+    emit(base);
     if (
       reused &&
       known &&
@@ -258,7 +260,7 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
       options.artifact &&
       !process.env.ARTIFACTS_OPEN_CMD
     ) {
-      const local = out.link as string;
+      const local = base.link as string;
       await openBrowser(local, [local]).catch((error: Error) => console.error(error.message));
     }
   };
@@ -417,6 +419,10 @@ export const startCommand: CommandSpec = {
       type: 'boolean',
       help: 'Open or focus the artifact, including when reusing a server',
     },
+    'mockup': {
+      type: 'boolean',
+      help: 'Include the phone mockup guide with the startup result',
+    },
     'no-open': { type: 'boolean', help: 'Do not open a browser' },
     'foreground': { type: 'boolean', help: 'Run the server in this process until Ctrl+C' },
     'no-daemon': { type: 'boolean' },
@@ -436,13 +442,15 @@ export const startCommand: CommandSpec = {
         port: values.port as string | undefined,
         open: values['no-open'] ? false : values.open ? true : process.env.ARTIFACTS_OPEN !== '0',
         openExisting: !!values.open,
+        mockup: !!values.mockup,
         foreground: !!(values.foreground || values['no-daemon']),
         background: !!(values.background || values.daemon),
       },
       emit,
     ),
-  text: (value) =>
-    value.type === 'server-started'
-      ? `${value.link ?? value.url}${value.reused ? ' (already running)' : ''}`
-      : null,
+  text: (value) => {
+    if (value.type !== 'server-started') return null;
+    const link = `${value.link ?? value.url}${value.reused ? ' (already running)' : ''}`;
+    return typeof value.mockupGuide === 'string' ? `${link}\n\n${value.mockupGuide}` : link;
+  },
 };
