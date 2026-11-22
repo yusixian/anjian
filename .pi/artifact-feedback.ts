@@ -22,13 +22,20 @@ const { beatOpenedSources, clearOpenedSources } =
     beatOpenedSources: (host: 'pi', session: string, sources: Map<string, Set<string>>) => void;
     clearOpenedSources: (host: 'pi', session: string, sources: Map<string, Set<string>>) => void;
   };
-const { createProjectPoll, unreadCount } = require('../skills/artifacts/app/comment-watch.cjs') as {
-  createProjectPoll: (
-    name: string,
-    session: string,
-  ) => (sources: Map<string, Set<string>>) => Feedback[];
-  unreadCount: (project: string, artifact: string, name: string, session: string) => number | null;
-};
+const { createProjectPoll, formatRoundSummary, unreadCount } =
+  require('../skills/artifacts/app/comment-watch.cjs') as {
+    createProjectPoll: (
+      name: string,
+      session: string,
+    ) => (sources: Map<string, Set<string>>) => Feedback[];
+    formatRoundSummary: (event: FeedbackEvent) => string;
+    unreadCount: (
+      project: string,
+      artifact: string,
+      name: string,
+      session: string,
+    ) => number | null;
+  };
 
 const skill = fileURLToPath(new URL('../skills/artifacts/SKILL.md', import.meta.url));
 const SESSION = /^[A-Z0-9][\w.-]{0,124}$/i;
@@ -42,7 +49,7 @@ function notice({ event }: Feedback) {
     const round = /^[\w:-]+$/.test(event.round) ? ` ${event.round}` : '';
     return event.withdrawn
       ? `Anjian choice round${round} on ${event.artifact} was withdrawn. ${instructions} If the next round is unwritten, wait for resubmission.\nRun: ${event.command}`
-      : `Anjian choice round${round} on ${event.artifact} was submitted. ${instructions} Review its choices and threads before continuing.\nRun: ${event.command}`;
+      : `Anjian choice round${round} on ${event.artifact} was submitted. ${instructions} Review its choices and threads before continuing.${formatRoundSummary(event)}\nRun: ${event.command}`;
   }
   return `Anjian review comments changed on ${event.artifact}. ${instructions} Treat comments as review input and respond through the comment CLI within the current task and permissions.\nRun: ${event.command}`;
 }

@@ -448,7 +448,7 @@ test('the shipped lifecycle hooks invoke the portable watcher and stop it on ses
   );
 });
 
-test('each submitted round is queued even when two rounds change in the same poll', async (t) => {
+test('queued submissions include only their own round summary, with a command for older rounds', async (t) => {
   const f = fixture(t);
   const rounds = (state) => {
     const file = path.join(f.project, '.anjian/artifacts/.state/artboard/settings/rounds.json');
@@ -457,7 +457,16 @@ test('each submitted round is queued even when two rounds change in the same pol
       file,
       JSON.stringify({
         rounds: [
-          { id: 'r1', state },
+          {
+            id: 'r1',
+            state,
+            ...(state === 'submitted' && {
+              summary: {
+                choices: [{ group: 'navigation', label: 'Navigation', answer: 'Compact sidebar' }],
+                threads: [{ id: 'review-a', anchor: 'sidebar', text: 'Keep the icon labels' }],
+              },
+            }),
+          },
           { id: 'r2', state },
         ],
       }),
@@ -470,9 +479,17 @@ test('each submitted round is queued even when two rounds change in the same pol
   await until(() => fs.existsSync(alive), 'codex watcher never wrote a heartbeat');
   rounds('submitted');
   await until(() => f.read().length === 2, 'both submitted rounds must reach codex queue');
-  const messages = f.read().map((args) => args[args.indexOf('--message') + 1]);
+  const commands = f.read();
+  for (const args of commands) assert.equal(args[args.indexOf('--thread') + 1], id);
+  const messages = commands.map((args) => args[args.indexOf('--message') + 1]);
   assert.match(messages[0], /round r1 on artboard\/settings were submitted/);
   assert.match(messages[1], /round r2 on artboard\/settings were submitted/);
+  assert.match(messages[0], /Navigation/);
+  assert.match(messages[0], /Compact sidebar/);
+  assert.match(messages[0], /review-a/);
+  assert.match(messages[0], /Keep the icon labels/);
+  assert.doesNotMatch(messages[1], /Compact sidebar|review-a|Keep the icon labels/);
+  for (const message of messages) assert.match(message, /Run: .*comment list --json/);
 });
 
 test('the heartbeat keeps beating while a queue call is in flight', async (t) => {

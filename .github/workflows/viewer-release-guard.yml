@@ -52,7 +52,7 @@ jobs:
         timeout-minutes: 5
         run: |
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-            # Bound mirror failures and retain Ubuntu archive signature verification.
+            # Bound index refreshes. Let dpkg finish within the step timeout so mirror retries can run.
             apt_options=(-o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
             installed=false
             for mirror in https://mirrors.edge.kernel.org/ubuntu/ https://archive.ubuntu.com/ubuntu/; do
@@ -60,7 +60,7 @@ jobs:
                 printf '%s\n' "$mirror" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
               fi
               if sudo timeout --kill-after=5s 45s apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update &&
-                sudo timeout --kill-after=5s 90s apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg; then
+                sudo apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg; then
                 installed=true
                 break
               fi

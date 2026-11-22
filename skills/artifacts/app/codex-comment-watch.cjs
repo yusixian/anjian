@@ -4,7 +4,7 @@ const { execFile, execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createProjectPoll, unreadCount } = require('./comment-watch.cjs');
+const { createProjectPoll, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
 const {
   beatSources,
   projectRoot,
@@ -129,7 +129,11 @@ function commentMessage(event) {
     event.type === 'anjian-choices'
       ? `Anjian choices for round ${event.round} on ${event.artifact} were ${event.withdrawn ? 'withdrawn' : 'submitted'}.`
       : 'Anjian review comments changed.';
-  return `${what} Local skill: ${JSON.stringify(skill)}; guide: ${JSON.stringify(guide)}. ${event.instruction}\nRun: ${event.command}`;
+  const summary = formatRoundSummary(event);
+  const instruction = summary
+    ? 'Review the submission and use the command for details when needed.'
+    : event.instruction;
+  return `${what} Local skill: ${JSON.stringify(skill)}; guide: ${JSON.stringify(guide)}. ${instruction}${summary}\nRun: ${event.command}`;
 }
 
 function queueMessage(ctx, remote, message, signal) {

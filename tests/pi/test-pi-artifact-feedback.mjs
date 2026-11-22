@@ -48,9 +48,11 @@ function markRead(projectDir, artifact, session, thread) {
   });
 }
 
-function choices(projectDir, state) {
+function choices(projectDir, state, summary) {
   write(projectDir, join(artboard, 'comments.json'), { threads: [] });
-  write(projectDir, join('.state', artboard, 'rounds.json'), { rounds: [{ id: round, state }] });
+  write(projectDir, join('.state', artboard, 'rounds.json'), {
+    rounds: [{ id: round, state, summary }],
+  });
 }
 
 async function until(condition) {
@@ -132,21 +134,34 @@ test('tracks submissions and withdrawals independently for each project', async 
   const dir = project(t);
   const otherDir = project(t);
   const messages = [];
+  const unrelatedMessages = [];
+  const session = randomUUID();
   const watcher = watchPiFeedback({
-    session: randomUUID(),
+    session,
     pollMs,
     deliver: async (message) => messages.push(message),
   });
   t.after(() => watcher.close());
+  const unrelated = watchPiFeedback({
+    session: randomUUID(),
+    pollMs,
+    deliver: async (message) => unrelatedMessages.push(message),
+  });
+  t.after(() => unrelated.close());
 
   choices(dir, 'open');
   choices(otherDir, 'open');
   watcher.subscribe(dir, artboard);
   watcher.subscribe(otherDir, artboard);
-  choices(dir, 'submitted');
+  unrelated.subscribe(dir, document);
+  const summary = {
+    choices: [{ group: 'density', answer: 'Two columns' }],
+    threads: [{ id: 'thread-a', anchor: 'compact', text: 'Keep the title visible' }],
+  };
+  choices(dir, 'submitted', summary);
   choices(otherDir, 'submitted');
   await until(() => messages.length === 2);
-  choices(dir, 'open');
+  choices(dir, 'open', summary);
   await until(() => messages.length === 3);
   choices(dir, 'submitted');
   await until(() => messages.length === 4);
@@ -158,6 +173,19 @@ test('tracks submissions and withdrawals independently for each project', async 
   assert.match(messages[1], /was submitted/);
   assert.match(messages[2], /was withdrawn/);
   assert.match(messages[3], /was submitted/);
+  const matching = messages.filter((message) => message.includes('Two columns'));
+  assert.equal(matching.length, 1, 'only the submission with a saved summary should include it');
+  const [submitted] = matching;
+  assert.match(submitted, /thread-a/);
+  assert.match(submitted, /Keep the title visible/);
+  for (const message of messages.filter((message) => message !== submitted)) {
+    assert.doesNotMatch(message, /Two columns|thread-a|Keep the title visible/);
+  }
+  for (const message of messages) {
+    assert.match(message, /Run: .*comment list --json/);
+    assert.ok(message.includes(`--session pi:${session}`));
+  }
+  assert.deepEqual(unrelatedMessages, []);
 });
 
 test('closing stops delivery of remaining notices while one is in progress', async (t) => {
