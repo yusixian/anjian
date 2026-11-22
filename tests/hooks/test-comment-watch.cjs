@@ -206,8 +206,9 @@ function monitor(t, cwd, overrides) {
     CLAUDE_PROJECT_DIR: cwd,
     ...overrides,
   };
-  const child =
-    entry && spawn(entry.command, { cwd, env, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  // Replace the Unix shell so test teardown signals the actual monitor.
+  const command = entry && (process.platform === 'win32' ? entry.command : `exec ${entry.command}`);
+  const child = command && spawn(command, { cwd, env, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const state = { output: '', errors: '', child };
   if (state.child) {
     state.child.stdout.on('data', (data) => {

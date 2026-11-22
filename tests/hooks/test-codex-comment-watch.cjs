@@ -420,7 +420,8 @@ test('the shipped lifecycle hooks invoke the portable watcher and stop it on ses
   const entry = config.SessionStart?.[0]?.hooks?.[0];
   assert.ok(entry, 'the Codex plugin has no startup hook');
   assert.equal(entry.async, true);
-  const child = spawn(entry.command, {
+  const command = process.platform === 'win32' ? entry.command : `exec ${entry.command}`;
+  const child = spawn(command, {
     cwd: f.project,
     env: f.env,
     shell: true,

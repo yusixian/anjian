@@ -28,7 +28,9 @@ jobs:
       - run: node --test tests/pi/test-*.mjs
       - run: node --test tests/antigravity/test-session.mjs
       - run: bash tests/antigravity/run-tests.sh
-      - run: node --test tests/hooks/test-*.cjs
+      - name: Verify Claude and Codex feedback hooks
+        timeout-minutes: 3
+        run: node --test tests/hooks/test-*.cjs
   artifacts:
     runs-on: ubuntu-latest
     defaults:
