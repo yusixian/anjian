@@ -313,6 +313,12 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
   return files ? snapshot(files, digest(files)) : { revision: null, files: {} };
 }
 
+export function readRemoteArtifactRevision(projectDir: string, artifact: string) {
+  const files = readManagedSource(projectDir, artifact);
+  if (!files) return null;
+  return { revision: digest(files), document: files.get('doc.xml')?.toString('utf8') };
+}
+
 function validateSlideDeck(source: Buffer) {
   if (source.length > MAX_SLIDE_DECK_BYTES) throw tooLarge(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
   let value: unknown;

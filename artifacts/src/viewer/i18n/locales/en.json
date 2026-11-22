@@ -721,6 +721,18 @@
     "access": "Access",
     "contents": "Shared content",
     "snapshotHelp": "Publish a complete snapshot of this artifact and its resources, without comments, edit history, other artifacts, or the project list. Later changes require a manual update.",
+    "documentSnapshotHelp": "Publish a complete snapshot of this document and its resources. Comments, edit history, and the project list are excluded. Later changes require a manual update.",
+    "references": "Referenced artifacts",
+    "referencesHelp": "Select which referenced artifacts visitors can open. This selection replaces any previously shared references when you update.",
+    "referenceReasons": {
+      "unavailable": "This artifact is unavailable.",
+      "unsupported": "This type cannot be included in a document share.",
+      "cycle": "This reference points back to the document being shared."
+    },
+    "wholeArtboard": "Selecting this reference shares the entire artboard, including all pages and objects.",
+    "nestedReferences": "Visitors can open this document. Links to its own referenced artifacts are disabled.",
+    "referencesTruncated": "Only the first 24 references are listed.",
+    "referencesChanged": "The references have changed. Review the list and select what to share again.",
     "validFor": "Link expiry",
     "oneDay": "1 day",
     "sevenDays": "7 days",
