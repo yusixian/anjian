@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react';
 
+import type { SelectionMessage } from '../../shared/selection';
 import type { BoardHumanOp } from '../../shared/board-comments';
 import { type Bounds, type CanvasLayout, type CanvasSpec, isMediaBoard } from '../../shared/types';
 import { SubmitBar } from '../choices/SubmitBar';
@@ -23,6 +24,8 @@ import { PhoneBoard } from '../components/PhoneBoard';
 import { QuestionSheet, SHEET_PEEK } from '../components/QuestionSheet';
 import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
 import { FeedbackSheet } from '../feedback/FeedbackSheet';
+import { useSelectionSync } from '../hooks/useSelectionSync';
+import { useArtboardObjectSelection } from '../hooks/useArtboardObjectSelection';
 import { useArtboardPage } from '../hooks/useArtboardPage';
 import { useBoardLifecycle } from '../hooks/useBoardLifecycle';
 import { useBoardOrigin } from '../hooks/useBoardOrigin';
@@ -97,8 +100,11 @@ interface Props {
   pending: string[];
   readOnly?: boolean;
   positionEditor?: ArtboardPositionEditor;
+  pickingObjects?: boolean;
+  objectModeRevision?: number;
   versions: Record<string, number>;
   warnings: string[];
+  send?: (message: SelectionMessage) => void;
 }
 
 const NO_THREADS: never[] = [];
@@ -121,7 +127,10 @@ export function PhoneArtboard({
   comment,
   comments,
   actions,
+  send,
   positionEditor,
+  pickingObjects = false,
+  objectModeRevision = 0,
   readOnly = false,
 }: Props) {
   const {
@@ -175,6 +184,16 @@ export function PhoneArtboard({
     layout,
     fitPage,
     startAtFocus: true,
+  });
+
+  const objectSelection = useArtboardObjectSelection(canvas, page, pickingObjects);
+  useSelectionSync({
+    artifact: readOnly ? null : artifact,
+    boards: canvas?.boards,
+    live: !readOnly && live,
+    objects: objectSelection.objects,
+    objectRevision: objectSelection.revision + objectModeRevision,
+    send,
   });
 
   const rounds = useMemo(
@@ -306,7 +325,7 @@ export function PhoneArtboard({
     tap.current = null;
     if (start?.pointer !== event.pointerId) return;
     const hit = boardAt(event);
-    if (hit) setOpen(hit);
+    if (hit && !pickingObjects) setOpen(hit);
   };
 
   const openBoard = open ? allBoards[open] : undefined;
@@ -387,6 +406,7 @@ export function PhoneArtboard({
               boards={boards}
               connections={canvas.connections}
               positionEditor={positionEditor}
+              objectPicker={pickingObjects ? objectSelection : undefined}
               contentBase={contentBase}
               culled={culled}
               frameLoaded={readOnly ? frameLoaded : noLoad}

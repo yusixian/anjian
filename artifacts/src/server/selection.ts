@@ -6,10 +6,12 @@ import { INSPECTOR_PROPERTIES, type InspectorProperty } from '../shared/inspecto
 import {
   DOCUMENT_SELECTION_LIMITS as DOC_LIMIT,
   type DocumentSelectionState,
+  type SelectedArtboardObject,
   type SelectedNode,
   SELECTION_FULL_NODES,
   SELECTION_LIMITS as LIMIT,
   SELECTION_MAX_NODES as MAX_NODES,
+  SELECTION_MAX_OBJECTS,
   type SelectionChange,
   type SelectionNode,
   type SelectionState,
@@ -108,12 +110,26 @@ export function readSelectionMessage(
     return node && change && { ...node, ...change };
   });
   const nodes = readAll(value.nodes, readNode);
+  let objects: SelectedArtboardObject[] | null | undefined;
+  if (value.objects !== undefined) {
+    if (!list(value.objects, SELECTION_MAX_OBJECTS)) return null;
+    objects = readAll(value.objects, (item) => {
+      if (
+        !object(item) ||
+        (item.kind !== 'board' && item.kind !== 'title' && item.kind !== 'sticky') ||
+        !text(item.id, LIMIT.id) || !item.id ||
+        !text(item.page, LIMIT.id) || !item.page
+      ) return null;
+      return { id: item.id, kind: item.kind, page: item.page };
+    });
+  }
+  if (objects === null) return null;
   if (!selected || !tweaks || !nodes) return null;
   return {
     id,
     tab: value.tab,
     human: value.human,
-    state: { selected, more: value.more as number, tweaks, nodes },
+    state: { selected, more: value.more as number, tweaks, nodes, ...(objects ? { objects } : {}) },
   };
 }
 
@@ -175,10 +191,27 @@ function readAnySelection(value: unknown) {
   return message && { ...message, kind: 'artboard' as const };
 }
 
+export function visibleSelectionObjects(dir: string, objects: SelectedArtboardObject[]) {
+  try {
+    const canvas: unknown = JSON.parse(fs.readFileSync(path.join(dir, 'canvas.json'), 'utf8'));
+    if (!object(canvas) || !Array.isArray(canvas.pages)) return [];
+    const pages = new Set(canvas.pages.filter(object).map((page) => page.id));
+    return objects.filter(({ kind, id, page }) => {
+      const items = kind === 'board' ? canvas.boards : canvas.notes;
+      if (!pages.has(page) || !object(items) || !Object.hasOwn(items, id)) return false;
+      const item = items[id];
+      return object(item) && item.page === page && (kind === 'board' || item.kind === kind);
+    });
+  } catch {
+    return [];
+  }
+}
+
 export function createSelectionStore(
   stateDir: string,
   exists: (kind: Kind, id: string) => boolean,
   enqueue?: (key: string, work: (admit: CommentAdmission) => void) => void,
+  liveObjects?: (id: string, objects: SelectedArtboardObject[]) => SelectedArtboardObject[],
 ) {
   const tabs = new Map<object, Tab>();
   let clock = 0;
@@ -198,10 +231,13 @@ export function createSelectionStore(
     if (!winner?.state || !exists(kind, id)) fs.rmSync(file, { force: true });
     else {
       try {
+        const state = winner.state;
+        const objects = 'objects' in state ? state.objects : undefined;
         writeJsonFiles(stateDir, [{ file, value: {
           artifact: `${kind}/${id}`,
           updatedAt: new Date().toISOString(),
-          ...winner.state,
+          ...state,
+          ...(objects?.length && liveObjects ? { objects: liveObjects(id, objects) } : {}),
         } }], admit);
       } catch (error) {
         // A stale selection would direct the Agent at the wrong content. This file is ephemeral.
@@ -237,6 +273,16 @@ export function createSelectionStore(
       });
       if (previous && !same) write(previous.kind, previous.id);
       write(message.kind, message.id);
+    },
+    refreshArtboard(id: string) {
+      for (const tab of tabs.values()) {
+        if (tab.kind !== 'artboard' || tab.id !== id || !tab.state || !('objects' in tab.state) ||
+            !tab.state.objects?.length || !liveObjects) continue;
+        const objects = liveObjects(id, tab.state.objects);
+        if (objects.length === tab.state.objects.length) continue;
+        tab.state = { ...tab.state, objects };
+        write('artboard', id);
+      }
     },
     drop(socket: object) {
       const tab = tabs.get(socket);

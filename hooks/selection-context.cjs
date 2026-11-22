@@ -69,7 +69,8 @@ function typedNodes(nodes, prompt) {
 
 function describe(session, { file, value }, prompt, budget) {
   const named = typedNodes(value.nodes, prompt);
-  if (!value.selected.length && !value.tweaks.length && !named.length) return '';
+  const objects = Array.isArray(value.objects) ? value.objects : [];
+  if (!value.selected.length && !value.tweaks.length && !named.length && !objects.length) return '';
   const head = [`Artboard ${value.artifact}, open in the viewer (updated ${value.updatedAt}):`];
   if (named.length) {
     head.push('Nodes named in this message:');
@@ -77,6 +78,11 @@ function describe(session, { file, value }, prompt, budget) {
   }
   const tail = `Full selection and node map: ${path.relative(session, file)}`;
   const body = [];
+  if (objects.length) {
+    body.push('Selected canvas objects:');
+    for (const { kind, id, page } of objects)
+      body.push(`- ${kind} ${JSON.stringify(id)} on page ${JSON.stringify(page)}`);
+  }
   if (value.selected.length) {
     const html = Math.max(80, Math.min(MAX_HTML, Math.floor(budget / 2 / value.selected.length)));
     body.push('Selected nodes:');

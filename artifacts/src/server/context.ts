@@ -27,7 +27,7 @@ import { readHtml } from './html';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
 import { readDocumentApprovalRevisions } from './remote-transfer';
-import { createSelectionStore } from './selection';
+import { createSelectionStore, visibleSelectionObjects } from './selection';
 import { readSlideDeck } from './slides';
 import { socketAuthorized } from './socket-access';
 import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactState } from './state';
@@ -161,6 +161,10 @@ export function createServerContext(options: ServerOptions) {
     stateDir,
     (kind, id) => resolveArtifactDir(root, kind, id) !== null,
     (key, work) => backgroundWrites.enqueue(key, work),
+    (id, objects) => {
+      const dir = resolveArtifactDir(root, 'artboard', id);
+      return dir ? visibleSelectionObjects(dir, objects) : [];
+    },
   );
   selections.clearAll();
   const changeListeners: ChangeListener[] = [];
@@ -427,6 +431,7 @@ export function createServerContext(options: ServerOptions) {
     };
   };
   const refreshState = (ref: ArtifactRef, dir: string) => {
+    if (ref.type === 'artboard') selections.refreshArtboard(ref.id);
     signatures.set(`${ref.type}/${ref.id}`, artifactSignature(dir, ref.type));
     return writeState(ref, dir);
   };

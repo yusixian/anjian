@@ -90,6 +90,43 @@ test('a viewer selection is written to selection.json for its artboard', async (
   ws.socket?.destroy();
 });
 
+test('canvas selections coexist with DOM selections and drop removed objects', async () => {
+  const { server, root } = await start();
+  const source = {
+    ...canvas,
+    pages: [...canvas.pages, { id: 'q', name: 'Second page' }],
+    notes: {
+      heading: { page: 'p', kind: 'title', x: 0, y: -100, text: 'Draft' },
+      hint: { page: 'p', kind: 'sticky', x: 680, y: 0, text: 'Fix contrast' },
+    },
+  };
+  const dir = writeArtboard(root, 'b1', source, { 'pages/p/a.html': '<p>a</p>' });
+  const ws = await connect(server);
+  const objects = [
+    { kind: 'board', id: 'a', page: 'p' },
+    { kind: 'title', id: 'heading', page: 'p' },
+    { kind: 'sticky', id: 'hint', page: 'p' },
+  ];
+  sendWsText(ws.socket!, message('t1', true, [2], {
+    objects: [...objects, { kind: 'title', id: 'hint', page: 'p' }, { kind: 'board', id: 'a', page: 'q' }],
+  }));
+  await waitFor(() => fs.existsSync(selectionFile(root)));
+  expect(readJson(selectionFile(root))).toMatchObject({
+    artifact: 'artboard/b1',
+    objects,
+    selected: [expect.objectContaining({ id: 'a#2' })],
+  });
+  fs.writeFileSync(path.join(dir, 'canvas.json'), JSON.stringify({
+    ...source, notes: { heading: source.notes.heading },
+  }));
+  await waitFor(() => readJson(selectionFile(root)).objects?.length === 2);
+  expect(readJson(selectionFile(root)).objects).toEqual(objects.slice(0, 2));
+  sendWsText(ws.socket!, message('t1', true, [2], { objects: [] }));
+  await waitFor(() => readJson(selectionFile(root)).objects?.length === 0);
+  expect(readJson(selectionFile(root)).selected[0].id).toBe('a#2');
+  ws.socket?.destroy();
+});
+
 test('the tab with the latest human change wins; automatic refreshes update only their own tab', async () => {
   const { server, root } = await start();
   writeArtboard(root, 'b1', canvas, { 'pages/p/a.html': '<p>a</p>' });
