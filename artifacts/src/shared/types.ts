@@ -158,5 +158,6 @@ export type ServerMessage =
       comments: BoardCommentsFile;
       stale: string[];
       listening?: boolean;
+      submitAgent?: string;
       receiptOnly?: true;
     };

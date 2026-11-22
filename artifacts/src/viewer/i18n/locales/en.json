@@ -78,6 +78,7 @@
     "recommended": "Recommended",
     "sayDone": "Say done in the terminal",
     "submit": "Submit",
+    "submitTo": "Submit to {{agent}}",
     "submitted": "Submitted",
     "submittedAt": "Submitted {{time}}",
     "unanswered": "{{groups}} unanswered",

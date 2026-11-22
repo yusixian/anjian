@@ -74,6 +74,7 @@
     "recommended": "推荐",
     "sayDone": "回终端说一声 选好了",
     "submit": "提交",
+    "submitTo": "提交给 {{agent}}",
     "submitted": "已提交",
     "submittedAt": "已提交 {{time}}",
     "unanswered": "{{groups}} 未选",

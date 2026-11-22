@@ -432,6 +432,7 @@ function createWhiteboardComments(dir: string, stateDir: string) {
     },
     commentNames({
       agentFile: path.join(stateDir, 'agent'),
+      artifact: { type: 'whiteboard', id: path.basename(dir) },
       projectDir: path.resolve(dir, '../../../..'),
     }),
     undefined,

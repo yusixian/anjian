@@ -4,12 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
-import { AGENT_MARKERS } from '../server/agent';
+import { AGENT_MARKERS, detectAgent } from '../server/agent';
 import { artifactPath } from '../server/artifact-address';
 import { artifactKeyOf } from '../server/artifacts';
 import { openBrowser } from '../server/browser-focus';
+import { artifactAgentFile } from '../server/comment-names';
 import { ensureHome, type MachinePaths, machinePaths, readProjects } from '../server/machine';
 import { readEntries, registryDir, removeEntry } from '../server/registry';
+import { writeJsonAtomic } from '../server/state';
 import type { CommandSpec } from './command';
 import {
   ARTIFACT_ERROR,
@@ -159,12 +161,14 @@ async function stopOldProjectServers() {
   }
 }
 
-// The server names agent comments after the latest session that started it; a start outside any agent keeps the last name.
-function recordAgent(paths: ProjectPaths) {
+function recordAgent(paths: ProjectPaths, artifact?: string) {
   const markers = Object.fromEntries(
     AGENT_MARKERS.flatMap((key) => (process.env[key] ? [[key, process.env[key]]] : [])),
   );
-  if (Object.keys(markers).length) fs.writeFileSync(paths.agent, `${JSON.stringify(markers)}\n`);
+  if (!Object.keys(markers).length) return;
+  const ref = artifact && artifactKeyOf(artifact);
+  if (ref && !detectAgent(markers)) return;
+  writeJsonAtomic(ref ? artifactAgentFile(paths.agent, ref) : paths.agent, markers);
 }
 
 function serverEnv(options: StartOptions) {
@@ -233,7 +237,7 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
   const known = readProjects(machine.projects).some((entry) => entry.dir === paths.project);
 
   const finish = async (info: ServerInfo, reused: boolean, hint?: string) => {
-    recordAgent(paths);
+    recordAgent(paths, options.artifact);
     const wantsOpen = options.open && (!reused || !known);
     await register(info, paths, wantsOpen ? (options.artifact ?? true) : undefined);
     if (options.artifact && process.connected && process.send) {
