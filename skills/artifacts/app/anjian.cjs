@@ -27,6 +27,10 @@ function ownerPid() {
 }
 
 function main() {
+  // Standalone copies can carry just the launcher and the compiled CLI.
+  if (fs.existsSync(path.join(__dirname, 'process-label.cjs'))) {
+    require('./process-label.cjs').labelProcess('Launcher');
+  }
   const cli = path.join(__dirname, 'cli.cjs');
   if (!fs.existsSync(cli)) {
     throw new Error(

@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { labelProcess } = require('../skills/artifacts/app/process-label.cjs');
 const { sessionOf, UUID } = require('../skills/artifacts/app/comment-subscriptions.cjs');
 const {
   unreadReceiptCount,
@@ -196,6 +197,7 @@ function documentSelections(session, root, budget) {
 }
 
 function main() {
+  labelProcess('Selection hook');
   const project = process.argv[2];
   const session = process.argv[3] || project;
   let input = {};

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { labelProcess } from '../../../skills/artifacts/app/process-label.cjs';
 import { version } from '../../package.json';
 import { openBrowser } from './browser-focus';
 import { startHub } from './hub';
@@ -23,6 +24,13 @@ function machineKey(file: string) {
 
 async function main() {
   const config = parseEnv(process.env, process.argv.slice(2));
+  // Linux start and stop match an exact argv entry in /proc.
+  if (process.platform === 'darwin') {
+    const identity = config.serverId && /^[\w-]{32,64}$/.test(config.serverId)
+      ? `--artifacts-server-id=${config.serverId}`
+      : undefined;
+    labelProcess('Hub', identity);
+  }
   const paths = machinePaths();
   ensureHome(paths.home);
   const hub = await startHub({

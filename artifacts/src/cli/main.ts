@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
 
+import { labelProcess } from '../../../skills/artifacts/app/process-label.cjs';
+
 import { commandHelp, type Options, parse, rootHelp, wantsHelp } from './command';
 import { COMMANDS } from './commands';
 import { CliError } from './paths';
@@ -88,6 +90,7 @@ async function main(argv: string[]) {
   }
 }
 
+labelProcess('CLI');
 main(process.argv.slice(2)).then(
   (code) => {
     process.exitCode = code;
