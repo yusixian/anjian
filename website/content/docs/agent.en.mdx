@@ -55,6 +55,28 @@ anjian comment reply --artifact document/plan --thread "actual-thread-ID" --text
 
 Here, `anjian` means the CLI built from this repository. You can replace it with `node /absolute/path/anjian/artifacts/dist/cli.cjs`. Run in the actual artifact project, or consistently pass the same `--project-dir`.
 
+## GitHub Copilot CLI
+
+Prepare a working Anjian CLI first. Install the complete `skills/artifacts/` directory from the Anjian source checkout as a project Skill. From your artifact project's root, run these commands with your own source path.
+
+```bash
+mkdir -p .github/skills/artifacts
+cp -R /absolute/path/anjian/skills/artifacts/. .github/skills/artifacts/
+copilot skill list
+```
+
+Confirm that `artifacts` appears in the project Skill list. Record the absolute path to the Anjian CLI or your wrapper in the project instructions above. When using `copilot -p`, start the local Hub in a separate terminal before starting Copilot from the artifact project.
+
+```bash
+anjian start --project-dir "$PWD" --no-open --foreground
+```
+
+Ask Copilot to use the `artifacts` Skill to create `document/plan` and give you its preview link. Open it in a browser and submit a comment. Return to the original session and ask Copilot to run the following command to read new comments. Add `--all` to see the full comment history.
+
+```bash
+anjian comment list --project-dir "$PWD" --artifact document/plan --json
+```
+
 ## Events and automation
 
 `anjian watch --json` emits events; the host must subscribe and schedule tasks itself. After an event, read comments or pull the artifact. Event output does not mean an Agent has automatically started working. The first watch does not replay all historical comments; use `comment list --all` when you need history.

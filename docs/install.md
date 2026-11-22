@@ -96,6 +96,10 @@ pi install /绝对路径/anjian
 anjian comment list --artifact document/plan --session "pi:$PI_SESSION_ID" --json
 ```
 
+## GitHub Copilot CLI
+
+从案间源码将完整的 `skills/artifacts/` 安装到作品项目的 `.github/skills/artifacts/`，用 `copilot skill list` 核对加载。运行入口、预览和手动回读见[文档站 Copilot 指南](https://anjian.cosine.ren/zh/docs/agent/#github-copilot-cli)。
+
 ## Antigravity CLI
 
 构建案间后，用本地源码目录安装插件。重新构建后，重新安装以更新 Antigravity 持有的插件副本。
