@@ -185,3 +185,48 @@ test('document comments remain readable at zero quota and normalize after capaci
     warning.mockRestore();
   }
 }, 40_000);
+
+test('restore from a comment backup follows the project write quota', async () => {
+  const temp = tempRoot();
+  const root = fs.realpathSync(temp.root);
+  const project = path.join(root, 'project');
+  const artifacts = path.join(project, '.anjian/artifacts');
+  writeDocument(artifacts, 'draft', { 'doc.xml': '<doc><p id="p">Text</p></doc>' });
+  const file = path.join(artifacts, 'document/draft/comments.json');
+  const paths = machinePaths({ ANJIAN_SERVER_HOME: path.join(root, 'home') });
+  registerProject(paths.projects, project);
+  const settings = createStorageSettings(paths.home);
+  const hub = await startHub({
+    paths, host: '127.0.0.1', urlHost: '127.0.0.1', ports: [0], boardPorts: [0],
+    token: 'a'.repeat(48), version: 'test', viewerDir: temp.viewer, runtimeDir: temp.runtime,
+  });
+  try {
+    const origin = `http://127.0.0.1:${hub.port}`;
+    const at = '2026-11-19T00:00:00.000Z';
+    const backup = {
+      version: 1,
+      threads: [{
+        id: 'archived', anchor: { blockId: 'p', quote: '' }, status: 'open', statusAt: at,
+        messages: [{ id: 'note', name: 'Reader', author: 'human', at, text: 'From backup' }],
+      }],
+    };
+    const restore = (headers: Record<string, string>) =>
+      fetch(origin + '/api/document/draft/comments/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(backup),
+      });
+    expect((await restore({})).status).toBe(403);
+    settings.setSharedLimit(0);
+    const denied = await restore({ Origin: origin });
+    expect(denied.status).toBe(413);
+    expect((await denied.json()).code).toBe('storage_quota_exceeded');
+    expect(fs.existsSync(file)).toBe(false);
+    settings.setSharedLimit(1024 * 1024);
+    expect((await restore({ Origin: origin })).status).toBe(200);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(backup);
+  } finally {
+    settings.setSharedLimit(1024 * 1024);
+    await hub.close();
+  }
+});

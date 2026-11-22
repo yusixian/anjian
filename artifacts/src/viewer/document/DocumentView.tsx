@@ -16,6 +16,7 @@ import { agentActivity } from './agentActivity';
 import type { AgentPlaybackState } from './AgentPlayback';
 import { type ArtifactReferenceResolver, LiveReferenceContext } from './ArtifactReferenceCard';
 import type { ThreadActions } from './CommentCard';
+import { CommentRecovery } from './CommentRecovery';
 import { DesktopDocument } from './DesktopDocument';
 import { DocumentEditor, extraNodes } from './DocumentEditor';
 import { useDocumentHistory } from './DocumentHistory';
@@ -108,6 +109,7 @@ export function DocumentView({
   const doc = loaded?.doc ?? null;
   const getAssetsRevision = useCallback(() => loaded?.assetsRevision, [loaded]);
   const getViewVersion = useCallback(() => (doc ? approvalViewKey(doc.frontiers()) : null), [doc]);
+  const [recoveryPending, setRecoveryPending] = useState(false);
   const [comments, setComments] = useState<CommentsFile>(emptyComments);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -152,6 +154,7 @@ export function DocumentView({
         setAgentActiveAt(state.agentActiveAt);
         syncClock(state.now);
         setComments(state.comments ?? emptyComments());
+        setRecoveryPending(Boolean(state.recoveryPending));
         const scroll = preserveScroll
           ? { left: window.scrollX, top: window.scrollY, behavior: 'instant' as const }
           : null;
@@ -178,7 +181,10 @@ export function DocumentView({
           setStreaming(event.streaming);
           setAgentActiveAt(event.agentActiveAt);
           syncClock(event.now);
-        } else if (event.type === 'doc-comments') setComments(event.comments);
+        } else if (event.type === 'doc-comments') {
+          setComments(event.comments);
+          setRecoveryPending(Boolean(event.recoveryPending));
+        }
       }),
     [channel, refreshMeta, syncClock],
   );
@@ -318,7 +324,6 @@ export function DocumentView({
       className={`anjian-doc ${stylex.props(styles.root).className ?? ''}`}
     >
       <TopBar
-        actions={barActions}
         activity={activity}
         agent={meta?.agent}
         agentSection={playback.section}
@@ -326,6 +331,19 @@ export function DocumentView({
         id={id}
         offline={offline && !quotaExceeded}
         openComments={openComments}
+        actions={
+          <>
+            {live && transport.restoreComments && !historyVisible ? (
+              <CommentRecovery
+                compact={phone}
+                pending={recoveryPending}
+                transport={transport}
+                onRestore={setComments}
+              />
+            ) : null}
+            {barActions}
+          </>
+        }
         history={{
           available: true,
           open: historyVisible,

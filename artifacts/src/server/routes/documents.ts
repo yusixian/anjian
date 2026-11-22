@@ -3,16 +3,21 @@ import type http from 'node:http';
 import { DOCUMENT_FEATURES_HEADER } from '../../shared/document-features';
 import { resolveArtifactDir } from '../artifacts';
 import type { ServerContext } from '../context';
-import { asHumanOp } from '../document-comments';
+import { asHumanOp, InvalidCommentBackup } from '../document-comments';
 import { DocumentPersistenceError, OutdatedClient } from '../document-session';
 import { send, sendJson } from '../http';
 import { MAX_DOCUMENT_UPDATE } from '../limits';
 import { readCommentBody } from './comments';
 import { RemoteTransferError } from '../remote-transfer';
-import { refreshRequestStorageAdmission, requestStorageAdmission } from '../storage/request-admission';
+import {
+  refreshRequestStorageAdmission,
+  requestStorageAdmission,
+} from '../storage/request-admission';
 import type { HttpRoute } from './table';
 
 const API_DOCUMENT_STATE_ROUTE = /^\/api\/document\/([^/]+)\/state$/;
+const MAX_COMMENT_BACKUP = 4 * 1024 * 1024;
+const API_DOCUMENT_COMMENT_BACKUP_ROUTE = /^\/api\/document\/([^/]+)\/comments\/restore$/;
 const API_DOCUMENT_WRITE_ROUTE = /^\/api\/document\/([^/]+)\/(update|comments)$/;
 
 async function serveDocumentState(res: http.ServerResponse, ctx: ServerContext, id: string) {
@@ -126,4 +131,73 @@ export const documentWriteRoute: HttpRoute<ServerContext> = {
     match[2] === 'comments'
       ? serveDocumentComments(req, res, ctx, match[1]!)
       : serveDocumentUpdate(req, res, ctx, match[1]!),
+};
+
+export const documentCommentRestoreRoute: HttpRoute<ServerContext> = {
+  path: API_DOCUMENT_COMMENT_BACKUP_ROUTE,
+  methods: ['POST'],
+  auth: 'same-origin',
+  async handle(req, res, ctx, { match }) {
+    const id = match[1]!;
+    if (!resolveArtifactDir(ctx.root, 'document', id)) {
+      sendJson(res, 404, { error: `document/${id} not found` });
+      return;
+    }
+    if (req.headers['content-type']?.split(';', 1)[0]?.trim() !== 'application/json') {
+      sendJson(res, 415, { error: 'Expected a JSON comment backup' });
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size <= MAX_COMMENT_BACKUP) chunks.push(chunk as Buffer);
+    }
+    if (size > MAX_COMMENT_BACKUP) {
+      sendJson(res, 413, { error: 'Comment backup exceeds 4 MiB' });
+      return;
+    }
+    try {
+      ctx.documents.restoreComments(
+        id,
+        Buffer.concat(chunks).toString('utf8'),
+        requestStorageAdmission(req),
+      );
+    } catch (error) {
+      if (!(error instanceof InvalidCommentBackup)) throw error;
+      sendJson(res, 400, { error: error.message });
+      return;
+    }
+    sendJson(res, 200, { comments: ctx.documents.viewerComments(id) });
+  },
+};
+
+const recoveryPath = /^\/api\/document\/([^/]+)\/comments\/recovery\/(review|apply)$/;
+
+export const documentCommentRecoveryRoute: HttpRoute<ServerContext> = {
+  path: recoveryPath,
+  methods: ['POST'],
+  auth: 'same-origin',
+  async handle(req, res, ctx, { match }) {
+    const id = match[1]!;
+    if (!resolveArtifactDir(ctx.root, 'document', id)) {
+      sendJson(res, 404, { error: `document/${id} not found` });
+      return;
+    }
+    if (match[2] === 'review') {
+      sendJson(res, 200, { recovery: ctx.documents.commentRecovery(id) });
+      return;
+    }
+    const body = await readCommentBody(req);
+    const revision = (body as { revision?: unknown } | null)?.revision;
+    if (typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) {
+      sendJson(res, 400, { error: 'Invalid comment recovery revision' });
+      return;
+    }
+    if (!ctx.documents.restoreCommentRecovery(id, revision, requestStorageAdmission(req))) {
+      sendJson(res, 409, { error: 'Comment recovery changed. Review it again.' });
+      return;
+    }
+    sendJson(res, 200, { comments: ctx.documents.viewerComments(id) });
+  },
 };

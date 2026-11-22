@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 
 import { nanoid } from 'nanoid';
@@ -13,12 +14,15 @@ import {
   type HumanOp,
   type IncomingComments,
   mergeComments,
+  mergeRestoredComments,
+  type Message,
   parseComments,
   type Person,
   savedComments,
 } from '../shared/comments';
 import type { CommentNames } from './comment-names';
 import { writeJsonAtomic } from './state';
+import { writeJsonFiles } from './storage/json-files';
 
 const MAX_TEXT = 20000;
 
@@ -102,9 +106,15 @@ export interface Store<F, H, G> {
     messageId?: string,
   ) => { file: F; threadId: string; messageId?: string };
   current: () => F;
+  hasRecovery: () => boolean;
+  recovery: () => { backup: F; revision: string } | null;
+  restore: (text: string, admit?: CommentAdmission) => F;
+  restoreRecovery: (revision: string, admit?: CommentAdmission) => boolean;
   sync: (admit?: CommentAdmission) => boolean;
   warnings: () => string[];
 }
+export class InvalidCommentBackup extends Error {}
+
 export type CommentAdmission = (deltaBytes: number) => void;
 
 export type CommentStore = Store<CommentsFile, HumanOp, AgentOp>;
@@ -138,6 +148,81 @@ const documentRules: StoreRules<CommentsFile, HumanOp, AgentOp> = {
   agent: applyAgentOp,
 };
 
+const validBackupTime = (value: unknown): value is string =>
+  isText(value, 64) && Number.isFinite(Date.parse(value));
+
+function validBackupMessage(message: Message) {
+  return (
+    isId(message.id) &&
+    validBackupTime(message.at) &&
+    isText(message.text) &&
+    (message.name === undefined || isText(message.name, 200)) &&
+    (message.avatar === undefined || isText(message.avatar, 2000)) &&
+    (message.editedAt === undefined || validBackupTime(message.editedAt)) &&
+    (message.deleted === undefined || (message.deleted === true && message.text === ''))
+  );
+}
+
+function readCommentBackup<F extends CommentsFile<unknown>>(
+  text: string,
+  readSaved: (incoming: IncomingComments) => F,
+): F {
+  const invalid = new InvalidCommentBackup('Invalid saved comment backup');
+  let incoming: IncomingComments;
+  let backup: F;
+  try {
+    incoming = parseComments(text);
+    backup = readSaved(incoming);
+  } catch {
+    throw invalid;
+  }
+  if (
+    incoming.version !== 1 ||
+    backup.threads.length !== incoming.threads.length ||
+    new Set(backup.threads.map(({ id }) => id)).size !== backup.threads.length
+  )
+    throw invalid;
+  for (const [index, thread] of backup.threads.entries()) {
+    const messages = thread.messages;
+    if (
+      !isId(thread.id) ||
+      !validBackupTime(thread.statusAt) ||
+      messages.length !== (incoming.threads[index]?.messages?.length ?? 0) ||
+      new Set(messages.map(({ id }) => id)).size !== messages.length ||
+      messages.some((message) => !validBackupMessage(message))
+    )
+      throw invalid;
+  }
+  return backup;
+}
+
+interface CommentRecovery {
+  file: string;
+  root: string;
+}
+
+function rejectedHumanComments<F extends CommentsFile<unknown>>(incoming: F, visible: F): F {
+  const byThread = new Map(visible.threads.map((thread) => [thread.id, thread]));
+  const threads = incoming.threads.flatMap((thread) => {
+    if (!isId(thread.id) || !validBackupTime(thread.statusAt)) return [];
+    const current = new Map(byThread.get(thread.id)?.messages.map((m) => [m.id, m]));
+    const messages = thread.messages.filter((message) => {
+      if (message.author !== 'human' || !validBackupMessage(message)) return false;
+      const saved = current.get(message.id);
+      if (!saved) return true;
+      return (
+        saved.author === 'human' &&
+        saved.at === message.at &&
+        !saved.deleted &&
+        (message.deleted ||
+          Date.parse(message.editedAt ?? message.at) > Date.parse(saved.editedAt ?? saved.at))
+      );
+    });
+    return messages.length ? [{ ...thread, messages }] : [];
+  });
+  return { ...incoming, threads };
+}
+
 const noNames: CommentNames = { human: () => undefined, agent: () => undefined };
 
 export function createCommentStore(
@@ -147,11 +232,23 @@ export function createCommentStore(
   newId = () => nanoid(10),
   admit?: CommentAdmission,
   deferNormalization = false,
+  recoveryFile?: CommentRecovery,
 ): CommentStore {
-  return createStore(file, documentRules, names, now, newId, admit, undefined, deferNormalization);
+  return createStore(
+    file,
+    documentRules,
+    names,
+    now,
+    newId,
+    admit,
+    undefined,
+    deferNormalization,
+    undefined,
+    recoveryFile,
+  );
 }
 
-export function createStore<F, H, G>(
+export function createStore<F extends CommentsFile<unknown>, H, G>(
   file: string,
   rules: StoreRules<F, H, G>,
   names = noNames,
@@ -161,14 +258,60 @@ export function createStore<F, H, G>(
   persist?: (next: F, admit?: CommentAdmission) => void,
   deferNormalization = false,
   read?: () => string | null,
+  recoveryFile?: CommentRecovery,
 ): Store<F, H, G> {
   let current = rules.empty();
   let lastSeen: string | null = null;
   let warnings: string[] = [];
   let loaded = false;
   let normalizationPending = false;
+  let rejected: F | undefined;
 
-  const write = (next: F, admit?: CommentAdmission) => {
+  const backupOnDisk = () => {
+    if (!recoveryFile) return null;
+    let fd: number;
+    try {
+      fd = fs.openSync(
+        recoveryFile.file,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+    try {
+      if (!fs.fstatSync(fd).isFile()) throw new Error('Unsafe comment recovery file');
+      const text = fs.readFileSync(fd, 'utf8');
+      return readCommentBackup(text, rules.saved);
+    } finally {
+      fs.closeSync(fd);
+    }
+  };
+
+  const recovery = () => {
+    const prior = backupOnDisk();
+    if (!rejected) return prior;
+    return prior
+      ? readCommentBackup(JSON.stringify(mergeRestoredComments(prior, rejected)), rules.saved)
+      : rejected;
+  };
+
+  const pendingRecovery = () => {
+    const backup = recovery();
+    return backup
+      ? { backup, revision: createHash('sha256').update(JSON.stringify(backup)).digest('hex') }
+      : null;
+  };
+
+  const preserveRejected = (admit?: CommentAdmission) => {
+    if (!recoveryFile || !rejected) return;
+    const backup = recovery();
+    writeJsonFiles(recoveryFile.root, [{ file: recoveryFile.file, value: backup }], admit);
+    rejected = undefined;
+  };
+
+  const write = (next: F, admit?: CommentAdmission, preserveRecovery = true) => {
+    if (preserveRecovery) preserveRejected(admit);
     const text = `${JSON.stringify(next, null, 2)}\n`;
     if (persist) persist(next, admit);
     else {
@@ -207,6 +350,15 @@ export function createStore<F, H, G>(
       const incoming = parseComments(text);
       const base = loaded ? current : rules.saved(incoming);
       merged = rules.merge(base, incoming, 'agent', now(), newId, names.agent());
+      if (recoveryFile && loaded && merged.warnings.length) {
+        const deferred = rejectedHumanComments(rules.saved(incoming), merged.file);
+        if (deferred.threads.length) {
+          const validated = readCommentBackup(JSON.stringify(deferred), rules.saved);
+          rejected = rejected
+            ? { ...rejected, ...mergeRestoredComments(rejected, validated) }
+            : validated;
+        }
+      }
     } catch (err) {
       lastSeen = text;
       normalizationPending = false;
@@ -228,12 +380,35 @@ export function createStore<F, H, G>(
     return true;
   };
 
+  const mergeBackup = (backup: F, admit?: CommentAdmission) => {
+    const merged = { ...current, ...mergeRestoredComments(current, backup) };
+    if (JSON.stringify(merged) !== JSON.stringify(current)) write(merged, admit);
+    return current;
+  };
+
   sync(initialAdmission);
   loaded = true;
   return {
     current: () => current,
     warnings: () => warnings,
     sync,
+    restore: (text, admit) => {
+      const backup = readCommentBackup(text, rules.saved);
+      sync(admit);
+      return mergeBackup(backup, admit);
+    },
+    hasRecovery: () => Boolean(recoveryFile && (rejected || fs.existsSync(recoveryFile.file))),
+    recovery: pendingRecovery,
+    restoreRecovery: (revision, admit) => {
+      if (!recoveryFile) return false;
+      sync();
+      const offered = pendingRecovery();
+      if (!offered || offered.revision !== revision) return false;
+      write({ ...current, ...mergeRestoredComments(current, offered.backup) }, admit, false);
+      rejected = undefined;
+      fs.rmSync(recoveryFile.file, { force: true });
+      return true;
+    },
     apply: (op, admit) => {
       sync(admit);
       const next = rules.human(current, op, now(), newId, names.human());
