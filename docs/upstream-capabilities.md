@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.7.3`（`a71a1ef`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.7.3) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.9.0`（`8433ffa`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.9.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -48,6 +48,14 @@
 | 从最新消息开始阅读白板或幻灯片的长讨论，向上查看历史 | 白板「评论」和幻灯片「本页批注」的卡片可以独立滚动。桌面及 390 px Chrome 核对初始位置、键盘和刷新。[验收 PR #101](https://github.com/yusixian/anjian/pull/101) · [v0.7.1 更新说明](https://anjian.cosine.ren/zh/docs/updates/#071) |
 | 在 Hub 运行时切换或合并 Git 分支，核对并恢复带入的人工批注 | 在原文档、画板、白板、幻灯片或分镜点「恢复批注」，预览并确认合并，也可导入原作品的备份。五类作品的隔离 Hub、Git、CLI 和 Chrome 验收见 [PR #103](https://github.com/yusixian/anjian/pull/103)。[上手指南](https://anjian.cosine.ren/zh/docs/review-workflows/#恢复批注) · [v0.7.2 更新说明](https://anjian.cosine.ren/zh/docs/updates/#072) |
 | 在 HTML 预览中查看页面启动时上报的运行错误 | 保留首次文件监听事件前上报的运行警告。编辑源文件后清除旧警告。[Hub 回归 PR #106](https://github.com/yusixian/anjian/pull/106) · [v0.7.3 主分支检查](https://github.com/yusixian/anjian/actions/runs/45011465868) · [v0.7.3 更新说明](https://anjian.cosine.ren/zh/docs/updates/#073) |
+
+## v0.7.4 至 v0.9.0 画板评审
+
+| 用户或 Agent 的任务 | 案间入口和验证证据 |
+| --- | --- |
+| 从文档查看画板选择组已提交的方案 | 选择组引用卡片显示提交结果，撤回后清除，可跳回原选择组。[Hub 与 Chrome 验收 #111](https://github.com/yusixian/anjian/pull/111) · [v0.7.4 更新说明](https://anjian.cosine.ren/zh/docs/updates/#074) |
+| 在同一画板用动作或条件串起多个界面 | Agent 可用 `canvas.json` 的 `connections` 连接卡片。Chrome 核对跨页隔离、移动、平移和缩放。[验收 #115](https://github.com/yusixian/anjian/pull/115) · [v0.8.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#080) |
+| 在浏览器移动画板卡片、标题和便签，继续让 Agent 更新作品 | 「调整布局」支持拖动和键盘微调。隔离 Hub 核对并发冲突、上传与重启，Chrome 核对桌面和触摸。[验收 #119](https://github.com/yusixian/anjian/pull/119) · [v0.9.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#090) |
 
 ## 待验证能力
 
