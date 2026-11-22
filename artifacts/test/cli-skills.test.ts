@@ -15,6 +15,7 @@ const references = [
   'document.md',
   'html.md',
   'icons.md',
+  'phone-mockups.md',
   'remote.md',
   'slides.md',
   'storyboard.md',
@@ -24,7 +25,7 @@ const references = [
 ];
 
 function fixture(launcher = false) {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-skills-')));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-skills-$&-')));
   temps.push(dir);
   const app = path.join(dir, 'app');
   const project = path.join(dir, 'project');
@@ -88,7 +89,9 @@ test.each([false, true])(
       expect(markdown.stdout).toBe(value.content + '\n');
       // Verify the complete source survives embedding, including the final byte.
       const original = fs.readFileSync(path.join(source, reference), 'utf8');
-      expect(value.content).toContain(original.replaceAll('node app/anjian.cjs', value.command));
+      expect(value.content).toContain(
+        original.replaceAll('node app/anjian.cjs', () => value.command),
+      );
       expect(value.command).toContain(launcher ? 'anjian.cjs' : 'cli.cjs');
     }
     for (const args of [['--help'], ['skills', '--help'], ['remote', 'status', '--json']]) {

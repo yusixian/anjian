@@ -20,16 +20,24 @@ export interface ShareArtifact {
   url: string;
 }
 
-export interface ShareRecord extends ShareArtifact {
-  token: string;
-  project: string;
+export interface ShareReferenceInput {
+  artifact: ShareArtifact;
+  expectedRevision: string;
+  key: string;
   title: string;
-  publishedAt: number;
+}
+
+export interface ShareRecord extends ShareArtifact {
+  bytes: number;
   expiresAt: number | null;
+  files: string[];
+  project: string;
+  publishedAt: number;
+  references?: Record<string, string>;
   revision: string;
   snapshotDir: string;
-  files: string[];
-  bytes: number;
+  title: string;
+  token: string;
 }
 
 export class ShareStoreError extends Error {
@@ -39,8 +47,22 @@ export class ShareStoreError extends Error {
   }
 }
 
-type IndexEntry = Omit<ShareRecord, 'snapshotDir'> & { snapshotId: string };
+type SnapshotFields = Pick<ShareRecord, 'type' | 'id' | 'url' | 'title' | 'revision' | 'files' | 'bytes'>;
+type ChildEntry = SnapshotFields & { slot: string; token: string };
+type IndexEntry = Omit<ShareRecord, 'snapshotDir' | 'references'> & {
+  snapshotId: string;
+  children?: Record<string, ChildEntry>;
+};
 type Index = { version: 1; records: Record<string, IndexEntry> };
+
+function validFields(entry: SnapshotFields) {
+  return isArtifactType(entry.type) && isArtifactId(entry.id) &&
+    typeof entry.url === 'string' && new RegExp(`^/${entry.type}/[A-Za-z0-9_-]+$`).test(entry.url) &&
+    typeof entry.title === 'string' &&
+    typeof entry.revision === 'string' && /^sha256:[a-f0-9]{64}$/.test(entry.revision) &&
+    Array.isArray(entry.files) && entry.files.every((file) => typeof file === 'string' && validFile(file)) &&
+    Number.isSafeInteger(entry.bytes) && entry.bytes >= 0;
+}
 
 function validFile(file: string) {
   if (!file || file.startsWith('/') || file.includes('\\') || /[\x00-\x1f\x7f]/.test(file)) return false;
@@ -91,14 +113,13 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
       const entry = candidate as IndexEntry;
       if (!/^[a-f0-9]{64}$/.test(key) || !entry || typeof entry !== 'object' ||
           !TOKEN.test(entry.token) || !SNAPSHOT.test(entry.snapshotId) ||
-          !isArtifactType(entry.type) || !isArtifactId(entry.id) ||
           typeof entry.project !== 'string' || !path.isAbsolute(entry.project) ||
-          typeof entry.url !== 'string' || !new RegExp(`^/${entry.type}/[A-Za-z0-9_-]+$`).test(entry.url) ||
-          typeof entry.title !== 'string' || !Number.isFinite(entry.publishedAt) ||
-          !(entry.expiresAt === null || Number.isFinite(entry.expiresAt)) ||
-          typeof entry.revision !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(entry.revision) ||
-          !Array.isArray(entry.files) || !entry.files.every((file) => typeof file === 'string' && validFile(file)) ||
-          !Number.isSafeInteger(entry.bytes) || entry.bytes < 0)
+          !Number.isFinite(entry.publishedAt) || !(entry.expiresAt === null || Number.isFinite(entry.expiresAt)) ||
+          !validFields(entry) || (entry.children !== undefined && (!entry.children ||
+            typeof entry.children !== 'object' || Array.isArray(entry.children) ||
+            Object.entries(entry.children).some(([key, child]) => !key || !child ||
+              !validFields(child) || typeof child.slot !== 'string' || !SNAPSHOT.test(child.slot) ||
+              typeof child.token !== 'string' || !TOKEN.test(child.token)))))
         throw new ShareStoreError(503, 'share_index_unavailable', 'Share index is invalid');
     }
     return parsed as Index;
@@ -113,7 +134,7 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     } finally { fs.rmSync(tmp, { force: true }); }
   };
 
-  const sourceAlive = (entry: IndexEntry) => {
+  const sourceAlive = (entry: ShareArtifact & { project: string }) => {
     const components = [entry.project, path.join(entry.project, '.anjian'),
       path.join(entry.project, '.anjian', 'artifacts'),
       path.join(entry.project, '.anjian', 'artifacts', entry.type),
@@ -133,10 +154,12 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
   };
 
   const recordOf = (entry: IndexEntry): ShareRecord => {
-    const { snapshotId, ...fields } = entry;
+    const { snapshotId, children, ...fields } = entry;
     if (!SNAPSHOT.test(snapshotId))
       throw new ShareStoreError(503, 'share_index_unavailable', 'Share snapshot reference is invalid');
-    return { ...fields, snapshotDir: path.join(snapshots, snapshotId) };
+    return { ...fields, snapshotDir: path.join(snapshots, snapshotId),
+      ...(children && { references: Object.fromEntries(Object.entries(children).map(([key, child]) => [key, child.token])) }),
+    };
   };
 
   const current = (entry: IndexEntry | undefined): ShareRecord | null =>
@@ -146,10 +169,18 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
   const status = (project: string, artifact: ShareArtifact) =>
     current(index().records[keyOf(project, artifact)]);
 
-  const find = (token: string) => {
+  const find = (token: string): ShareRecord | null => {
     if (!TOKEN.test(token)) return null;
     for (const entry of Object.values(index().records)) {
       if (entry.token === token) return current(entry);
+      const child = Object.values(entry.children ?? {}).find((candidate) => candidate.token === token);
+      if (child) {
+        const parent = current(entry);
+        if (!parent) return null;
+        const { slot, ...fields } = child;
+        return { ...fields, project: parent.project, publishedAt: parent.publishedAt, expiresAt: parent.expiresAt,
+          snapshotDir: path.join(parent.snapshotDir, '.references', slot) };
+      }
     }
     return null;
   };
@@ -174,34 +205,19 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     return expired.length;
   };
 
-  const publish = (
-    project: string,
-    artifact: ShareArtifact,
-    settings: { expiresInDays?: 1 | 7 | 30 | null; title: string },
-    admit?: (bytes: number) => void,
-  ) => {
-    const key = keyOf(project, artifact);
-    if (![1, 7, 30, null, undefined].includes(settings.expiresInDays) ||
-        !settings.title.trim() || settings.title.length > 300)
+  const capture = (project: string, artifact: ShareArtifact, title: string, expectedRevision?: string) => {
+    keyOf(project, artifact);
+    if (!title.trim() || title.length > 300 || artifact.type === 'storyboard')
       throw new ShareStoreError(400, 'invalid_share', 'Invalid share settings');
-    if (artifact.type === 'storyboard') throw new ShareStoreError(400, 'invalid_share', 'Export a storyboard video to share it');
-    cleanupExpired();
+    if (!sourceAlive({ ...artifact, project: path.resolve(project) }))
+      throw new ShareStoreError(404, 'artifact_not_found', 'Artifact identity changed');
     // readRemoteArtifact applies the existing 32 MiB, path and symlink restrictions.
     const snapshot = readRemoteArtifact(project, `${artifact.type}/${artifact.id}`);
     if (!snapshot.revision) throw new ShareStoreError(404, 'artifact_not_ready', 'Artifact is not ready to share');
-    const old = index();
-    const previous = old.records[key];
-    const identity: IndexEntry = {
-      ...(previous ?? { snapshotId: '' }), ...artifact,
-      token: previous?.token ?? crypto.randomBytes(32).toString('base64url'),
-      project: path.resolve(project), title: settings.title.trim(), publishedAt: now(),
-      expiresAt: settings.expiresInDays === undefined
-        ? (previous ? previous.expiresAt : now() + 7 * 86_400_000)
-        : settings.expiresInDays === null ? null : now() + settings.expiresInDays * 86_400_000,
-      revision: snapshot.revision, files: Object.keys(snapshot.files), bytes: 0,
-      snapshotId: crypto.randomUUID(),
-    };
-    if (!sourceAlive(identity)) throw new ShareStoreError(404, 'artifact_not_found', 'Artifact identity changed');
+    if (!sourceAlive({ ...artifact, project: path.resolve(project) }))
+      throw new ShareStoreError(404, 'artifact_not_found', 'Artifact identity changed');
+    if (expectedRevision !== undefined && expectedRevision !== snapshot.revision)
+      throw new ShareStoreError(409, 'revision_conflict', 'Artifact changed before publication');
     const files = Object.entries(snapshot.files).map(([file, base64]) => {
       if (!validFile(file)) throw new ShareStoreError(422, 'unsafe_snapshot', 'Unsafe snapshot file');
       const body = Buffer.from(base64, 'base64');
@@ -210,17 +226,9 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
       if (!deck) throw new ShareStoreError(422, 'invalid_snapshot', 'Invalid slide deck');
       return [SLIDE_DECK_FILE, Buffer.from(JSON.stringify(publishedSlideDeck(deck)))] as const;
     });
-    identity.bytes = files.reduce((sum, [, body]) => sum + body.length, 0);
-    const usage = Object.values(old.records).reduce((sum, entry) => sum + entry.bytes, 0) - (previous?.bytes ?? 0);
-    if (identity.bytes + usage > maxBytes)
-      throw new ShareStoreError(413, 'share_storage_full', 'Public share storage is full');
-    // Reserve the entire new snapshot: the old one must remain available until publication succeeds.
-    admit?.(identity.bytes);
-    safeDirectory(root);
-    safeDirectory(snapshots);
-    const directory = path.join(snapshots, identity.snapshotId);
-    fs.mkdirSync(directory, { mode: 0o700 });
-    try {
+    const fields: SnapshotFields = { type: artifact.type, id: artifact.id, url: artifact.url, title: title.trim(), revision: snapshot.revision,
+      files: files.map(([name]) => name), bytes: files.reduce((sum, [, body]) => sum + body.length, 0) };
+    const write = (directory: string) => {
       for (const [file, body] of files) {
         const target = path.join(directory, file);
         fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
@@ -243,6 +251,62 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
         }
       } catch {
         throw new ShareStoreError(422, 'invalid_snapshot', 'Artifact is not ready for public sharing');
+      }
+    };
+    return { fields, write };
+  };
+
+  const publish = (
+    project: string,
+    artifact: ShareArtifact,
+    settings: { expiresInDays?: 1 | 7 | 30 | null; title: string; expectedRevision?: string; references?: ShareReferenceInput[] },
+    admit?: (bytes: number) => void,
+  ) => {
+    const key = keyOf(project, artifact);
+    if (![1, 7, 30, null, undefined].includes(settings.expiresInDays) ||
+        !settings.title.trim() || settings.title.length > 300)
+      throw new ShareStoreError(400, 'invalid_share', 'Invalid share settings');
+    if (artifact.type === 'storyboard') throw new ShareStoreError(400, 'invalid_share', 'Export a storyboard video to share it');
+    cleanupExpired();
+    const parent = capture(project, artifact, settings.title, settings.expectedRevision);
+    const old = index();
+    const previous = old.records[key];
+    const identity: IndexEntry = {
+      ...parent.fields,
+      token: previous?.token ?? crypto.randomBytes(32).toString('base64url'),
+      project: path.resolve(project), publishedAt: now(),
+      expiresAt: settings.expiresInDays === undefined
+        ? (previous ? previous.expiresAt : now() + 7 * 86_400_000)
+        : settings.expiresInDays === null ? null : now() + settings.expiresInDays * 86_400_000,
+      snapshotId: crypto.randomUUID(),
+    };
+    const children: { slot: string; write: (directory: string) => void }[] = [];
+    for (const reference of settings.references ?? []) {
+      identity.children ??= Object.create(null) as Record<string, ChildEntry>;
+      if (!reference.key || Object.hasOwn(identity.children, reference.key) || !reference.expectedRevision)
+        throw new ShareStoreError(400, 'invalid_share', 'Invalid share reference');
+      const child = capture(project, reference.artifact, reference.title, reference.expectedRevision);
+      const slot = crypto.randomUUID();
+      identity.children[reference.key] = { ...child.fields, token: crypto.randomBytes(32).toString('base64url'), slot };
+      children.push({ slot, write: child.write });
+      identity.bytes += child.fields.bytes;
+      if (identity.bytes > maxBytes) throw new ShareStoreError(413, 'share_storage_full', 'Public share storage is full');
+    }
+    const usage = Object.values(old.records).reduce((sum, entry) => sum + entry.bytes, 0) - (previous?.bytes ?? 0);
+    if (identity.bytes + usage > maxBytes)
+      throw new ShareStoreError(413, 'share_storage_full', 'Public share storage is full');
+    // Reserve the entire new snapshot: the old one must remain available until publication succeeds.
+    admit?.(identity.bytes);
+    safeDirectory(root);
+    safeDirectory(snapshots);
+    const directory = path.join(snapshots, identity.snapshotId);
+    fs.mkdirSync(directory, { mode: 0o700 });
+    try {
+      parent.write(directory);
+      for (const child of children) {
+        const childDir = path.join(directory, '.references', child.slot);
+        safeDirectory(childDir);
+        child.write(childDir);
       }
       persist({ version: 1, records: { ...old.records, [key]: identity } });
     } catch (error) {
@@ -292,6 +356,8 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     const previous = old.records[key];
     if (!previous || !current(previous)) throw new ShareStoreError(404, 'share_not_found', 'Share not found');
     const changed = { ...previous, token: crypto.randomBytes(32).toString('base64url') };
+    if (previous.children) changed.children = Object.fromEntries(Object.entries(previous.children).map(([key, child]) =>
+      [key, { ...child, token: crypto.randomBytes(32).toString('base64url') }]));
     persist({ version: 1, records: { ...old.records, [key]: changed } });
     return recordOf(changed);
   };
@@ -299,7 +365,9 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
   const file = (record: ShareRecord, relative: string) => {
     if (!validFile(relative) || !record.files.includes(relative)) return null;
     // Re-check current authority to avoid serving an old record after revoke or rotate.
-    if (find(record.token)?.revision !== record.revision) return null;
+    const live = find(record.token);
+    if (!live || live.revision !== record.revision || live.snapshotDir !== record.snapshotDir ||
+        !live.files.includes(relative)) return null;
     const target = path.join(record.snapshotDir, relative);
     try {
       if (!fs.realpathSync(target).startsWith(`${fs.realpathSync(record.snapshotDir)}${path.sep}`)) return null;

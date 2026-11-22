@@ -107,6 +107,7 @@ describe('anjian start', () => {
     const { code, out } = run(['start', '--project-dir', project]);
     expect(code).toBe(0);
     expect(out.type).toBe('server-started');
+    expect(out).not.toHaveProperty('mockupGuide');
     expect(out.root).toBe(fs.realpathSync(path.join(project, '.anjian', 'artifacts')));
     expect(out.url).toMatch(/^http:\/\/localhost:\d+\/$/);
     expect((await get(out.url.replace('localhost', '127.0.0.1'))).status).toBe(200);
@@ -117,6 +118,19 @@ describe('anjian start', () => {
     expect(
       JSON.parse(fs.readFileSync(path.join(stateOf(project), 'server-info'), 'utf8')).url,
     ).toBe(out.url);
+  }, 30000);
+
+  test('returns the bundled phone mockup guide on fresh and reused starts', () => {
+    const project = newProject();
+    const args = ['start', '--mockup', '--project-dir', project, '--artifact', 'artboard/booking'];
+    const first = run(args);
+    expect(first.code).toBe(0);
+    expect(new URL(first.out.link).pathname).toMatch(/^\/artboard\/[A-Za-z0-9]{21}$/);
+    expect(first.out.mockupGuide).toContain('# Phone mockups');
+    const reused = run(args);
+    expect(reused.out.reused).toBe(true);
+    expect(reused.out.link).toBe(first.out.link);
+    expect(reused.out.mockupGuide).toBe(first.out.mockupGuide);
   }, 30000);
 
   test('two projects share one server process and one port', () => {

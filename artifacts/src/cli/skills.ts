@@ -16,6 +16,10 @@ export function cliCommand() {
   );
 }
 
+export function artifactSkillBody(reference: string, command = cliCommand()) {
+  return CLI_SKILL_DOCUMENTS[reference]!.replaceAll('node app/anjian.cjs', () => command);
+}
+
 export function remoteGuide() {
   return `${cliCommand()} skills get artifacts --reference remote.md`;
 }
@@ -52,7 +56,7 @@ export const skillsCommand: CommandSpec = {
     )
       throw new CliError(`Unknown reference: ${reference}. Use skills list for allowed names.`);
     const command = cliCommand();
-    const body = CLI_SKILL_DOCUMENTS[reference]!.replaceAll('node app/anjian.cjs', command);
+    const body = artifactSkillBody(reference, command);
     const header = `<!-- Anjian built-in artifacts / ${reference} -->\n\nCurrent CLI: ${command}\n\nUse this entry point wherever the guide says anjian or app/anjian.cjs. Preserve any configured wrapper and ANJIAN_CLIENT_HOME.\nRead references with: ${command} skills get artifacts --reference <name>\nAllowed references: ${references.join(', ')}\nRelative document links refer to these bundled references, not files in your project.\n\n`;
     emit({ type: 'skill', name, reference, command, content: header + body });
     return 0;

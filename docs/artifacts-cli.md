@@ -16,6 +16,12 @@ node skills/artifacts/app/anjian.cjs stop --json
 
 在 Codex 或 Claude Code 的案间启动器中用 `start --project-dir <目录> --artifact <作品>`，成功打开后将该作品的本地反馈订阅到当前会话。订阅与 Hub 状态目录分开，启动器和监听器须使用相同的 `ANJIAN_RUNTIME_DIR`（如果配置了该变量），订阅索引按用户主目录解析相对路径。当嵌套宿主同时提供两种会话 ID 时，在启动器调用中设置 `ANJIAN_COMMENT_HOST=codex` 或 `ANJIAN_COMMENT_HOST=claude`，以选择实际接收会话。
 
+## 手机样机
+
+用 `anjian start --mockup --json --project-dir <项目> --artifact artboard/<作品>`
+启动本地评审。返回的 `mockupGuide` 包含设备尺寸、安全区和同组方案对比的引导。
+使用 `anjian skills get artifacts --reference phone-mockups.md` 可单独读取指南。
+
 ## 批注已读状态
 
 Codex 和 Claude Code 的 `comment list` 使用当前会话的已读状态。其他客户端可传 `--session <id>`。相同作品的不同会话独立确认，远程调用同时按已授权设备隔离。无会话的调用沿用旧游标。

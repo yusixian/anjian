@@ -1,5 +1,312 @@
 # anjian-workflow
 
+## 0.5.0
+
+### Minor Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+新增 Antigravity CLI 反馈会话。可以为指定的本地文档和画板接收批注、选择提交与撤回通知，并用当前会话的回执读取待办。
+
+<!-- anjian:en -->
+
+#### English
+
+Start an Antigravity CLI feedback session for selected local documents and artboards. It receives comment and choice updates and uses a session-specific receipt to read pending feedback.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+Agent 可用 `changes` 查看文档保留的版本，以及指定区间内人工编辑涉及的块和操作。用 `review` 可查看已保存的评审意见、引用位置和画板证据状态。两个命令都接受浏览器稳定地址或作品目录名，都有 JSON 输出，也可重复查询，保留原作品和评论未读状态。
+
+<!-- anjian:en -->
+
+#### English
+
+Agents can use `changes` to list retained document versions and identify the blocks and operations involved in human edits over a selected range. The `review` command reports saved review comments, their locations, and the status of artboard evidence. Both commands accept stable browser addresses or directory slugs, support repeatable JSON queries and preserve artifact files and unread comments.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+可将排版、色彩、布局和组件规范保存为可复用的案间文档。验收报告可以固定所用规范的版本，将规则关联到检查结果或画板验收组，并标明尚未覆盖的规则。
+
+<!-- anjian:en -->
+
+#### English
+
+Save typography, color, layout, and component rules as a reusable Anjian document. Verification reports can pin the exact specification revision, link rules to check results or artboard review groups, and identify rules without coverage.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+文档可以用批准题记录读者对当前修订的明确决定。决定保留批准人、选项和修订，设计变更后会提示重新评审。Agent 可用 `approval` 查看记录或在实施前核对当前修订是否获批。
+
+<!-- anjian:en -->
+
+#### English
+
+Documents can include an approval question that records a reader's explicit decision for the current revision. Each decision retains the reviewer, choice, and revision. Design changes require a new review, and agents can use `approval` to inspect decisions or check that the current revision is approved before implementation.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+本地 HTML 预览支持主动将选中的文字发送给打开过该预览的 Codex 或 Claude Code 会话。发送保存当时的选区与作品版本，刷新或切换选区后，Agent 仍可读取已发送的快照。
+
+<!-- anjian:en -->
+
+#### English
+
+Send selected text from a local HTML preview to a Codex or Claude Code session that opened the preview. Each send preserves the selection and artifact revision so the Agent can read the snapshot after the page refreshes or the selection changes.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+文档可加入带推荐项的选择题或开放题。读者可保存草稿并在重载后继续，明确提交给已连接的 Agent，也可在回复前撤回。提交保留当时的题目和答案，Agent 可在同一反馈任务回复，读者能在题目下看到结果。
+
+<!-- anjian:en -->
+
+#### English
+
+Documents can include choice questions with a recommended option and open-ended questions. Readers can save and reload drafts, submit an answer to a connected Agent, or withdraw before a reply. Each submission preserves the question and answer as they were submitted. The Agent can reply in the same feedback task and readers can see the reply in the document.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+macOS 的 Apple 芯片和 Intel 机型可下载独立的案间安装包。解压后即可使用随包提供的运行时。发行页同时提供 SHA-256 校验文件，包内记录案间版本、源码提交和许可证。也可保留原有源码构建方式。
+
+<!-- anjian:en -->
+
+#### English
+
+Anjian releases can include standalone downloads for Apple silicon and Intel Macs. The extracted package runs with its included runtime. Each release provides SHA-256 checksum files, and the package records its Anjian version, source commit, and licenses. Building from source remains supported.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+白板、幻灯片和分镜可以在编辑器里将选中的批注提交给已连接的 Lody Agent。用户可以查看进度、打开原批注并验收回传。批注保留页面、幻灯片或片段定位，重试同一结果只保留一条回复。
+
+<!-- anjian:en -->
+
+#### English
+
+Submit selected whiteboard, slide deck, and storyboard comments to a connected Lody Agent from the editor. Track progress, reopen the original comment, and review the returned revision. Comments keep their page, slide, or clip anchors, and retrying the same result preserves a single reply.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+使用 `start --mockup` 启动画板时，Agent 会收到手机样机指南，可按目标尺寸和安全区在同一画板上比较手机界面方案。
+
+<!-- anjian:en -->
+
+#### English
+
+Start an artboard with `start --mockup` to give the Agent a guide for comparing phone designs at the intended viewport size and safe-area insets.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+Pi 可通过 `/anjian-open` 或 `anjian_open` 打开文档和画板，并在当前会话接收评论、选择提交与撤回。订阅随 Pi 会话保存，通知保留手工读取评论的命令。
+
+<!-- anjian:en -->
+
+#### English
+
+Use `/anjian-open` or `anjian_open` in Pi to open a document or artboard and receive comments, choice submissions, and withdrawals in the same session. Subscriptions follow the Pi session, and notifications include the command for reading the feedback manually.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+发布评审文档时，可选择一并公开的引用作品。读者打开的是这次发布保存的只读快照。未选入的引用仍显示名称，撤销文档分享会同时关闭其引用快照。
+
+<!-- anjian:en -->
+
+#### English
+
+When publishing a review document, choose which referenced artifacts to include. Readers open read-only snapshots from that publication. References you leave out still show their labels. Revoking the document share also revokes its included snapshots.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+批注已读按 Agent 会话独立记录。全量查看保留未读状态，Agent 可确认快照中的指定线程。快照后新增或改动的消息继续显示为未读。文档和画板在消息旁标明 Agent 是否已读到当前版本。远程会话同时按授权设备隔离。
+
+<!-- anjian:en -->
+
+#### English
+
+Comment read receipts are tracked per Agent session. A full listing leaves unread changes intact, and an Agent can confirm a specific thread from a saved snapshot. New or edited messages after the snapshot stay unread. Documents and artboards show when an Agent has read the current version of a message. Remote sessions are also scoped to the authorized device.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+新增可编辑的幻灯片作品。支持重排、按页批注、键盘翻页和同步的演讲者窗口。公开链接展示发布时的卡组，演讲者备注和批注保留在项目内。Agent 可以按幻灯片 ID 批注，自托管项目可以用 CLI 推拉卡组。
+
+<!-- anjian:en -->
+
+#### English
+
+Create and edit slide decks with reordering, slide-level comments, keyboard navigation, and a synchronized presenter window. Public links show the published deck while speaker notes and comments stay private. Agents can comment by slide ID and push or pull decks in self-hosted projects.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+新增独立白板。可以在作品库新建白板，编辑 Excalidraw 场景，选择多个元素发起批注，并在重开后定位。Agent 可以推拉场景、读取和回复批注。公开分享使用只读快照。
+
+<!-- anjian:en -->
+
+#### English
+
+Create a standalone whiteboard in the library, edit its Excalidraw scene, and comment on one or more elements. Reopen the board to find the same elements. Agents can pull and push scenes, read comments, and reply. Public links show a read-only snapshot.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+新增产品演示分镜。可导入媒体，在多条视频和音频轨道上调整片段、裁切和混音，并按片段保留评审。预览和 MP4 下载使用同一份合成结果。Agent 可以通过原生时间线及按片段批注协作，自托管项目支持推拉源文件和素材。
+
+<!-- anjian:en -->
+
+#### English
+
+Create storyboards for product demo videos. Import media, arrange and trim clips across video and audio tracks, and keep feedback attached to clips. Preview and download the same rendered MP4. Agents can edit the native timeline and review clips, and self-hosted projects can sync the timeline and media.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+文档支持按稳定地址引用其他文档、HTML、画板、白板、幻灯片和分镜。打开画板引用可精确跳转到指定组或卡片，验收组显示当前状态。公开快照保留引用文字，目标作品的访问权限继续单独校验。
+
+<!-- anjian:en -->
+
+#### English
+
+Documents can reference other documents, HTML previews, artboards, whiteboards, slides, and storyboards by stable address. Artboard references open the exact group or board, and verification groups show their current verdict. Public snapshots preserve the reference text, and access to the destination is checked independently.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+新增验收报告。案间可将机器检查的完整输出、构建与环境信息、画板验收和未验证事项生成可打开的文档。重新生成时，已变更或缺失的检查证据会标记待复核。画板引用显示当前人工判定。
+
+<!-- anjian:en -->
+
+#### English
+
+Verification reports bring complete check output, build and environment details, artboard reviews, and coverage gaps into an Anjian document. Regenerating a report flags changed or missing check evidence for review. Linked artboard groups display their current human verdict.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+可在白板和公开快照中切换画框、复制画框链接。重新打开链接时会聚焦对应画框，画框移除后会提示并显示整个白板。
+
+<!-- anjian:en -->
+
+#### English
+
+Switch between frames and copy links from whiteboards or published snapshots. Opening a link focuses that frame. If the frame has been removed, the page shows the whole whiteboard and explains why.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+白板支持新增和切换独立页面。各页单独保存修订，批注和画框链接可定位到对应页面。已有白板保留原场景作为默认页，自托管推拉和公开快照可包含多页。
+
+<!-- anjian:en -->
+
+#### English
+
+Create and switch between whiteboard pages. Each page has its own scene revision, and comments and frame links can target a specific page. Existing whiteboards retain their original scene as the default page. Self-hosted sync and published snapshots can include multiple pages.
+
+<!-- anjian:end -->
+
+### Patch Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+修正 Antigravity 插件图标，补充从案间本地构建安装插件、打开作品和主动读取批注的说明。
+
+<!-- anjian:en -->
+
+#### English
+
+Fix the Antigravity plugin icon and document how to install a local Anjian build, open artifacts, and read comments on demand.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+在当前 Codex 或 Claude Code 会话显式打开另一工作区的文档或画板后，该作品的批注和画板选择轮次会通知当前会话。通知命令指向实际作品所在的目录。一个工作区的批注暂时不可读时，其他工作区仍可收到通知。
+
+<!-- anjian:en -->
+
+#### English
+
+After you explicitly open a document or artboard in another workspace from the current Codex or Claude Code session, that artifact's comments and artboard choice rounds notify the current session. The notification command points to the workspace that contains the artifact. Temporarily unavailable comments in one workspace do not delay notifications from other workspaces.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+作品库可在同一项目中创建白板、幻灯片和分镜。三类作品保留各自的编辑和批注入口。白板与幻灯片可以发布只读快照，分镜可下载渲染后的成片。
+
+<!-- anjian:en -->
+
+#### English
+
+Create whiteboards, slide decks, and storyboards in the same project. Each type keeps its editing and review controls. Whiteboards and slide decks can publish read-only snapshots, and storyboards can download rendered videos.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+修复 Codex 本地反馈监听遗漏画板选择轮次的问题。同一批检测到的多个轮次会分别发送给已订阅的会话。Hub 注册工作区时会在五秒后结束未完成的请求，避免持续返回数据的响应让注册进程一直等待。
+
+<!-- anjian:en -->
+
+#### English
+
+Fix missed Codex notifications when multiple artboard choice rounds are submitted between polls. Each round is delivered separately to the subscribed session. Local Hub project registration now stops unfinished requests after five seconds, including responses that keep streaming data.
+
+<!-- anjian:end -->
+
 ## 0.4.0
 
 ### Minor Changes

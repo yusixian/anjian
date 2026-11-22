@@ -1,14 +1,25 @@
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 import { Check, Copy, ExternalLink, Share2 } from 'lucide-react';
-import { type MouseEvent, type Ref, useCallback, useEffect, useRef, useState } from 'react';
+import { type MouseEvent, type Ref, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { ArtifactType } from '../../shared/types';
 import { useTranslation } from '../i18n';
 
-interface ShareRecord { url: string; publishedAt: number; expiresAt: number | null }
-interface ShareResponse { share: ShareRecord | null; title: string }
+interface ShareRecord { expiresAt: number | null; publishedAt: number; url: string }
+interface ShareReferenceChoice {
+  key: string;
+  label: string;
+  nested?: boolean;
+  reason?: 'unavailable' | 'unsupported' | 'cycle';
+  revision?: string;
+  type: ArtifactType;
+  wholeArtifact?: boolean;
+}
+interface ShareReferencePreview { choices: ShareReferenceChoice[]; revision: string; truncated?: boolean }
+interface ShareReferenceSelection { choices: { key: string; revision: string }[]; revision: string }
+interface ShareResponse { referencePreview?: ShareReferencePreview; share: ShareRecord | null; title: string }
 type Action = 'publish' | 'revoke' | 'rotate';
 type Expiry = 1 | 7 | 30 | null;
 
@@ -54,6 +65,8 @@ const styles = stylex.create({
     padding: 13, boxSizing: 'border-box', borderWidth: 1, borderStyle: 'solid',
     borderColor: cssVar.colorBorderSecondary, borderRadius: 8, lineHeight: '19px',
   },
+  references: { minInlineSize: 0, margin: 0, padding: 0, borderWidth: 0 },
+  referenceLabel: { minInlineSize: 0, overflowWrap: 'anywhere' },
   selected: { borderColor: cssVar.colorText },
   radio: { margin: 2, accentColor: cssVar.colorText },
   small: { display: 'block', marginTop: 4, color: cssVar.colorTextSecondary, fontSize: 12, lineHeight: '18px' },
@@ -87,17 +100,23 @@ const styles = stylex.create({
 async function getShare(type: ArtifactType, id: string, project?: string): Promise<ShareResponse> {
   const query = new URLSearchParams({ type, id });
   if (project) query.set('project', project);
-  const response = await fetch(`/api/hub/share?${query}`, { cache: 'no-store' });
+  const response =
+    type === 'document'
+      ? await fetch('/api/hub/share', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+          body: JSON.stringify({ type, id, project, action: 'preview' }),
+        })
+      : await fetch(`/api/hub/share?${query}`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json() as Promise<ShareResponse>;
 }
 
 class ShareQuotaError extends Error {}
 
-async function changeShare(type: ArtifactType, id: string, action: Action, expiry: Expiry | undefined, project?: string): Promise<ShareResponse> {
+async function changeShare(type: ArtifactType, id: string, action: Action, expiry: Expiry | undefined, project?: string, referenceSelection?: ShareReferenceSelection): Promise<ShareResponse> {
   const response = await fetch('/api/hub/share', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
-    body: JSON.stringify({ type, id, project, action, expiresInDays: expiry }),
+    body: JSON.stringify({ type, id, project, action, expiresInDays: expiry, referenceSelection }),
   });
   if (!response.ok) {
     if (response.status === 413) {
@@ -113,6 +132,7 @@ export function ShareButton({ type, id, project, card = false }: {
   type: ArtifactType; id: string; project?: string; card?: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ShareResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -120,6 +140,7 @@ export function ShareButton({ type, id, project, card = false }: {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [expiry, setExpiry] = useState<Expiry>(7);
+  const [selectedReferences, setSelectedReferences] = useState<Set<string>>(() => new Set());
   const [confirm, setConfirm] = useState<'revoke' | 'rotate' | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -127,6 +148,7 @@ export function ShareButton({ type, id, project, card = false }: {
   const dialogRef = useRef<HTMLElement>(null);
   const requestId = useRef(0);
   const inFlight = useRef(false);
+  const referencePreview = type === 'document' ? data?.referencePreview : undefined;
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -134,7 +156,7 @@ export function ShareButton({ type, id, project, card = false }: {
     setError('');
     try {
       const next = await getShare(type, id, project);
-      if (request === requestId.current) { setData(next); setUncertain(false); }
+      if (request === requestId.current) { setData(next); setSelectedReferences(new Set()); setUncertain(false); }
     } catch {
       if (request === requestId.current) { setUncertain(true); setError(t('share.loadFailed')); }
     } finally {
@@ -149,7 +171,7 @@ export function ShareButton({ type, id, project, card = false }: {
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
-    const frame = requestAnimationFrame(() => cancelRef.current?.focus());
+    const frame = requestAnimationFrame(() => (confirm ? cancelRef.current : dialogRef.current)?.focus());
     return () => { cancelAnimationFrame(frame); previous?.focus(); };
   }, [open, confirm]);
 
@@ -160,18 +182,31 @@ export function ShareButton({ type, id, project, card = false }: {
     setBusy(true);
     setError('');
     try {
-      const next = await changeShare(type, id, action, action === 'publish' && data?.share ? undefined : expiry, project);
-      setData(next);
+      const referenceSelection = action === 'publish' && referencePreview ? {
+        revision: referencePreview.revision,
+        choices: referencePreview.choices.flatMap(({ key, revision, reason }) =>
+          revision && !reason && selectedReferences.has(key) ? [{ key, revision }] : []),
+      } : undefined;
+      const next = await changeShare(type, id, action, action === 'publish' && data?.share ? undefined : expiry, project, referenceSelection);
+      setData({ ...next, referencePreview });
+      if (action === 'revoke') setSelectedReferences(new Set());
       setUncertain(false);
       setConfirm(null);
     } catch (failure) {
       // The server may have committed a change before its response was lost.
       // Re-read status before offering the action again.
       try {
-        setData(await getShare(type, id, project));
+        const next = await getShare(type, id, project);
+        const referencesChanged = referencePreview?.revision !== next.referencePreview?.revision ||
+          referencePreview?.choices.some(({ key, revision }) => selectedReferences.has(key) &&
+            !next.referencePreview?.choices.some((choice) => choice.key === key && choice.revision === revision && !choice.reason));
+        if (referencesChanged) setSelectedReferences(new Set());
+        setData(next);
         setUncertain(false);
         setConfirm(null);
-        setError(t(failure instanceof ShareQuotaError ? 'share.quotaExceeded' : 'share.actionUnconfirmed'));
+        const message = failure instanceof ShareQuotaError ? 'share.quotaExceeded'
+          : referencesChanged ? 'share.referencesChanged' : 'share.actionUnconfirmed';
+        setError(t(message));
       } catch {
         setUncertain(true);
         setError(t('share.actionUnknown'));
@@ -186,7 +221,13 @@ export function ShareButton({ type, id, project, card = false }: {
     try { await navigator.clipboard.writeText(new URL(data.share.url, location.origin).href); setCopied(true); }
     catch { setError(t('share.copyFailed')); }
   };
-  const click = (event: MouseEvent<HTMLButtonElement>) => { event.stopPropagation(); setOpen(true); };
+  const click = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setData(null);
+    setError('');
+    setLoading(true);
+    setOpen(true);
+  };
   const share = data?.share;
   const absoluteUrl = share ? new URL(share.url, location.origin).href : '';
   const format = (value: number) => new Date(value).toLocaleString(i18n.language);
@@ -203,21 +244,25 @@ export function ShareButton({ type, id, project, card = false }: {
     </button>
     {open && createPortal(
       <div {...stylex.props(styles.overlay)}>
-        <section ref={dialogRef} role="dialog" aria-modal="true" aria-label={t('share.title')}
+        <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('share.title')}
           {...stylex.props(styles.dialog)}
           onKeyDown={(event) => {
             if (event.key === 'Escape' && !busy) { event.stopPropagation(); close(); }
             if (event.key !== 'Tab') return;
-            const items = [...dialogRef.current!.querySelectorAll<HTMLElement>('button:not([disabled]),select:not([disabled]),a[href]')];
+            const items = [...dialogRef.current!.querySelectorAll<HTMLElement>('button:not(:disabled),select:not(:disabled),input[type=checkbox]:not(:disabled),a[href]')];
             if (!items.length) { event.preventDefault(); return; }
-            if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)!.focus(); }
+            if (event.shiftKey && (document.activeElement === items[0] || document.activeElement === dialogRef.current)) { event.preventDefault(); items.at(-1)!.focus(); }
             else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0]!.focus(); }
           }}>
           <div {...stylex.props(styles.heading)}><h2 {...stylex.props(styles.title)}>{t('share.title')}</h2><span {...stylex.props(styles.badge)}>{t(share ? 'share.public' : 'share.private')}</span></div>
           <p {...stylex.props(styles.subtitle)}>{data?.title ?? t('share.subtitle')}</p>
           {loading && <p role="status">{t('share.loading')}</p>}
           {error && <p role="alert" {...stylex.props(styles.error)}>{error}</p>}
-          {!loading && !data && button(t('share.retry'), () => void load())}
+          {!data && <div {...stylex.props(styles.actions)}>
+            {button(t('share.close'), close, 'plain', false, cancelRef)}
+            {!loading && button(t('share.retry'), () => void load())}
+          </div>}
+          {data && uncertain && !loading && button(t('share.retry'), () => void load())}
           {data && confirm ? <>
             <div {...stylex.props(styles.section)}><h3>{t(confirm === 'revoke' ? 'share.revokeConfirmTitle' : 'share.rotateConfirmTitle')}</h3>
               <p {...stylex.props(styles.warning)}>{t(confirm === 'revoke' ? 'share.revokeImpact' : 'share.rotateImpact')}</p></div>
@@ -239,7 +284,43 @@ export function ShareButton({ type, id, project, card = false }: {
             </div>
             <div {...stylex.props(styles.section)}>
               <b {...stylex.props(styles.label)}>{t('share.contents')}</b>
-              <p {...stylex.props(styles.warning)}>{t('share.snapshotHelp')}</p>
+              <p {...stylex.props(styles.warning)}>{t(referencePreview?.choices.length ? 'share.documentSnapshotHelp' : 'share.snapshotHelp')}</p>
+              {referencePreview && (referencePreview.choices.length > 0 || referencePreview.truncated) && (
+                <fieldset disabled={busy || loading || uncertain} aria-describedby={`${fieldId}-references`} {...stylex.props(styles.references)}>
+                  <legend {...stylex.props(styles.label)}>{t('share.references')}</legend>
+                  <p id={`${fieldId}-references`} {...stylex.props(styles.warning)}>{t('share.referencesHelp')}</p>
+                  {referencePreview.choices.map(({ key, label, type: referenceType, revision, reason, wholeArtifact, nested }, index) => {
+                    const checked = selectedReferences.has(key) && !!revision && !reason;
+                    const nameId = `${fieldId}-reference-${index}`;
+                    const descriptionId = `${nameId}-description`;
+                    return <label key={key} {...stylex.props(styles.option, checked && styles.selected)}>
+                      <input type="checkbox" checked={checked} disabled={!!reason || !revision}
+                        aria-labelledby={nameId} aria-describedby={descriptionId}
+                        {...stylex.props(styles.radio)}
+                        onChange={(event) => {
+                          const include = event.target.checked;
+                          setSelectedReferences((current) => {
+                            const next = new Set(current);
+                            if (include) next.add(key);
+                            else next.delete(key);
+                            return next;
+                          });
+                        }} />
+                      <span {...stylex.props(styles.referenceLabel)}>
+                        <strong id={nameId}>{label || `${t(`type.${referenceType}`)} ${index + 1}`}</strong>
+                        <small id={descriptionId} {...stylex.props(styles.small)}>
+                          {t(`type.${referenceType}`)}
+                          {reason || !revision ? <><br />{t(`share.referenceReasons.${reason ?? 'unavailable'}`)}</> : <>
+                            {wholeArtifact && <><br />{t('share.wholeArtboard')}</>}
+                            {nested && <><br />{t('share.nestedReferences')}</>}
+                          </>}
+                        </small>
+                      </span>
+                    </label>;
+                  })}
+                  {referencePreview.truncated && <p {...stylex.props(styles.warning)}>{t('share.referencesTruncated')}</p>}
+                </fieldset>
+              )}
               {share ? <>
                 <span {...stylex.props(styles.link)}>{absoluteUrl}</span>
                 <p {...stylex.props(styles.warning)}>{t('share.publishedAt', { date: format(share.publishedAt) })}<br />
@@ -249,8 +330,8 @@ export function ShareButton({ type, id, project, card = false }: {
                   <a href={absoluteUrl} rel="noopener noreferrer" target="_blank" {...stylex.props(styles.button)}><ExternalLink size={14} />{t('share.preview')}</a>
                 </div>
               </> : <>
-                <label htmlFor="share-expiry" {...stylex.props(styles.label)}>{t('share.validFor')}</label>
-                <select id="share-expiry" value={expiry ?? 'never'} {...stylex.props(styles.select)} onChange={(event) => setExpiry(event.target.value === 'never' ? null : Number(event.target.value) as Expiry)}>
+                <label htmlFor={`${fieldId}-expiry`} {...stylex.props(styles.label)}>{t('share.validFor')}</label>
+                <select id={`${fieldId}-expiry`} value={expiry ?? 'never'} {...stylex.props(styles.select)} onChange={(event) => setExpiry(event.target.value === 'never' ? null : Number(event.target.value) as Expiry)}>
                   <option value={1}>{t('share.oneDay')}</option><option value={7}>{t('share.sevenDays')}</option>
                   <option value={30}>{t('share.thirtyDays')}</option><option value="never">{t('share.never')}</option>
                 </select>

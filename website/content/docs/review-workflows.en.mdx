@@ -1,0 +1,55 @@
+---
+title: New review workflows
+description: Try the whiteboard, slide, storyboard, document review, and Agent feedback workflows.
+---
+
+## Check your version
+
+These workflows require an Anjian build with [the Ryugi sync batch](https://github.com/yusixian/anjian/pull/81) and the follow-up features listed below. Check the [release notes](/docs/updates) for published versions. Your self-hosted server and local CLI update separately. See [local setup](/docs/local) for building from source.
+
+## Whiteboards
+
+1. In the project library, create a whiteboard. Use **Add page** to create a separate scene and use the **Page** picker to switch between it and **Main**.
+2. Draw your diagram and save it. To review specific shapes, select one or more elements, open **Comments**, and choose **Comment on …**. Use **Locate …** in the thread to return to those elements.
+3. To link to a saved frame, choose it in the **Frame** picker and click **Copy frame link**. For anonymous readers, publish a read-only snapshot first and copy the frame link from that snapshot. [Sharing and access](/docs/sharing)
+
+## Slides
+
+1. Create a slide deck in the library. Add or reorder slides, enter **Speaker notes**, and save. Open **Slide comments** to review a specific slide.
+2. Choose **Present** to open the audience view, then **Presenter window** to see your private notes and a preview of the next slide. Allow pop-ups for the site if the window is blocked.
+3. Open **Share** and publish a snapshot when readers need an anonymous link. The published deck contains slide titles and bodies. Speaker notes and review threads stay in the project. [Sharing and access](/docs/sharing)
+
+## Storyboards
+
+1. Create a storyboard and choose **Import media** in the **Media bin**. Add **Video** or **Audio** tracks and add media to the timeline. Images go on video tracks.
+2. Select a clip and edit its timeline start, source in point, and duration under **Properties**. Use **Source** in the monitor to preview an asset. Save the timeline before commenting on a new clip.
+3. Choose **Render video** or **Save and render**. Play **Edited video** with sound, then choose **Download MP4** to save that same render. For local rendering, make sure `ffmpeg` and `ffprobe` are available to the Anjian server. The self-hosted Anjian Docker image includes both.
+
+## Document decisions and verification
+
+- **Ask a question.** Ask the Agent to add an `<ask>` block with choices or a text answer. Enter an answer, save a draft to return to it later, or submit it to the connected Agent. The question shows the reply when the Agent responds.
+- **Record a decision.** In a revision approval question, review the current document, select an option, and choose **Record decision**. The decision records who answered and which revision they reviewed. Changes can require a new review. An Agent can inspect the record with `anjian approval`.
+- **Link the work.** Ask the Agent to add a `<ref>` for a related artifact. An artboard reference can open a specific group or board and display the current verdict of a verification group. Readers need access to the destination.
+- **Review the evidence.** Ask the Agent to generate a verification report with `verify-report` and open the resulting document. It can include check output, the build and environment, human verdicts on an artboard, and unchecked items. When the report pins a design specification, you can trace each reported check to the version of the rule it tested. The Agent can use `changes` to inspect retained document revisions and `review` to inspect saved review comments and evidence. [Documents](/docs/documents)
+
+## Send feedback to an Agent
+
+- **Connected Lody session.** Ask the Agent in Lody to connect to the intended artifacts. In the work's **Agent** panel, select the comments and choose **Submit to Agent**. Follow the task there, open the original comments, and review the returned result before accepting it. This workflow extends to whiteboards, slides, and storyboards, preserving the page, slide, or clip attached to each comment.
+- **Local HTML.** Have the intended Codex or Claude Code session open the local HTML preview. In the preview, select text, choose the session if prompted, and click **Send selection**. The send captures that selection and artifact revision even if you subsequently refresh or select something else. In Codex or Claude Code, use the same startup command with the other worktree's project and artifact to subscribe that session there.
+- **Pi and Antigravity CLI.** Install the local Anjian package into Pi with `pi install /absolute/path/to/anjian`, then use `/anjian-open document/plan` or `/anjian-open artboard/design`. For Antigravity, use `agy plugin install /absolute/path/to/anjian`. To receive feedback in a dedicated session, launch `skills/artifacts/app/antigravity-session.cjs` with Node, passing `--project-dir` and the local `--artifact` arguments. Use the receipt or read command shown by the session.
+- **Read receipts.** Use the notification's `anjian comment list … --session …` command to read feedback for that session, or add `--all` to inspect the full history without changing unread state. Documents and artboards show whether the Agent has read the current version of a message. [Agent setup](/docs/agent)
+
+```bash title="Run in the intended Codex or Claude Code session"
+anjian start --project-dir "$project" --artifact html/demo --json
+```
+
+Set `$project` to the artifact project directory. Replace `demo` with the HTML artifact directory name. For self-hosting, see [Devices and CLI](/docs/remote-cli).
+
+## macOS installation
+
+Use the [official Anjian Releases page](https://github.com/yusixian/anjian/releases) for published downloads. Anjian supports standalone archives with a bundled runtime. When a release supplies archives, choose `darwin-arm64` for Apple silicon or `darwin-x64` for Intel, download the matching `.tar.gz.sha256`, and check the archive with `shasum -a 256 -c <checksum-file>` before extracting. Building from source is also supported. [Local setup](/docs/local)
+
+## Phone mockups and reference sharing
+
+- **Phone mockups.** The [phone mockups pull request](https://github.com/yusixian/anjian/pull/84) adds `anjian start --mockup --json --project-dir /path/to/project --artifact artboard/booking-review`. Put your alternatives in one artboard choice group and use the same phone dimensions and safe areas so reviewers can compare the layouts. The built-in reference is available with `anjian skills get artifacts --reference phone-mockups.md`.
+- **Share a document with selected references.** The [document sharing pull request](https://github.com/yusixian/anjian/pull/85) adds a reference checklist in the document's **Share** dialog. Select the direct, same-project references you want readers to open, check the scope shown for each reference, and publish. Included links expire with the parent share. Unselected and nested references display as labels.
