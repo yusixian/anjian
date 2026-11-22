@@ -6,6 +6,20 @@
 
 ## 当前对照版本
 
+2026-11-23 核对 Ryugi 正式版 `v1.102.9`（`0e5f03594b723f4248b46bbf213c2fb75163c271`）。相对 `v1.102.8` 新增 2 个公开提交，累计审计 190 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.9) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.8...v1.102.9)
+
+- `9f2422a` 修正带宿主前缀的自定义会话 ID，并隔离 Codex 绑定。案间把会话标识校验、Codex 环境变量隔离纳入 [#142](https://github.com/yusixian/anjian/issues/142) 的端到端验收。
+- `0e5f035` 更新发布清单。该批新增代码不在 MIT 保留范围内，案间依据公开行为独立实现。[授权说明](https://github.com/Innei/ryugi/blob/v1.102.9/LICENSE)
+
+### v1.102.8 的能力差异
+
+2026-11-23 核对 Ryugi 正式版 `v1.102.8`（`71793405c405915492baea824ef842cb7e6130ae`）。相对 `v1.102.7` 新增 2 个公开提交，累计审计 188 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.8) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.7...v1.102.8)
+
+- `8e976d3` 新增自定义宿主身份及命令投递。发布说明也列出从 Hub 通道移除单项订阅。案间已有内置宿主的本机 SSE 和项目或作品隔离，通用投递与即时取消订阅由 [#142](https://github.com/yusixian/anjian/issues/142) 独立实现。Copilot 的定向唤醒与回读原型见 [#136](https://github.com/yusixian/anjian/issues/136)。
+- `7179340` 更新发布清单。该批新增代码不在 MIT 保留范围内。本次仅依据正式发布说明和公开文件清单记录任务。[授权说明](https://github.com/Innei/ryugi/blob/v1.102.8/LICENSE)
+
+### v1.102.7 的能力差异
+
 2026-11-23 核对 Ryugi 正式版 `v1.102.7`（`21e39ba0182c0589a109cab053b5b949044d8e86`）。相对 `v1.102.6` 新增 4 个公开提交，累计审计 186 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.7) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.6...v1.102.7)
 
 - `600ba95` 更新官方云的设备码登录指引。案间沿用自己的设备授权和项目绑定流程。[设备授权](https://anjian.cosine.ren/zh/docs/remote-cli/)
