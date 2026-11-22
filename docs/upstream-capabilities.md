@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.3`（`a9fe0fb`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.10.0`（`6854582`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.10.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.3) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.4`（`ab04426`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.10.0`（`6854582`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.10.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.4) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -63,6 +63,7 @@
 
 ## 待验证能力
 
+- 按作品保留启动 Agent 和默认回复署名，避免不同宿主互相覆盖。[实现 #127](https://github.com/yusixian/anjian/issues/127)
 - 本地评论由 Hub 主动推送，订阅在 Hub 重启后恢复。案间现有监听器定时读取评论文件。Codex 已有 App Server 唤醒路径，实际空闲会话纳入验证。[实现 #125](https://github.com/yusixian/anjian/issues/125)
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 

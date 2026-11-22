@@ -40,7 +40,7 @@ const { createProjectPoll, formatRoundSummary, unreadCount } =
     createProjectPoll: (
       name: string,
       session: string,
-    ) => (sources: Map<string, Set<string>>) => Feedback[];
+    ) => (sources: Map<string, Set<string>>, changed: Map<string, Set<string>>) => Feedback[];
     formatRoundSummary: (event: FeedbackEvent) => string;
     unreadCount: (
       project: string,
@@ -49,6 +49,12 @@ const { createProjectPoll, formatRoundSummary, unreadCount } =
       session: string,
     ) => number | null;
   };
+const { createLocalCommentEvents } = require('../skills/artifacts/app/local-comment-events.cjs') as {
+  createLocalCommentEvents: (wake: () => void) => {
+    scope: (sources: Map<string, Set<string>>) => Map<string, Set<string>>;
+    close: () => void;
+  };
+};
 
 const skill = fileURLToPath(new URL('../skills/artifacts/SKILL.md', import.meta.url));
 const SESSION = /^[A-Z0-9][\w.-]{0,124}$/i;
@@ -88,7 +94,7 @@ export function watchPiFeedback({
   const collect = () => {
     beatOpenedSources('pi', session, sources);
     questions.update(sources);
-    for (const feedback of poll(sources)) {
+    for (const feedback of poll(sources, comments.scope(sources))) {
       const { project, event } = feedback;
       const round = event.type === 'anjian-choices' ? event.round : null;
       pending.set(JSON.stringify([project, event.artifact, round]), { ...feedback, retryAt: 0 });
@@ -133,6 +139,7 @@ export function watchPiFeedback({
       running = false;
     }
   };
+  const comments = createLocalCommentEvents(() => void tick());
 
   return {
     subscribe(project: string, artifact: string) {
@@ -151,6 +158,7 @@ export function watchPiFeedback({
     close() {
       closed = true;
       clearInterval(timer);
+      comments.close();
       pending.clear();
       clearOpenedSources('pi', session, sources);
       questions.close(sources);

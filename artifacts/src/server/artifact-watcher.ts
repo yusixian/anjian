@@ -18,7 +18,7 @@ const watchedComments = {
   whiteboard: whiteboardCommentsOf,
 };
 
-export function watchArtifacts(ctx: ServerContext) {
+export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifact: string) => void) {
   const { root, signatures, clients, documents, boardComments, runtimeWarnings } = ctx;
   const pending = new Set<string>();
   const key = {};
@@ -73,7 +73,9 @@ export function watchArtifacts(ctx: ServerContext) {
             ctx.backgroundWrites.enqueue(`artboard/${ref.id}`, (admit) => {
               boardComments.sync(ref.id, admit);
               boardComments.boardsChanged(ref.id, admit);
+              if (changed.includes('canvas.json')) commentFileChanged?.(key);
             });
+          if (changed.includes('comments.json')) commentFileChanged?.(key);
           const signature = artifactSignature(dir, ref.type);
           if (signatures.get(key) === signature) continue;
           const reported = runtimeWarnings.get(key);

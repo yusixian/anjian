@@ -5,6 +5,7 @@ const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createProjectPoll, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
+const { createLocalCommentEvents } = require('./local-comment-events.cjs');
 const {
   beatSources,
   projectRoot,
@@ -211,6 +212,7 @@ function watch(ctx, input) {
   };
   const stop = () => {
     clearInterval(timer);
+    comments.close();
     controller.abort();
     questions.close(questionSources);
     if (readJson(ctx.file)?.token === state.token) fs.rmSync(ctx.file, { force: true });
@@ -220,7 +222,7 @@ function watch(ctx, input) {
     if (readJson(ctx.file)?.token !== state.token) return stop();
     const sources = subscriptionSources(ctx.project, 'codex', ctx.session);
     if (!running) {
-      for (const { project, event } of poll(sources)) {
+      for (const { project, event } of poll(sources, comments.scope(sources))) {
         const key = JSON.stringify([project, event.artifact, event.round]);
         pending.set(key, { project, event });
       }
@@ -277,6 +279,7 @@ function watch(ctx, input) {
       running = false;
     }
   };
+  const comments = createLocalCommentEvents(() => void tick());
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
   timer = setInterval(tick, 1000);

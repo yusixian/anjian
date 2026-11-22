@@ -41,6 +41,7 @@ import { safeEqual, send, sendJson, urlHostForHttp } from './http';
 import { createHubShare } from './hub-share';
 import { createHubTrash } from './hub-trash';
 import { serveHubViewer } from './hub-viewer';
+import { createLocalCommentEvents } from './local-comment-events';
 import {
   artifactsRootOf,
   isDormant,
@@ -298,6 +299,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       .filter((entry) => available(entry.dir))
       .map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
   const remoteEvents = createRemoteEvents(options.paths.home);
+  const localCommentEvents = loopback ? createLocalCommentEvents(options.token) : undefined;
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
@@ -332,6 +334,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               github,
               localQuestionHome,
               localQuestionProject: loopback ? projectId(project) : undefined,
+              commentFileChanged: localCommentEvents
+                ? (artifact) => localCommentEvents.notify(projectId(project), artifact)
+                : undefined,
               recordingWrite: (work) =>
                 writeQuota(project, (prepare) =>
                   withProjectMutation(project, async () => {
@@ -1276,6 +1281,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
+      if (localCommentEvents?.handle(req, res, url.pathname)) return;
       if (options.docsDir && (await serveDocsSite(req, res, url, options.docsDir))) return;
       if (await publicShares(req, res, url)) return;
       if (await privateContent(req, res, url, 'main')) return;
@@ -1562,6 +1568,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           throw new AggregateError([error], 'Hub did not close completely', { cause: error });
         }
         clearInterval(trashCleanup);
+        localCommentEvents?.close();
         remoteAuth.close();
         await migrationApi.close();
         await storageRuntime.close();

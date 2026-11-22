@@ -6,6 +6,10 @@
 
 ## 当前对照版本
 
+2026-11-22 核对 Ryugi 正式版 `v1.102.4`（`ab04426ef7ee5c9171f3c46f1eefa5002754133f`）。相对 `v1.102.3` 新增 1 个公开提交，累计审计 180 个提交。发布说明披露了按作品保留启动 Agent，可避免同项目的其他 Agent 改变提交按钮与默认回复署名。公开增量仅包含发布清单和启动引导。案间仍使用项目级标记，按 [#127](https://github.com/yusixian/anjian/issues/127) 独立实现。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.4) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.3...v1.102.4)
+
+### v1.102.3 的能力差异
+
 2026-11-22 核对 Ryugi 正式版 `v1.102.3`（`a9fe0fb1e953777458734160c2d3a8885ecc018a`）。相对 `v1.102.2` 新增 3 个公开提交，累计审计 179 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.3) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.2...v1.102.3)
 
 - `385b86f` 将本地评论从宿主定时读取改为 Hub 推送。案间由 [#125](https://github.com/yusixian/anjian/issues/125) 独立实现事件订阅和重启恢复。Codex 已有基于 App Server 的唤醒路径，实际空闲会话纳入该项验收。普通 Antigravity 会话的外部投递继续由 [#52](https://github.com/yusixian/anjian/issues/52) 跟踪。

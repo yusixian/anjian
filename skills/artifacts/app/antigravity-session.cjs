@@ -10,7 +10,8 @@ const { parseArgs, promisify } = require('node:util');
 
 const { createLocalQuestionDispatch } = require('./local-question-dispatch.cjs');
 const { beatOpenedSources, clearOpenedSources } = require('./comment-subscriptions.cjs');
-const { createCommentWatch, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
+const { createProjectPoll, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
+const { createLocalCommentEvents } = require('./local-comment-events.cjs');
 
 const LAUNCHER = path.join(__dirname, 'anjian.cjs');
 const ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
@@ -57,7 +58,7 @@ function runAntigravitySession({
   const receipt = `agy:${session}`;
   const subscriptions = new Set(artifacts);
   const sources = new Map([[project, subscriptions]]);
-  const poll = createCommentWatch(project, 'Antigravity', receipt);
+  const poll = createProjectPoll('Antigravity', receipt);
   const questions = createLocalQuestionDispatch('agy', session);
   let pollingQuestion = false;
   const prompts = [];
@@ -127,7 +128,7 @@ function runAntigravitySession({
   function collect() {
     beatOpenedSources('agy', session, sources);
     questions.update(sources);
-    for (const event of poll(subscriptions)) {
+    for (const { event } of poll(sources, comments.scope(sources))) {
       const round = event.type === 'anjian-choices' ? event.round : null;
       feedback.set(JSON.stringify([event.artifact, round]), event);
     }
@@ -135,6 +136,7 @@ function runAntigravitySession({
 
   function stopWatching() {
     clearInterval(timer);
+    comments.close();
     clearOpenedSources('agy', session, sources);
     questions.close(sources);
   }
@@ -185,12 +187,14 @@ function runAntigravitySession({
   child.stdin.on('error', reportError);
   child.on('error', reportError);
 
-  collect();
-  const timer = setInterval(() => {
+  const tick = () => {
     if (closed || inputEnded) return;
     collect();
     sendNext();
-  }, pollMs);
+  };
+  const comments = createLocalCommentEvents(tick, env);
+  collect();
+  const timer = setInterval(tick, pollMs);
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
   errors.write(`Anjian Antigravity feedback session ${receipt}\n`);

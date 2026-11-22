@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { unreadReceiptCount, unreadThreadCount } = require('./comment-threads.cjs');
 const { beatSources, sessionOf, subscriptionSources } = require('./comment-subscriptions.cjs');
+const { createLocalCommentEvents } = require('./local-comment-events.cjs');
 const { createSelectionDispatch } = require('./selection-dispatch.cjs');
 
 const cursorKey = (env) => (env.CLAUDE_CODE_IS_COWORK ? 'Claude Cowork' : 'Claude Code');
@@ -217,12 +218,13 @@ function createCommentWatch(project, key = cursorKey(process.env), session) {
 
 function createProjectPoll(key, session) {
   const polls = new Map();
-  return (sources) => {
+  return (sources, changed = sources) => {
     const events = [];
     for (const project of polls.keys()) {
       if (!sources.has(project)) polls.delete(project);
     }
-    for (const [project, artifacts] of sources) {
+    for (const [project, artifacts] of changed) {
+      if (!sources.has(project)) continue;
       if (!polls.has(project)) polls.set(project, createCommentWatch(project, key, session));
       for (const event of polls.get(project)(artifacts)) events.push({ project, event });
     }
@@ -236,16 +238,15 @@ function main() {
   const session = sessionOf('claude');
   const write = (event, done) =>
     process.stdout.write(`${JSON.stringify({ ...event, summary: undefined })}\n`, done);
-  const poll = session
-    ? createProjectPoll(undefined, `claude:${session}`)
-    : createCommentWatch(project);
+  const poll = createProjectPoll(undefined, session ? `claude:${session}` : undefined);
+  const unscoped = new Map([[project, new Set(['*'])]]);
   const selections = session && createSelectionDispatch('claude', session);
   let sendingSelection = false;
   const emit = () => {
+    const sources = session ? subscriptionSources(project, 'claude', session) : unscoped;
+    if (session) beatSources(project, 'claude', session, sources);
+    for (const { event } of poll(sources, comments.scope(sources))) write(event);
     if (session) {
-      const sources = subscriptionSources(project, 'claude', session);
-      beatSources(project, 'claude', session, sources);
-      for (const { event } of poll(sources)) write(event);
       if (sendingSelection) return;
       const selection = selections(sources);
       if (!selection) return;
@@ -254,14 +255,14 @@ function main() {
         if (!error) selection.acknowledge();
         sendingSelection = false;
       });
-    } else {
-      for (const event of poll()) write(event);
     }
   };
+  const comments = createLocalCommentEvents(emit);
   emit();
   const timer = setInterval(emit, 1000);
   const stop = () => {
     clearInterval(timer);
+    comments.close();
     process.exit(0);
   };
   process.on('SIGINT', stop);
