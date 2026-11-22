@@ -246,6 +246,7 @@
     "railComments": "评论 {{count}}"
   },
   "feedback": {
+    "targetMissing": "原批注或其指向的内容已不存在。",
     "title": "Agent 反馈",
     "manage": "管理连接",
     "refresh": "刷新",
@@ -680,6 +681,10 @@
     "actionUnconfirmed": "已重新读取分享状态，请核对链接和状态后继续。",
     "actionUnknown": "操作结果暂时无法确认。请先重试读取，避免重复发布或关闭。"
   },
+  "slideLibrary": {
+    "create": "新建幻灯片",
+    "createFailed": "无法创建幻灯片，请重试。"
+  },
   "storage": {
     "migration": {
       "active": "已启用",
@@ -805,6 +810,10 @@
       "cacheHelp": "共享额度不是磁盘容量。接入 S3 后，缓存和保留原文件仍占本地空间；此处不估算 S3 容量。"
     }
   },
+  "storyboardLibrary": {
+    "create": "新建分镜",
+    "createFailed": "无法创建分镜，请重试。"
+  },
   "time": {
     "justNow": "刚刚",
     "notRecorded": "时间未记录",
@@ -813,14 +822,6 @@
     "seconds": "{{count}} 秒",
     "minutes": "{{count}} 分钟",
     "hours": "{{count}} 小时"
-  },
-  "slideLibrary": {
-    "create": "新建幻灯片",
-    "createFailed": "无法创建幻灯片，请重试。"
-  },
-  "storyboardLibrary": {
-    "create": "新建分镜",
-    "createFailed": "无法创建分镜，请重试。"
   },
   "type": {
     "storyboard": "分镜",

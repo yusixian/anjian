@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
 import type { Thread } from '../shared/comments';
+import type { FeedbackArtifactType } from '../shared/feedback-artifact';
 import type { ArtifactType, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
 import { artifactPath, resolveArtifactAddress } from './artifact-address';
@@ -27,9 +28,12 @@ import type { PreparedStorageState } from './remote-transfer';
 import { createBoardRequestHandler, serveContent } from './routes/content';
 import { HTTP_ROUTES, UPGRADE_ROUTES } from './routes/index';
 import { dispatchHttp, dispatchUpgrade } from './routes/table';
+import { slidesCommentsOf } from './slides-comments';
 import { writeJsonAtomic } from './state';
-import { closeStoryboardJobs } from './storyboard-jobs';
 import { cumulativeStorageAdmission } from './storage/quota';
+import { storyboardCommentsOf } from './storyboard-comments';
+import { closeStoryboardJobs } from './storyboard-jobs';
+import { whiteboardCommentsOf } from './whiteboard';
 import { rejectUpgrade } from './ws';
 
 export type { ArtifactPayload, MountSettings, ServerOptions } from './context';
@@ -38,9 +42,9 @@ export interface ArtifactsServer {
   boardPort: number;
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
   contentToken: string;
-  feedbackComments?: (type: 'document' | 'artboard', id: string) => Thread<unknown>[];
+  feedbackComments?: (type: FeedbackArtifactType, id: string) => Thread<unknown>[];
   feedbackReply?: (
-    type: 'document' | 'artboard',
+    type: FeedbackArtifactType,
     id: string,
     threadId: string,
     text: string,
@@ -83,6 +87,12 @@ export interface ArtifactsServer {
 }
 
 export type MountedProject = ArtifactsServer;
+
+const nativeCommentStores = {
+  slides: slidesCommentsOf,
+  storyboard: storyboardCommentsOf,
+  whiteboard: whiteboardCommentsOf,
+};
 
 export async function startArtifactsServer(options: ServerOptions): Promise<ArtifactsServer> {
   const githubConfig = options.mount ? undefined : (options.github ?? readGitHubConfig());
@@ -428,18 +438,12 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     },
     feedbackComments: (type, id) => readFeedbackComments(root, type, id),
     feedbackReply: (type, id, threadId, text, messageId, admit) => {
-      if (type === 'document')
-        ctx.documents.applyAgentCommentOp(
-          id,
-          { op: 'reply', threadId, text },
-          'Agent',
-          admit,
-          messageId,
-        );
+      const op = { op: 'reply' as const, threadId, text };
+      if (type === 'document') ctx.documents.applyAgentCommentOp(id, op, 'Agent', admit, messageId);
+      else if (type === 'artboard') ctx.boardComments.applyAgent(id, op, 'Agent', admit, messageId);
       else
-        ctx.boardComments.applyAgent(
-          id,
-          { op: 'reply', threadId, text },
+        nativeCommentStores[type](ctx, path.join(root, type, id)).applyAgent(
+          op,
           'Agent',
           admit,
           messageId,

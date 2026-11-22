@@ -8,6 +8,7 @@ import type {
   FeedbackRoundInput,
 } from '../../shared/feedback';
 import { choiceContext, choiceGroups, groupsTouching, roundViews } from '../board-choices';
+import { matchesFeedbackArtifact } from './artifact';
 import { type FeedbackData, feedbackError, hash } from './store';
 import { enqueueTask } from './tasks';
 
@@ -79,11 +80,15 @@ export function submitRound(
   rounds: ReturnType<typeof feedbackRounds>,
   revision: string,
   now: number,
+  artifactAddress: string,
 ) {
   if (!connection.artifacts.includes(artifact)) feedbackError('connection_unavailable');
   if (
     data.tasks.some(
-      (t) => t.artifact === artifact && t.roundId === requested.id && t.state !== 'cancelled',
+      (t) =>
+        matchesFeedbackArtifact(t, artifact, artifactAddress) &&
+        t.roundId === requested.id &&
+        t.state !== 'cancelled',
     )
   )
     feedbackError('round_already_submitted');

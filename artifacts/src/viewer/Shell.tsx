@@ -14,7 +14,9 @@ const ArtboardLayout = lazy(() =>
 const ArtifactList = lazy(() =>
   import('./layouts/ArtifactList').then(({ ArtifactList }) => ({ default: ArtifactList })),
 );
-const SettingsLayout = lazy(() => import('./layouts/SettingsLayout').then(({ SettingsLayout }) => ({ default: SettingsLayout })));
+const SettingsLayout = lazy(() =>
+  import('./layouts/SettingsLayout').then(({ SettingsLayout }) => ({ default: SettingsLayout })),
+);
 const DeviceLayout = lazy(() =>
   import('./layouts/DeviceLayout').then(({ DeviceLayout }) => ({ default: DeviceLayout })),
 );
@@ -24,12 +26,16 @@ const DocumentLayout = lazy(() =>
 const HtmlLayout = lazy(() =>
   import('./layouts/HtmlLayout').then(({ HtmlLayout }) => ({ default: HtmlLayout })),
 );
-const StoryboardLayout = lazy(() => import('./storyboard').then(({ StoryboardLayout }) => ({ default: StoryboardLayout })));
+const StoryboardLayout = lazy(() =>
+  import('./storyboard').then(({ StoryboardLayout }) => ({ default: StoryboardLayout })),
+);
 const SlidesLayout = lazy(() =>
-  import('./slides').then(({ SlidesLayout }) => ({ default: SlidesLayout })),
+  import('./slides/SlidesLayout').then(({ SlidesLayout }) => ({ default: SlidesLayout })),
 );
 const WhiteboardLayout = lazy(() =>
-  import('./whiteboard/WhiteboardLayout').then(({ WhiteboardLayout }) => ({ default: WhiteboardLayout })),
+  import('./whiteboard/WhiteboardLayout').then(({ WhiteboardLayout }) => ({
+    default: WhiteboardLayout,
+  })),
 );
 const PreviewLayout = lazy(() =>
   import('./layouts/PreviewLayout').then(({ PreviewLayout }) => ({ default: PreviewLayout })),
@@ -48,11 +54,7 @@ const styles = stylex.create({
   },
 });
 
-const local = (page: ReactNode) => (
-  <>
-    {page}
-  </>
-);
+const local = (page: ReactNode) => <>{page}</>;
 
 function Embedded({ id, type }: { id: string; type: 'artboard' | 'document' }) {
   useEffect(() => startEmbedChild()?.close, []);
@@ -74,19 +76,24 @@ function RouteView() {
     window.scrollTo(0, 0);
   }, [path]);
   if (route.kind === 'list') return local(<ArtifactList />);
-  if (route.kind === 'members' || route.kind === 'storage') return <SettingsLayout page={route.kind} />;
+  if (route.kind === 'members' || route.kind === 'storage')
+    return <SettingsLayout page={route.kind} />;
   if (route.kind === 'devices') return <DeviceLayout connect={route.connect} />;
   if (route.kind === 'unknown')
     return <div {...stylex.props(styles.unknown)}>No artifact lives at this address.</div>;
   const id = document.documentElement.dataset.anjianArtifactId ?? route.id;
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  const address = canonical && parseRoute(new URL(canonical.href).pathname);
+  const nativeId =
+    address && address.kind === route.kind && address.type === route.type ? address.id : route.id;
   if ((route.kind === 'artifact' || route.kind === 'preview') && route.type === 'storyboard')
-    return <StoryboardLayout key={id} id={id} readOnly={route.kind === 'preview'} />;
+    return <StoryboardLayout id={nativeId} key={nativeId} readOnly={route.kind === 'preview'} />;
   if (route.kind === 'preview') return <PreviewLayout id={id} type={route.type} />;
   if (route.kind === 'embed') return <Embedded id={id} type={route.type} />;
-  if (route.type === 'slides') return local(<SlidesLayout key={id} id={id} />);
+  if (route.type === 'slides') return local(<SlidesLayout id={nativeId} key={nativeId} />);
   if (route.type === 'html') return local(<HtmlLayout id={id} />);
   if (route.type === 'document') return local(<DocumentLayout id={id} />);
-  if (route.type === 'whiteboard') return local(<WhiteboardLayout id={id} />);
+  if (route.type === 'whiteboard') return local(<WhiteboardLayout id={nativeId} />);
   return local(<ArtboardLayout id={id} />);
 }
 

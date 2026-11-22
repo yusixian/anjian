@@ -2,12 +2,22 @@ import type http from 'node:http';
 
 import type { BoardThread } from '../../shared/board-comments';
 import type { FeedbackClaim } from '../../shared/feedback';
+import { FEEDBACK_ARTIFACT_TYPES } from '../../shared/feedback-artifact';
 import { ARTIFACT_LOCATOR_SOURCE } from '../../shared/ids';
 import type { MountedProject } from '../app';
 import { ArtifactTrashError, assertArtifactNotTrashed } from '../artifact-trash';
 import { sendJson } from '../http';
 import { withProjectMutation } from '../project-mutations';
-import { readRemoteArtifact, RemoteTransferError } from '../remote-transfer';
+import {
+  readRemoteArtifact,
+  readRemoteArtifactAddress,
+  RemoteTransferError,
+} from '../remote-transfer';
+import {
+  assertFeedbackArtifactIdentity,
+  matchesFeedbackArtifact,
+  requireFeedbackArtifact,
+} from './artifact';
 import { feedbackSelection } from './comments';
 import { applyResult } from './result';
 import { feedbackRounds, roundSubmissionHash, submitRound } from './rounds';
@@ -67,7 +77,7 @@ async function bodyOf(req: http.IncomingMessage, limit: number): Promise<Record<
 }
 const REMOTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/feedback(?:\/(.*))?$/;
 const BROWSER = new RegExp(
-  `^/api/(document|artboard)/(${ARTIFACT_LOCATOR_SOURCE})/feedback(?:/(.*))?$`,
+  `^/api/(${FEEDBACK_ARTIFACT_TYPES.join('|')})/(${ARTIFACT_LOCATOR_SOURCE})/feedback(?:/(.*))?$`,
 );
 export function createFeedbackApi(options: Options) {
   return async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
@@ -77,14 +87,18 @@ export function createFeedbackApi(options: Options) {
     res.setHeader('Cache-Control', 'no-store');
     try {
       const requestedArtifact = browser ? `${browser[1]}/${browser[2]}` : undefined;
+      const browserProject = () =>
+        requestedArtifact ? options.browserProject(req, requestedArtifact) : null;
+      const browserTarget = browserProject();
       const device = remote && req.headers.origin === undefined ? options.authenticate(req) : null;
       if (remote && !device) feedbackError('unauthorized', undefined, 401);
       const project = remote
         ? options.projects().find((p) => p.id === remote[1] && device!.projects.includes(p.id))
-        : options.browserProject(req, requestedArtifact!);
+        : browserTarget;
       if (!project) feedbackError('not_found', undefined, 404);
       const target = project!;
-      const artifact = browser ? (project as Project & { artifact: string }).artifact : undefined;
+      const artifact = browserTarget?.artifact;
+      const browserRef = artifact ? requireFeedbackArtifact(artifact) : null;
       const authorize = () => {
         if (remote) {
           const current = options.authenticate(req);
@@ -95,8 +109,20 @@ export function createFeedbackApi(options: Options) {
             !options.projects().some((p) => p.id === target.id && p.dir === target.dir)
           )
             feedbackError('unauthorized', undefined, 401);
-        } else if (options.browserProject(req, requestedArtifact!)?.id !== target.id)
+          return null;
+        }
+        const current = browserProject();
+        if (
+          current?.id !== target.id ||
+          current.dir !== target.dir ||
+          current.artifact !== artifact
+        )
           feedbackError('not_found', undefined, 404);
+        const address = readRemoteArtifactAddress(target.dir, artifact!);
+        const locator = browser![2];
+        if (locator !== browserRef!.id && locator !== address)
+          feedbackError('not_found', undefined, 404);
+        return address;
       };
       const suffix = remote ? (remote[2] ?? '') : (browser![3] ?? '');
       const parts = suffix.split('/');
@@ -108,18 +134,47 @@ export function createFeedbackApi(options: Options) {
           : {};
       const store = feedbackStore(options.home, target.id);
       const run = async (prepare?: () => Promise<(delta: number) => void>) => {
-        authorize();
+        const address = authorize();
         const data = store.load();
-        const projectTask = (task: Parameters<typeof publicTask>[0]) => ({
-          ...publicTask(task),
-          ...claimAvailability(
+        const addresses = new Map<string, string | null>();
+        const currentAddress = (key: string) => {
+          const cached = addresses.get(key);
+          if (cached !== undefined) return cached;
+          let current: string | null;
+          try {
+            current = readRemoteArtifactAddress(target.dir, key);
+          } catch (error) {
+            if (!(error instanceof RemoteTransferError)) throw error;
+            current = null;
+          }
+          addresses.set(key, current);
+          return current;
+        };
+        const projectTask = (task: Parameters<typeof publicTask>[0]) => {
+          const availability = claimAvailability(
             data,
             task,
             Date.now(),
             options.deviceAuthorized(connectionOf(data, task.connectionId).deviceId, target.id),
-          ),
-        });
-        let checkWrite = authorize;
+          );
+          if (
+            remote &&
+            req.method === 'GET' &&
+            task.artifactAddress !== undefined &&
+            (task.state === 'queued' ||
+              task.state === 'running' ||
+              task.state === 'needs_attention') &&
+            task.artifactAddress !== currentAddress(task.artifact)
+          )
+            return {
+              ...publicTask(task),
+              claimable: false,
+              recoverable: false,
+              blockedReason: 'artifact_identity_changed',
+            };
+          return { ...publicTask(task), ...availability };
+        };
+        let checkWrite: () => void = authorize;
         const save = async () => {
           if (!prepare) throw new Error('Read-only feedback request');
           const admit = await prepare();
@@ -132,13 +187,13 @@ export function createFeedbackApi(options: Options) {
         const visibleTasks = data.tasks.filter(
           (t) =>
             visibleConnections.some((c) => c.id === t.connectionId) &&
-            (!artifact || t.artifact === artifact),
+            (!artifact || matchesFeedbackArtifact(t, artifact, address)),
         );
         if (req.method === 'GET') {
           if (suffix === 'input' && artifact) {
             const mounted = await options.mount(target.dir);
             authorize();
-            const [type, id] = artifact.split('/') as ['document' | 'artboard', string];
+            const { type, id } = browserRef!;
             assertArtifactNotTrashed(target.dir, type, id);
             const snapshot = readRemoteArtifact(target.dir, artifact);
             if (!snapshot.revision || !mounted.feedbackComments)
@@ -158,11 +213,8 @@ export function createFeedbackApi(options: Options) {
                       snapshot.revision!,
                     ).map(({ preview }) => ({
                       ...preview,
-                      state: data.tasks.some(
-                        (t) =>
-                          t.artifact === artifact &&
-                          t.roundId === preview.id &&
-                          t.state !== 'cancelled',
+                      state: visibleTasks.some(
+                        (t) => t.roundId === preview.id && t.state !== 'cancelled',
                       )
                         ? 'submitted'
                         : preview.state,
@@ -258,9 +310,11 @@ export function createFeedbackApi(options: Options) {
           const prior = data.tasks.find((t) => t.submissionKey === key);
           if (prior) {
             if (prior.submissionHash !== submissionHash) feedbackError('idempotency_conflict');
+            assertFeedbackArtifactIdentity(target.dir, prior);
             return { task: projectTask(prior) };
           }
-          const [type, id] = artifact.split('/') as ['document' | 'artboard', string];
+          if (!address) return feedbackError('artifact_not_found', undefined, 404);
+          const { type, id } = browserRef!;
           assertArtifactNotTrashed(target.dir, type, id);
           const mounted = await options.mount(target.dir);
           authorize();
@@ -269,11 +323,6 @@ export function createFeedbackApi(options: Options) {
             feedbackError('artifact_not_found', undefined, 404);
           if (!requested && !Array.isArray(body.selection))
             feedbackError('invalid_selection', undefined, 400);
-          checkWrite = () => {
-            authorize();
-            if (!options.deviceAuthorized(connection.deviceId, target.id))
-              feedbackError('connection_unauthorized');
-          };
           const threads = mounted.feedbackComments!(type, id);
           const task = requested
             ? submitRound(
@@ -285,6 +334,7 @@ export function createFeedbackApi(options: Options) {
                 feedbackRounds(target.dir, id, threads as BoardThread[], revision!),
                 revision!,
                 Date.now(),
+                address,
               )
             : submit(
                 data,
@@ -300,10 +350,13 @@ export function createFeedbackApi(options: Options) {
                 revision!,
                 Date.now(),
               );
-          if (requested) {
-            const authorizedWrite = checkWrite;
-            checkWrite = () => {
-              authorizedWrite();
+          task.artifactAddress = address;
+          checkWrite = () => {
+            authorize();
+            assertFeedbackArtifactIdentity(target.dir, task);
+            if (!options.deviceAuthorized(connection.deviceId, target.id))
+              feedbackError('connection_unauthorized');
+            if (requested) {
               const currentRevision = readRemoteArtifact(target.dir, artifact).revision;
               const current = feedbackRounds(
                 target.dir,
@@ -313,8 +366,8 @@ export function createFeedbackApi(options: Options) {
               ).find((r) => r.preview.id === requested.id);
               if (!current || current.preview.version !== requested.version)
                 feedbackError('feedback_changed');
-            };
-          }
+            }
+          };
           await save();
           return { task: projectTask(task) };
         }
@@ -322,7 +375,13 @@ export function createFeedbackApi(options: Options) {
         const task = taskOf(data, parts[1]!, device?.id);
         if (artifact && task.artifact !== artifact) feedbackError('not_found', undefined, 404);
         const action = parts[2];
+        const guardTask = () => {
+          authorize();
+          assertFeedbackArtifactIdentity(target.dir, task);
+        };
         if (browser) {
+          guardTask();
+          checkWrite = guardTask;
           if (
             action === 'accept' &&
             (task.state === 'awaiting_review' || task.state === 'accepted')
@@ -344,9 +403,10 @@ export function createFeedbackApi(options: Options) {
         }
         if (!['claim', 'recover', 'renew', 'fail', 'result'].includes(action!))
           feedbackError('not_found', undefined, 404);
-        const [type, id] = task.artifact.split('/') as ['document' | 'artboard', string];
+        const { type, id } = requireFeedbackArtifact(task.artifact);
         assertArtifactNotTrashed(target.dir, type, id);
         if (action === 'claim' || action === 'recover') {
+          guardTask();
           const revision = readRemoteArtifact(target.dir, task.artifact).revision;
           if (!revision) feedbackError('artifact_not_found', undefined, 404);
           const previousAttempt = task.attempt;
@@ -361,7 +421,7 @@ export function createFeedbackApi(options: Options) {
           );
           if (task.attempt === previousAttempt) return { task: projectTask(task) };
           checkWrite = () => {
-            authorize();
+            guardTask();
             fence(data, task, device!.id, { ...result, token: body.token as string }, Date.now());
           };
           const mounted = await options.mount(target.dir);
@@ -381,7 +441,7 @@ export function createFeedbackApi(options: Options) {
           return { task: projectTask(task) };
         }
         const guard = () => {
-          authorize();
+          guardTask();
           fence(
             data,
             task,
@@ -394,15 +454,8 @@ export function createFeedbackApi(options: Options) {
           );
         };
         guard();
-        const prior = structuredClone(task);
-        checkWrite = () => {
-          authorize();
-          fence(data, prior, device!.id, body as unknown as FeedbackClaim, Date.now());
-        };
         if (action === 'result') {
           checkWrite = guard;
-        }
-        if (action === 'result') {
           const mounted = await options.mount(target.dir);
           guard();
           await applyResult({
@@ -418,6 +471,11 @@ export function createFeedbackApi(options: Options) {
             },
           });
         } else {
+          const prior = structuredClone(task);
+          checkWrite = () => {
+            guardTask();
+            fence(data, prior, device!.id, body as unknown as FeedbackClaim, Date.now());
+          };
           if (task.state !== 'running') feedbackError('invalid_task_transition');
           if (action === 'renew') task.leaseUntil = Date.now() + LEASE_MS;
           else if (action === 'fail') {

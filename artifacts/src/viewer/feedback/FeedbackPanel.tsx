@@ -28,7 +28,7 @@ function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) 
   const history = tasks.filter((task) => task.state === 'accepted' || task.state === 'cancelled');
   const active = tasks.filter((task) => task.state !== 'accepted' && task.state !== 'cancelled');
   const connectionGuide = t('feedback.connectionGuide', {
-    artifact,
+    artifact: feedback.input?.artifact ?? artifact,
     origin: window.location.origin,
   });
   const openThread = (id: string) => {

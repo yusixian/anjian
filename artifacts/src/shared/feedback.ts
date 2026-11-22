@@ -34,6 +34,7 @@ export interface FeedbackOperation {
 }
 export interface FeedbackTask {
   artifact: string;
+  artifactAddress?: string;
   attempt: number;
   claimOwner?: string;
   claimRecoverySeq?: number;

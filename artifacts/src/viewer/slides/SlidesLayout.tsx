@@ -1,3 +1,5 @@
+import './slides.css';
+
 import { ArrowDown, ArrowUp, MessageSquare, NotebookPen, Play, Plus, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -11,6 +13,7 @@ import {
 } from '../../shared/slides';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { ShareButton } from '../components/ShareButton';
+import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
 import { Audience } from './Audience';
 import { useSlidesCopy } from './copy';
 import { useSlideKeys, useSlidePage } from './navigation';
@@ -133,7 +136,7 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
         }}
       />
     );
-  return (
+  const editor = (
     <div
       className="sd-root sd-editor"
       onKeyDown={(e) => {
@@ -165,6 +168,7 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
           >
             <span>{c.save}</span>
           </Tool>
+          <NativeFeedbackButton />
           <ShareButton id={id} type="slides" />
           <span ref={presentButtonRef}>
             <Tool primary icon={Play} label={c.present} onClick={() => setAudience(true)}>
@@ -275,6 +279,31 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
         </main>
       </div>
     </div>
+  );
+  return (
+    <NativeFeedback<SlideDeckSnapshot>
+      id={id}
+      type="slides"
+      locate={(snapshot, threadId) => {
+        const slideId = snapshot.comments.threads.find((thread) => thread.id === threadId)?.anchor
+          .slideId;
+        if (
+          !slideId ||
+          !snapshot.deck.slides.some((item) => item.id === slideId) ||
+          (dirty && !deck.slides.some((item) => item.id === slideId))
+        )
+          return false;
+        if (!dirty && !writingRef.current) {
+          setBase(snapshot);
+          setDeck(snapshot.deck);
+        }
+        select(slideId);
+        setDetail('comments');
+        return true;
+      }}
+    >
+      {editor}
+    </NativeFeedback>
   );
 }
 

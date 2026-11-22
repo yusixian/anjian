@@ -1,11 +1,16 @@
 import './whiteboard.css';
 
 import { MessageSquare, Save } from 'lucide-react';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 
-import { WHITEBOARD_DEFAULT_PAGE, type WhiteboardPage as Sheet } from '../../shared/whiteboard';
+import {
+  WHITEBOARD_DEFAULT_PAGE,
+  type WhiteboardPage as Sheet,
+  type WhiteboardSnapshot,
+} from '../../shared/whiteboard';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { ShareButton } from '../components/ShareButton';
+import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
 import { useTranslation } from '../i18n';
 import {
   createWhiteboardDrafts,
@@ -36,6 +41,9 @@ function WhiteboardPage({
   onPages,
   commentsOpen,
   toggleComments,
+  focusRequest,
+  onFocused,
+  missingThread,
 }: {
   id: string;
   page: string;
@@ -47,6 +55,9 @@ function WhiteboardPage({
   onPages: (pages: Sheet[]) => void;
   commentsOpen: boolean;
   toggleComments: () => void;
+  missingThread: string | null;
+  focusRequest: string[] | undefined;
+  onFocused: (found: boolean) => void;
 }) {
   const { t } = useTranslation();
   const {
@@ -101,6 +112,7 @@ function WhiteboardPage({
               <MessageSquare aria-hidden="true" size={15} />
               {t('chrome.comments')}
             </button>
+            <NativeFeedbackButton />
             <ShareButton id={id} type="whiteboard" />
           </div>
         )}
@@ -171,9 +183,11 @@ function WhiteboardPage({
           >
             <Canvas
               canvasRef={canvasRef}
+              focusRequest={focusRequest}
               frameId={frame}
               key={generation}
               scene={view.scene}
+              onFocused={onFocused}
               onSceneChange={changed}
               onSelectionChange={(ids) => setSelection({ generation, ids })}
             />
@@ -182,6 +196,7 @@ function WhiteboardPage({
             <WhiteboardComments
               busy={busy}
               locate={(ids) => canvasRef.current?.focusElements(ids) ?? false}
+              missingThread={missingThread}
               post={addComment}
               selected={selected}
               comments={{
@@ -208,6 +223,17 @@ function WhiteboardArtifact({ id }: { id: string }) {
   const { page, frame, navigate } = useWhiteboardLocation();
   const [drafts] = useState(createWhiteboardDrafts);
   const [pages, setPages] = useState<Sheet[]>([]);
+  const [anchor, setAnchor] = useState<{ page: string; threadId: string; ids: string[] } | null>(
+    null,
+  );
+  const [missingThread, setMissingThread] = useState<string | null>(null);
+  const onFocused = useCallback(
+    (found: boolean) => {
+      setMissingThread(found ? null : (anchor?.threadId ?? null));
+      setAnchor(null);
+    },
+    [anchor],
+  );
   const [commentsOpen, setCommentsOpen] = useState(
     () => window.matchMedia('(min-width: 760px)').matches,
   );
@@ -221,19 +247,42 @@ function WhiteboardArtifact({ id }: { id: string }) {
   }, [drafts]);
 
   return (
-    <WhiteboardPage
-      commentsOpen={commentsOpen}
-      drafts={drafts}
-      frame={frame}
+    <NativeFeedback<WhiteboardSnapshot>
       id={id}
-      key={page}
-      page={page}
-      pages={pages}
-      toggleComments={() => setCommentsOpen((open) => !open)}
-      onFrame={(next) => navigate(page, next)}
-      onPage={(next) => navigate(next, null)}
-      onPages={setPages}
-    />
+      type="whiteboard"
+      locate={(snapshot, threadId) => {
+        const thread = snapshot.comments.threads.find((item) => item.id === threadId);
+        if (!thread) return false;
+        const next = thread.anchor.page ?? WHITEBOARD_DEFAULT_PAGE;
+        if (!snapshot.pages.some((item) => item.id === next)) return false;
+        setMissingThread(null);
+        setAnchor({ threadId, page: next, ids: thread.anchor.elementIds });
+        setCommentsOpen(true);
+        navigate(next, null);
+        return true;
+      }}
+    >
+      <WhiteboardPage
+        commentsOpen={commentsOpen}
+        drafts={drafts}
+        focusRequest={anchor?.page === page ? anchor.ids : undefined}
+        frame={frame}
+        id={id}
+        key={page}
+        missingThread={missingThread}
+        page={page}
+        pages={pages}
+        toggleComments={() => setCommentsOpen((open) => !open)}
+        onFocused={onFocused}
+        onFrame={(next) => navigate(page, next)}
+        onPages={setPages}
+        onPage={(next) => {
+          setAnchor(null);
+          setMissingThread(null);
+          navigate(next, null);
+        }}
+      />
+    </NativeFeedback>
   );
 }
 

@@ -460,9 +460,9 @@ function createWhiteboardComments(dir: string, stateDir: string) {
       revision = editableRevision();
       return store.apply(op, admit);
     },
-    applyAgent(op: WhiteboardAgentOp, name?: string, admit?: CommentAdmission) {
+    applyAgent(op: WhiteboardAgentOp, name?: string, admit?: CommentAdmission, messageId?: string) {
       revision = editableRevision();
-      return store.applyAgent(op, name, admit);
+      return store.applyAgent(op, name, admit, messageId);
     },
     list(agent: string, all: boolean, admit?: CommentAdmission) {
       store.sync();

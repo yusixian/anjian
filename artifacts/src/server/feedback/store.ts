@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { FeedbackConnection, FeedbackTask } from '../../shared/feedback';
+import { isArtifactAddress } from '../../shared/ids';
 import { RemoteTransferError } from '../remote-transfer';
 
 export interface FeedbackData {
@@ -61,6 +62,8 @@ function validate(value: unknown): asserts value is FeedbackData {
         t &&
         typeof t.id === 'string' &&
         typeof t.artifact === 'string' &&
+        (t.artifactAddress === undefined ||
+          (typeof t.artifactAddress === 'string' && isArtifactAddress(t.artifactAddress))) &&
         states.has(t.state) &&
         Number.isSafeInteger(t.attempt) &&
         [t.recoveryRequestSeq ?? 0, t.recoveryConsumedSeq ?? 0, t.claimRecoverySeq ?? 0].every(
