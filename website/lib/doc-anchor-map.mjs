@@ -17,6 +17,10 @@ export const docAnchorMap = {
     entry: { zh: '配置项目入口', en: 'configure-a-project-entry-point' },
     feedback: { zh: '一轮反馈怎么处理', en: 'process-a-round-of-feedback' },
     events: { zh: '事件与自动处理', en: 'events-and-automation' },
+    localQuestion: {
+      zh: '把文档答案发给本地-agent',
+      en: 'send-a-document-answer-to-a-local-agent',
+    },
     handover: { zh: '换一个-agent-接手', en: 'hand-over-to-another-agent' },
   },
   'remote-cli': {
