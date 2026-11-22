@@ -28,6 +28,7 @@ import {
   isDraft,
   roundViews,
 } from './board-choices';
+import { roundRecords } from './board-round-summary';
 import { createCommentCursors } from './comment-cursors';
 import type { CommentNames } from './comment-names';
 import { type CommentReader, createCommentReceipts } from './comment-receipts';
@@ -288,7 +289,7 @@ export function createBoardCommentRegistry(options: Options) {
           ];
           const context = choiceContext(dirOf(id));
           if (context.canvas) {
-            const rounds = roundViews(context, next.threads);
+            const rounds = roundRecords(roundsFile(id), context, next.threads);
             if (rounds.length || fs.existsSync(roundsFile(id)))
               files.push({ file: roundsFile(id), value: { rounds } });
           }
@@ -346,7 +347,7 @@ export function createBoardCommentRegistry(options: Options) {
   const writeRounds = (id: string, admit?: CommentAdmission) => {
     const context = choiceContext(dirOf(id));
     if (!context.canvas) return;
-    const rounds = roundViews(context, store(id, admit).current().threads);
+    const rounds = roundRecords(roundsFile(id), context, store(id, admit).current().threads);
     if (rounds.length === 0 && !fs.existsSync(roundsFile(id))) return;
     writeJsonFiles(options.root, [{ file: roundsFile(id), value: { rounds } }], admit);
   };

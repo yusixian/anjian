@@ -143,10 +143,10 @@ async function fixtures(t) {
       });
     },
     launch,
-    async round(state) {
+    async round(state, summary) {
       await mkdir(join(app, 'artboard/options'), { recursive: true });
       await writeJson('.state/artboard/options/rounds.json', {
-        rounds: [{ id: 'page:p', state, groups: ['alternatives'] }],
+        rounds: [{ id: 'page:p', state, groups: ['alternatives'], summary }],
       });
     },
   };
@@ -214,16 +214,23 @@ test(
     const f = await fixtures(t);
     await f.round('open');
     const session = f.launch('choices', ['artboard/options']);
+    const other = f.launch('other', ['document/notes']);
     session.input.write('open the choices\n');
+    other.input.write('open the notes\n');
     await until(async () => {
       assert.equal((await f.heartbeatFiles('artboard/options')).length, 1);
       assert.match(session.stdout(), /completed turn/);
+      assert.match(other.stdout(), /completed turn/);
     });
-    await f.round('submitted');
+    const summary = {
+      choices: [{ group: 'alternatives', answer: 'Pinned toolbar' }],
+      threads: [{ id: 'review-toolbar', anchor: 'toolbar', text: 'Keep the undo button visible' }],
+    };
+    await f.round('submitted', summary);
     await until(async () => {
       assert.match((await session.prompts())[1] ?? '', /submitted/i);
     });
-    await f.round('open');
+    await f.round('open', summary);
     await until(async () => {
       assert.match((await session.prompts())[2] ?? '', /withdrawn/i);
     });
@@ -232,7 +239,13 @@ test(
       assert.match(notice, /artboard\/options/);
       assert.match(notice, /page:p/);
       assert.match(notice, receipt);
+      assert.match(notice, /Run: .*comment list --json/);
     }
+    assert.match(submitted, /Pinned toolbar/);
+    assert.match(submitted, /review-toolbar/);
+    assert.match(submitted, /Keep the undo button visible/);
+    assert.doesNotMatch(withdrawn, /Pinned toolbar|review-toolbar|Keep the undo button visible/);
+    assert.deepEqual(await other.prompts(), ['open the notes']);
     session.input.end();
     assert.equal(await session.done, 0, session.stderr());
   },

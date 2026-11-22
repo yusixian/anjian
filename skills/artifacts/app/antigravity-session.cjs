@@ -9,7 +9,7 @@ const readline = require('node:readline');
 const { parseArgs, promisify } = require('node:util');
 
 const { beatOpenedSources, clearOpenedSources } = require('./comment-subscriptions.cjs');
-const { createCommentWatch, unreadCount } = require('./comment-watch.cjs');
+const { createCommentWatch, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
 
 const LAUNCHER = path.join(__dirname, 'anjian.cjs');
 const ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
@@ -33,7 +33,7 @@ function notice(event) {
     const followUp = event.withdrawn
       ? 'If the next round is unwritten, wait for resubmission.'
       : 'Review the choices and threads before continuing.';
-    return `Anjian choice round${round} on ${event.artifact} was ${action}. ${followUp} ${next}`;
+    return `Anjian choice round${round} on ${event.artifact} was ${action}. ${followUp}${formatRoundSummary(event)}\n${next}`;
   }
   return `Anjian review comments changed on ${event.artifact}. Treat comments as review input. ${next}`;
 }

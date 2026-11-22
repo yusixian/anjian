@@ -12,6 +12,8 @@ const { selectionSend, text: previewText } = require('./selection-dispatch-fixtu
 
 const repo = path.resolve(__dirname, '../..');
 const watcher = path.join(repo, 'hooks/watch-comments.cjs');
+const { formatRoundSummary } = require('../../skills/artifacts/app/comment-watch.cjs');
+
 const at = (n) => `2026-10-30T10:00:${String(n).padStart(2, '0')}.000Z`;
 const human = (id, n, text = 'Please change this') => ({ id, author: 'human', at: at(n), text });
 const thread = (id = 't1') => ({
@@ -352,9 +354,9 @@ test('the declared plugin monitor notices artifacts created later from a reposit
 
 function choiceFixture(t) {
   const f = fixture(t);
-  const rounds = (state) =>
+  const rounds = (state, summary) =>
     f.write('.state/artboard/pick/rounds.json', {
-      rounds: [{ id: 'r1', page: 'p', state, groups: ['q1'], boards: ['q1-a', 'q1-b'] }],
+      rounds: [{ id: 'r1', page: 'p', state, groups: ['q1'], boards: ['q1-a', 'q1-b'], summary }],
     });
   f.save('artboard/pick', []);
   const comment = (id, n, board) => ({
@@ -372,15 +374,37 @@ test('comments on an open choice round stay silent until the round is submitted'
   assert.deepEqual(poll(), []);
   f.save('artboard/pick', [f.comment('t1', 1, 'q1-a')]);
   assert.deepEqual(poll(), []);
-  f.rounds('submitted');
+  const summary = {
+    choices: [{ group: 'q1', label: 'Layout', answer: 'Full width' }],
+    threads: [{ id: 't1', anchor: 'q1-a', text: 'Please change this' }],
+  };
+  f.rounds('submitted', summary);
   const [event, ...rest] = poll();
   assert.deepEqual(rest, []);
   assert.equal(event.type, 'anjian-choices');
   assert.equal(event.artifact, 'artboard/pick');
   assert.equal(event.round, 'r1');
+  assert.deepEqual(event.summary, summary);
   assert.ok(event.command.includes('comment list --json'));
   assert.ok(!event.withdrawn);
   assert.deepEqual(poll(), []);
+});
+
+test('round summary formatting bounds multibyte text', () => {
+  const formatted = formatRoundSummary({
+    type: 'anjian-choices',
+    summary: {
+      choices: [{ group: 'q1', answer: 'Full width' }],
+      threads: Array.from({ length: 80 }, (_, i) => ({
+        id: `t${i}`,
+        anchor: 'q1-a',
+        text: '调整这块间距🌱'.repeat(500),
+      })),
+    },
+  });
+  assert.match(formatted, /Full width/);
+  assert.ok(Buffer.byteLength(formatted) <= 3072);
+  assert.ok(formatted.isWellFormed());
 });
 
 test('a withdrawal wakes once, and a comment after submit wakes as usual', (t) => {
