@@ -11,6 +11,7 @@ const RESOLVE = {
   html: resolveHtmlFile,
   slides: () => null,
   storyboard: () => null,
+  whiteboard: () => null,
 };
 
 export const isArtifactPage = (type: ArtifactType, relative: string) =>

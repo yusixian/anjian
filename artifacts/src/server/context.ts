@@ -33,6 +33,7 @@ import { createSelectionStore } from './selection';
 import { socketAuthorized } from './socket-access';
 import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactState } from './state';
 import { createVerifyRecordings } from './verify-recordings';
+import { readWhiteboardScene, whiteboardTitle } from './whiteboard';
 import { textFrame } from './ws';
 
 export interface ServerOptions {
@@ -75,6 +76,14 @@ export function readArtifactSource(
   runtime: string[] = [],
 ): ArtifactPayload {
   if (ref.type === 'artboard') return readCanvas(dir);
+  if (ref.type === 'whiteboard') {
+    try {
+      const { scene } = readWhiteboardScene(dir);
+      return { title: whiteboardTitle(scene, dir), version: 0, warnings: [] };
+    } catch {
+      return { title: ref.id, version: 0, warnings: ['Whiteboard scene could not be read'] };
+    }
+  }
   if (ref.type === 'document') {
     const payload = readDocument(dir, ref.id);
     return { ...payload, warnings: [...payload.warnings, ...runtime] };

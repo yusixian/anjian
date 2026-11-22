@@ -19,6 +19,7 @@ const CONTENT_CSP: Record<ArtifactType, string> = {
   artboard: 'sandbox allow-scripts',
   document: "sandbox; default-src 'none'",
   html: 'sandbox allow-scripts allow-modals allow-forms allow-popups allow-downloads',
+  whiteboard: "sandbox; default-src 'none'",
 };
 
 export function serveContent(
@@ -64,6 +65,7 @@ export function serveContent(
     html: resolveHtmlFile,
     slides: () => null,
     storyboard: () => null,
+    whiteboard: () => null,
   }[ref.type];
   const target =
     (ref.type === 'artboard' ? recordings.resolve(id, relative) : null) ?? resolve(dir, relative);

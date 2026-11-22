@@ -25,6 +25,10 @@ export const TYPE_GLYPHS: Record<ArtifactType, { fill: string; stroke: string }>
     fill: '',
     stroke: 'M8 7.5 3.5 12 8 16.5M16 7.5l4.5 4.5-4.5 4.5M13.5 5.5l-3 13',
   },
+  whiteboard: {
+    fill: '',
+    stroke: 'M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M9 18l-2 3m8-3 2 3M7 14l3-4 3 2 4-4',
+  },
 };
 
 const INK = '#C65D3B';

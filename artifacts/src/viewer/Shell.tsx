@@ -3,8 +3,8 @@ import * as stylex from '@stylexjs/stylex';
 import { lazy, type ReactNode, Suspense, useEffect } from 'react';
 import { useLocation } from 'wouter';
 
-import { t } from './i18n';
 import { useBrowserSession } from './hooks/useBrowserSession';
+import { t } from './i18n';
 import { startEmbedChild } from './lib/embed-bridge';
 import { canonicalPath, parseRoute } from './lib/route';
 
@@ -27,6 +27,9 @@ const HtmlLayout = lazy(() =>
 const StoryboardLayout = lazy(() => import('./storyboard').then(({ StoryboardLayout }) => ({ default: StoryboardLayout })));
 const SlidesLayout = lazy(() =>
   import('./slides').then(({ SlidesLayout }) => ({ default: SlidesLayout })),
+);
+const WhiteboardLayout = lazy(() =>
+  import('./whiteboard/WhiteboardLayout').then(({ WhiteboardLayout }) => ({ default: WhiteboardLayout })),
 );
 const PreviewLayout = lazy(() =>
   import('./layouts/PreviewLayout').then(({ PreviewLayout }) => ({ default: PreviewLayout })),
@@ -83,6 +86,7 @@ function RouteView() {
   if (route.type === 'slides') return local(<SlidesLayout key={id} id={id} />);
   if (route.type === 'html') return local(<HtmlLayout id={id} />);
   if (route.type === 'document') return local(<DocumentLayout id={id} />);
+  if (route.type === 'whiteboard') return local(<WhiteboardLayout id={id} />);
   return local(<ArtboardLayout id={id} />);
 }
 

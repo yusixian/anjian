@@ -121,6 +121,63 @@ test('artboard/document data projection omits private state and rejects unknown 
   }
 });
 
+test('whiteboard creation is project-scoped and public shares expose only a read-only scene', async () => {
+  const { project, root, req, owner, action } = await setup();
+  const create = (target: string, headers: Record<string, string>) => req('/api/hub/whiteboards', {
+    method: 'POST', headers, body: JSON.stringify({ project: target, title: 'Onboarding' }),
+  });
+  expect((await create(project, { ...owner, Origin: 'https://unrelated.example' })).status).toBe(403);
+  expect((await create(temp(), owner)).status).toBe(404);
+  const response = await create(project, owner);
+  expect(response.status).toBe(201);
+  const { id, url } = await response.json();
+  expect(url).toMatch(/^\/whiteboard\/[a-z\d]{21}$/i);
+  const list = await (await req('/api/hub/artifacts', { headers: owner })).json();
+  expect(list.artifacts).toContainEqual(expect.objectContaining({ id, url, type: 'whiteboard', title: 'Onboarding' }));
+  const dir = path.join(root, 'whiteboard', id);
+  const source = path.join(dir, 'scene.excalidraw');
+  fs.writeFileSync(source, JSON.stringify({
+    type: 'excalidraw', version: 2, appState: { name: 'Onboarding', collaborators: 'private' },
+    elements: [{ id: 'box', type: 'rectangle' }, { id: 'discarded', type: 'ellipse', isDeleted: true }],
+  }));
+  fs.writeFileSync(path.join(dir, 'comments.json'), 'PRIVATE WHITEBOARD COMMENTS');
+  const published = await action('publish', { type: 'whiteboard', id });
+  expect(published.status).toBe(200);
+  const link = new URL((await published.json()).share.url).pathname;
+  fs.writeFileSync(source, JSON.stringify({ type: 'excalidraw', version: 2, elements: [] }));
+  const publicData = await (await req(`${link}/data`)).json();
+  expect(publicData.scene.elements).toEqual([{ id: 'box', type: 'rectangle' }]);
+  expect(JSON.stringify(publicData)).not.toContain('private');
+  expect(JSON.stringify(publicData)).not.toContain('PRIVATE WHITEBOARD COMMENTS');
+  expect((await req(`${link}/data`, { method: 'POST' })).status).toBe(405);
+  expect((await req(`${new URL(publicData.contentBase).pathname}scene.excalidraw`, {}, true)).status).toBe(404);
+});
+
+test('a whiteboard share exposes only pages in the published snapshot', async () => {
+  const { project, root, req, owner, action } = await setup();
+  const board = path.join(root, 'whiteboard/pages-demo');
+  const scene = (id: string) => JSON.stringify({ type: 'excalidraw', version: 2, elements: [{ id, type: 'frame' }] });
+  fs.mkdirSync(path.join(board, 'pages'), { recursive: true });
+  fs.writeFileSync(path.join(board, 'scene.excalidraw'), scene('main-frame'));
+  const manifest = path.join(board, 'pages.json');
+  fs.writeFileSync(manifest, JSON.stringify({ version: 1, pages: [{ id: 'review', title: 'Review' }] }));
+  fs.writeFileSync(path.join(board, 'pages/review.excalidraw'), scene('review-frame'));
+  const published = await action('publish', { type: 'whiteboard', id: 'pages-demo', project });
+  expect(published.status).toBe(200);
+  const url = new URL((await published.json()).share.url).pathname;
+  const review = await (await req(`${url}/data?page=review`)).json();
+  expect(review).toMatchObject({ page: 'review', pageMissing: false, scene: { elements: [{ id: 'review-frame' }] } });
+  expect(review.pages.map(({ id }: { id: string }) => id)).toEqual(['main', 'review']);
+  fs.writeFileSync(manifest, JSON.stringify({ version: 1, pages: [{ id: 'review', title: 'Review' }, { id: 'draft', title: 'Draft' }] }));
+  fs.writeFileSync(path.join(board, 'pages/draft.excalidraw'), scene('unpublished-frame'));
+  const hidden = await (await req(`${url}/data?page=draft`)).json();
+  expect(hidden).toMatchObject({ page: 'main', pageMissing: true, scene: { elements: [{ id: 'main-frame' }] } });
+  expect(JSON.stringify(hidden)).not.toContain('unpublished-frame');
+  expect((await req('/api/whiteboard/pages-demo?page=draft')).status).toBe(403);
+  const preview = await (await req('/api/preview/whiteboard/pages-demo?page=draft', { headers: owner })).json();
+  expect(preview).toMatchObject({ page: 'draft', pageMissing: false, scene: { elements: [{ id: 'unpublished-frame' }] } });
+});
+
 test('private capability paths preserve relative resources without reopening legacy content access', async () => {
   const { req, owner, root, h, project } = await setup();
   const response = await req('/api/artifacts/html/demo', { headers: owner });
@@ -334,4 +391,51 @@ test('storyboard renders one private revision for both playback and export', asy
   expect(await repeated.json()).toMatchObject({ id: job.id, status: 'ready' });
   const share = await write('/api/hub/share', { action: 'publish', project, type: 'storyboard', id });
   expect(share.status).toBe(404);
+});
+
+test('one project keeps native editors, source formats, and share modes distinct', async () => {
+  const { action, owner, project, req, root } = await setup();
+  const title = 'Mixed review';
+  const types = [
+    { type: 'whiteboard', create: 'whiteboards', source: 'scene.excalidraw', data: 'scene', share: 200 },
+    { type: 'slides', create: 'slides', source: 'deck.json', data: 'deck', share: 200 },
+    { type: 'storyboard', create: 'storyboards', source: 'timeline.json', data: 'storyboard', share: 404 },
+  ];
+  const created = [];
+  for (const entry of types) {
+    const response = await req(`/api/hub/${entry.create}`, {
+      body: JSON.stringify({ project, title }),
+      headers: owner,
+      method: 'POST',
+    });
+    expect(response.status, await response.clone().text()).toBe(201);
+    const { id, url } = await response.json() as { id: string; url: string };
+    expect(url).toMatch(new RegExp(`^/${entry.type}/`));
+    expect(fs.readdirSync(path.join(root, entry.type, id))).toEqual(
+      expect.arrayContaining(['.artifact-id', entry.source]),
+    );
+    const privateApi = `/api${url}`;
+    const get = await req(privateApi, { headers: owner });
+    expect(get.status, await get.clone().text()).toBe(200);
+    expect(await get.json()).toHaveProperty(entry.data);
+    expect((await req(privateApi)).status).toBe(403);
+    const published = await action('publish', { id, type: entry.type });
+    expect(published.status).toBe(entry.share);
+    if (published.ok) {
+      const share = new URL((await published.json()).share.url).pathname;
+      const data = await (await req(`${share}/data`)).json();
+      expect(data).toHaveProperty(entry.data);
+      expect(data).toHaveProperty('type', entry.type);
+      expect(data).not.toHaveProperty('comments');
+    }
+    created.push({ id, type: entry.type });
+  }
+
+  const library = await (await req('/api/hub/artifacts', { headers: owner })).json();
+  expect(library.artifacts).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: 'demo', type: 'html' }),
+      ...created.map((entry) => expect.objectContaining(entry)),
+    ]),
+  );
 });

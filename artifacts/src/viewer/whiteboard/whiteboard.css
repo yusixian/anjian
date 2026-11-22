@@ -1,0 +1,279 @@
+.anjian-whiteboard {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--lobe-color-bg-container);
+  color: var(--lobe-color-text);
+  font: 14px/1.5 var(--lobe-font-family);
+}
+
+.anjian-whiteboard-toolbar,
+.anjian-whiteboard-actions,
+.anjian-whiteboard-thread-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anjian-whiteboard-toolbar {
+  min-height: 52px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--lobe-color-border-secondary);
+}
+
+.anjian-whiteboard-toolbar h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.anjian-whiteboard-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.anjian-whiteboard-actions > span {
+  color: var(--lobe-color-text-secondary);
+  font-size: 12px;
+}
+
+.anjian-whiteboard-actions > button,
+.anjian-whiteboard-frames button,
+.anjian-whiteboard-frames input,
+.anjian-whiteboard-frames select,
+.anjian-whiteboard-pages button,
+.anjian-whiteboard-pages input,
+.anjian-whiteboard-pages select,
+.anjian-whiteboard-comments button,
+.anjian-whiteboard-notice button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 9px;
+  border: 1px solid var(--lobe-color-border-secondary);
+  border-radius: 7px;
+  background: var(--lobe-color-bg-container);
+  color: var(--lobe-color-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.anjian-whiteboard-actions > button:is(:hover, [aria-expanded='true']),
+.anjian-whiteboard-frames button:hover,
+.anjian-whiteboard-pages button:hover,
+.anjian-whiteboard-comments button:hover,
+.anjian-whiteboard-notice button:hover {
+  background: var(--lobe-color-fill-tertiary);
+}
+
+.anjian-whiteboard-actions > button:disabled,
+.anjian-whiteboard-pages button:disabled,
+.anjian-whiteboard-comments button:disabled,
+.anjian-whiteboard-notice button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.anjian-whiteboard-workspace {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.anjian-whiteboard-navigation,
+.anjian-whiteboard-pages,
+.anjian-whiteboard-frames {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--lobe-color-border-secondary);
+  background: var(--lobe-color-bg-container);
+  color: var(--lobe-color-text);
+  font: 12px/1.5 var(--lobe-font-family);
+}
+
+.anjian-whiteboard-navigation > :is(.anjian-whiteboard-pages, .anjian-whiteboard-frames) {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.anjian-whiteboard-pages label,
+.anjian-whiteboard-frames label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.anjian-whiteboard-pages select,
+.anjian-whiteboard-frames select {
+  min-width: 0;
+  max-width: min(50vw, 320px);
+}
+
+.anjian-whiteboard-pages form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
+.anjian-whiteboard-pages input {
+  min-width: 0;
+  max-width: min(55vw, 240px);
+  cursor: text;
+}
+
+.anjian-whiteboard-frames input {
+  display: block;
+  width: min(100%, 320px);
+  min-width: 0;
+  cursor: text;
+}
+
+.anjian-whiteboard-shared {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.anjian-whiteboard-shared .anjian-whiteboard-canvas {
+  flex: 1;
+  height: auto;
+}
+
+.anjian-whiteboard-with-comments {
+  grid-template-columns: minmax(0, 1fr) minmax(255px, 320px);
+}
+
+.anjian-whiteboard-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.anjian-whiteboard-comments {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  border-inline-start: 1px solid var(--lobe-color-border-secondary);
+  background: var(--lobe-color-bg-container);
+}
+
+.anjian-whiteboard-comments h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.anjian-whiteboard-comments p {
+  color: var(--lobe-color-text-secondary);
+  font-size: 13px;
+}
+
+.anjian-whiteboard-thread,
+.anjian-whiteboard-new-comment {
+  margin-top: 12px;
+  padding: 8px;
+  border: 1px solid var(--lobe-color-border-secondary);
+  border-radius: 8px;
+}
+
+.anjian-whiteboard-thread-bar {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.anjian-whiteboard-thread-bar span {
+  font-size: 12px;
+  color: var(--lobe-color-text-secondary);
+}
+
+.anjian-whiteboard-compose {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.anjian-whiteboard-compose label {
+  justify-self: start;
+}
+.anjian-whiteboard-compose textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px;
+  border: 1px solid var(--lobe-color-border-secondary);
+  border-radius: 7px;
+  background: var(--lobe-color-bg-container);
+  color: var(--lobe-color-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.anjian-whiteboard-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--lobe-color-warning-bg);
+  color: var(--lobe-color-warning-text);
+  font-size: 13px;
+}
+
+.anjian-whiteboard-loading {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  color: var(--lobe-color-text-secondary);
+}
+
+@media (max-width: 759px) {
+  .anjian-whiteboard-toolbar {
+    flex-wrap: wrap;
+  }
+  .anjian-whiteboard-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .anjian-whiteboard-actions > span {
+    margin-inline-end: auto;
+  }
+  .anjian-whiteboard-with-comments {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
+  }
+  .anjian-whiteboard-comments {
+    border-inline-start: 0;
+    border-top: 1px solid var(--lobe-color-border-secondary);
+  }
+  .anjian-whiteboard-actions > button,
+  .anjian-whiteboard-pages button,
+  .anjian-whiteboard-pages input,
+  .anjian-whiteboard-pages select,
+  .anjian-whiteboard-comments button,
+  .anjian-whiteboard-notice button {
+    min-height: 44px;
+  }
+  .anjian-whiteboard-pages input {
+    font-size: 16px;
+  }
+  .anjian-whiteboard-compose textarea {
+    font-size: 16px;
+  }
+}

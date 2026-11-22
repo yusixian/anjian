@@ -17,6 +17,12 @@ import { storyboardAssetsRoute, storyboardJobRoute, storyboardRenderRoute, story
 import { storyboardAgentCommentRoute, storyboardCommentRoute } from './storyboard-comments';
 import type { HttpRoute, UpgradeRoute } from './table';
 import { libraryRoute, shellRoute, viewerFileRoute } from './viewer';
+import {
+  whiteboardAgentCommentRoute,
+  whiteboardCommentRoute,
+  whiteboardPagesRoute,
+  whiteboardSceneRoute,
+} from './whiteboard';
 
 // Order matters: earlier routes shadow later ones.
 export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
@@ -43,6 +49,10 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   slidesAgentCommentRoute,
   documentStateRoute,
   documentWriteRoute,
+  whiteboardSceneRoute,
+  whiteboardPagesRoute,
+  whiteboardCommentRoute,
+  whiteboardAgentCommentRoute,
   artifactApiRoute,
   libraryRoute,
   shellRoute,

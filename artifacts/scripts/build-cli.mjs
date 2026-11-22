@@ -21,6 +21,7 @@ const documents = Object.fromEntries(
     'slides.md',
     'storyboard.md',
     'ui.md',
+    'whiteboard.md',
     'examples/today-inbox.html',
   ].map((name) => [name, fs.readFileSync(new URL(name, skillRoot), 'utf8')]),
 );

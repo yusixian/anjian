@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import stylex from '@stylexjs/unplugin';
@@ -7,6 +10,19 @@ import { defineConfig } from 'vite';
 import { buildInfo } from '../scripts/release/build-info.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
+const require = createRequire(import.meta.url);
+const excalidrawFonts = path.join(path.dirname(require.resolve('@excalidraw/excalidraw')), 'fonts');
+// The package also includes the GPL-licensed legacy Liberation Sans 1.05 binary.
+const bundledFontFamilies = new Set([
+  'Assistant',
+  'Cascadia',
+  'ComicShanns',
+  'Excalifont',
+  'Lilita',
+  'Nunito',
+  'Virgil',
+  'Xiaolai',
+]);
 
 export default defineConfig({
   base: '/',
@@ -16,6 +32,20 @@ export default defineConfig({
     renderBuiltUrl: (_filename, { hostType }) => ({ relative: hostType !== 'html' }),
   },
   plugins: [
+    {
+      name: 'anjian-excalidraw-fonts',
+      generateBundle() {
+        for (const file of fs.readdirSync(excalidrawFonts, { encoding: 'utf8', recursive: true })) {
+          const parts = file.split(path.sep);
+          if (!file.endsWith('.woff2') || !bundledFontFamilies.has(parts[0]!)) continue;
+          this.emitFile({
+            type: 'asset',
+            fileName: `fonts/${parts.join('/')}`,
+            source: fs.readFileSync(path.join(excalidrawFonts, file)),
+          });
+        }
+      },
+    },
     stylex.vite({
       useCSSLayers: true,
       // The shared CSS is loaded by every HTML entry; the default target may be main-only.

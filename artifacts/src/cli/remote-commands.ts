@@ -32,7 +32,7 @@ const artifactOption = {
   artifact: {
     type: 'string' as const,
     value: '<type>/<id>',
-    help: 'Document, artboard, HTML, slides or storyboard artifact',
+    help: 'Document, artboard, HTML, slides, storyboard or whiteboard artifact',
   },
 };
 const permissionError = (status: number, json: Record<string, any>) =>
@@ -57,8 +57,8 @@ const validSnapshot = (artifact: string, value: Record<string, any>): value is R
 async function remoteSnapshot(dir: string, artifact: string) {
   const { binding } = bindingFor(dir);
   const result = await authenticatedRequest(dir, artifactRoute(binding, artifact));
-  if (result.status !== 200 || !validSnapshot(artifact, result.json))
-    throw permissionError(result.status, result.json);
+  if (result.status !== 200) throw permissionError(result.status, result.json);
+  if (!validSnapshot(artifact, result.json)) throw new CliError('Remote returned an invalid artifact snapshot');
   return result.json;
 }
 
@@ -276,8 +276,9 @@ async function push(dir: string, artifact: string | undefined, emit: Emit) {
     });
     if (result.status === 409)
       throw new CliError(`${artifact} changed remotely; pull and compare before pushing`);
-    if (result.status !== 200 || !validSnapshot(artifact, result.json) || !result.json.revision)
-      throw permissionError(result.status, result.json);
+    if (result.status !== 200) throw permissionError(result.status, result.json);
+    if (!validSnapshot(artifact, result.json) || !result.json.revision)
+      throw new CliError('Remote upload returned an invalid artifact snapshot');
     if (
       bindingFor(dir).binding.origin !== binding.origin ||
       bindingFor(dir).binding.projectId !== binding.projectId

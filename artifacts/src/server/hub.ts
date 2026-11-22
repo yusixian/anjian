@@ -8,7 +8,8 @@ import { BUILD_INFO } from '../shared/build-info';
 import type { HubArtifact, HubArtifactList, HubProjectStatus, HubStatus } from '../shared/hub';
 import { MAX_SLIDE_TITLE, SLIDE_DECK_FILE } from '../shared/slides';
 import { MAX_STORYBOARD_TITLE, STORYBOARD_FILE } from '../shared/storyboard';
-import type { ArtifactType } from '../shared/types';
+import { ARTIFACT_TYPES, type ArtifactType } from '../shared/types';
+import { emptyWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
 import {
   accessPolicy,
   hostAllowed,
@@ -55,16 +56,15 @@ import { listenFirst } from './ports';
 import { createProjectAccess } from './project-access';
 import { withProjectMaintenance } from './project-maintenance';
 import { withProjectMutation } from './project-mutations';
-import { RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
-import { defaultSlideDeck } from './slides';
-import { defaultStoryboard } from './storyboard-source';
 import { createProjectSuspension } from './project-suspension';
 import { createPublicShare } from './public-share';
 import { openReady } from './ready';
 import { createRemoteApi } from './remote-api';
 import { createRemoteAuth } from './remote-auth';
 import { createRemoteEvents } from './remote-events';
+import { RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
 import { createShareStore } from './share-store';
+import { defaultSlideDeck } from './slides';
 import { writeJsonAtomic } from './state';
 import { createStorageApi } from './storage/api';
 import { createStorageBackend } from './storage/backend';
@@ -77,6 +77,7 @@ import { createStorageRuntime } from './storage/runtime';
 import { createStorageSettings } from './storage/settings';
 import { planMigrationSources } from './storage/sources';
 import { createStorageUsage } from './storage/usage';
+import { defaultStoryboard } from './storyboard-source';
 
 export interface HubOptions {
   boardOrigin?: string;
@@ -123,11 +124,50 @@ const CONTROL_PATH = /^\/api\/hub\/(?:stop|restart|log)$/;
 const LOG_TAIL_BYTES = 256 * 1024;
 const STATUS_SCAN_MS = 10_000;
 const LOG_TAIL_LINES = 500;
-const ARTIFACT_IN_PATH = /(?:^|\/)(artboard|document|html|slides|storyboard)\/([\w-]+)/;
+const ARTIFACT_TYPE_PATH = ARTIFACT_TYPES.join('|');
+const ARTIFACT_IN_PATH = new RegExp(`(?:^|/)(${ARTIFACT_TYPE_PATH})/([\\w-]+)`);
 const CONTENT_PATH = /^\/c\/([^/]+)\//;
 const PROJECT_HEADER = 'x-anjian-project';
 const MAX_BODY = 64 * 1024;
-const ARTIFACT_KEY = /^(?:artboard|document|html|slides|storyboard)\/[a-z0-9][a-z0-9-]*$/;
+const ARTIFACT_KEY = new RegExp(`^(?:${ARTIFACT_TYPE_PATH})/[a-z0-9][a-z0-9-]*$`);
+const DELETED_ARTIFACT_PATH = new RegExp(`^/(${ARTIFACT_TYPE_PATH})/([\\w-]+)/?$`);
+const ARTIFACT_MUTATION_PATH =
+  /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments|document\/[^/]+\/update|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?|whiteboard\/[^/]+(?:\/pages)?)$/;
+
+const ARTIFACT_CREATION = new Map<string, {
+  type: ArtifactType;
+  label: string;
+  prefix: string;
+  file: string;
+  maxTitle: number;
+  create: (title: string, language: unknown) => unknown;
+}>([
+  ['/api/hub/slides', {
+    type: 'slides',
+    label: 'Slide deck',
+    prefix: 'deck',
+    file: SLIDE_DECK_FILE,
+    maxTitle: MAX_SLIDE_TITLE,
+    create: (title) => defaultSlideDeck(title),
+  }],
+  ['/api/hub/storyboards', {
+    type: 'storyboard',
+    label: 'Storyboard',
+    prefix: 'storyboard',
+    file: STORYBOARD_FILE,
+    maxTitle: MAX_STORYBOARD_TITLE,
+    create: (title, language) =>
+      defaultStoryboard(title, language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined),
+  }],
+  ['/api/hub/whiteboards', {
+    type: 'whiteboard',
+    label: 'Whiteboard',
+    prefix: 'board',
+    file: WHITEBOARD_SCENE_FILE,
+    maxTitle: 120,
+    create: (title) => ({ ...emptyWhiteboardScene(), appState: { name: title } }),
+  }],
+]);
 
 const realDir = (dir: string) => {
   try {
@@ -712,10 +752,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     res: http.ServerResponse,
     url: URL,
   ): Promise<boolean> => {
-    const createdType = url.pathname === '/api/hub/slides' ? 'slides'
-      : url.pathname === '/api/hub/storyboards' ? 'storyboard' : null;
-    if (createdType) {
-      const isDeck = createdType === 'slides';
+    const creation = ARTIFACT_CREATION.get(url.pathname);
+    if (creation) {
       if (req.method !== 'POST') {
         send(res, 405, 'Method not allowed');
         return true;
@@ -736,8 +774,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         title?: unknown;
       } | null;
       const title = typeof body?.title === 'string' ? body.title.trim() : '';
-      if (!body || typeof body.project !== 'string' || !title || title.length > (isDeck ? MAX_SLIDE_TITLE : MAX_STORYBOARD_TITLE)) {
-        sendJson(res, 400, { error: isDeck ? 'Invalid slide deck request' : 'Invalid storyboard request' });
+      if (!body || typeof body.project !== 'string' || !title || title.length > creation.maxTitle) {
+        sendJson(res, 400, { error: `Invalid ${creation.label.toLowerCase()} request` });
         return true;
       }
       const reference = body.project;
@@ -747,11 +785,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return true;
       }
       try {
-        const id = `${isDeck ? 'deck' : 'storyboard'}-${crypto.randomUUID()}`;
-        const file = isDeck ? SLIDE_DECK_FILE : STORYBOARD_FILE;
-        const source = isDeck
-          ? defaultSlideDeck(title)
-          : defaultStoryboard(title, body.language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined);
+        const id = `${creation.prefix}-${crypto.randomUUID()}`;
+        const source = creation.create(title, body.language);
         const link = await writeQuota(target, (prepare) =>
           withProjectMutation(target, async () => {
             const admit = await prepare();
@@ -760,20 +795,20 @@ export async function startHub(options: HubOptions): Promise<Hub> {
             assertAvailable(target);
             writeRemoteArtifact(
               target,
-              `${createdType}/${id}`,
+              `${creation.type}/${id}`,
               {
                 baseRevision: null,
-                files: { [file]: Buffer.from(JSON.stringify(source)).toString('base64') },
+                files: { [creation.file]: Buffer.from(JSON.stringify(source)).toString('base64') },
               },
               admit,
             );
-            return artifactPath(artifactsRootOf(target), createdType, id);
+            return artifactPath(artifactsRootOf(target), creation.type, id);
           }),
         );
         sendJson(res, 201, { id, url: link });
       } catch (error) {
         sendJson(res, error instanceof RemoteTransferError ? error.status : 500, {
-          error: isDeck ? 'Slide deck could not be created' : 'Storyboard could not be created',
+          error: `${creation.label} could not be created`,
         });
       }
       return true;
@@ -1306,7 +1341,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         });
         return;
       }
-      const deletedRoute = /^\/(document|artboard|html|slides|storyboard)\/([\w-]+)\/?$/.exec(pathname);
+      const deletedRoute = DELETED_ARTIFACT_PATH.exec(pathname);
       if (
         deletedRoute &&
         authenticated(req, url) &&
@@ -1340,12 +1375,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }
       const mounted = await route(req, url, pathname);
       if (!mounted) send(res, 404, 'Not found');
-      else if (
-        req.method === 'POST' &&
-        /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard)\/[^/]+\/comments|document\/[^/]+\/update|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?)$/.test(
-          pathname,
-        )
-      ) {
+      else if (req.method === 'POST' && ARTIFACT_MUTATION_PATH.test(pathname)) {
         const project = path.resolve(mounted.root, '../..');
         if (
           !projectAccess.authorized(req, project) ||

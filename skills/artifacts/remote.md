@@ -83,7 +83,7 @@ not live local file watching. Artboards must include every referenced board file
 before pushing; the local skeleton streaming workflow cannot be uploaded halfway.
 Return the successful push's `url`. A recipient still needs browser access.
 
-Documents, artboards, slide decks, and storyboards support native comments. HTML uses push, pull, check, and browser runtime verification. Upload only source/resources. Server comments, history and CRDT state
+Documents, artboards, whiteboards, slide decks, and storyboards support native comments. HTML uses push, pull, check, and browser runtime verification. Upload only source/resources. Server comments, history and CRDT state
 remain server-owned. Do not edit/copy comments.json or .state to simulate a reply.
 
 ## Events, errors and credentials

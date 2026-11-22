@@ -292,14 +292,18 @@ export function renderThumbnail(artifact: ThumbnailArtifact, value: unknown) {
       [...key].reduce((hash, c) => (Math.imul(hash, 31) + c.charCodeAt(0)) >>> 0, 0) % 5;
     const light = ['#eee8e0', '#e6ece8', '#e9e8f0', '#e5ebed', '#f0e7e4'][index];
     const dark = ['#312b25', '#25312a', '#2c2937', '#263036', '#342824'][index];
-    body = `<style>:root{--cover:${light}}@media (prefers-color-scheme: dark){:root{--cover:${dark}}}</style>${rect(0, 0, 600, 360, 'var(--cover)')}${text(42, 91, '</>', 44, 'var(--muted)', 500)}${wrap(
+    const whiteboard = artifact.type === 'whiteboard';
+    const glyph = whiteboard
+      ? `<path d="${TYPE_GLYPHS.whiteboard.stroke}" transform="translate(40 45) scale(2)" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
+      : text(42, 91, '</>', 44, 'var(--muted)', 500);
+    body = `<style>:root{--cover:${light}}@media (prefers-color-scheme: dark){:root{--cover:${dark}}}</style>${rect(0, 0, 600, 360, 'var(--cover)')}${glyph}${wrap(
       title,
       25,
       505,
       3,
     )
       .map((line, i) => text(42, 160 + i * 36, line, 25, 'var(--ink)', 600))
-      .join('')}${text(42, 318, `${artifact.project ?? 'ANJIAN'} / HTML`, 11, 'var(--muted)')}`;
+      .join('')}${text(42, 318, `${artifact.project ?? 'ANJIAN'}${whiteboard ? '' : ' / HTML'}`, 11, 'var(--muted)')}`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360"><title>${escape(title)}</title>${STYLE}${body}</svg>`;
 }

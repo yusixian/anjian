@@ -27,6 +27,8 @@ function useJson<T>(url: string) {
 }
 
 export function PreviewLayout({ type, id }: { type: ArtifactType; id: string }) {
-  const { data, failed } = useJson<PreviewPayload>(`/api/preview/${type}/${id}`);
+  const page = type === 'whiteboard' ? new URL(location.href).searchParams.get('page') : null;
+  const query = page ? `?${new URLSearchParams({ page })}` : '';
+  const { data, failed } = useJson<PreviewPayload>(`/api/preview/${type}/${id}${query}`);
   return <PreviewView data={data} failed={failed} id={id} type={type} />;
 }

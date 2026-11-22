@@ -121,7 +121,7 @@ function artifactIds(root, type) {
 
 function commentReminders(project, root, key) {
   const waiting = [];
-  for (const type of ['document', 'artboard', 'slides', 'storyboard']) {
+  for (const type of ['document', 'artboard', 'whiteboard', 'slides', 'storyboard']) {
     for (const id of artifactIds(root, type)) {
       const file = readJson(path.join(root, type, id, 'comments.json'));
       if (!file) continue;

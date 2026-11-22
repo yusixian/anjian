@@ -28,6 +28,14 @@ const openArtifact = (artifact: HubArtifact, newTab: boolean) => {
   else location.assign(artifact.url);
 };
 
+const creationOptions = {
+  slides: { path: 'slides', label: 'slideLibrary.create', error: 'slideLibrary.createFailed' },
+  storyboard: { path: 'storyboards', label: 'storyboardLibrary.create', error: 'storyboardLibrary.createFailed' },
+  whiteboard: { path: 'whiteboards', label: 'whiteboard.create', error: 'whiteboard.createFailed' },
+} as const;
+type CreatableArtifact = keyof typeof creationOptions;
+const creatableTypes = Object.keys(creationOptions) as CreatableArtifact[];
+
 export function ArtifactList() {
   const { t } = useTranslation();
   const { list, error, refresh, removeProject } = useHubArtifacts();
@@ -45,7 +53,7 @@ export function ArtifactList() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [confirmMove, setConfirmMove] = useState<TrashTarget[] | null>(null);
   const [moving, setMoving] = useState(false);
-  const [creating, setCreating] = useState<'slides' | 'storyboard' | null>(null);
+  const [creating, setCreating] = useState<CreatableArtifact | null>(null);
   const [moveDone, setMoveDone] = useState(0);
   const [moved, setMoved] = useState<TrashEntry[]>([]);
   const [failedTargets, setFailedTargets] = useState<TrashTarget[]>([]);
@@ -75,11 +83,11 @@ export function ArtifactList() {
   const retryable = failedTargets.filter((target) => picked.some((artifact) => artifactSelectionKey(artifact) === artifactSelectionKey(target)));
   const allVisibleSelected = items.length > 0 && items.every((artifact) => chosen.has(artifactSelectionKey(artifact)));
 
-  const createArtifact = async (kind: 'slides' | 'storyboard') => {
+  const createArtifact = async (kind: CreatableArtifact) => {
     if (!selected || creating) return;
     setCreating(kind);
     try {
-      const response = await fetch(kind === 'slides' ? '/api/hub/slides' : '/api/hub/storyboards', {
+      const response = await fetch(`/api/hub/${creationOptions[kind].path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,7 +100,7 @@ export function ArtifactList() {
       if (!response.ok || !data.url?.startsWith(`/${kind}/`)) throw new Error('Artifact could not be created');
       location.assign(data.url);
     } catch {
-      toast.error(t(kind === 'slides' ? 'slideLibrary.createFailed' : 'storyboardLibrary.createFailed'));
+      toast.error(t(creationOptions[kind].error));
     } finally {
       setCreating(null);
     }
@@ -293,12 +301,18 @@ export function ArtifactList() {
             </span>
             {selected && !selecting && (
               <div {...stylex.props(styles.createActions)}>
-                <Button icon={Plus} disabled={creating !== null} loading={creating === 'slides'} size="small" onClick={() => void createArtifact('slides')}>
-                  {t('slideLibrary.create')}
-                </Button>
-                <Button icon={Plus} disabled={creating !== null} loading={creating === 'storyboard'} size="small" onClick={() => void createArtifact('storyboard')}>
-                  {t('storyboardLibrary.create')}
-                </Button>
+                {creatableTypes.map((kind) => (
+                  <Button
+                    key={kind}
+                    icon={Plus}
+                    disabled={creating !== null}
+                    loading={creating === kind}
+                    size="small"
+                    onClick={() => void createArtifact(kind)}
+                  >
+                    {t(creationOptions[kind].label)}
+                  </Button>
+                ))}
               </div>
             )}
             {selection !== 'trash' && (
@@ -323,14 +337,15 @@ export function ArtifactList() {
           ) : (
           <>
           <div {...stylex.props(styles.toolbar)}>
-            <Segmented<ArtifactType | 'all'>
-              className={stylex.props(styles.tabs).className}
-              options={tabs}
-              size="small"
-              styles={{ item: { height: 30, paddingInline: 8 } }}
-              value={type}
-              onChange={(next) => { if (next !== type) clearChosen(true); setType(next); }}
-            />
+            <div {...stylex.props(styles.tabs)}>
+              <Segmented<ArtifactType | 'all'>
+                options={tabs}
+                size="small"
+                styles={{ item: { height: 30, paddingInline: 8 } }}
+                value={type}
+                onChange={(next) => { if (next !== type) clearChosen(true); setType(next); }}
+              />
+            </div>
             <div {...stylex.props(styles.tools)}>
               <div aria-label={t('home.scopeLabel')} role="group" {...stylex.props(styles.scope)}>
                 {scopes.map((option) => (

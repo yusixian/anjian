@@ -89,7 +89,7 @@ function createCommentWatch(project, key = cursorKey(process.env)) {
   const roundStates = new Map();
   return (artifacts) => {
     const events = [];
-    for (const type of ['document', 'artboard', 'slides', 'storyboard']) {
+    for (const type of ['document', 'artboard', 'whiteboard', 'slides', 'storyboard']) {
       for (const id of ids(root, type)) {
         const artifact = `${type}/${id}`;
         if (artifacts && !artifacts.has('*') && !artifacts.has(artifact)) continue;

@@ -19,6 +19,7 @@ const references = [
   'slides.md',
   'storyboard.md',
   'ui.md',
+  'whiteboard.md',
   'examples/today-inbox.html',
 ];
 

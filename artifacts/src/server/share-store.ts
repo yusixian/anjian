@@ -2,12 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { parseSlideDeck, publishedSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
 import type { ArtifactType } from '../shared/types';
 import { isArtifactId, isArtifactLocator, isArtifactType } from './artifacts';
 import { parseDocument } from './document-codec';
-import { parseSlideDeck, publishedSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
 import { readRemoteArtifact } from './remote-transfer';
 import { readCanvas } from './state';
+import { readWhiteboardScene } from './whiteboard';
 
 const DEFAULT_MAX_BYTES = 512 * 1024 * 1024;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -235,6 +236,8 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
             throw new Error('Artboard is incomplete or invalid');
         } else if (artifact.type === 'document') {
           parseDocument(fs.readFileSync(path.join(directory, 'doc.xml'), 'utf8'));
+        } else if (artifact.type === 'whiteboard') {
+          readWhiteboardScene(directory);
         } else if (artifact.type === 'html' && !fs.readFileSync(path.join(directory, 'index.html'), 'utf8').trim()) {
           throw new Error('HTML entry is empty');
         }

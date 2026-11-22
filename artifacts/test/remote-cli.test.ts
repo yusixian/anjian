@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { remoteCommands } from '../src/cli/remote-commands';
-import { applyLocalFiles, backupHome, clientHome, filesHash, localFiles, readConfig, sleep, updateConfig, withArtifactLock } from '../src/cli/remote-core';
+import { applyLocalFiles, backupHome, clientHome, filesHash, localFiles, readConfig, sleep, updateConfig, validateFiles, withArtifactLock } from '../src/cli/remote-core';
 import { serverClient } from '../src/cli/server';
 
 let home: string;
@@ -31,6 +31,33 @@ const run = async (name: string, values: Record<string, string | boolean | undef
   return out;
 };
 const doc = (text: string) => ({ 'doc.xml': Buffer.from(`<doc><p>${text}</p></doc>`).toString('base64') });
+const whiteboard = (color: string) => ({
+  'scene.excalidraw': Buffer.from(JSON.stringify({
+    type: 'excalidraw', version: 2, elements: [], appState: { viewBackgroundColor: color },
+  })).toString('base64'),
+});
+
+test('keeps an unlisted whiteboard scene out of sync without overwriting it', () => {
+  const artifact = 'whiteboard/review';
+  const source = whiteboard('#ffffff');
+  applyLocalFiles(project, artifact, source);
+  const pages = path.join(project, '.anjian/artifacts', artifact, 'pages');
+  fs.mkdirSync(pages);
+  const orphan = path.join(pages, 'draft.excalidraw');
+  fs.writeFileSync(orphan, 'unlisted draft');
+
+  expect(localFiles(project, artifact)).toEqual(source);
+  applyLocalFiles(project, artifact, whiteboard('#eeeeee'));
+  expect(fs.readFileSync(orphan, 'utf8')).toBe('unlisted draft');
+
+  expect(() => applyLocalFiles(project, artifact, {
+    ...source,
+    'pages.json': Buffer.from(JSON.stringify({ version: 1, pages: [{ id: 'draft', title: 'Draft' }] })).toString('base64'),
+    'pages/draft.excalidraw': source['scene.excalidraw'],
+  })).toThrow('Unlisted whiteboard file already exists');
+  expect(fs.readFileSync(orphan, 'utf8')).toBe('unlisted draft');
+  expect(localFiles(project, artifact)).toEqual(whiteboard('#eeeeee'));
+});
 
 function fixtureServer() {
   let files: Record<string, string> = {};
@@ -50,7 +77,8 @@ function fixtureServer() {
     }
     if (url.pathname === '/api/remote/projects/p1/agent/document/demo/comments') { send(200, { threads: [] }); return; }
     if (url.pathname === '/api/remote/projects/p1/events') { send(200, { cursor: '1', events: [{ id: '1', artifact: 'document/demo', type: 'comment', data: { text: 'hello' } }] }); return; }
-    if (url.pathname === '/api/remote/projects/p1/artifacts/document/demo') {
+    const artifactMatch = /^\/api\/remote\/projects\/p1\/artifacts\/(document|whiteboard)\/demo$/.exec(url.pathname);
+    if (artifactMatch) {
       if (req.method === 'GET') { send(200, { revision, files }); return; }
       const chunks: Buffer[] = [];
       req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -58,7 +86,7 @@ function fixtureServer() {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { baseRevision: string | null; files: Record<string, string> };
         if (body.baseRevision !== revision) { send(409, { error: 'revision_conflict' }); return; }
         files = body.files; revision = `r${++nextRevision}`;
-        send(200, { revision, files, url: 'http://127.0.0.1/document/demo' });
+        send(200, { revision, files, url: `http://127.0.0.1/${artifactMatch[1]}/demo` });
       });
       return;
     }
@@ -142,6 +170,88 @@ describe('remote CLI', () => {
       api.mutate(doc('other remote edit'));
       await expect(run('push', { artifact: 'document/demo' })).rejects.toThrow('changed remotely');
     } finally { await api.close(); }
+  });
+
+  test('pushes and pulls whiteboards while preserving local feedback and recoverable scenes', async () => {
+    const api = fixtureServer();
+    const origin = await api.origin();
+    const artifact = 'whiteboard/demo';
+    try {
+      updateConfig((config) => { config.servers[origin] = { token: 'secret-token', expiresAt: Date.now() + 60_000, deviceId: 'd1', deviceName: 'Laptop' }; });
+      await run('link', { server: origin });
+      applyLocalFiles(project, artifact, whiteboard('#ffffff'));
+      const dir = path.join(project, '.anjian/artifacts', artifact);
+      fs.writeFileSync(path.join(dir, 'comments.json'), 'local feedback');
+      expect((await run('push', { artifact }))[0]).toMatchObject({ artifact, revision: 'r1' });
+      expect(readConfig().bindings[project]!.revisions[artifact]!.local).toBe(filesHash(whiteboard('#ffffff')));
+      api.mutate(whiteboard('#f2f2f2'));
+      fs.writeFileSync(path.join(dir, 'scene.excalidraw'), '{unfinished');
+      await expect(run('pull', { artifact })).rejects.toThrow('refusing to overwrite');
+      const [result] = await run('pull', { artifact, 'backup-local': true });
+      const backup = JSON.parse(fs.readFileSync(result!.backup as string, 'utf8'));
+      expect(Buffer.from(backup.files['scene.excalidraw'], 'base64').toString()).toBe('{unfinished');
+      expect(localFiles(project, artifact)).toEqual(whiteboard('#f2f2f2'));
+      expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('local feedback');
+      api.mutate({ 'scene.excalidraw': Buffer.from('{}').toString('base64') });
+      await expect(run('pull', { artifact })).rejects.toThrow('Remote returned an invalid artifact snapshot');
+      expect(localFiles(project, artifact)).toEqual(whiteboard('#f2f2f2'));
+    } finally { await api.close(); }
+  });
+
+  test('transfers listed whiteboard pages while preserving unlisted source and feedback', async () => {
+    const api = fixtureServer();
+    const origin = await api.origin();
+    const artifact = 'whiteboard/demo';
+    const board = whiteboard('#ffffff');
+    const scene = board['scene.excalidraw'];
+    const page = 'pages/agenda.excalidraw';
+    const multipage = {
+      ...board,
+      'pages.json': Buffer.from(JSON.stringify({ version: 1, pages: [{ id: 'agenda', title: 'Agenda' }] })).toString('base64'),
+      [page]: scene,
+    };
+    try {
+      updateConfig((config) => {
+        config.servers[origin] = {
+          token: 'secret-token', expiresAt: Date.now() + 60_000, deviceId: 'd1', deviceName: 'Laptop',
+        };
+      });
+      await run('link', { server: origin });
+      applyLocalFiles(project, artifact, multipage);
+      const dir = path.join(project, '.anjian/artifacts', artifact);
+      fs.writeFileSync(path.join(dir, 'comments.json'), 'keep feedback');
+      const orphan = path.join(dir, 'pages/orphan.excalidraw');
+      fs.writeFileSync(orphan, Buffer.from(scene, 'base64'));
+      expect(localFiles(project, artifact)).toEqual(multipage);
+      expect((await run('push', { artifact }))[0]).toMatchObject({ artifact, revision: 'r1' });
+
+      api.mutate({ ...multipage, 'pages.json': Buffer.from('{}').toString('base64') });
+      await expect(run('pull', { artifact })).rejects.toThrow('invalid artifact snapshot');
+      expect(localFiles(project, artifact)).toEqual(multipage);
+      api.mutate(board);
+      await run('pull', { artifact });
+      expect(localFiles(project, artifact)).toEqual(board);
+      expect(fs.existsSync(path.join(dir, page))).toBe(false);
+      expect(fs.readFileSync(orphan).toString('base64')).toBe(scene);
+      expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('keep feedback');
+    } finally { await api.close(); }
+  });
+
+  test('enforces the scene and package byte limits without overflowing Base64 validation', () => {
+    const artifact = 'whiteboard/demo';
+    const scene = Buffer.from(whiteboard('#ffffff')['scene.excalidraw'], 'base64').toString();
+    const fileLimit = 16 * 1024 * 1024;
+    const large = Buffer.from(scene.padEnd(fileLimit, ' ')).toString('base64');
+    expect(() => validateFiles(artifact, { 'scene.excalidraw': large })).not.toThrow();
+    const tooLarge = Buffer.from(scene.padEnd(fileLimit + 1, ' ')).toString('base64');
+    expect(() => validateFiles(artifact, { 'scene.excalidraw': tooLarge })).toThrow('16 MiB');
+    const files = {
+      'scene.excalidraw': large,
+      'pages.json': Buffer.from(JSON.stringify({ version: 1, pages: [{ id: 'agenda', title: 'Agenda' }] })).toString('base64'),
+      'pages/agenda.excalidraw': large,
+    };
+    expect(() => validateFiles(artifact, files)).toThrow('32 MiB');
+    expect(() => validateFiles(artifact, { ...files, 'scene.excalidraw': whiteboard('#ffffff')['scene.excalidraw'] })).not.toThrow();
   });
 
   test('preserves special JavaScript property names as ordinary asset names', () => {

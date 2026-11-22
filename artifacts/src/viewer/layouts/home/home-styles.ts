@@ -100,7 +100,7 @@ export const styles = stylex.create({
     'minHeight': 32,
     '@media (max-width: 700px)': { alignItems: 'stretch', flexDirection: 'column', gap: 8 },
   },
-  tabs: { flexShrink: 0 },
+  tabs: { maxWidth: '100%', overflowX: 'auto' },
   tabLabel: { display: 'inline-flex', gap: 7, alignItems: 'center', fontSize: 12 },
   tabCount: { fontSize: 10, color: cssVar.colorTextSecondary, fontVariantNumeric: 'tabular-nums' },
   tools: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' },

@@ -82,7 +82,7 @@ function entryAddress(entry: TrashEntry) {
   let pathname: string;
   try { pathname = new URL(entry.url, 'http://anjian.local').pathname; }
   catch { throw new ArtifactTrashError(500, 'trash_corrupt', 'Invalid trash URL'); }
-  const match = /^\/(document|artboard|html|slides|storyboard)\/([^/]+)$/.exec(pathname);
+  const match = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
   if (!match || match[1] !== entry.type || !isArtifactAddress(match[2]!))
     throw new ArtifactTrashError(500, 'trash_corrupt', 'Invalid trash address');
   return match[2]!;
