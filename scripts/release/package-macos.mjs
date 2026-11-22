@@ -2,12 +2,23 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { parseArgs } from 'node:util';
 
 import { buildInfo, hashFile } from './build-info.mjs';
 import { root } from './versions.mjs';
 
-const [output, sha, architecture] = process.argv.slice(2);
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: {
+    dmg: { type: 'boolean' },
+    identity: { type: 'string' },
+    'notary-profile': { type: 'string' },
+  },
+});
+const [output, sha, architecture] = positionals;
+const { dmg, identity, 'notary-profile': profile } = values;
 if (
+  positionals.length !== 3 ||
   !output ||
   !/^[a-f0-9]{40}$/.test(sha ?? '') ||
   !['arm64', 'x64'].includes(architecture) ||
@@ -15,9 +26,11 @@ if (
   process.arch !== architecture
 ) {
   throw new Error(
-    'Usage on the target Mac: node scripts/release/package-macos.mjs <output-dir> <commit> <arm64|x64>',
+    'Usage on the target Mac: node scripts/release/package-macos.mjs <output-dir> <commit> <arm64|x64> [--dmg]',
   );
 }
+if ((identity !== undefined || profile !== undefined) && (!dmg || !identity || !profile))
+  throw new Error('Notarization requires --dmg, --identity and --notary-profile together');
 
 const info = buildInfo();
 if (info.sha !== sha || info.state !== 'clean')
@@ -85,6 +98,46 @@ function sortedEntries(directory, prefix) {
         ? [relative, ...sortedEntries(path.join(directory, entry.name), relative)]
         : [relative];
     });
+}
+
+function diskImage(bundledNode) {
+  const run = (command, args) =>
+    execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+  const image = path.join(temporary, `${artifact}.dmg`);
+  const entitlements = path.join(temporary, 'node-entitlements.plist');
+  fs.writeFileSync(entitlements, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<plist version="1.0"><dict>',
+    '<key>com.apple.security.cs.allow-jit</key><true/>',
+    // The pinned Intel Node runtime also uses executable allocations without MAP_JIT.
+    ...(architecture === 'x64' ? ['<key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>'] : []),
+    '</dict></plist>',
+  ].join('\n'));
+  run('/usr/bin/codesign', [
+    '--force', '--sign', identity ?? '-', identity ? '--timestamp' : '--timestamp=none',
+    '--identifier', 'ren.cosine.anjian.cli', '--options', 'runtime',
+    '--entitlements', entitlements, bundledNode,
+  ]);
+  run('/usr/bin/codesign', ['--verify', '--strict', bundledNode]);
+  run('/usr/bin/hdiutil', [
+    'create', '-quiet', '-ov', '-format', 'UDZO', '-volname', `Anjian ${info.version}`,
+    '-srcfolder', bundle, image,
+  ]);
+  run('/usr/bin/hdiutil', ['verify', '-quiet', image]);
+  if (identity) {
+    run('/usr/bin/codesign', [
+      '--sign', identity, '--timestamp', '--identifier', 'ren.cosine.anjian.cli.disk-image', image,
+    ]);
+    const result = JSON.parse(run('/usr/bin/xcrun', [
+      'notarytool', 'submit', image, '--keychain-profile', profile, '--wait', '--output-format', 'json',
+    ]));
+    if (result.status !== 'Accepted')
+      throw new Error(`Apple notarization ${result.status} (submission ${result.id})`);
+    run('/usr/bin/xcrun', ['stapler', 'staple', image]);
+    run('/usr/bin/xcrun', ['stapler', 'validate', image]);
+    run('/usr/bin/codesign', ['--verify', '--strict', image]);
+  }
+  return image;
 }
 
 try {
@@ -155,9 +208,12 @@ try {
     fs.utimesSync(destination, timestamp, timestamp);
   }
   fs.mkdirSync(directory, { recursive: true });
-  const filename = `${artifact}.tar.gz`;
+  const filename = `${artifact}.${dmg ? 'dmg' : 'tar.gz'}`;
   const archive = path.join(directory, filename);
-  execFileSync(
+  if (dmg) {
+    if (fs.existsSync(archive)) throw new Error(`Disk image already exists: ${archive}`);
+    fs.copyFileSync(diskImage(bundledNode), archive, fs.constants.COPYFILE_EXCL);
+  } else execFileSync(
     '/usr/bin/tar',
     [
       '--format',

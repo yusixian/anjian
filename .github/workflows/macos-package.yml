@@ -50,6 +50,16 @@ jobs:
           directory="$RUNNER_TEMP/anjian-packages"
           archive=$(node scripts/release/package-macos.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH")
           node scripts/release/smoke-macos-package.mjs "$archive" "$EXPECTED_SHA" "$TARGET_ARCH"
+      - name: Verify a disk image from a read-only mount
+        if: github.event_name == 'pull_request'
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          directory="$RUNNER_TEMP/anjian-dmg-smoke"
+          image=$(node scripts/release/package-macos.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH" --dmg)
+          node scripts/release/smoke-macos-package.mjs "$image" "$EXPECTED_SHA" "$TARGET_ARCH"
       - uses: actions/upload-artifact@v4
         with:
           name: anjian-macos-${{ matrix.arch }}
