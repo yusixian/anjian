@@ -6,7 +6,6 @@ import { useId, useRef, useState } from 'react';
 import type { CommentsFile } from '../../shared/comments';
 import { useTranslation } from '../i18n';
 
-type RecoveryArtifact = 'document' | 'artboard' | 'slides' | 'storyboard' | 'whiteboard';
 interface CommentRecoveryPreview {
   backup: CommentsFile<unknown>;
   revision: string;
@@ -64,14 +63,14 @@ const styles = stylex.create({
 });
 
 export function CommentRecovery<A>({
-  id,
-  type,
+  url,
+  preserveReviewRecords,
   compact,
   pending,
   onRestore,
 }: {
-  id: string;
-  type: RecoveryArtifact;
+  url: string;
+  preserveReviewRecords?: boolean;
   compact?: boolean;
   pending?: boolean;
   onRestore?: (comments: CommentsFile<A>) => void;
@@ -87,7 +86,7 @@ export function CommentRecovery<A>({
   >('loading');
 
   async function post<Result>(action: string, body: BodyInit) {
-    const response = await fetch(`/api/${type}/${encodeURIComponent(id)}/comments/${action}`, {
+    const response = await fetch(`${url}/${action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -148,7 +147,7 @@ export function CommentRecovery<A>({
         {...stylex.props(styles.dialog)}
       >
         <h2 id={heading}>{t('comments.restoreBackup')}</h2>
-        {type === 'artboard' && <p>{t('comments.reviewRecordsRecovery')}</p>}
+        {preserveReviewRecords && <p>{t('comments.reviewRecordsRecovery')}</p>}
         <div role="status">
           {status === 'loading' && t('common.loading')}
           {status === 'ready' && !preview && t('comments.noPendingRecovery')}

@@ -114,7 +114,10 @@ function WhiteboardPage({
               {t('chrome.comments')}
             </button>
             <NativeFeedbackButton />
-            <CommentRecovery id={id} type="whiteboard" onRestore={() => void load()} />
+            <CommentRecovery
+              url={`/api/whiteboard/${encodeURIComponent(id)}/comments`}
+              onRestore={() => void load()}
+            />
             <ShareButton id={id} type="whiteboard" />
           </div>
         )}

@@ -17,7 +17,10 @@ export function ArtboardLayout({ id }: { id: string }) {
           id={id}
           actions={
             <>
-              <CommentRecovery id={id} type="artboard" />
+              <CommentRecovery
+                preserveReviewRecords
+                url={`/api/artboard/${encodeURIComponent(id)}/comments`}
+              />
               <ShareButton id={id} type="artboard" />
             </>
           }

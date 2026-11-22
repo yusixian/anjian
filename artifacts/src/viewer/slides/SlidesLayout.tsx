@@ -172,8 +172,7 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
           </Tool>
           <NativeFeedbackButton />
           <CommentRecovery
-            id={id}
-            type="slides"
+            url={url + '/comments'}
             onRestore={() => setCommentRevision((value) => value + 1)}
           />
           <ShareButton id={id} type="slides" />

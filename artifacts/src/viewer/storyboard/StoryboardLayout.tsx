@@ -230,8 +230,7 @@ function Workbench({
           <div className="sb-toolbar-actions">
             <NativeFeedbackButton />
             <CommentRecovery
-              id={id}
-              type="storyboard"
+              url={url + '/comments'}
               onRestore={() => setCommentRevision((value) => value + 1)}
             />
             <span className="sb-save-state" role="status">

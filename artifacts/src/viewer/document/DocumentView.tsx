@@ -93,6 +93,7 @@ export function DocumentView({
   transport,
   live,
   resolveReference,
+  commentRecoveryUrl,
   fallback,
   actions: barActions,
 }: {
@@ -100,6 +101,7 @@ export function DocumentView({
   transport: DocumentTransport;
   live: boolean;
   resolveReference?: ArtifactReferenceResolver;
+  commentRecoveryUrl?: string;
   fallback?: ReactNode;
   actions?: ReactNode;
 }) {
@@ -333,12 +335,11 @@ export function DocumentView({
         openComments={openComments}
         actions={
           <>
-            {live && !historyVisible ? (
+            {live && commentRecoveryUrl && !historyVisible ? (
               <CommentRecovery
                 compact={phone}
-                id={id}
                 pending={recoveryPending}
-                type="document"
+                url={commentRecoveryUrl}
                 onRestore={setComments}
               />
             ) : null}
