@@ -16,15 +16,30 @@ function eachDocument(sources, visit) {
   }
 }
 
-function formatMessage({ artifact, revision, definition, answer }) {
+const MESSAGE_BYTES = 3 * 1024;
+
+function readCommand(project, artifact, recipient, id) {
+  const quote =
+    process.platform === 'win32'
+      ? (value) => "'" + value.replaceAll("'", "''") + "'"
+      : (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+  return `node ${quote(path.join(__dirname, 'anjian.cjs'))} question-answer --project-dir ${quote(project)} --artifact ${artifact} --recipient ${recipient} --submission ${id} --json`;
+}
+
+function formatMessage(delivery, project, recipient) {
+  const { artifact, revision, definition, answer } = delivery;
+  const heading = `The human submitted an answer to Anjian question ${JSON.stringify(definition.id)} in ${artifact}.\n`;
+  const location = `Document revision: ${revision}\n`;
   const option = definition.options?.find(({ id }) => id === answer);
-  return (
-    `The human submitted an answer to Anjian question ${JSON.stringify(definition.id)} in ${artifact}.\n` +
-    `Document revision: ${revision}\nQuestion: ${JSON.stringify(definition.prompt)}\n` +
-    (option
-      ? `Selected option: ${JSON.stringify(option.label)} (ID ${JSON.stringify(answer)})`
-      : `Answer: ${JSON.stringify(answer)}`)
-  );
+  const content = option
+    ? `Selected option: ${JSON.stringify(option.label)} (ID ${JSON.stringify(answer)})`
+    : `Answer: ${JSON.stringify(answer)}`;
+  const full = heading + location + `Question: ${JSON.stringify(definition.prompt)}\n` + content;
+  const command = readCommand(project, artifact, recipient, delivery.id);
+  const inline = full + `\nRead the submitted answer again: ${command}`;
+  return Buffer.byteLength(inline, 'utf8') <= MESSAGE_BYTES
+    ? inline
+    : heading + location + `Read the full submitted answer: ${command}`;
 }
 
 function createLocalQuestionDispatch(host, session) {
@@ -118,9 +133,9 @@ function createLocalQuestionDispatch(host, session) {
     const targets = [];
     eachDocument(sources, (project, artifact) => {
       const url = endpoint(project, artifact);
-      if (url) targets.push({ url, artifact });
+      if (url) targets.push({ url, artifact, project });
     });
-    for (const { url, artifact } of targets) {
+    for (const { url, artifact, project } of targets) {
       try {
         const previous = receipts.get(url);
         if (previous) {
@@ -142,7 +157,7 @@ function createLocalQuestionDispatch(host, session) {
           continue;
         return {
           artifact,
-          message: formatMessage(delivery),
+          message: formatMessage(delivery, project, recipient),
           acknowledge: () => acknowledge(url, delivery.id),
         };
       } catch {
