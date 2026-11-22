@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.6`（`de9f13d`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.0`（`5ef5fc9`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.6) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.6`（`de9f13d`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.1`（`e09efaa`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.1) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.6) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -64,6 +64,10 @@
 ## v0.11.0 本机评论推送
 
 已订阅作品的本机宿主接收 Hub 推送的变更通知。四种宿主的回归覆盖订阅、轮次和回执。真实 Codex App Server 配本地模型桩验证空闲线程接收评论、未订阅线程保持空闲、Hub 异常退出后恢复和手动停止。[功能验收 #128](https://github.com/yusixian/anjian/pull/128) · [中文说明](https://anjian.cosine.ren/zh/docs/updates/#0110) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0110)
+
+## v0.11.1 作品级 Agent 署名
+
+启动 Agent 和默认回复作者按作品记录。桌面与 320、390 px Chrome 验证中英文提交按钮与活动宿主对应，实际 CLI 回归覆盖旧作品和显式署名。[验收 #131](https://github.com/yusixian/anjian/pull/131) · [中文说明](https://anjian.cosine.ren/zh/docs/updates/#0111) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0111)
 
 ## 待验证能力
 

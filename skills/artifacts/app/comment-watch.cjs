@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { labelProcess } = require('./process-label.cjs');
 const { unreadReceiptCount, unreadThreadCount } = require('./comment-threads.cjs');
 const { beatSources, sessionOf, subscriptionSources } = require('./comment-subscriptions.cjs');
 const { createLocalCommentEvents } = require('./local-comment-events.cjs');
@@ -233,6 +234,7 @@ function createProjectPoll(key, session) {
 }
 
 function main() {
+  labelProcess('Comment watcher');
   const project = process.argv[2] || process.cwd();
   // Without a session ID (older Claude Code) there is nothing to route by, so every artifact counts.
   const session = sessionOf('claude');

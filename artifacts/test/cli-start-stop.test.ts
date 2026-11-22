@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
+import { version } from '../package.json';
 import { AGENT_MARKERS } from '../src/server/agent';
 import { machinePaths, readProjects } from '../src/server/machine';
 import { registryDir, writeEntry } from '../src/server/registry';
@@ -270,6 +271,14 @@ describe('anjian start', () => {
     ]);
     expect(a.out.port).toBe(b.out.port);
     const pid = serverPid();
+    if (process.platform === 'darwin') {
+      const command = spawnSync('ps', ['-ww', '-p', String(pid), '-o', 'command='], {
+        encoding: 'utf8',
+      });
+      expect(command.stdout.trim()).toMatch(
+        new RegExp(`^Anjian ${version.replaceAll('.', '\\.')} Hub --artifacts-server-id=[a-f0-9]{48}$`),
+      );
+    }
     expect(run(['stop']).out.status).toBe('stopped');
     expect(() => process.kill(pid, 0)).toThrow();
   }, 30000);

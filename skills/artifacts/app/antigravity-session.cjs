@@ -5,6 +5,7 @@ const { execFile, spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { labelProcess } = require('./process-label.cjs');
 const readline = require('node:readline');
 const { parseArgs, promisify } = require('node:util');
 
@@ -213,6 +214,7 @@ function runAntigravitySession({
 }
 
 async function main() {
+  labelProcess('Antigravity session');
   const { values } = parseArgs({
     options: {
       'artifact': { type: 'string', multiple: true },

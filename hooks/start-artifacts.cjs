@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const { labelProcess } = require('../skills/artifacts/app/process-label.cjs');
 
 function readJson(file) {
   try {
@@ -48,6 +49,7 @@ function registerWithRunningServer(project) {
 }
 
 function main() {
+  labelProcess('Session start');
   const project = process.argv[2];
   if (!project) return;
   return registerWithRunningServer(project);

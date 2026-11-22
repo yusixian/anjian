@@ -4,6 +4,7 @@ const { execFile, execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { labelProcess } = require('./process-label.cjs');
 const { createProjectPoll, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
 const { createLocalCommentEvents } = require('./local-comment-events.cjs');
 const {
@@ -287,6 +288,7 @@ function watch(ctx, input) {
 }
 
 function main() {
+  labelProcess('Codex watcher');
   let input;
   try {
     input = JSON.parse(fs.readFileSync(0, 'utf8'));

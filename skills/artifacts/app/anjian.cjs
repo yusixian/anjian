@@ -5,6 +5,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const nodeCrypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { labelProcess } = require('./process-label.cjs');
 
 const win32 = process.platform === 'win32';
 
@@ -27,6 +28,7 @@ function ownerPid() {
 }
 
 function main() {
+  labelProcess('Launcher');
   const cli = path.join(__dirname, 'cli.cjs');
   if (!fs.existsSync(cli)) {
     throw new Error(
