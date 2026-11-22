@@ -7,7 +7,7 @@ import { parseCookies, safeEqual, send } from './http';
 
 const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
 const PAGE =
-  /^\/(?:index\.html|library\/?|devices|connect|members|storage|(?:(?:preview|embed)\/)?(?:artboard|document|html)\/[\w-]+\/?)?$/;
+  /^\/(?:index\.html|library\/?|devices|connect|members|storage|(?:(?:preview|embed)\/)?(?:artboard|document|html|slides)\/[\w-]+\/?)?$/;
 const escape = (value: string) =>
   value.replaceAll(
     /[&<>"']/g,

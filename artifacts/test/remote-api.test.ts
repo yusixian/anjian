@@ -494,3 +494,41 @@ test('document download at zero quota returns persisted bytes without uncharged 
     expect(fs.readFileSync(file, 'utf8')).toContain('next edit');
   } finally { settings.setSharedLimit(1024 * 1024); }
 });
+
+test('a linked device can transfer a deck and review it by stable slide ID', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const project = fx.id(fx.alpha);
+  const other = fx.id(fx.beta);
+  const prefix = `/api/remote/projects/${project}`;
+  const artifact = 'slides/briefing';
+  const deck = {
+    version: 1,
+    title: 'Briefing',
+    slides: [{ id: 'plan', title: 'Plan', body: 'Customer rollout', notes: 'Internal notes' }],
+  };
+  const files = { 'deck.json': encode(JSON.stringify(deck)) };
+  const json = (method: string, body: unknown) => ({
+    method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const uploaded = await fx.request(`${prefix}/artifacts/${artifact}`, json('PUT', { baseRevision: null, files }));
+  expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+  const source = await uploaded.json();
+  expect(source).toMatchObject({ files, revision: expect.stringMatching(/^sha256:/) });
+  const comment = (body: unknown, projectId = project) =>
+    fx.request(`/api/remote/projects/${projectId}/agent/${artifact}/comments`, json('POST', body));
+  const addition = { op: 'add', slideId: 'plan', text: 'Clear next steps', cursor: 'review-device' };
+  expect((await comment(addition, other)).status).toBe(404);
+  expect((await comment({ ...addition, slideId: 'missing' })).status).toBe(409);
+  expect((await comment(addition)).status).toBe(200);
+  const listed = await comment({ op: 'list', all: true, cursor: 'review-device' });
+  expect(listed.status, await listed.clone().text()).toBe(200);
+  expect((await listed.json()).threads[0]).toMatchObject({ anchor: { slideId: 'plan' } });
+
+  const fetched = await fx.request(`${prefix}/artifacts/${artifact}`, { headers });
+  expect(fetched.status).toBe(200);
+  expect(await fetched.json()).toMatchObject({ files, revision: source.revision });
+  const checked = await fx.request(`${prefix}/agent/${artifact}/check`, json('POST', {}));
+  expect(checked.status, await checked.clone().text()).toBe(200);
+  expect((await checked.json()).warnings).toEqual([]);
+});

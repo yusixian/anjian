@@ -24,6 +24,9 @@ const DocumentLayout = lazy(() =>
 const HtmlLayout = lazy(() =>
   import('./layouts/HtmlLayout').then(({ HtmlLayout }) => ({ default: HtmlLayout })),
 );
+const SlidesLayout = lazy(() =>
+  import('./slides').then(({ SlidesLayout }) => ({ default: SlidesLayout })),
+);
 const PreviewLayout = lazy(() =>
   import('./layouts/PreviewLayout').then(({ PreviewLayout }) => ({ default: PreviewLayout })),
 );
@@ -74,6 +77,7 @@ function RouteView() {
   const id = document.documentElement.dataset.anjianArtifactId ?? route.id;
   if (route.kind === 'preview') return <PreviewLayout id={id} type={route.type} />;
   if (route.kind === 'embed') return <Embedded id={id} type={route.type} />;
+  if (route.type === 'slides') return local(<SlidesLayout key={id} id={id} />);
   if (route.type === 'html') return local(<HtmlLayout id={id} />);
   if (route.type === 'document') return local(<DocumentLayout id={id} />);
   return local(<ArtboardLayout id={id} />);

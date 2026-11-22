@@ -18,6 +18,7 @@ const documents = Object.fromEntries(
     'html.md',
     'icons.md',
     'remote.md',
+    'slides.md',
     'ui.md',
     'examples/today-inbox.html',
   ].map((name) => [name, fs.readFileSync(new URL(name, skillRoot), 'utf8')]),

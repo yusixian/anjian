@@ -16,6 +16,7 @@ const references = [
   'html.md',
   'icons.md',
   'remote.md',
+  'slides.md',
   'ui.md',
   'examples/today-inbox.html',
 ];

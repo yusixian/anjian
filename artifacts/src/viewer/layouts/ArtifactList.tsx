@@ -1,6 +1,6 @@
 import { Button, Input, Segmented, Select, toast } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
-import { Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
 
 import type { HubArtifact, HubProjectStatus } from '../../shared/hub';
@@ -45,6 +45,7 @@ export function ArtifactList() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [confirmMove, setConfirmMove] = useState<TrashTarget[] | null>(null);
   const [moving, setMoving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [moveDone, setMoveDone] = useState(0);
   const [moved, setMoved] = useState<TrashEntry[]>([]);
   const [failedTargets, setFailedTargets] = useState<TrashTarget[]>([]);
@@ -73,6 +74,25 @@ export function ArtifactList() {
   const picked = items.filter((artifact) => chosen.has(artifactSelectionKey(artifact)));
   const retryable = failedTargets.filter((target) => picked.some((artifact) => artifactSelectionKey(artifact) === artifactSelectionKey(target)));
   const allVisibleSelected = items.length > 0 && items.every((artifact) => chosen.has(artifactSelectionKey(artifact)));
+
+  const createSlides = async () => {
+    if (!selected || creating) return;
+    setCreating(true);
+    try {
+      const response = await fetch('/api/hub/slides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: selected.dir, title: t('type.slides') }),
+      });
+      const data = (await response.json()) as { url?: string };
+      if (!response.ok || !data.url?.startsWith('/slides/')) throw new Error('Slide deck could not be created');
+      location.assign(data.url);
+    } catch {
+      toast.error(t('slideLibrary.createFailed'));
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const clearChosen = (notify = false) => {
     if (notify && chosen.size) toast.info(t('bulk.selectionCleared'));
@@ -267,6 +287,11 @@ export function ArtifactList() {
                   ? t('home.recentSubtitle')
                   : t('library.count', { count: base.length })}
             </span>
+            {selected && !selecting && (
+              <Button icon={Plus} loading={creating} size="small" onClick={() => void createSlides()}>
+                {t('slideLibrary.create')}
+              </Button>
+            )}
             {selection !== 'trash' && (
               <Button className={stylex.props(bulkStyles.touchAction).className} size="small" onClick={() => {
                 setSelecting((current) => !current);

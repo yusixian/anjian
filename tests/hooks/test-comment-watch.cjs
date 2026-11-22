@@ -39,16 +39,18 @@ function watch(project, key) {
   return require(watcher).createCommentWatch(project, key);
 }
 
-test('new document and artboard comments produce actionable notifications without consuming them', (t) => {
+test('new document, artboard and slide comments produce actionable notifications without consuming them', (t) => {
   const f = fixture(t);
   const poll = watch(f.project);
   assert.deepEqual(poll(), []);
   f.save('document/plan', [thread()]);
   f.save('artboard/settings', [{ ...thread(), anchor: { page: 'p', board: 'a', x: 1, y: 2 } }]);
+  f.save('slides/briefing', [{ ...thread(), anchor: { slideId: 'plan' } }]);
   const events = poll();
   assert.deepEqual(events.map((event) => event.artifact).sort(), [
     'artboard/settings',
     'document/plan',
+    'slides/briefing',
   ]);
   for (const event of events) {
     assert.equal(event.unread, 1);
@@ -238,7 +240,7 @@ function launcher(t) {
     const result = spawnSync(
       process.execPath,
       [path.join(app, 'anjian.cjs'), ...args, '--json', '--project-dir', project],
-      { env: { ...process.env, CLAUDE_CODE_SESSION_ID: session }, encoding: 'utf8' },
+      { env: { ...process.env, CODEX_THREAD_ID: undefined, CLAUDE_CODE_SESSION_ID: session }, encoding: 'utf8' },
     );
     assert.equal(result.status, 0, result.stderr);
   };
@@ -255,7 +257,7 @@ test('a Claude Code session hears only comments on artifacts it opened through t
   const mine = randomUUID();
   const other = randomUUID();
   const watcher = monitor(t, f.project, { CLAUDE_CODE_SESSION_ID: mine });
-  run(f.project, mine, 'start', '--artifact', 'artboard/chat');
+  run(f.project, mine, 'start', '--artifact', 'slides/briefing');
   run(f.project, other, 'start', '--artifact', 'artboard/mac-app-shell');
   run(f.project, mine, 'start');
   await delay(1200);
@@ -263,14 +265,14 @@ test('a Claude Code session hears only comments on artifacts it opened through t
   f.save('document/plan', [thread()]);
   await delay(1500);
   assert.equal(watcher.output, '', "another session's artifact woke this session");
-  f.save('artboard/chat', [thread()]);
-  await until(() => watcher.output.includes('artboard/chat'));
+  f.save('slides/briefing', [{ ...thread(), anchor: { slideId: 'plan' } }]);
+  await until(() => watcher.output.includes('slides/briefing'));
   assert.deepEqual(
     watcher.output
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line).artifact),
-    ['artboard/chat'],
+    ['slides/briefing'],
     watcher.errors,
   );
 });
@@ -358,7 +360,7 @@ test('a running watcher keeps a heartbeat beside its subscription', async (t) =>
   const f = fixture(t);
   const session = randomUUID();
   const child = spawn(process.execPath, [watcher, f.project], {
-    env: { ...process.env, CLAUDE_CODE_SESSION_ID: session },
+    env: { ...process.env, CODEX_THREAD_ID: undefined, CLAUDE_CODE_SESSION_ID: session },
     stdio: 'ignore',
   });
   t.after(() => child.kill());

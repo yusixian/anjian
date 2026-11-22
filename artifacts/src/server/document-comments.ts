@@ -160,6 +160,7 @@ export function createStore<F, H, G>(
   initialAdmission?: CommentAdmission,
   persist?: (next: F, admit?: CommentAdmission) => void,
   deferNormalization = false,
+  read?: () => string | null,
 ): Store<F, H, G> {
   let current = rules.empty();
   let lastSeen: string | null = null;
@@ -186,12 +187,16 @@ export function createStore<F, H, G>(
   };
 
   const sync = (admit?: CommentAdmission) => {
-    let text: string;
-    try {
-      text = fs.readFileSync(file, 'utf8');
-    } catch {
-      return false;
+    let text: string | null;
+    if (read) text = read();
+    else {
+      try {
+        text = fs.readFileSync(file, 'utf8');
+      } catch {
+        return false;
+      }
     }
+    if (text === null) return false;
     if (text === lastSeen) {
       if (!normalizationPending || !admit) return false;
       write(current, admit);

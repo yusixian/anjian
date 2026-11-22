@@ -3,8 +3,12 @@ import { ChevronDown, Eye } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { ANJIAN_MARK_VIEWBOX,anjianMarkBody } from '../../shared/brand';
+import type { PublishedSlideDeck } from '../../shared/slides';
 import type { ArtifactType, CanvasLayout, CanvasSpec } from '../../shared/types';
 
+const SlideShare = lazy(() =>
+  import('../slides').then(({ PublishedSlides }) => ({ default: PublishedSlides })),
+);
 const ArtboardView = lazy(() =>
   import('../layouts/ArtboardView').then(({ ArtboardView }) => ({ default: ArtboardView })),
 );
@@ -16,6 +20,7 @@ const PublicDocument = lazy(() =>
 interface SharePayload {
   canvas?: CanvasSpec | null;
   contentBase: string;
+  deck?: PublishedSlideDeck;
   expiresAt: number | null;
   layout?: CanvasLayout | null;
   publishedAt: number;
@@ -99,7 +104,7 @@ export function SharePage() {
         const next = (await response.json()) as SharePayload;
         if (id !== seq.current) return;
         if (
-          !['artboard', 'document', 'html'].includes(next.type) ||
+          !['artboard', 'document', 'html', 'slides'].includes(next.type) ||
           typeof next.title !== 'string' ||
           typeof next.contentBase !== 'string'
         )
@@ -207,6 +212,10 @@ export function SharePage() {
                     warnings={[]}
                   />
                 </div>
+              </Suspense>
+            ) : data.type === 'slides' && data.deck ? (
+              <Suspense fallback={<div className="share-message">{copy.loading}</div>}>
+                <SlideShare deck={data.deck} />
               </Suspense>
             ) : data.type === 'html' ? (
               <iframe

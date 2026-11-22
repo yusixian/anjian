@@ -2,6 +2,7 @@ import * as stylex from '@stylexjs/stylex';
 import type { SerializedEditorState } from 'lexical';
 import { lazy, Suspense, useEffect, useState } from 'react';
 
+import type { PublishedSlideDeck } from '../../shared/slides';
 import type { ArtifactType, CanvasPayload } from '../../shared/types';
 import { CanvasErrorBoundary } from '../components/CanvasErrorBoundary';
 import { useTranslation } from '../i18n';
@@ -9,6 +10,9 @@ import { culledBoards } from '../lib/cull';
 import { fitView } from '../lib/view';
 import { styles } from './previewStyles';
 
+const SlidesPreview = lazy(() =>
+  import('../slides').then(({ PublishedSlides }) => ({ default: PublishedSlides })),
+);
 const DocumentPreview = lazy(() =>
   import('../document/shims').then(() => import('../document/SnapshotDocument')),
 );
@@ -21,6 +25,7 @@ const none = new Set<string>();
 
 export interface PreviewPayload extends Partial<CanvasPayload> {
   contentBase: string;
+  deck?: PublishedSlideDeck;
   state?: SerializedEditorState;
   title: string;
 }
@@ -47,6 +52,13 @@ export function PreviewView({
   const message = (text: string) => <div {...stylex.props(styles.message)}>{text}</div>;
   if (failed) return message(t('preview.unavailable'));
   if (!data) return message(t('preview.loading'));
+  if (type === 'slides') {
+    return data.deck ? (
+      <Suspense fallback={message(t('preview.loading'))}>
+        <SlidesPreview deck={data.deck} />
+      </Suspense>
+    ) : message(t('preview.unavailable'));
+  }
   if (type === 'html') {
     if (data.warnings?.length) return message(t('preview.waitingPage'));
     return (

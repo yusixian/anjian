@@ -3,11 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { mintArtifactId } from '../shared/ids';
+import { MAX_SLIDE_DECK_BYTES, parseSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
+import type { ArtifactType } from '../shared/types';
 import { structuralWarnings } from '../shared/validate';
 import { parseDocument } from './document-codec';
 
-const ARTIFACT = /^(document|artboard|html)\/([a-z0-9][a-z0-9-]*)$/;
+const ARTIFACT = /^(document|artboard|html|slides)\/([a-z0-9][a-z0-9-]*)$/;
 const MAX_BYTES = 32 * 1024 * 1024;
+const PRIMARY_FILE: Record<ArtifactType, string> = {
+  document: 'doc.xml',
+  artboard: 'canvas.json',
+  html: 'index.html',
+  slides: SLIDE_DECK_FILE,
+};
 const MAX_FILES = 1_000;
 const MAX_PATH_BYTES = 512;
 const MAX_DEPTH = 16;
@@ -41,8 +49,8 @@ const unsafe = (message: string) => new RemoteTransferError(409, 'unsafe_artifac
 
 function artifactParts(artifact: string) {
   const match = ARTIFACT.exec(artifact);
-  if (!match) throw invalid('artifact must be document/<id>, artboard/<id> or html/<id>');
-  return { type: match[1] as 'document' | 'artboard' | 'html', id: match[2]! };
+  if (!match) throw invalid('artifact must be document/<id>, artboard/<id>, html/<id> or slides/<id>');
+  return { type: match[1] as ArtifactType, id: match[2]! };
 }
 
 function validRelative(file: string) {
@@ -66,10 +74,11 @@ function validRelative(file: string) {
   );
 }
 
-function managed(type: 'document' | 'artboard' | 'html', file: string) {
+function managed(type: ArtifactType, file: string) {
   if (!validRelative(file)) return false;
   const lower = file.toLowerCase();
   if (lower === 'comments.json') return false;
+  if (type === 'slides') return file === SLIDE_DECK_FILE;
   if (type === 'document') return file === 'doc.xml' || file.startsWith('assets/');
   if (type === 'artboard')
     return file === 'canvas.json' || file.startsWith('pages/') || file.startsWith('assets/');
@@ -111,7 +120,7 @@ function assertTreeSafe(dir: string, depth = 0) {
   }
 }
 
-function collect(dir: string, type: 'document' | 'artboard' | 'html') {
+function collect(dir: string, type: ArtifactType) {
   const files = new Map<string, Buffer>();
   let total = 0;
   let entries = 0;
@@ -124,6 +133,8 @@ function collect(dir: string, type: 'document' | 'artboard' | 'html') {
         throw unsafe(`unsafe entry: ${entry.name}`);
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
+        if (type === 'slides' && relative === SLIDE_DECK_FILE)
+          throw unsafe(`expected a regular file: ${relative}`);
         walk(path.join(current, entry.name), relative, depth + 1);
         continue;
       }
@@ -175,13 +186,25 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
   const files = collect(dir, type);
   // Mounting can create metadata before the first source file is uploaded.
   if (files.size === 0) return { revision: null, files: {} };
-  const primary =
-    type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
-  if (!files.has(primary)) throw unsafe(`artifact is missing ${primary}`);
+  const primary = PRIMARY_FILE[type];
+  const source = files.get(primary);
+  if (!source) throw unsafe(`artifact is missing ${primary}`);
+  if (type === 'slides') validateSlideDeck(source);
   return snapshot(files, digest(files));
 }
 
-function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknown) {
+function validateSlideDeck(source: Buffer) {
+  if (source.length > MAX_SLIDE_DECK_BYTES) throw tooLarge(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
+  let value: unknown;
+  try {
+    value = JSON.parse(utf8.decode(source));
+  } catch {
+    throw invalid(`${SLIDE_DECK_FILE} must contain valid UTF-8 JSON`);
+  }
+  if (!parseSlideDeck(value)) throw invalid(`${SLIDE_DECK_FILE} does not match the slide deck schema`);
+}
+
+function decodeManifest(type: ArtifactType, incoming: unknown) {
   if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming))
     throw invalid('files must be a path-to-base64 object');
   const entries = Object.entries(incoming as Record<string, unknown>);
@@ -197,6 +220,8 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
     if (typeof value !== 'string') throw invalid(`invalid base64 content: ${name}`);
     const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
     const estimatedBytes = Math.floor(value.length / 4) * 3 - padding;
+    if (type === 'slides' && estimatedBytes > MAX_SLIDE_DECK_BYTES)
+      throw tooLarge(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
     if (estimatedBytes > MAX_BYTES - total || value.length > Math.ceil(MAX_BYTES / 3) * 4)
       throw tooLarge('artifact exceeds 32 MiB');
     if (value.length % 4 !== 0 || !/^[A-Z0-9+/]*$/i.test(value.slice(0, -padding || undefined)))
@@ -207,11 +232,16 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
     if (total > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB');
     files.set(name, data);
   }
-  const required = { document: 'doc.xml', artboard: 'canvas.json', html: 'index.html' }[type];
-  if (!files.has(required)) throw invalid(`${required} is required`);
+  const required = PRIMARY_FILE[type];
+  const source = files.get(required);
+  if (!source) throw invalid(`${required} is required`);
+  if (type === 'slides') {
+    validateSlideDeck(source);
+    return files;
+  }
   let primary: string;
   try {
-    primary = utf8.decode(files.get(required)!);
+    primary = utf8.decode(source);
   } catch {
     throw invalid(`${required} must be UTF-8`);
   }
@@ -273,7 +303,7 @@ function copyPreservingState(source: string, target: string) {
   fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: true });
 }
 
-function removeManaged(dir: string, type: 'document' | 'artboard' | 'html', prefix = '') {
+function removeManaged(dir: string, type: ArtifactType, prefix = '') {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
     const file = path.join(dir, entry.name);

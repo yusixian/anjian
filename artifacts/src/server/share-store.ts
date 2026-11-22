@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { ArtifactType } from '../shared/types';
 import { isArtifactId, isArtifactLocator, isArtifactType } from './artifacts';
 import { parseDocument } from './document-codec';
+import { parseSlideDeck, publishedSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
 import { readRemoteArtifact } from './remote-transfer';
 import { readCanvas } from './state';
 
@@ -201,7 +202,11 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     if (!sourceAlive(identity)) throw new ShareStoreError(404, 'artifact_not_found', 'Artifact identity changed');
     const files = Object.entries(snapshot.files).map(([file, base64]) => {
       if (!validFile(file)) throw new ShareStoreError(422, 'unsafe_snapshot', 'Unsafe snapshot file');
-      return [file, Buffer.from(base64, 'base64')] as const;
+      const body = Buffer.from(base64, 'base64');
+      if (artifact.type !== 'slides') return [file, body] as const;
+      const deck = parseSlideDeck(JSON.parse(body.toString('utf8')));
+      if (!deck) throw new ShareStoreError(422, 'invalid_snapshot', 'Invalid slide deck');
+      return [SLIDE_DECK_FILE, Buffer.from(JSON.stringify(publishedSlideDeck(deck)))] as const;
     });
     identity.bytes = files.reduce((sum, [, body]) => sum + body.length, 0);
     const usage = Object.values(old.records).reduce((sum, entry) => sum + entry.bytes, 0) - (previous?.bytes ?? 0);
@@ -229,7 +234,7 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
             throw new Error('Artboard is incomplete or invalid');
         } else if (artifact.type === 'document') {
           parseDocument(fs.readFileSync(path.join(directory, 'doc.xml'), 'utf8'));
-        } else if (!fs.readFileSync(path.join(directory, 'index.html'), 'utf8').trim()) {
+        } else if (artifact.type === 'html' && !fs.readFileSync(path.join(directory, 'index.html'), 'utf8').trim()) {
           throw new Error('HTML entry is empty');
         }
       } catch {

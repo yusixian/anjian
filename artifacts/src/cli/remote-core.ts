@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { MAX_SLIDE_DECK_BYTES, parseSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
 import { CliError, projectPaths } from './paths';
 import { remoteGuide } from './skills';
 
@@ -29,7 +30,13 @@ export interface RemoteArtifact {
   url?: string;
 }
 const EMPTY = (): RemoteConfig => ({ servers: {}, bindings: {} });
-const KEY = /^(?:document|artboard|html)\/[a-z0-9][a-z0-9-]*$/;
+const KEY = /^(?:document|artboard|html|slides)\/[a-z0-9][a-z0-9-]*$/;
+const PRIMARY_FILE: Record<string, string> = {
+  document: 'doc.xml',
+  artboard: 'canvas.json',
+  html: 'index.html',
+  slides: SLIDE_DECK_FILE,
+};
 const MAX_FILES = 1000;
 const MAX_BYTES = 32 * 1024 * 1024;
 // eslint-disable-next-line no-control-regex -- Remote filenames must reject C0 controls and DEL as well as path separators.
@@ -275,7 +282,7 @@ export async function authenticatedRequest(
 }
 export function artifactRoute(binding: RemoteBinding, artifact: string) {
   if (!KEY.test(artifact))
-    throw new CliError('--artifact must be document/<id>, artboard/<id> or html/<id>');
+    throw new CliError('--artifact must be document/<id>, artboard/<id>, html/<id> or slides/<id>');
   return `/api/remote/projects/${encodeURIComponent(binding.projectId)}/artifacts/${artifact}`;
 }
 function validName(name: string, type: string): boolean {
@@ -288,6 +295,7 @@ function validName(name: string, type: string): boolean {
     return false;
   if (Buffer.byteLength(name) > 512 || parts.length > 16) return false;
   if (name === 'comments.json' || name.includes('/comments.json')) return false;
+  if (type === 'slides') return name === SLIDE_DECK_FILE;
   if (type === 'document')
     return name === 'doc.xml' || (parts[0] === 'assets' && parts.length >= 2);
   if (type === 'artboard')
@@ -314,6 +322,24 @@ function checkDirectory(root: string, candidate: string) {
   }
 }
 export function validateFiles(artifact: string, files: Record<string, string>) {
+  validateManifest(artifact, files);
+  if (!artifact.startsWith('slides/') || !Object.hasOwn(files, SLIDE_DECK_FILE)) return;
+  const encoded = files[SLIDE_DECK_FILE]!;
+  if (Buffer.byteLength(encoded, 'base64') > MAX_SLIDE_DECK_BYTES)
+    throw new CliError(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
+  const bytes = Buffer.from(encoded, 'base64');
+  if (bytes.toString('base64') !== encoded)
+    throw new CliError(`Invalid base64 content: ${SLIDE_DECK_FILE}`);
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    throw new CliError(`${SLIDE_DECK_FILE} must contain valid UTF-8 JSON`);
+  }
+  if (!parseSlideDeck(value))
+    throw new CliError(`${SLIDE_DECK_FILE} does not match the slide deck schema`);
+}
+function validateManifest(artifact: string, files: Record<string, string>) {
   if (!KEY.test(artifact) || !files || typeof files !== 'object' || Array.isArray(files))
     throw new CliError('Invalid artifact manifest');
   const type = artifact.split('/')[0]!;
@@ -333,8 +359,7 @@ export function validateFiles(artifact: string, files: Record<string, string>) {
     bytes += Buffer.byteLength(encoded, 'base64');
     if (bytes > MAX_BYTES) throw new CliError('Artifact exceeds the 32 MiB transfer limit');
   }
-  const required =
-    type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
+  const required = PRIMARY_FILE[type]!;
   if (entries.length && !Object.hasOwn(files, required))
     throw new CliError(`Artifact needs ${required}`);
 }
@@ -346,17 +371,18 @@ export function localFiles(projectDir: string, artifact: string): Record<string,
   const files: Record<string, string> = Object.create(null);
   let count = 0,
     bytes = 0;
+  const type = artifact.split('/')[0]!;
   const visit = (relative: string) => {
     const absolute = path.join(dir, relative);
     for (const entry of fs.readdirSync(absolute, { withFileTypes: true })) {
       const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory() && ['assets', 'pages'].includes(name)) {
+      if (type !== 'slides' && entry.isDirectory() && ['assets', 'pages'].includes(name)) {
         visit(name);
         continue;
       }
-      if (!validName(name, artifact.split('/')[0]!)) continue;
+      if (!validName(name, type)) continue;
       if (entry.isSymbolicLink()) throw new CliError(`Refusing symlink: ${name}`);
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && type !== 'slides') {
         visit(name);
         continue;
       }
@@ -368,7 +394,8 @@ export function localFiles(projectDir: string, artifact: string): Record<string,
     }
   };
   visit('');
-  validateFiles(artifact, files);
+  // Pull needs the original bytes to back up a locally corrupted deck.
+  validateManifest(artifact, files);
   return files;
 }
 export function filesHash(files: Record<string, string>): string {

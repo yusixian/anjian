@@ -23,6 +23,7 @@ import type { CommentAdmission } from './document-comments';
 import { createBackgroundWrites } from './storage/background-writes';
 import { createDeferredInputs } from './deferred-inputs';
 import { readHtml } from './html';
+import { readSlideDeck } from './slides';
 import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
@@ -75,6 +76,13 @@ export function readArtifactSource(
   if (ref.type === 'document') {
     const payload = readDocument(dir, ref.id);
     return { ...payload, warnings: [...payload.warnings, ...runtime] };
+  }
+  if (ref.type === 'slides') {
+    try {
+      return { title: readSlideDeck(dir).deck.title, version: 0, warnings: [] };
+    } catch {
+      return { title: ref.id, version: 0, warnings: ['Slide deck could not be read'] };
+    }
   }
   const payload = readHtml(dir, ref.id);
   return {
@@ -309,8 +317,8 @@ export function createServerContext(options: ServerOptions) {
       },
     };
   };
-  const prepareArtifactMetadata = (type: 'artboard' | 'html', id: string, stagedDir: string) => {
-    let payload: CanvasPayload | HtmlPayload;
+  const prepareArtifactMetadata = (type: 'artboard' | 'html' | 'slides', id: string, stagedDir: string) => {
+    let payload: ArtifactPayload;
     let extra: Record<string, unknown>;
     let validateRuntime = () => undefined;
     if (type === 'html') {
@@ -324,6 +332,9 @@ export function createServerContext(options: ServerOptions) {
         if (JSON.stringify(runtimeWarnings.get(key) ?? []) !== JSON.stringify(runtime) || ranVersions.get(key) !== ran)
           throw new Error('HTML runtime state changed during upload');
       };
+    } else if (type === 'slides') {
+      payload = readArtifactSource(stagedDir, { id, type });
+      extra = {};
     } else {
       const canvas = readCanvas(stagedDir, id);
       const eligible = new Set(Object.values(canvas.canvas?.groups ?? {})

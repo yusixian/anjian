@@ -202,3 +202,63 @@ test('concurrent publications in different projects cannot both consume the rema
   expect(results.map((response) => response.status).sort()).toEqual([200, 413]);
   expect(fs.readdirSync(path.join(f.home, 'shares/snapshots'))).toHaveLength(1);
 });
+
+test('creates, edits and reviews a slide deck and publishes an isolated reading snapshot', async () => {
+  const { action, owner, project, req, root } = await setup();
+  const write = (url: string, body: unknown, headers = owner) =>
+    req(url, { body: JSON.stringify(body), headers, method: 'POST' });
+  const create = { project, title: 'Release briefing' };
+  expect((await write('/api/hub/slides', create, { ...owner, Origin: 'https://other.example' })).status).toBe(403);
+  const created = await write('/api/hub/slides', create);
+  expect(created.status).toBe(201);
+  const { id, url } = await created.json() as { id: string; url: string };
+  expect(url).toMatch(/^\/slides\//);
+  const address = url.split('/').at(-1);
+  const endpoint = `/api/slides/${address}`;
+  expect((await req(endpoint)).status).toBe(403);
+  expect((await req(url, { headers: owner })).status).toBe(200);
+  const initial = await (await req(endpoint, { headers: owner })).json();
+  expect(initial.deck.title).toBe(create.title);
+  const first = { id: 'opening', title: 'Opening', body: 'Public opener', notes: 'Private notes A' };
+  const second = { id: 'plan', title: 'Plan', body: 'Public plan', notes: 'Private notes B' };
+  const deck = { ...initial.deck, slides: [first, second] };
+  const saved = await write(endpoint, { deck, revision: initial.revision });
+  expect(saved.status).toBe(200);
+  const current = await saved.json();
+  const review = await write(`${endpoint}/comments`, { op: 'create', slideId: 'plan', text: 'Private review' });
+  expect(review.status).toBe(200);
+  const reordered = await write(endpoint, { deck: { ...deck, slides: [second, first] }, revision: current.revision });
+  expect(reordered.status).toBe(200);
+  const latest = await reordered.json();
+  expect(latest.comments.threads[0]).toMatchObject({ anchor: { slideId: 'plan' } });
+  expect((await write(endpoint, { deck, revision: current.revision })).status).toBe(409);
+
+  const publish = await action('publish', { id, type: 'slides' });
+  expect(publish.status).toBe(200);
+  const share = new URL((await publish.json()).share.url).pathname;
+  const data = await (await req(`${share}/data`)).json();
+  expect(data.deck.slides).toEqual([
+    { id: 'plan', title: 'Plan', body: 'Public plan' },
+    { id: 'opening', title: 'Opening', body: 'Public opener' },
+  ]);
+  expect(JSON.stringify(data)).not.toContain('Private');
+  expect((await req(`${new URL(data.contentBase).pathname}deck.json`, {}, true)).status).toBe(404);
+
+  const preview = await (await req(`/api/preview/slides/${id}`, { headers: owner })).json();
+  expect(preview.deck).toEqual(data.deck);
+  const draft = { ...latest.deck, slides: [{ ...second, body: 'Unpublished edit' }, first] };
+  expect((await write(endpoint, { deck: draft, revision: latest.revision })).status).toBe(200);
+  expect((await (await req(`${share}/data`)).json()).deck).toEqual(data.deck);
+  const dir = path.join(root, 'slides', id);
+  const disk = JSON.parse(fs.readFileSync(path.join(dir, 'deck.json'), 'utf8'));
+  expect(disk).toEqual(draft);
+
+  const comments = path.join(dir, 'comments.json');
+  fs.renameSync(comments, path.join(dir, 'comments.backup'));
+  fs.mkdirSync(comments);
+  const recoverable = await (await req(endpoint, { headers: owner })).json();
+  expect(recoverable).toMatchObject({ deck: draft, commentsWarning: 'Unsafe comments.json path' });
+  const successful = await write(endpoint, { deck, revision: recoverable.revision });
+  expect(successful.status).toBe(200);
+  expect(await successful.json()).toMatchObject({ deck, commentsWarning: 'Unsafe comments.json path' });
+});

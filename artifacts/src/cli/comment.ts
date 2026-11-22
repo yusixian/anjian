@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 import { detectAgent } from '../server/agent';
+import { isSlideId, type SlideAnchor } from '../shared/slides';
 import type { CommandSpec } from './command';
 import { CliError, invocation } from './paths';
 import { serverClient } from './server';
@@ -20,6 +21,7 @@ export interface CommentOptions {
   projectDir: string;
   quote?: string;
   round?: string;
+  slide?: string;
   text?: string;
   thread?: string;
   withdraw?: boolean;
@@ -27,7 +29,7 @@ export interface CommentOptions {
   y?: string;
 }
 
-const ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
+const ARTIFACT = /^(?:document|artboard|slides)\/[a-z0-9][a-z0-9-]*$/;
 const WRITTEN = {
   add: 'comment-added',
   reply: 'comment-replied',
@@ -62,6 +64,8 @@ function requestOf(
   action: CommentAction,
   type: string,
 ): Record<string, unknown> {
+  if (options.slide !== undefined && (action !== 'add' || type !== 'slides'))
+    throw new CliError('--slide is supported when adding a slide comment');
   if (action === 'list') return { op: 'list', all: !!options.all };
   if ((action === 'choose' || action === 'submit') && type !== 'artboard')
     throw new CliError(`comment ${action} works on artboards only`);
@@ -87,6 +91,10 @@ function requestOf(
       text: messageText(options),
     };
   }
+  if (action === 'add' && type === 'slides') {
+    if (!isSlideId(options.slide)) throw new CliError('comment add on slides needs --slide <slideId>');
+    return { op: 'add', slideId: options.slide, text: messageText(options) };
+  }
   if (action === 'add') {
     if (!options.block) throw new CliError('comment add needs --block <blockId>');
     return {
@@ -107,7 +115,7 @@ export async function comment(options: CommentOptions, emit: Emit): Promise<numb
   if (!action)
     throw new CliError('comment needs an action: list, add, reply, resolve, choose or submit');
   if (!options.artifact || !ARTIFACT.test(options.artifact))
-    throw new CliError('--artifact must be document/<id> or artboard/<id>');
+    throw new CliError('--artifact must be document/<id>, artboard/<id> or slides/<id>');
   const [type, id] = options.artifact.split('/') as [string, string];
   const request = requestOf(options, action, type);
   const server = serverClient(options.projectDir);
@@ -174,7 +182,7 @@ interface ListedBoardAnchor {
 }
 
 interface ListedThread {
-  anchor: { blockId: string; blockIds?: string[]; quote: string } | ListedBoardAnchor;
+  anchor: { blockId: string; blockIds?: string[]; quote: string } | ListedBoardAnchor | SlideAnchor;
   changes?: string[];
   files?: Record<string, string>;
   id: string;
@@ -239,6 +247,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
 
 function anchorLines(thread: ListedThread): string[] {
   const anchor = thread.anchor;
+  if ('slideId' in anchor) return [`  on slide ${anchor.slideId}`];
   if ('blockId' in anchor) {
     const ids = anchor.blockIds ?? [anchor.blockId];
     return [
@@ -317,11 +326,12 @@ export const commentCommand: CommandSpec = {
   name: 'comment',
   summary: 'Read and answer comments on a document or artboard (needs a running server)',
   usage: [
-    'list    --artifact <document|artboard>/<id> [--all]',
+    'list    --artifact <document|artboard|slides>/<id> [--all]',
     'add     --artifact document/<id> --block <blockId> [--quote <text>] [--text <text>]',
     'add     --artifact artboard/<id> --board <boardId> [--x <px> --y <px>] [--text <text>]',
-    'reply   --artifact <document|artboard>/<id> --thread <threadId> [--text <text>]',
-    'resolve --artifact <document|artboard>/<id> --thread <threadId>',
+    'add     --artifact slides/<id> --slide <slideId> [--text <text>]',
+    'reply   --artifact <document|artboard|slides>/<id> --thread <threadId> [--text <text>]',
+    'resolve --artifact <document|artboard|slides>/<id> --thread <threadId>',
     'choose  --artifact artboard/<id> --group <groupId> (--board <boardId> | --clear)',
     'submit  --artifact artboard/<id> --round <roundId> [--withdraw]',
   ],
@@ -329,6 +339,7 @@ export const commentCommand: CommandSpec = {
     'list prints what changed since you last listed. Without --text, add and reply read the message from stdin.',
   options: {
     artifact: { type: 'string', value: '<type>/<id>', help: 'The document or artboard' },
+    slide: { type: 'string', value: '<slideId>', help: 'add: the slide to comment on' },
     all: { type: 'boolean', help: 'list: every thread, not only what changed' },
     block: { type: 'string', value: '<blockId>', help: 'add: the document block to comment on' },
     quote: {
@@ -354,6 +365,7 @@ export const commentCommand: CommandSpec = {
         action: positionals[0],
         artifact: values.artifact as string | undefined,
         all: values.all as boolean | undefined,
+        slide: values.slide as string | undefined,
         block: values.block as string | undefined,
         quote: values.quote as string | undefined,
         thread: values.thread as string | undefined,

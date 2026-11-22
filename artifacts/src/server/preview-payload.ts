@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { publishedSlideDeck } from '../shared/slides';
 import type { CanvasPayload } from '../shared/types';
 import type { ArtifactRef } from './artifacts';
 import { parseDocument } from './document-codec';
+import { readSlideDeck } from './slides';
 
 export function previewPayload(
   ref: ArtifactRef,
@@ -20,5 +22,6 @@ export function previewPayload(
       title,
       state: parseDocument(fs.readFileSync(path.join(dir, 'doc.xml'), 'utf8')),
     };
+  if (ref.type === 'slides') return { deck: publishedSlideDeck(readSlideDeck(dir).deck) };
   return { title };
 }

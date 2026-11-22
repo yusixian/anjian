@@ -3,6 +3,7 @@ import type http from 'node:http';
 import path from 'node:path';
 
 import { computeLayout } from '../shared/geometry';
+import { SLIDE_DECK_FILE } from '../shared/slides';
 import type { CanvasSpec } from '../shared/types';
 import { parseDocument } from './document-codec';
 import { mimeOf, send } from './http';
@@ -38,6 +39,11 @@ function payload(options: Options, record: ShareRecord) {
     const file = options.store.file(record, 'doc.xml');
     if (!file) throw new Error('Missing document');
     return { ...result, state: parseDocument(fs.readFileSync(file, 'utf8')) };
+  }
+  if (record.type === 'slides') {
+    const file = options.store.file(record, SLIDE_DECK_FILE);
+    if (!file) throw new Error('Missing slide deck');
+    return { ...result, deck: JSON.parse(fs.readFileSync(file, 'utf8')) as unknown };
   }
   if (record.type === 'artboard') {
     const file = options.store.file(record, 'canvas.json');

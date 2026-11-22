@@ -18,7 +18,7 @@ import type { HttpRoute, RouteParams } from './table';
 
 const SHELL_ROUTE = new RegExp(`^/(?:library/?|(${ARTIFACT_TYPES.join('|')})/([^/]+)/?)?$`);
 const PREVIEW_ROUTE = new RegExp(
-  `^/preview/(artboard|document|html)/${ARTIFACT_LOCATOR_SOURCE}/?$`,
+  `^/preview/(artboard|document|html|slides)/${ARTIFACT_LOCATOR_SOURCE}/?$`,
 );
 
 export const viewerCsp = (boardOrigins: string[]) =>
@@ -61,7 +61,7 @@ function serveShell(
     ? t('meta.artifact', {
         project,
         title,
-        type: ref.type === 'artboard' ? 'Artboard' : ref.type === 'document' ? 'Document' : 'HTML',
+        type: { artboard: 'Artboard', document: 'Document', html: 'HTML', slides: 'Slides' }[ref.type],
       })
     : t('meta.library', { project });
   const preview = PREVIEW_ROUTE.test(pathname);

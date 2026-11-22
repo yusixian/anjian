@@ -62,7 +62,7 @@ export interface ArtifactsServer {
   onMessage: (listener: (message: ServerMessage) => void) => void;
   port: number;
   prepareArtifactUpload: (
-    type: 'artboard' | 'html',
+    type: 'artboard' | 'html' | 'slides',
     id: string,
     stagedDir: string,
   ) => PreparedStorageState;

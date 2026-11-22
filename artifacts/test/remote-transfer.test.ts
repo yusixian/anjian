@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, test } from 'vitest';
 
+import { applyLocalFiles, filesHash, localFiles, validateFiles } from '../src/cli/remote-core';
+import { MAX_SLIDE_DECK_BYTES } from '../src/shared/slides';
 import {
   readRemoteArtifact,
   RemoteTransferError,
@@ -226,4 +228,74 @@ test('generated state commit failure restores both source and state', () => {
   }))).toThrow('state install failed');
   expect(readRemoteArtifact(root, 'html/rollback')).toEqual(before);
   expect(fs.readFileSync(stateFile, 'utf8')).toBe('old state');
+});
+
+const deck = (body: string) => ({
+  'deck.json': encode(JSON.stringify({
+    version: 1,
+    title: 'Design review',
+    slides: [{ id: 'intro', title: 'Introduction', body, notes: 'Private notes' }],
+  })),
+});
+
+test('transfers only the slide deck and preserves comments and revisions', () => {
+  const root = project();
+  const artifact = 'slides/design-review';
+  const original = write(root, artifact, null, deck('First draft'));
+  const dir = path.join(root, '.anjian/artifacts', artifact);
+  const comments = path.join(dir, 'comments.json');
+  fs.writeFileSync(comments, 'human feedback');
+  expect(readRemoteArtifact(root, artifact)).toEqual(original);
+  expect(() => write(root, artifact, null, deck('Outdated edit'))).toThrowError(
+    expect.objectContaining({ code: 'revision_conflict' }),
+  );
+  const updated = write(root, artifact, original.revision, deck('Second draft'));
+  expect(updated.files).toEqual(deck('Second draft'));
+  expect(updated.revision).not.toBe(original.revision);
+  expect(fs.readFileSync(comments, 'utf8')).toBe('human feedback');
+});
+
+test('rejects invalid slide source uploads and pull manifests', () => {
+  const root = project();
+  const artifact = 'slides/design-review';
+  const original = write(root, artifact, null, deck('First draft'));
+  expect(() => write(root, artifact, original.revision, {})).toThrowError(
+    expect.objectContaining({ code: 'invalid_artifact' }),
+  );
+  const invalidFiles: Record<string, string>[] = [
+    { 'deck.json': encode(Buffer.from([0xff])) },
+    { 'deck.json': encode('{"version":1,"title":"Missing slides"}') },
+    { 'deck.json': encode('{') },
+    { 'deck.json': encode(Buffer.alloc(MAX_SLIDE_DECK_BYTES + 1)) },
+    { ...original.files, 'comments.json': encode('{}') },
+    { ...original.files, 'pages/extra.html': encode('<p>extra</p>') },
+    { ...original.files, '../deck.json': encode('{}') },
+    { 'Deck.json': original.files['deck.json']! },
+  ];
+  for (const files of invalidFiles) {
+    expect(() => write(root, artifact, original.revision, files)).toThrowError(RemoteTransferError);
+    expect(() => validateFiles(artifact, files)).toThrow();
+    expect(readRemoteArtifact(root, artifact)).toEqual(original);
+  }
+  fs.writeFileSync(path.join(root, '.anjian/artifacts', artifact, 'deck.json'), '{');
+  expect(() => readRemoteArtifact(root, artifact)).toThrowError(
+    expect.objectContaining({ code: 'invalid_artifact' }),
+  );
+});
+
+test('keeps malformed local slide bytes available for backup before replacing the deck', () => {
+  const root = project();
+  const artifact = 'slides/design-review';
+  const dir = path.join(root, '.anjian/artifacts', artifact);
+  fs.mkdirSync(dir, { recursive: true });
+  const broken = Buffer.from([0x7b, 0xff]);
+  fs.writeFileSync(path.join(dir, 'deck.json'), broken);
+  fs.writeFileSync(path.join(dir, 'comments.json'), 'human feedback');
+
+  const local = localFiles(root, artifact);
+  expect(local).toEqual({ 'deck.json': encode(broken) });
+  expect(() => validateFiles(artifact, local)).toThrow();
+  applyLocalFiles(root, artifact, deck('Replacement'), filesHash(local));
+  expect(localFiles(root, artifact)).toEqual(deck('Replacement'));
+  expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('human feedback');
 });

@@ -831,7 +831,12 @@
     "minutes": "{{count}} min",
     "hours": "{{count}} h"
   },
+  "slideLibrary": {
+    "create": "New slide deck",
+    "createFailed": "Could not create the slide deck. Try again."
+  },
   "type": {
+    "slides": "Slides",
     "all": "All",
     "artboard": "Artboard",
     "document": "Document",

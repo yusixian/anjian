@@ -13,6 +13,10 @@ export const TYPE_GLYPHS: Record<ArtifactType, { fill: string; stroke: string }>
     stroke:
       'M7 3h10a2.5 2.5 0 0 1 2.5 2.5v13a2.5 2.5 0 0 1-2.5 2.5H7a2.5 2.5 0 0 1-2.5-2.5v-13A2.5 2.5 0 0 1 7 3z M8.5 8.5h7M8.5 12h7M8.5 15.5h4',
   },
+  slides: {
+    fill: '',
+    stroke: 'M3.5 4.5h17v12h-17zM12 16.5v3m-2.5 0h5M7 12l3-3 2.5 2 3-3',
+  },
   html: {
     fill: '',
     stroke: 'M8 7.5 3.5 12 8 16.5M16 7.5l4.5 4.5-4.5 4.5M13.5 5.5l-3 13',

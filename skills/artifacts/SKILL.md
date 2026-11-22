@@ -50,6 +50,7 @@ Do not install `ryugi-artifacts` or an unverified `anjian` npm package.
 | What is being decided                                                            | Type                       | Read before writing                                                      |
 | -------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------ |
 | Architecture, engineering design, a review, proposal or flow walkthrough         | `document`                 | `document.md`                                                            |
+| A live talk, briefing, or walkthrough presented from an ordered deck              | `slides`                   | `slides.md`                                                              |
 | One surface or one dimension — a component, type scale, background, motion       | `html`                     | `html.md`, `ui.md` for components                                        |
 | A business space — several screens, dimensions, states or questions at once      | `artboard`                 | `artboard.md`; `artboard-prototype.md` for playable boards or parameters |
 | Whether a built change matches what was approved, when they ask you to verify it | `artboard`, a verify group | `artboard.md`                                                            |
@@ -177,6 +178,7 @@ their official Cloud credentials.
   artboard/<id>/       canvas.json + pages/ (you write); comments.json (server only)
   document/<id>/       doc.xml + assets/ (you write); comments.json (server only)
   html/<id>/           index.html + its files        (you write)
+  slides/<id>/         deck.json (you write); comments.json (server only)
   .state/              the server writes; never edit
     <type>/<id>/warnings.json   warnings + pending; `check` prints it
     artboard/<id>/layout.json   computed geometry

@@ -58,14 +58,19 @@ describe('parseRoute', () => {
       type: 'document',
       id: 'spec',
     });
-    for (const pathname of ['/preview/slides/deck', '/preview/html/Bad', '/preview/html/x/y']) {
+    expect(parseRoute('/preview/slides/deck')).toEqual({
+      kind: 'preview',
+      type: 'slides',
+      id: 'deck',
+    });
+    for (const pathname of ['/preview/unsupported/deck', '/preview/html/Bad', '/preview/html/x/y']) {
       expect(parseRoute(pathname)).toEqual({ kind: 'unknown' });
     }
   });
 
   test('unknown types, invalid ids and deeper paths are unknown', () => {
     for (const pathname of [
-      '/slides/deck',
+      '/unsupported/deck',
       '/html/../x',
       '/html/Bad',
       '/html/a/b',
