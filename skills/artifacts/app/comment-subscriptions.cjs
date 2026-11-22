@@ -85,6 +85,7 @@ function sessionOf(host, env = process.env) {
 }
 
 function hostOf(env, explicit = true) {
+  if (env.ANJIAN_FEEDBACK_SESSION) return null;
   const codex = sessionOf('codex', env);
   const claude = sessionOf('claude', env);
   if (!codex || !claude) return codex ? 'codex' : claude ? 'claude' : null;
@@ -95,6 +96,12 @@ function hostOf(env, explicit = true) {
 }
 
 function clientCommentSession(env = process.env) {
+  const selected = env.ANJIAN_FEEDBACK_SESSION;
+  if (selected) {
+    if (!/^[a-z][a-z0-9-]{0,31}:[A-Za-z0-9][\w.:-]{0,94}$/.test(selected))
+      throw new Error('Invalid ANJIAN_FEEDBACK_SESSION');
+    return selected;
+  }
   const host = hostOf(env);
   return host ? `${host}:${sessionOf(host, env)}` : null;
 }

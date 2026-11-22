@@ -77,6 +77,28 @@ anjian start --project-dir "$PWD" --no-open --foreground
 anjian comment list --project-dir "$PWD" --artifact document/plan --json
 ```
 
+## 自定义 Agent 宿主
+
+让本机 Hub 把文档批注和画板反馈交给你指定的程序。先启动案间，在你的本机配置目录写一个 JSON 文件。以下示例将收到的事件打印到终端。把 `command` 的第一个元素换成可执行文件的绝对路径，再按需替换后续参数。
+
+```json
+{
+  "artifacts": ["document/plan", "artboard/design"],
+  "command": ["/absolute/path/to/node", "-e", "process.stdin.pipe(process.stderr)"],
+  "host": "review-desk",
+  "name": "Review Desk",
+  "session": "terminal:123"
+}
+```
+
+在作品项目中运行 `anjian feedback-host --config /绝对路径/host.json --json`，保持终端或父进程运行。每次投递会启动配置的程序，把一行 JSON 写入它的标准输入。数据包含 `type`、`host`、`name`、`session`、`projectDir` 和 `artifact`。画板提交也包含轮次和撤回状态。适配器可运行以下命令读回批注，并用同一个会话记录已读。加 `--peek` 可只查看。
+
+```bash
+anjian comment list --artifact document/plan --session review-desk:terminal:123 --json
+```
+
+在监听进程的标准输入发送 `{"action":"unsubscribe","artifact":"document/plan"}` 可以移除一个作品。发送同格式的 `subscribe` 可重新监听。关闭标准输入或按 Ctrl+C 会停止这次监听。永久移除时更新或删除自己的配置文件。
+
 ## 事件与自动处理
 
 `anjian watch --json` 输出事件，宿主需要自己订阅并调度任务。收到事件后再读取评论或拉取作品；事件输出不等于 Agent 已自动醒来处理。首次监听不重放全部历史评论，需要历史时使用 `comment list --all`。

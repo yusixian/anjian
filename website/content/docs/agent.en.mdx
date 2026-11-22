@@ -77,6 +77,28 @@ Ask Copilot to use the `artifacts` Skill to create `document/plan` and give you 
 anjian comment list --project-dir "$PWD" --artifact document/plan --json
 ```
 
+## Custom Agent hosts
+
+Send local document comments and artboard feedback to a program you choose. Start Anjian and save a JSON file in your local configuration directory. This example prints each event to the terminal. Use an absolute executable path as the first element of `command`, followed by its arguments.
+
+```json
+{
+  "artifacts": ["document/plan", "artboard/design"],
+  "command": ["/absolute/path/to/node", "-e", "process.stdin.pipe(process.stderr)"],
+  "host": "review-desk",
+  "name": "Review Desk",
+  "session": "terminal:123"
+}
+```
+
+From the artifact project, run `anjian feedback-host --config /absolute/path/host.json --json` and keep the terminal or parent process running. Each delivery starts the configured program and sends one JSON line to its standard input. The event includes `type`, `host`, `name`, `session`, `projectDir`, and `artifact`. Artboard submissions also identify the round and whether it was withdrawn. The adapter can use the following command to read comments and record them for the same session. Add `--peek` to inspect them without recording a read.
+
+```bash
+anjian comment list --artifact document/plan --session review-desk:terminal:123 --json
+```
+
+Send `{"action":"unsubscribe","artifact":"document/plan"}` to the watcher's standard input to remove one artifact. Use the same format with `subscribe` to listen again. Close standard input or press Ctrl+C to stop listening. Edit or remove your configuration file to make the change permanent.
+
 ## Events and automation
 
 `anjian watch --json` emits events; the host must subscribe and schedule tasks itself. After an event, read comments or pull the artifact. Event output does not mean an Agent has automatically started working. The first watch does not replay all historical comments; use `comment list --all` when you need history.
