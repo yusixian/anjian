@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.101.2`（`cda303f`）。案间以 `0.4.0`（`04d711a`）为实施起点。首批同步及两个后续能力已发布至 `0.5.0`（`26d574a`）。[案间 0.5.0 发布说明与安装包](https://github.com/yusixian/anjian/releases/tag/v0.5.0) · [上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.101.2) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.0`（`c0d1b86`）。案间以 `0.4.0`（`04d711a`）为实施起点。首批同步及两个后续能力已发布至 `0.5.0`（`26d574a`），本地画板摘要和文档问答随后发布至 `0.6.0`（`80c64d6`）。[案间 0.5.0 发布说明与安装包](https://github.com/yusixian/anjian/releases/tag/v0.5.0) · [上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.102.0) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -33,9 +33,14 @@
 
 实际操作入口见[线上新功能上手指南](https://anjian.cosine.ren/zh/docs/review-workflows/)。上表中的浏览器与 Agent 流程证据来自隔离环境，公开指南及更新说明已经在线验收。
 
-## 下一批
+## v0.6.0 本地反馈
 
-[案间 #86](https://github.com/yusixian/anjian/issues/86) 跟踪本地 Agent 唤醒中的提交摘要。画板部分见 [#90](https://github.com/yusixian/anjian/pull/90)，本地问答在同一文档存在多个会话时可选择接收者，支持 Codex、Pi 和 Antigravity，并沿用同一题的提交与撤回规则。Chrome 实测桌面撤回、390 px 重载保留草稿及 Pi 双会话隔离。入口见[中英文 Agent 指南](../website/content/docs/agent.mdx)。
+[案间 #86](https://github.com/yusixian/anjian/issues/86) 跟踪本地 Agent 唤醒中的提交摘要。画板部分见 [#90](https://github.com/yusixian/anjian/pull/90)，本地问答在同一文档存在多个会话时可选择接收者，支持 Codex、Pi 和 Antigravity，并沿用同一题的提交与撤回规则。Chrome 实测桌面撤回、390 px 重载保留草稿及 Pi 双会话隔离。长答案回退见 [#93](https://github.com/yusixian/anjian/pull/93)。入口见[中英文 Agent 指南](../website/content/docs/agent.mdx)。
+
+## 新版差距
+
+- [#95](https://github.com/yusixian/anjian/issues/95) 跟踪验收报告的跨环境结果摘要、人工决定、视觉验收汇总和规格记录保留。
+- [#52](https://github.com/yusixian/anjian/issues/52) 跟踪向已经运行的普通 Antigravity 交互会话投递反馈。
 
 ## 后续同步
 

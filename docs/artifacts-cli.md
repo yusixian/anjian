@@ -72,6 +72,8 @@ anjian verify-report --input report.json --output .anjian/artifacts/document/rev
 
 将第一条命令生成的 XML 保存到规范文档。第二条命令给出精确的 `revision`，可用于验收报告。保留规范 JSON 和原始证据文件，避免修改过去的报告输入。更改规则时另存一份规范文件，保留规则 ID，并在新版的 `previous` 字段记录上一版摘要。
 
+验收清单可用 `routineChecks` 汇总类型检查、测试等常规检查，每条机器结果可用 `observation` 写一句实际观察。查看报告时可展开命令、采集时间、摘要和原始输出。证据缺失或摘要变更后，报告隐藏旧结论并提示复核。跨环境报告可给每条机器结果增加 `context: { build, environment }`，相同环境和构建只列一次。未提供 `context` 时使用报告顶层的环境和构建。
+
 在验收报告输入中增加 `designSpec`，字段包括相对于报告 JSON 的 `file`、规范的 `revision`，以及规范文档的稳定地址 `target`。在每条检查或人工验收项增加 `rules` 数组，填写相应规则 ID。报告会标明未覆盖的规则。人工验收项通过画板链接展示当前状态。
 
 ## 确认设计批准

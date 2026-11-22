@@ -275,3 +275,55 @@ test('protects a pinned manifest addressed with different case on case-insensiti
   );
   expect(fs.readFileSync(original)).toEqual(bytes);
 });
+
+test('shows one-line observations, groups sources, and retains the raw evidence in a disclosure', async () => {
+  const report = await createReport();
+  const check = report.checks[0]!;
+  const context = { build: 'desktop-42', environment: 'Linux runner' };
+  const summarized = {
+    ...report,
+    routineChecks: 'Typecheck and 18 tests passed.',
+    checks: [
+      { ...check, observation: 'API returned <ready>.' },
+      { ...check, title: 'Linux API', observation: 'Created a draft.', context },
+      { ...check, title: 'Linux CLI', observation: 'Loaded the draft.', context },
+    ],
+  };
+  fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(summarized));
+  const { xml, checks } = await run({ input: 'report.json', lang: 'en' });
+  expect(checks).toEqual(summarized.checks.map(({ title }) => ({ title, status: 'pass' })));
+  const content = String(xml);
+  expect(content.match(/Linux runner/g)).toHaveLength(1);
+  expect(content.match(/desktop-42/g)).toHaveLength(1);
+  expect(content).toContain('Routine checks Typecheck and 18 tests passed.');
+  expect(content).toMatch(
+    /<p>API returned &lt;ready&gt;\.<\/p>\s*<details summary="View evidence">/,
+  );
+  expect(content).toContain('pnpm test');
+  const roundTrip = serializeDocument(parseDocument(content));
+  expect(roundTrip).toContain('View evidence');
+  expect(roundTrip).toContain('Literal ]]');
+  expect(roundTrip).toContain('Linux CLI');
+
+  fs.writeFileSync(path.join(dir, 'output.txt'), 'Unverified data');
+  const stale = String((await run({ input: 'report.json', lang: 'en' })).xml);
+  expect(stale).toContain('Evidence changed. Review required.');
+  expect(stale).not.toContain('Created a draft.');
+  expect(stale).not.toContain('Unverified data');
+  fs.unlinkSync(path.join(dir, 'output.txt'));
+  const missing = String((await run({ input: 'report.json', lang: 'en' })).xml);
+  expect(missing).toContain('Evidence missing. Review required.');
+  expect(missing).not.toContain('Loaded the draft.');
+});
+
+test('rejects multiline observations and routine check summaries', async () => {
+  const report = await createReport();
+  const write = (value: unknown) =>
+    fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(value));
+  write({ ...report, routineChecks: 'passed\nfailed' });
+  await expect(run({ input: 'report.json' })).rejects.toThrow(
+    'routineChecks must be a single line',
+  );
+  write({ ...report, checks: [{ ...report.checks[0], observation: 'ready\nmissing' }] });
+  await expect(run({ input: 'report.json' })).rejects.toThrow('observation must be a single line');
+});
