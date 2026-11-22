@@ -38,7 +38,7 @@ export function serverClient(projectDir: string) {
     return {
       project: paths.project,
       async call(method: string, route: string, body?: unknown): Promise<ServerResponse> {
-        const match = /^\/api\/agent\/(document|artboard|slides)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/.exec(route);
+        const match = /^\/api\/agent\/(document|artboard|slides|storyboard)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/.exec(route);
         if (!match) throw new CliError('This command cannot use the remote agent API');
         const remoteRoute = `/api/remote/projects/${encodeURIComponent(binding.projectId)}/agent/${match[1]}/${match[2]}/${match[3]}`;
         const result = await request(binding.origin, remoteRoute, { method, body, token: credential.token });

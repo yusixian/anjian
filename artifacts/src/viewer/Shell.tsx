@@ -24,6 +24,7 @@ const DocumentLayout = lazy(() =>
 const HtmlLayout = lazy(() =>
   import('./layouts/HtmlLayout').then(({ HtmlLayout }) => ({ default: HtmlLayout })),
 );
+const StoryboardLayout = lazy(() => import('./storyboard').then(({ StoryboardLayout }) => ({ default: StoryboardLayout })));
 const SlidesLayout = lazy(() =>
   import('./slides').then(({ SlidesLayout }) => ({ default: SlidesLayout })),
 );
@@ -75,6 +76,8 @@ function RouteView() {
   if (route.kind === 'unknown')
     return <div {...stylex.props(styles.unknown)}>No artifact lives at this address.</div>;
   const id = document.documentElement.dataset.anjianArtifactId ?? route.id;
+  if ((route.kind === 'artifact' || route.kind === 'preview') && route.type === 'storyboard')
+    return <StoryboardLayout key={id} id={id} readOnly={route.kind === 'preview'} />;
   if (route.kind === 'preview') return <PreviewLayout id={id} type={route.type} />;
   if (route.kind === 'embed') return <Embedded id={id} type={route.type} />;
   if (route.type === 'slides') return local(<SlidesLayout key={id} id={id} />);

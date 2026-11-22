@@ -10,6 +10,7 @@ const RESOLVE = {
   document: resolveDocumentAsset,
   html: resolveHtmlFile,
   slides: () => null,
+  storyboard: () => null,
 };
 
 export const isArtifactPage = (type: ArtifactType, relative: string) =>

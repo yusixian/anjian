@@ -13,6 +13,8 @@ import { documentStateRoute, documentWriteRoute } from './documents';
 import { slideDeckRoute } from './slides';
 import { slidesAgentCommentRoute, slidesCommentRoute } from './slides-comments';
 import { clientSocketRoute } from './sockets';
+import { storyboardAssetsRoute, storyboardJobRoute, storyboardRenderRoute, storyboardRoute, storyboardVideoRoute } from './storyboard';
+import { storyboardAgentCommentRoute, storyboardCommentRoute } from './storyboard-comments';
 import type { HttpRoute, UpgradeRoute } from './table';
 import { libraryRoute, shellRoute, viewerFileRoute } from './viewer';
 
@@ -29,6 +31,13 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   agentBoardCommentsRoute,
   agentCheckRoute,
   boardCommentsRoute,
+  storyboardAssetsRoute,
+  storyboardRenderRoute,
+  storyboardJobRoute,
+  storyboardVideoRoute,
+  storyboardCommentRoute,
+  storyboardAgentCommentRoute,
+  storyboardRoute,
   slideDeckRoute,
   slidesCommentRoute,
   slidesAgentCommentRoute,

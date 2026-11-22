@@ -21,8 +21,8 @@ interface Options {
   upload?: <T>(project: string, work: (prepare: () => Promise<(deltaBytes: number) => void>) => Promise<T>) => Promise<T>;
 }
 const MAX_BODY = 46 * 1024 * 1024;
-const ARTIFACT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/artifacts\/(document|artboard|html|slides)\/([a-z0-9][a-z0-9-]*)$/;
-const AGENT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/agent\/(document|artboard|html|slides)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/;
+const ARTIFACT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/artifacts\/(document|artboard|html|slides|storyboard)\/([a-z0-9][a-z0-9-]*)$/;
+const AGENT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/agent\/(document|artboard|html|slides|storyboard)\/([a-z0-9][a-z0-9-]*)\/(comments|check)$/;
 const EVENTS_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/events$/;
 
 async function readBody(req: http.IncomingMessage) {

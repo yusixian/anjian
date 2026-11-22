@@ -282,8 +282,8 @@ export function renderThumbnail(artifact: ThumbnailArtifact, value: unknown) {
   let body: string;
   if (artifact.type === 'document') body = documentDrawing(title, object(value));
   else if (artifact.type === 'artboard') body = artboardDrawing(object(value));
-  else if (artifact.type === 'slides') {
-    body = `${rect(0, 0, 600, 360, 'var(--bg)')}${rect(36, 32, 528, 296, 'var(--paper)', 'var(--border)')}<path transform="translate(59 55) scale(1.8)" d="${TYPE_GLYPHS.slides.stroke}" stroke="var(--muted)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>${wrap(title, 32, 450, 3)
+  else if (artifact.type === 'slides' || artifact.type === 'storyboard') {
+    body = `${rect(0, 0, 600, 360, 'var(--bg)')}${rect(36, 32, 528, 296, 'var(--paper)', 'var(--border)')}<path transform="translate(59 55) scale(1.8)" d="${TYPE_GLYPHS[artifact.type].stroke}" stroke="var(--muted)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>${wrap(title, 32, 450, 3)
       .map((line, index) => text(64, 165 + index * 40, line, 32, 'var(--ink)', 600))
       .join('')}`;
   } else {

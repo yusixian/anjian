@@ -183,6 +183,7 @@ export function createShareStore(home: string, options: { maxBytes?: number; now
     if (![1, 7, 30, null, undefined].includes(settings.expiresInDays) ||
         !settings.title.trim() || settings.title.length > 300)
       throw new ShareStoreError(400, 'invalid_share', 'Invalid share settings');
+    if (artifact.type === 'storyboard') throw new ShareStoreError(400, 'invalid_share', 'Export a storyboard video to share it');
     cleanupExpired();
     // readRemoteArtifact applies the existing 32 MiB, path and symlink restrictions.
     const snapshot = readRemoteArtifact(project, `${artifact.type}/${artifact.id}`);

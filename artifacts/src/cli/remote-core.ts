@@ -5,6 +5,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { MAX_SLIDE_DECK_BYTES, parseSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
+import {
+  MAX_STORYBOARD_ASSET_BYTES,
+  MAX_STORYBOARD_ASSETS,
+  MAX_STORYBOARD_TIMELINE_BYTES,
+  missingStoryboardAsset,
+  parseStoryboard,
+  STORYBOARD_FILE,
+  storyboardAssetKind,
+} from '../shared/storyboard';
 import { CliError, projectPaths } from './paths';
 import { remoteGuide } from './skills';
 
@@ -30,12 +39,13 @@ export interface RemoteArtifact {
   url?: string;
 }
 const EMPTY = (): RemoteConfig => ({ servers: {}, bindings: {} });
-const KEY = /^(?:document|artboard|html|slides)\/[a-z0-9][a-z0-9-]*$/;
+const KEY = /^(?:document|artboard|html|slides|storyboard)\/[a-z0-9][a-z0-9-]*$/;
 const PRIMARY_FILE: Record<string, string> = {
   document: 'doc.xml',
   artboard: 'canvas.json',
   html: 'index.html',
   slides: SLIDE_DECK_FILE,
+  storyboard: STORYBOARD_FILE,
 };
 const MAX_FILES = 1000;
 const MAX_BYTES = 32 * 1024 * 1024;
@@ -282,7 +292,7 @@ export async function authenticatedRequest(
 }
 export function artifactRoute(binding: RemoteBinding, artifact: string) {
   if (!KEY.test(artifact))
-    throw new CliError('--artifact must be document/<id>, artboard/<id>, html/<id> or slides/<id>');
+    throw new CliError('--artifact must be document/<id>, artboard/<id>, html/<id>, slides/<id> or storyboard/<id>');
   return `/api/remote/projects/${encodeURIComponent(binding.projectId)}/artifacts/${artifact}`;
 }
 function validName(name: string, type: string): boolean {
@@ -296,6 +306,7 @@ function validName(name: string, type: string): boolean {
   if (Buffer.byteLength(name) > 512 || parts.length > 16) return false;
   if (name === 'comments.json' || name.includes('/comments.json')) return false;
   if (type === 'slides') return name === SLIDE_DECK_FILE;
+  if (type === 'storyboard') return name === STORYBOARD_FILE || storyboardAssetKind(name) !== null;
   if (type === 'document')
     return name === 'doc.xml' || (parts[0] === 'assets' && parts.length >= 2);
   if (type === 'artboard')
@@ -323,28 +334,45 @@ function checkDirectory(root: string, candidate: string) {
 }
 export function validateFiles(artifact: string, files: Record<string, string>) {
   validateManifest(artifact, files);
-  if (!artifact.startsWith('slides/') || !Object.hasOwn(files, SLIDE_DECK_FILE)) return;
-  const encoded = files[SLIDE_DECK_FILE]!;
-  if (Buffer.byteLength(encoded, 'base64') > MAX_SLIDE_DECK_BYTES)
+  const slides = artifact.startsWith('slides/');
+  const storyboard = artifact.startsWith('storyboard/');
+  const file = slides ? SLIDE_DECK_FILE : STORYBOARD_FILE;
+  if ((!slides && !storyboard) || !Object.hasOwn(files, file)) return;
+  const encoded = files[file]!;
+  if (slides && Buffer.byteLength(encoded, 'base64') > MAX_SLIDE_DECK_BYTES)
     throw new CliError(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
   const bytes = Buffer.from(encoded, 'base64');
-  if (bytes.toString('base64') !== encoded)
-    throw new CliError(`Invalid base64 content: ${SLIDE_DECK_FILE}`);
+  if (bytes.toString('base64') !== encoded) throw new CliError(`Invalid base64 content: ${file}`);
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
-    throw new CliError(`${SLIDE_DECK_FILE} must contain valid UTF-8 JSON`);
+    throw new CliError(`${file} must contain valid UTF-8 JSON`);
   }
-  if (!parseSlideDeck(value))
+  if (slides && !parseSlideDeck(value))
     throw new CliError(`${SLIDE_DECK_FILE} does not match the slide deck schema`);
+  if (storyboard) {
+    const timeline = parseStoryboard(value);
+    if (!timeline) throw new CliError(`${file} does not match the storyboard schema`);
+    const missing = missingStoryboardAsset(timeline, new Set(Object.keys(files)));
+    if (missing) throw new CliError(`Missing storyboard asset: ${missing}`);
+  }
 }
+
+function checkStoryboardSize(type: string, name: string, size: number) {
+  if (type !== 'storyboard') return;
+  const limit = name === STORYBOARD_FILE ? MAX_STORYBOARD_TIMELINE_BYTES : MAX_STORYBOARD_ASSET_BYTES;
+  if (size > limit) throw new CliError(`${name} exceeds the storyboard file limit`);
+}
+
 function validateManifest(artifact: string, files: Record<string, string>) {
   if (!KEY.test(artifact) || !files || typeof files !== 'object' || Array.isArray(files))
     throw new CliError('Invalid artifact manifest');
   const type = artifact.split('/')[0]!;
   const entries = Object.entries(files);
   if (entries.length > MAX_FILES) throw new CliError('Artifact contains too many files');
+  if (type === 'storyboard' && entries.length > MAX_STORYBOARD_ASSETS + 1)
+    throw new CliError('Storyboard has too many media files');
   let bytes = 0;
   const names = new Set<string>();
   for (const [name, encoded] of entries) {
@@ -352,11 +380,16 @@ function validateManifest(artifact: string, files: Record<string, string>) {
       !validName(name, type) ||
       names.has(name.toLowerCase()) ||
       typeof encoded !== 'string' ||
-      !/^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i.test(encoded)
+      encoded.length % 4 !== 0
     )
       throw new CliError(`Invalid artifact file: ${name}`);
+    const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+    if (/[^A-Z0-9+/]/i.test(encoded.slice(0, encoded.length - padding)))
+      throw new CliError(`Invalid artifact file: ${name}`);
+    const size = encoded.length / 4 * 3 - padding;
+    checkStoryboardSize(type, name, size);
     names.add(name.toLowerCase());
-    bytes += Buffer.byteLength(encoded, 'base64');
+    bytes += size;
     if (bytes > MAX_BYTES) throw new CliError('Artifact exceeds the 32 MiB transfer limit');
   }
   const required = PRIMARY_FILE[type]!;
@@ -376,18 +409,27 @@ export function localFiles(projectDir: string, artifact: string): Record<string,
     const absolute = path.join(dir, relative);
     for (const entry of fs.readdirSync(absolute, { withFileTypes: true })) {
       const name = relative ? `${relative}/${entry.name}` : entry.name;
+      if (type === 'storyboard' && name === 'assets' && !entry.isDirectory())
+        throw new CliError('Expected a storyboard assets directory');
       if (type !== 'slides' && entry.isDirectory() && ['assets', 'pages'].includes(name)) {
         visit(name);
         continue;
       }
       if (!validName(name, type)) continue;
       if (entry.isSymbolicLink()) throw new CliError(`Refusing symlink: ${name}`);
-      if (entry.isDirectory() && type !== 'slides') {
+      if (entry.isDirectory() && type !== 'slides' && type !== 'storyboard') {
         visit(name);
         continue;
       }
       if (!entry.isFile()) throw new CliError(`Refusing non-file: ${name}`);
-      const data = fs.readFileSync(path.join(dir, name));
+      const file = path.join(dir, name);
+      if (type === 'storyboard') {
+        if (count >= MAX_STORYBOARD_ASSETS + 1) throw new CliError('Storyboard has too many media files');
+        const size = fs.statSync(file).size;
+        checkStoryboardSize(type, name, size);
+        if (size > MAX_BYTES - bytes) throw new CliError('Artifact exceeds the 32 MiB transfer limit');
+      }
+      const data = fs.readFileSync(file);
       if (++count > MAX_FILES || (bytes += data.length) > MAX_BYTES)
         throw new CliError('Artifact exceeds transfer limit');
       files[name] = data.toString('base64');

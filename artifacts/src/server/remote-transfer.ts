@@ -4,17 +4,27 @@ import path from 'node:path';
 
 import { mintArtifactId } from '../shared/ids';
 import { MAX_SLIDE_DECK_BYTES, parseSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
+import {
+  MAX_STORYBOARD_ASSET_BYTES,
+  MAX_STORYBOARD_ASSETS,
+  MAX_STORYBOARD_TIMELINE_BYTES,
+  missingStoryboardAsset,
+  parseStoryboard,
+  STORYBOARD_FILE,
+  storyboardAssetKind,
+} from '../shared/storyboard';
 import type { ArtifactType } from '../shared/types';
 import { structuralWarnings } from '../shared/validate';
 import { parseDocument } from './document-codec';
 
-const ARTIFACT = /^(document|artboard|html|slides)\/([a-z0-9][a-z0-9-]*)$/;
+const ARTIFACT = /^(document|artboard|html|slides|storyboard)\/([a-z0-9][a-z0-9-]*)$/;
 const MAX_BYTES = 32 * 1024 * 1024;
 const PRIMARY_FILE: Record<ArtifactType, string> = {
   document: 'doc.xml',
   artboard: 'canvas.json',
   html: 'index.html',
   slides: SLIDE_DECK_FILE,
+  storyboard: STORYBOARD_FILE,
 };
 const MAX_FILES = 1_000;
 const MAX_PATH_BYTES = 512;
@@ -49,7 +59,7 @@ const unsafe = (message: string) => new RemoteTransferError(409, 'unsafe_artifac
 
 function artifactParts(artifact: string) {
   const match = ARTIFACT.exec(artifact);
-  if (!match) throw invalid('artifact must be document/<id>, artboard/<id>, html/<id> or slides/<id>');
+  if (!match) throw invalid('artifact must be document/<id>, artboard/<id>, html/<id>, slides/<id> or storyboard/<id>');
   return { type: match[1] as ArtifactType, id: match[2]! };
 }
 
@@ -79,6 +89,7 @@ function managed(type: ArtifactType, file: string) {
   const lower = file.toLowerCase();
   if (lower === 'comments.json') return false;
   if (type === 'slides') return file === SLIDE_DECK_FILE;
+  if (type === 'storyboard') return file === STORYBOARD_FILE || storyboardAssetKind(file) !== null;
   if (type === 'document') return file === 'doc.xml' || file.startsWith('assets/');
   if (type === 'artboard')
     return file === 'canvas.json' || file.startsWith('pages/') || file.startsWith('assets/');
@@ -120,6 +131,12 @@ function assertTreeSafe(dir: string, depth = 0) {
   }
 }
 
+function checkStoryboardSize(type: ArtifactType, name: string, size: number) {
+  if (type !== 'storyboard') return;
+  const limit = name === STORYBOARD_FILE ? MAX_STORYBOARD_TIMELINE_BYTES : MAX_STORYBOARD_ASSET_BYTES;
+  if (size > limit) throw tooLarge(`${name} exceeds the storyboard file limit`);
+}
+
 function collect(dir: string, type: ArtifactType) {
   const files = new Map<string, Buffer>();
   let total = 0;
@@ -133,20 +150,24 @@ function collect(dir: string, type: ArtifactType) {
         throw unsafe(`unsafe entry: ${entry.name}`);
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
-        if (type === 'slides' && relative === SLIDE_DECK_FILE)
+        if ((type === 'slides' || type === 'storyboard') && managed(type, relative))
           throw unsafe(`expected a regular file: ${relative}`);
         walk(path.join(current, entry.name), relative, depth + 1);
         continue;
       }
       if (!managed(type, relative)) continue;
       if (files.size >= MAX_FILES) throw tooLarge('artifact has too many source files');
+      if (type === 'storyboard' && files.size >= MAX_STORYBOARD_ASSETS + 1)
+        throw tooLarge('Storyboard has too many media files');
       const lower = relative.toLowerCase();
       if (folded.has(lower)) throw unsafe(`case-insensitive duplicate: ${relative}`);
       folded.add(lower);
       const file = path.join(current, entry.name);
       const stat = fs.statSync(file);
       if (stat.size > MAX_BYTES - total) throw tooLarge('artifact exceeds 32 MiB');
+      checkStoryboardSize(type, relative, stat.size);
       const data = fs.readFileSync(file);
+      checkStoryboardSize(type, relative, data.length);
       total += data.length;
       if (total > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB');
       files.set(relative, data);
@@ -190,6 +211,7 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
   const source = files.get(primary);
   if (!source) throw unsafe(`artifact is missing ${primary}`);
   if (type === 'slides') validateSlideDeck(source);
+  if (type === 'storyboard') validateStoryboard(source, files);
   return snapshot(files, digest(files));
 }
 
@@ -204,11 +226,26 @@ function validateSlideDeck(source: Buffer) {
   if (!parseSlideDeck(value)) throw invalid(`${SLIDE_DECK_FILE} does not match the slide deck schema`);
 }
 
+function validateStoryboard(source: Buffer, files: ReadonlyMap<string, Buffer>) {
+  let value: unknown;
+  try {
+    value = JSON.parse(utf8.decode(source));
+  } catch {
+    throw invalid(`${STORYBOARD_FILE} must contain valid UTF-8 JSON`);
+  }
+  const storyboard = parseStoryboard(value);
+  if (!storyboard) throw invalid(`${STORYBOARD_FILE} does not match the storyboard schema`);
+  const missing = missingStoryboardAsset(storyboard, new Set(files.keys()));
+  if (missing) throw invalid(`missing storyboard asset: ${missing}`);
+}
+
 function decodeManifest(type: ArtifactType, incoming: unknown) {
   if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming))
     throw invalid('files must be a path-to-base64 object');
   const entries = Object.entries(incoming as Record<string, unknown>);
   if (entries.length > MAX_FILES) throw tooLarge('artifact has too many source files');
+  if (type === 'storyboard' && entries.length > MAX_STORYBOARD_ASSETS + 1)
+    throw tooLarge('Storyboard has too many media files');
   const folded = new Set<string>();
   let total = 0;
   const files = new Map<string, Buffer>();
@@ -220,6 +257,7 @@ function decodeManifest(type: ArtifactType, incoming: unknown) {
     if (typeof value !== 'string') throw invalid(`invalid base64 content: ${name}`);
     const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
     const estimatedBytes = Math.floor(value.length / 4) * 3 - padding;
+    checkStoryboardSize(type, name, estimatedBytes);
     if (type === 'slides' && estimatedBytes > MAX_SLIDE_DECK_BYTES)
       throw tooLarge(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
     if (estimatedBytes > MAX_BYTES - total || value.length > Math.ceil(MAX_BYTES / 3) * 4)
@@ -237,6 +275,10 @@ function decodeManifest(type: ArtifactType, incoming: unknown) {
   if (!source) throw invalid(`${required} is required`);
   if (type === 'slides') {
     validateSlideDeck(source);
+    return files;
+  }
+  if (type === 'storyboard') {
+    validateStoryboard(source, files);
     return files;
   }
   let primary: string;

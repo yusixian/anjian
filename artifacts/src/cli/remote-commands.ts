@@ -32,7 +32,7 @@ const artifactOption = {
   artifact: {
     type: 'string' as const,
     value: '<type>/<id>',
-    help: 'Document, artboard, HTML or slides artifact',
+    help: 'Document, artboard, HTML, slides or storyboard artifact',
   },
 };
 const permissionError = (status: number, json: Record<string, any>) =>
@@ -46,7 +46,7 @@ const validSnapshot = (artifact: string, value: Record<string, any>): value is R
     return false;
   try {
     validateFiles(artifact, value.files as Record<string, string>);
-    if (!artifact.startsWith('slides/')) return true;
+    if (!artifact.startsWith('slides/') && !artifact.startsWith('storyboard/')) return true;
     const empty = Object.keys(value.files).length === 0;
     return value.revision === null ? empty : !empty && /^sha256:[a-f0-9]{64}$/.test(value.revision);
   } catch {

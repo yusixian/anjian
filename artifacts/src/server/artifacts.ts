@@ -82,7 +82,7 @@ export function artifactSignature(dir: string, type?: ArtifactType): string {
     }
     for (const entry of entries) {
       if (entry.name.startsWith('.')) continue;
-      if ((type === 'artboard' || type === 'slides') && current === dir && entry.name === 'comments.json') continue;
+      if ((type === 'artboard' || type === 'slides' || type === 'storyboard') && current === dir && entry.name === 'comments.json') continue;
       const full = path.join(current, entry.name);
       try {
         const stat = fs.statSync(full);

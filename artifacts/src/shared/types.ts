@@ -1,7 +1,7 @@
 import type { BoardCommentsFile } from './board-comments';
 import type { CommentsFile } from './comments';
 
-export const ARTIFACT_TYPES = ['artboard', 'document', 'html', 'slides'] as const;
+export const ARTIFACT_TYPES = ['artboard', 'document', 'html', 'slides', 'storyboard'] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
 export interface Rect {

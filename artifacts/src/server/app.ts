@@ -28,6 +28,7 @@ import { createBoardRequestHandler, serveContent } from './routes/content';
 import { HTTP_ROUTES, UPGRADE_ROUTES } from './routes/index';
 import { dispatchHttp, dispatchUpgrade } from './routes/table';
 import { writeJsonAtomic } from './state';
+import { closeStoryboardJobs } from './storyboard-jobs';
 import { cumulativeStorageAdmission } from './storage/quota';
 import { rejectUpgrade } from './ws';
 
@@ -62,7 +63,7 @@ export interface ArtifactsServer {
   onMessage: (listener: (message: ServerMessage) => void) => void;
   port: number;
   prepareArtifactUpload: (
-    type: 'artboard' | 'html' | 'slides',
+    type: 'artboard' | 'html' | 'slides' | 'storyboard',
     id: string,
     stagedDir: string,
   ) => PreparedStorageState;
@@ -322,6 +323,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
           failures.push(error);
         }
       };
+      await step('storyboardJobs', () => closeStoryboardJobs(ctx));
       await step('backgroundWrites', () => ctx.backgroundWrites.close());
       await step('watcher', () => watcher.close());
       await step('sockets', () => {

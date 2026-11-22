@@ -3,6 +3,7 @@ import type http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
+import { missingStoryboardAsset, STORYBOARD_FILE } from '../shared/storyboard';
 import type { CanvasPayload, DocumentPayload, HtmlPayload, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
 import {
@@ -24,6 +25,7 @@ import { createBackgroundWrites } from './storage/background-writes';
 import { createDeferredInputs } from './deferred-inputs';
 import { readHtml } from './html';
 import { readSlideDeck } from './slides';
+import { listStoryboardAssets, readStoryboard } from './storyboard-source';
 import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
@@ -76,6 +78,18 @@ export function readArtifactSource(
   if (ref.type === 'document') {
     const payload = readDocument(dir, ref.id);
     return { ...payload, warnings: [...payload.warnings, ...runtime] };
+  }
+  if (ref.type === 'storyboard') {
+    try {
+      const { bytes, storyboard } = readStoryboard(dir);
+      const assets = listStoryboardAssets(dir);
+      const missing = missingStoryboardAsset(storyboard, new Set(assets.map(({ path }) => path)));
+      const warnings = bytes === 0 ? [`${STORYBOARD_FILE} not found`]
+        : missing ? [`Missing or invalid storyboard media: ${missing}`] : [];
+      return { title: storyboard.title, version: 0, warnings };
+    } catch {
+      return { title: ref.id, version: 0, warnings: ['Storyboard could not be read'] };
+    }
   }
   if (ref.type === 'slides') {
     try {
@@ -317,7 +331,7 @@ export function createServerContext(options: ServerOptions) {
       },
     };
   };
-  const prepareArtifactMetadata = (type: 'artboard' | 'html' | 'slides', id: string, stagedDir: string) => {
+  const prepareArtifactMetadata = (type: 'artboard' | 'html' | 'slides' | 'storyboard', id: string, stagedDir: string) => {
     let payload: ArtifactPayload;
     let extra: Record<string, unknown>;
     let validateRuntime = () => undefined;
@@ -332,7 +346,7 @@ export function createServerContext(options: ServerOptions) {
         if (JSON.stringify(runtimeWarnings.get(key) ?? []) !== JSON.stringify(runtime) || ranVersions.get(key) !== ran)
           throw new Error('HTML runtime state changed during upload');
       };
-    } else if (type === 'slides') {
+    } else if (type === 'slides' || type === 'storyboard') {
       payload = readArtifactSource(stagedDir, { id, type });
       extra = {};
     } else {

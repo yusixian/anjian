@@ -835,7 +835,12 @@
     "create": "New slide deck",
     "createFailed": "Could not create the slide deck. Try again."
   },
+  "storyboardLibrary": {
+    "create": "New storyboard",
+    "createFailed": "Could not create the storyboard. Try again."
+  },
   "type": {
+    "storyboard": "Storyboard",
     "slides": "Slides",
     "all": "All",
     "artboard": "Artboard",

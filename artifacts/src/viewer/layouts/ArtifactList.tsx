@@ -45,7 +45,7 @@ export function ArtifactList() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [confirmMove, setConfirmMove] = useState<TrashTarget[] | null>(null);
   const [moving, setMoving] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<'slides' | 'storyboard' | null>(null);
   const [moveDone, setMoveDone] = useState(0);
   const [moved, setMoved] = useState<TrashEntry[]>([]);
   const [failedTargets, setFailedTargets] = useState<TrashTarget[]>([]);
@@ -75,22 +75,26 @@ export function ArtifactList() {
   const retryable = failedTargets.filter((target) => picked.some((artifact) => artifactSelectionKey(artifact) === artifactSelectionKey(target)));
   const allVisibleSelected = items.length > 0 && items.every((artifact) => chosen.has(artifactSelectionKey(artifact)));
 
-  const createSlides = async () => {
+  const createArtifact = async (kind: 'slides' | 'storyboard') => {
     if (!selected || creating) return;
-    setCreating(true);
+    setCreating(kind);
     try {
-      const response = await fetch('/api/hub/slides', {
+      const response = await fetch(kind === 'slides' ? '/api/hub/slides' : '/api/hub/storyboards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project: selected.dir, title: t('type.slides') }),
+        body: JSON.stringify({
+          language: document.documentElement.lang,
+          project: selected.dir,
+          title: t(`type.${kind}`),
+        }),
       });
       const data = (await response.json()) as { url?: string };
-      if (!response.ok || !data.url?.startsWith('/slides/')) throw new Error('Slide deck could not be created');
+      if (!response.ok || !data.url?.startsWith(`/${kind}/`)) throw new Error('Artifact could not be created');
       location.assign(data.url);
     } catch {
-      toast.error(t('slideLibrary.createFailed'));
+      toast.error(t(kind === 'slides' ? 'slideLibrary.createFailed' : 'storyboardLibrary.createFailed'));
     } finally {
-      setCreating(false);
+      setCreating(null);
     }
   };
 
@@ -288,9 +292,14 @@ export function ArtifactList() {
                   : t('library.count', { count: base.length })}
             </span>
             {selected && !selecting && (
-              <Button icon={Plus} loading={creating} size="small" onClick={() => void createSlides()}>
-                {t('slideLibrary.create')}
-              </Button>
+              <div {...stylex.props(styles.createActions)}>
+                <Button icon={Plus} disabled={creating !== null} loading={creating === 'slides'} size="small" onClick={() => void createArtifact('slides')}>
+                  {t('slideLibrary.create')}
+                </Button>
+                <Button icon={Plus} disabled={creating !== null} loading={creating === 'storyboard'} size="small" onClick={() => void createArtifact('storyboard')}>
+                  {t('storyboardLibrary.create')}
+                </Button>
+              </div>
             )}
             {selection !== 'trash' && (
               <Button className={stylex.props(bulkStyles.touchAction).className} size="small" onClick={() => {

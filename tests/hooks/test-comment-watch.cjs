@@ -39,18 +39,20 @@ function watch(project, key) {
   return require(watcher).createCommentWatch(project, key);
 }
 
-test('new document, artboard and slide comments produce actionable notifications without consuming them', (t) => {
+test('new document, artboard, slide and storyboard comments produce actionable notifications without consuming them', (t) => {
   const f = fixture(t);
   const poll = watch(f.project);
   assert.deepEqual(poll(), []);
   f.save('document/plan', [thread()]);
   f.save('artboard/settings', [{ ...thread(), anchor: { page: 'p', board: 'a', x: 1, y: 2 } }]);
   f.save('slides/briefing', [{ ...thread(), anchor: { slideId: 'plan' } }]);
+  f.save('storyboard/demo', [{ ...thread(), anchor: { clipId: 'cut' } }]);
   const events = poll();
   assert.deepEqual(events.map((event) => event.artifact).sort(), [
     'artboard/settings',
     'document/plan',
     'slides/briefing',
+    'storyboard/demo',
   ]);
   for (const event of events) {
     assert.equal(event.unread, 1);

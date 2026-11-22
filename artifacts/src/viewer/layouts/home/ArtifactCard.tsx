@@ -180,7 +180,7 @@ export function ArtifactCard({
           {selected && <Check aria-hidden="true" size={16} />}
         </button>
       )}
-      {!selectionMode && <ShareButton card type={artifact.type} id={artifact.id} project={artifact.project} />}
+      {!selectionMode && artifact.type !== 'storyboard' && <ShareButton card type={artifact.type} id={artifact.id} project={artifact.project} />}
     </div>
   );
 }

@@ -51,10 +51,10 @@ or opens their existing full access link there. Do not fetch a deployment key or
 another project's credentials. A pairing code is not a browser login; keep pending
 distinct from success. Expired pairing requires a new login attempt before link.
 
-## Process a document or artboard comment
+## Review a work in a linked project
 
 Use the same entry point and project for every step. Read the corresponding type
-reference before editing. Existing artifact example:
+reference before editing. Set `thread` to the thread ID returned by the list command.
 
 ```bash
 anjian remote status
@@ -63,7 +63,7 @@ anjian pull --artifact document/plan
 # Read the freshly pulled doc.xml; edit only the requested blocks, preserving IDs.
 anjian push --artifact document/plan
 anjian check --artifact document/plan
-anjian comment reply --artifact document/plan --thread "已修改并上传，检查通过。" < thread-id > --text
+anjian comment reply --artifact document/plan --thread "$thread" --text "已修改并上传，检查通过。"
 ```
 
 Inspect each result before proceeding. If pull refuses local changes, preserve and
@@ -83,8 +83,7 @@ not live local file watching. Artboards must include every referenced board file
 before pushing; the local skeleton streaming workflow cannot be uploaded halfway.
 Return the successful push's `url`. A recipient still needs browser access.
 
-Comments apply to document/artboard; HTML uses push/pull/check and browser runtime
-verification. Upload only source/resources. Server comments, history and CRDT state
+Documents, artboards, slide decks, and storyboards support native comments. HTML uses push, pull, check, and browser runtime verification. Upload only source/resources. Server comments, history and CRDT state
 remain server-owned. Do not edit/copy comments.json or .state to simulate a reply.
 
 ## Events, errors and credentials

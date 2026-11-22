@@ -532,3 +532,37 @@ test('a linked device can transfer a deck and review it by stable slide ID', asy
   expect(checked.status, await checked.clone().text()).toBe(200);
   expect((await checked.json()).warnings).toEqual([]);
 });
+
+test('a linked device syncs storyboards and keeps clip reviews outside the source manifest', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const prefix = `/api/remote/projects/${fx.id(fx.alpha)}`;
+  const source = `${prefix}/artifacts/storyboard/demo`;
+  const comments = `${prefix}/agent/storyboard/demo/comments`;
+  const json = (method: string, body: unknown) => ({
+    method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const timeline = {
+    version: 1, title: 'Demo', tracks: [{
+      id: 'picture', kind: 'video', name: 'Picture', clips: [{
+        id: 'opening', asset: 'assets/cover.png', durationMs: 250, startMs: 0, trimMs: 0,
+      }],
+    }],
+  };
+  const files = {
+    'timeline.json': encode(JSON.stringify(timeline)),
+    'assets/cover.png': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jcXQAAAAASUVORK5CYII=',
+  };
+  const uploaded = await fx.request(source, json('PUT', { baseRevision: null, files }));
+  expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+  const snapshot = await uploaded.json();
+  const pushed = await fx.request(comments, json('POST', { op: 'add', clipId: 'opening', text: 'Tighten the opening' }));
+  expect(pushed.status, await pushed.clone().text()).toBe(200);
+  const listed = await fx.request(comments, json('POST', { op: 'list', all: true }));
+  expect((await listed.json()).threads[0]).toMatchObject({ anchor: { clipId: 'opening' } });
+  const checked = await fx.request(`${prefix}/agent/storyboard/demo/check`, json('POST', {}));
+  expect(checked.status, await checked.clone().text()).toBe(200);
+  expect((await checked.json()).warnings).toEqual([]);
+  const pulled = await fx.request(source, { headers });
+  expect(await pulled.json()).toMatchObject({ files, revision: snapshot.revision });
+});

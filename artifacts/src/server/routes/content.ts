@@ -15,6 +15,7 @@ import type { HttpRoute } from './table';
 
 const CONTENT_CSP: Record<ArtifactType, string> = {
   slides: "default-src 'none'; sandbox",
+  storyboard: "default-src 'none'; sandbox",
   artboard: 'sandbox allow-scripts',
   document: "sandbox; default-src 'none'",
   html: 'sandbox allow-scripts allow-modals allow-forms allow-popups allow-downloads',
@@ -62,6 +63,7 @@ export function serveContent(
     document: resolveDocumentAsset,
     html: resolveHtmlFile,
     slides: () => null,
+    storyboard: () => null,
   }[ref.type];
   const target =
     (ref.type === 'artboard' ? recordings.resolve(id, relative) : null) ?? resolve(dir, relative);

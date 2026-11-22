@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -40,7 +41,7 @@ async function setup() {
   });
   const owner = { Cookie: `anjian_artifacts_${h.port}=test-secret-key`, Origin: 'https://share.example', 'Content-Type': 'application/json' };
   const action = (action: string, extra: object = {}) => req('/api/hub/share', { method: 'POST', headers: owner, body: JSON.stringify({ project, type: 'html', id: 'demo', action, expiresInDays: 7, ...extra }) });
-  return { h, home, project, root, req, owner, action };
+  return { h, home, project, root, req, owner, action, viewer: fixture.viewer };
 }
 
 test('anonymous snapshot survives edits, rotates/revokes and exposes only scoped files', async () => {
@@ -261,4 +262,76 @@ test('creates, edits and reviews a slide deck and publishes an isolated reading 
   const successful = await write(endpoint, { deck, revision: recoverable.revision });
   expect(successful.status).toBe(200);
   expect(await successful.json()).toMatchObject({ deck, commentsWarning: 'Unsafe comments.json path' });
+});
+
+test('storyboard renders one private revision for both playback and export', async () => {
+  const { owner, project, req, viewer } = await setup();
+  fs.writeFileSync(path.join(viewer, 'preview.html'), '<!doctype html><title>generic preview</title>');
+  const write = (url: string, payload: unknown) => req(url, {
+    body: JSON.stringify(payload),
+    headers: owner,
+    method: 'POST',
+  });
+  const created = await write('/api/hub/storyboards', { project, title: 'Demo storyboard', language: 'en' });
+  expect(created.status, await created.clone().text()).toBe(201);
+  const { id, url } = await created.json() as { id: string; url: string };
+  const endpoint = `/api${url}`;
+  expect((await req(url, { headers: owner })).status).toBe(200);
+  const preview = await req(`/preview${url}`, { headers: owner });
+  expect(preview.status).toBe(200);
+  expect(await preview.text()).not.toContain('generic preview');
+  expect((await req(endpoint)).status).toBe(403);
+  const initial = await (await req(endpoint, { headers: owner })).json();
+  expect(initial.storyboard.tracks[0]).toMatchObject({ name: 'Video', kind: 'video' });
+  const image = execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=16x16', '-frames:v', '1',
+    '-threads:v', '1', '-c:v', 'png', '-f', 'image2pipe', 'pipe:1']);
+  const uploaded = await req(`${endpoint}/assets?name=opening.png`, {
+    body: new Uint8Array(image),
+    headers: { ...owner, 'Content-Type': 'image/png' },
+    method: 'POST',
+  });
+  expect(uploaded.status, await uploaded.clone().text()).toBe(201);
+  const { asset } = await uploaded.json();
+  const assetUrl = `${endpoint}/assets?name=${encodeURIComponent(asset.path)}`;
+  expect((await req(assetUrl)).status).toBe(403);
+  const partialAsset = await req(assetUrl, { headers: { ...owner, Range: 'bytes=0-7' } });
+  expect(partialAsset.status).toBe(206);
+  expect(Buffer.from(await partialAsset.arrayBuffer())).toEqual(image.subarray(0, 8));
+
+  const timeline = initial.storyboard;
+  timeline.tracks[0].clips = [{ id: 'first', asset: asset.path, durationMs: 400, startMs: 0, trimMs: 0 }];
+  const saved = await write(endpoint, { storyboard: timeline, revision: initial.revision });
+  expect(saved.status, await saved.clone().text()).toBe(200);
+  const { revision } = await saved.json();
+  const comment = await write(`${endpoint}/comments`, { op: 'create', clipId: 'first', text: 'Review the timing' });
+  expect(comment.status).toBe(200);
+  timeline.tracks[0].clips[0].startMs = 100;
+  const moved = await write(endpoint, { storyboard: timeline, revision });
+  expect(moved.status).toBe(200);
+  const current = await moved.json();
+  expect(current.comments.threads[0].anchor).toEqual({ clipId: 'first' });
+  expect((await write(`${endpoint}/render`, { revision })).status).toBe(409);
+
+  const render = await write(`${endpoint}/render`, { revision: current.revision });
+  expect(render.ok, await render.clone().text()).toBe(true);
+  let job = await render.json();
+  const jobUrl = `${endpoint}/render/${job.id}`;
+  for (let i = 0; i < 60 && ['queued', 'running'].includes(job.status); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    job = await (await req(jobUrl, { headers: owner })).json();
+  }
+  expect(job).toMatchObject({ status: 'ready' });
+  const video = `${jobUrl}/video`;
+  expect((await req(video)).status).toBe(403);
+  const playback = await req(video, { headers: { ...owner, Range: 'bytes=0-31' } });
+  const download = await req(`${video}?download=1`, { headers: owner });
+  expect(playback.status).toBe(206);
+  expect(download.headers.get('content-disposition')).toContain('attachment');
+  const mp4 = Buffer.from(await download.arrayBuffer());
+  expect(mp4.toString('ascii', 4, 8)).toBe('ftyp');
+  expect(Buffer.from(await playback.arrayBuffer())).toEqual(mp4.subarray(0, 32));
+  const repeated = await write(`${endpoint}/render`, { revision: current.revision });
+  expect(await repeated.json()).toMatchObject({ id: job.id, status: 'ready' });
+  const share = await write('/api/hub/share', { action: 'publish', project, type: 'storyboard', id });
+  expect(share.status).toBe(404);
 });

@@ -818,7 +818,12 @@
     "create": "新建幻灯片",
     "createFailed": "无法创建幻灯片，请重试。"
   },
+  "storyboardLibrary": {
+    "create": "新建分镜",
+    "createFailed": "无法创建分镜，请重试。"
+  },
   "type": {
+    "storyboard": "分镜",
     "slides": "幻灯片",
     "all": "全部",
     "artboard": "画板",

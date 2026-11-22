@@ -299,3 +299,50 @@ test('keeps malformed local slide bytes available for backup before replacing th
   expect(localFiles(root, artifact)).toEqual(deck('Replacement'));
   expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('human feedback');
 });
+
+test('storyboard transfer keeps the timeline and media together and excludes review history', () => {
+  const root = project();
+  const artifact = 'storyboard/demo';
+  const files = {
+    'timeline.json': encode(JSON.stringify({
+      version: 1, title: 'Review', tracks: [{
+        id: 'picture', name: 'Picture', kind: 'video', clips: [{
+          id: 'first', asset: 'assets/opening.png', startMs: 0, trimMs: 0, durationMs: 500,
+        }],
+      }],
+    })),
+    'assets/opening.png': encode('fixture bytes'),
+  };
+  const saved = write(root, artifact, null, files);
+  const dir = path.join(root, '.anjian/artifacts', artifact);
+  fs.writeFileSync(path.join(dir, 'comments.json'), 'keep feedback');
+  expect(readRemoteArtifact(root, artifact)).toEqual(saved);
+  expect(() => write(root, artifact, saved.revision, {
+    'timeline.json': files['timeline.json'],
+  })).toThrow('missing storyboard asset');
+  expect(() => validateFiles(artifact, { 'timeline.json': files['timeline.json'] })).toThrow('Missing storyboard asset');
+  expect(() => write(root, artifact, saved.revision, {
+    ...files, 'exports/demo.mp4': encode('generated'),
+  })).toThrow('source file is not allowed');
+  expect(readRemoteArtifact(root, artifact)).toEqual(saved);
+  expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('keep feedback');
+});
+
+test('validates realistic storyboard media manifests without recursive Base64 patterns', () => {
+  const artifact = 'storyboard/remote';
+  const files = {
+    'timeline.json': encode(JSON.stringify({ version: 1, title: 'Review', tracks: [] })),
+    'assets/footage.mp4': Buffer.alloc(4 * 1024 * 1024).toString('base64'),
+  };
+  expect(() => validateFiles(artifact, files)).not.toThrow();
+});
+
+test('storyboard transfers enforce the same media count limit as the editor', () => {
+  const artifact = 'storyboard/count';
+  const files = {
+    'timeline.json': encode(JSON.stringify({ version: 1, title: 'Demo', tracks: [] })),
+    ...Object.fromEntries(Array.from({ length: 257 }, (_, i) => [`assets/clip-${i}.png`, 'YQ=='])),
+  };
+  expect(() => write(project(), artifact, null, files)).toThrow('too many media files');
+  expect(() => validateFiles(artifact, files)).toThrow('too many media files');
+});

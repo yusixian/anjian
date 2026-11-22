@@ -76,7 +76,8 @@ export const styles = stylex.create({
     'paddingInline': 32,
     '@media (max-width: 700px)': { paddingBlockStart: 20, paddingInline: 16 },
   },
-  heading: { display: 'flex', alignItems: 'baseline', gap: 10 },
+  createActions: { display: 'flex', flexWrap: 'wrap', gap: 6 },
+  heading: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 },
   headingTitle: {
     margin: 0,
     fontSize: 22,
