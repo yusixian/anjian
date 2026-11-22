@@ -58,3 +58,21 @@ CLI：node /绝对路径/anjian/skills/artifacts/app/anjian.cjs
 Agent 自行发现入口并完成接入命令；仅服务器未知或项目选择确有歧义时询问。用户在浏览器批准账号可授予的所需全部项目；当前协议只有设备名称与项目列表，没有 `--scope all` 或权限级别参数。已有有效绑定不为扩权而撤销重绑。
 
 已有远程作品使用「读取批注 → pull → 编辑 → push → check → 回复」。冲突、本地未同步改动和浏览器授权处理见 [Agent 远程操作参考](../skills/artifacts/remote.md)。本地模式仍使用文件写入和本地服务器。后台通知钩子是额外集成，需在宿主中单独验证。服务器部署不会更新本机 CLI；修改 Skill 后须重新构建并交付客户端产物。
+
+## Pi 反馈
+
+先完成案间源码构建，然后在 Pi 安装这份本地包。
+
+```bash
+pi install /绝对路径/anjian
+```
+
+在 Pi 中输入 `/anjian-open document/plan` 或 `/anjian-open artboard/design`。Agent 也可以调用 `anjian_open`。入口使用当前作品项目目录，跨项目时可在命令末尾附上目录，或给工具传 `projectDir`。
+
+用这个入口打开的文档和画板才会订阅到当前会话。普通评论、画板选择提交和撤回会排在当前 Pi 任务之后处理。重新打开同一 Pi 会话会恢复当前分支的订阅。切换会话或用 `/tree` 返回尚未打开作品的分支时，原订阅会停止通知。
+
+Pi 无法继续运行时，反馈仍保存在作品中。通知里包含手工读取命令。也可以用 Pi 的 `/session` 查看会话 ID，再执行下方命令。自托管项目继续使用设备绑定及远程反馈流程。
+
+```bash
+anjian comment list --artifact document/plan --session pi: < Pi会话ID > --json
+```

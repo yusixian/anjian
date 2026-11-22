@@ -10,6 +10,7 @@ const ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
 const HOSTS = {
   codex: { env: 'CODEX_THREAD_ID', dir: 'codex-comment-watch' },
   claude: { env: 'CLAUDE_CODE_SESSION_ID', dir: 'claude-comment-watch' },
+  pi: { dir: 'pi-comment-watch' },
 };
 
 function readJson(file) {
@@ -48,15 +49,33 @@ function beatFile(file, now = Date.now()) {
   }
 }
 
-function beatSources(project, host, session, sources) {
-  beatFile(aliveFile(project, host, session));
+function forOpenedBeats(host, session, sources, update) {
   for (const [target, artifacts] of sources) {
     for (const artifact of artifacts) {
       if (!ARTIFACT.test(artifact)) continue;
       const dir = path.dirname(aliveFile(target, host, session));
-      beatFile(path.join(dir, 'opened', artifact, `${session}.alive`));
+      update(path.join(dir, 'opened', artifact, `${session}.alive`));
     }
   }
+}
+
+function beatOpenedSources(host, session, sources) {
+  forOpenedBeats(host, session, sources, beatFile);
+}
+
+function clearOpenedSources(host, session, sources) {
+  forOpenedBeats(host, session, sources, (file) => {
+    try {
+      fs.rmSync(file, { force: true });
+    } catch {
+      // A remaining heartbeat expires without further writes.
+    }
+  });
+}
+
+function beatSources(project, host, session, sources) {
+  beatFile(aliveFile(project, host, session));
+  beatOpenedSources(host, session, sources);
 }
 
 function sessionOf(host, env = process.env) {
@@ -177,6 +196,8 @@ function register(args, env = process.env) {
 
 module.exports = {
   aliveFile,
+  beatOpenedSources,
+  clearOpenedSources,
   beatSources,
   clientCommentSession,
   projectRoot,

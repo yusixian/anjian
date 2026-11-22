@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,9 +18,19 @@ async function readPackageJson() {
   return JSON.parse(await readFile(packageJsonPath, 'utf8'));
 }
 
-async function loadExtension() {
+async function loadExtension(onMessage = () => {}) {
   const handlers = new Map();
+  const commands = new Map();
+  const tools = new Map();
   const pi = {
+    registerCommand(name, command) {
+      commands.set(name, command);
+    },
+    registerTool(tool) {
+      tools.set(tool.name, tool);
+    },
+    sendMessage: onMessage,
+    appendEntry() {},
     on(event, handler) {
       if (!handlers.has(event)) handlers.set(event, []);
       handlers.get(event).push(handler);
@@ -27,7 +40,7 @@ async function loadExtension() {
     pathToFileURL(extensionPath).href + `?cachebust=${Date.now()}-${Math.random()}`
   );
   mod.default(pi);
-  return { handlers };
+  return { handlers, commands, tools };
 }
 
 function firstHandler(handlers, event) {
@@ -47,21 +60,31 @@ function textOf(message) {
 test('package.json declares a pi package with skills and extension resources', async () => {
   const pkg = await readPackageJson();
 
-  assert.equal(pkg.name, 'anjian');
+  assert.equal(pkg.name, 'anjian-workflow');
   assert.ok(pkg.keywords.includes('pi-package'));
   assert.deepEqual(pkg.pi.skills, ['./skills']);
   assert.deepEqual(pkg.pi.extensions, ['./.pi/extensions/anjian.ts']);
 });
 
 test('extension leaves package skill discovery to Pi and registers lifecycle hooks', async () => {
-  const { handlers } = await loadExtension();
+  const { handlers, commands, tools } = await loadExtension();
+  assert.ok(commands.has('anjian-open'));
+  assert.ok(tools.has('anjian_open'));
 
   assert.equal(
     (handlers.get('resources_discover') ?? []).length,
     0,
     'extension must not bypass package skill filters',
   );
-  for (const event of ['session_start', 'session_compact', 'context', 'agent_end']) {
+  for (const event of [
+    'session_start',
+    'session_shutdown',
+    'session_tree',
+    'message_end',
+    'session_compact',
+    'context',
+    'agent_end',
+  ]) {
     assert.equal((handlers.get(event) ?? []).length, 1, `missing ${event} handler`);
   }
   assert.equal((handlers.get('session_before_compact') ?? []).length, 0);
@@ -73,7 +96,13 @@ test('startup context injects the bootstrap as one user message until agent_end'
   const context = firstHandler(handlers, 'context');
   const agentEnd = firstHandler(handlers, 'agent_end');
 
-  await sessionStart({ type: 'session_start', reason: 'startup' }, {});
+  await sessionStart(
+    { type: 'session_start', reason: 'startup' },
+    {
+      sessionManager: { getSessionId: () => 'fixture', getBranch: () => [] },
+    },
+  );
+  await firstHandler(handlers, 'session_shutdown')();
 
   const originalMessages = [
     {
@@ -144,4 +173,106 @@ test('pi tools reference documents pi-specific mappings', async () => {
     rows.some((row) => /todo|task/i.test(row)),
     'mapping table documents task tracking',
   );
+});
+
+test('removes a branch subscription and acknowledges only its own persisted notice', async (t) => {
+  const project = await mkdtemp(resolve(tmpdir(), 'anjian-pi-branch-'));
+  t.after(() => rm(project, { force: true, recursive: true }));
+  let branch = [
+    {
+      type: 'custom',
+      customType: 'anjian-opened-artifact',
+      data: { project, artifact: 'document/plan' },
+    },
+  ];
+  const ctx = {
+    sessionManager: { getSessionId: () => 'branch-session', getBranch: () => branch },
+    isIdle: () => true,
+    model: {},
+  };
+  const messages = [];
+  const { handlers } = await loadExtension((message) =>
+    messages.push({ role: 'custom', ...message }),
+  );
+  t.after(() => firstHandler(handlers, 'session_shutdown')());
+  await firstHandler(handlers, 'session_start')({}, ctx);
+  const heartbeat = resolve(
+    project,
+    '.anjian/artifacts/.state/pi-comment-watch/opened/document/plan/branch-session.alive',
+  );
+  assert.ok(existsSync(heartbeat));
+  branch = [];
+  await firstHandler(handlers, 'session_tree')({}, ctx);
+  assert.equal(existsSync(heartbeat), false);
+  const artifact = resolve(project, '.anjian/artifacts/document/plan');
+  await mkdir(artifact, { recursive: true });
+  async function feedback(id) {
+    await writeFile(
+      resolve(artifact, 'comments.json'),
+      JSON.stringify({
+        threads: [
+          {
+            id: 'thread',
+            status: 'open',
+            messages: [{ id, author: 'human', at: '2026-11-22T00:00:00Z' }],
+          },
+        ],
+      }),
+    );
+  }
+  await feedback('first');
+  branch = [
+    {
+      type: 'custom',
+      customType: 'anjian-opened-artifact',
+      data: { project, artifact: 'document/plan' },
+    },
+  ];
+  await firstHandler(handlers, 'session_tree')({}, ctx);
+  assert.ok(existsSync(heartbeat));
+  const waitFor = async (length) => {
+    for (let i = 0; i < 60 && messages.length < length; i++) await delay(30);
+    assert.equal(messages.length, length);
+  };
+  await waitFor(1);
+  const ack = firstHandler(handlers, 'message_end');
+  await ack({ message: { ...messages[0], details: { id: 'unrelated' } } });
+  await feedback('second');
+  await delay(1100);
+  assert.equal(messages.length, 1);
+  await ack({ message: messages[0] });
+  await waitFor(2);
+  await ack({ message: messages[1] });
+});
+
+test('Pi receipts leave inherited host subscriptions alone while ordinary explicit receipts still register', async (t) => {
+  const root = await mkdtemp(resolve(tmpdir(), 'anjian-pi-launcher-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  for (const file of ['anjian.cjs', 'comment-subscriptions.cjs'])
+    await copyFile(resolve(repoRoot, 'skills/artifacts/app', file), resolve(root, file));
+  await writeFile(resolve(root, 'cli.cjs'), '');
+  const codex = '12345678-1111-4444-a111-abcdefabcdef';
+  const subscribed = resolve(root, '.anjian/artifacts/.state/codex-comment-watch', `${codex}.json`);
+  const env = { ...process.env, ANJIAN_ARTIFACTS_OWNER: '2', CODEX_THREAD_ID: codex };
+  delete env.CLAUDE_CODE_SESSION_ID;
+  const read = (session) =>
+    spawnSync(
+      process.execPath,
+      [
+        resolve(root, 'anjian.cjs'),
+        'comment',
+        'list',
+        '--session',
+        session,
+        '--artifact',
+        'document/plan',
+        '--project-dir',
+        root,
+      ],
+      { cwd: root, env, encoding: 'utf8' },
+    );
+  assert.equal(read('pi:fixture').status, 0);
+  assert.equal(existsSync(subscribed), false);
+  assert.equal(read('custom-reader').status, 0);
+  assert.deepEqual(JSON.parse(await readFile(subscribed, 'utf8')).artifacts, ['document/plan']);
 });

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const HOSTS = ['claude', 'codex'];
+const HOSTS = ['claude', 'codex', 'pi'];
 const COMMENT_ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
 const FRESH_MS = 10_000;
 

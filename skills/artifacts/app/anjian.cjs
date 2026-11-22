@@ -36,13 +36,22 @@ function main() {
   const args = process.argv.slice(2);
   const end = args.indexOf('--');
   const flags = end === -1 ? args : args.slice(0, end);
+  const piReceipt =
+    args[0] === 'comment' &&
+    args[1] === 'list' &&
+    flags.some(
+      (arg, index) =>
+        arg.startsWith('--session=pi:') ||
+        (arg === '--session' && flags[index + 1]?.startsWith('pi:')),
+    );
   const readOnly =
     args[0] === 'skills' ||
     flags.includes('--help') ||
     flags.includes('-h') ||
     args[0] === '--version' ||
     args[0] === '-v' ||
-    (args[0] === 'remote' && args[1] === 'status');
+    (args[0] === 'remote' && args[1] === 'status') ||
+    piReceipt;
   const watch = !readOnly && (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID);
   const explicitStart =
     watch &&
