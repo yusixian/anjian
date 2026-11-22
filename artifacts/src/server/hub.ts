@@ -1043,13 +1043,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     projects: remoteProjects,
     mount: mountOf,
     upload: writeQuota,
-    resolveDocument: (dir, documentId) =>
-      index
-        .list()
-        .find(
-          (entry) =>
-            entry.project === dir && entry.type === 'document' && entry.address === documentId,
-        )?.id,
+    resolveDocument: (dir, documentId) => {
+      const matches = index.list().filter(
+        (entry) => entry.project === dir && entry.type === 'document' && entry.address === documentId,
+      );
+      return matches.length === 1 ? matches[0]!.id : undefined;
+    },
     browserProject: (req, artifact) => {
       if (
         (req.method !== 'GET' && !req.headers.origin) ||

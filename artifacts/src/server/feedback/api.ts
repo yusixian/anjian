@@ -63,7 +63,7 @@ interface Options {
   home: string;
   mount: (dir: string) => Promise<MountedProject>;
   projects: () => Project[];
-  resolveDocument?: (dir: string, documentId: string) => string | undefined;
+  resolveDocument: (dir: string, documentId: string) => string | undefined;
   upload: <T>(
     project: string,
     work: (prepare: () => Promise<(delta: number) => void>) => Promise<T>,
@@ -212,16 +212,19 @@ export function createFeedbackApi(options: Options) {
             (remote ? parts.length !== 2 : parts.length !== 1 || !artifact?.startsWith('document/'))
           )
             return feedbackError('artifact_not_found', undefined, 404);
-          const id = remote
-            ? options.resolveDocument?.(target.dir, documentId)
-            : artifact!.slice(9);
-          if (!id) return feedbackError('artifact_not_found', undefined, 404);
+          const id = options.resolveDocument(target.dir, documentId);
+          if (!id || (artifact && artifact !== `document/${id}`))
+            return feedbackError('artifact_not_found', undefined, 404);
           assertArtifactNotTrashed(target.dir, 'document', id);
           const mounted = await options.mount(target.dir);
           const read = await mounted.feedbackQuestions(id);
           const view = await mounted.documentApprovalView?.(id);
           authorize();
-          if (!read || readRemoteArtifactAddress(target.dir, `document/${id}`) !== documentId)
+          if (
+            !read ||
+            options.resolveDocument(target.dir, documentId) !== id ||
+            readRemoteArtifactAddress(target.dir, `document/${id}`) !== documentId
+          )
             return feedbackError('artifact_not_found', undefined, 404);
           const currentRevision = view?.()
             ? (readDocumentApprovalRevisions(target.dir, id)?.revision ?? null)
@@ -268,25 +271,33 @@ export function createFeedbackApi(options: Options) {
               throw error;
             }
           };
-          const documentId = address;
           const questions = definitions();
-          const approvalView =
-            documentId && questions.some((item) => item.approve)
-              ? await mounted.documentApprovalView?.(id)
+          const documentId =
+            questions.some((item) => item.approve) &&
+            options.resolveDocument(target.dir, address) === id
+              ? address
               : null;
+          const approvalView = documentId ? await mounted.documentApprovalView?.(id) : null;
           checkQuestionIdentity();
           const currentView = () => {
-            const view = approvalView?.();
+            const identityValid =
+              documentId !== null && options.resolveDocument(target.dir, documentId) === id;
+            const view = identityValid ? approvalView?.() : null;
             const revisions = view ? readDocumentApprovalRevisions(target.dir, id) : null;
             return {
               view,
+              identityValid,
               revision: revisions?.revision ?? null,
               assetsRevision: revisions?.assetsRevision,
             };
           };
-          const items = ({ revision, assetsRevision }: ReturnType<typeof currentView>) =>
+          const items = ({
+            revision,
+            assetsRevision,
+            identityValid,
+          }: ReturnType<typeof currentView>) =>
             questionItems(data, artifact, definitions(), address).map((item) =>
-              item.definition.approve && documentId
+              item.definition.approve && documentId && identityValid
                 ? {
                     ...item,
                     approval: {
@@ -313,13 +324,9 @@ export function createFeedbackApi(options: Options) {
             );
           const definition = questions.find((question) => question.id === questionId);
           if (body.action === 'decide' || definition?.approve) {
-            if (
-              body.action !== 'decide' ||
-              !definition?.approve ||
-              !documentId ||
-              !browserTarget?.actor
-            )
+            if (body.action !== 'decide' || !definition?.approve || !browserTarget?.actor)
               return feedbackError('invalid_approval_action', undefined, 400);
+            if (!documentId) return feedbackError('approval_view_changed');
             const choice = text(body.answer, 'answer', 64);
             if (!definition.options?.some((option) => option.id === choice))
               return feedbackError('invalid_question_answer', undefined, 400);
@@ -365,7 +372,9 @@ export function createFeedbackApi(options: Options) {
             if (changed) await save();
             else checkApproval();
             return {
-              item: items({ view, revision, assetsRevision }).find((row) => row.id === questionId),
+              item: items({ view, revision, assetsRevision, identityValid: true }).find(
+                (row) => row.id === questionId,
+              ),
             };
           }
           if (body.action === 'withdraw') {

@@ -39,7 +39,10 @@ export const reviewEvidenceRoute: HttpRoute<ServerContext> = {
     }
     try {
       if (action === 'review') {
-        sendJson(res, 200, reviewSummary(target.dir, type, id, ctx.recordings.evidenceHash));
+        sendJson(res, 200, {
+          ...reviewSummary(target.dir, type, target.id, ctx.recordings.evidenceHash),
+          artifact,
+        });
         return;
       }
       if (type !== 'document') {

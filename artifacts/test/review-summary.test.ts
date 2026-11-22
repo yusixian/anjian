@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -7,7 +8,9 @@ import { afterEach, expect, test } from 'vitest';
 import { reviewText } from '../src/cli/review';
 import { boardHashes } from '../src/server/board-comments';
 import { cursorsFile } from '../src/server/comment-cursors';
+import type { ServerContext } from '../src/server/context';
 import { reviewSummary } from '../src/server/review-summary';
+import { reviewEvidenceRoute } from '../src/server/routes/review-evidence';
 
 const dirs: string[] = [];
 const at = '2026-01-01T00:00:00.000Z';
@@ -89,7 +92,7 @@ test('stays empty when a valid document has no saved review threads', () => {
   expect(fs.readdirSync(dir)).toEqual(['doc.xml']);
 });
 
-test('keeps file and canvas locators and downgrades a verdict as evidence changes', () => {
+test('keeps file and canvas locators and downgrades a verdict as evidence changes', async () => {
   const { root, dir } = fixture('artboard');
   const board = { page: 'page', x: 0, y: 0, w: 100, h: 100, file: 'pages/test.html' };
   fs.writeFileSync(
@@ -148,6 +151,40 @@ test('keeps file and canvas locators and downgrades a verdict as evidence change
   expect(preparing.groups).toMatchObject([
     { verdict: 'pending', evidence: [{ status: 'preparing' }] },
   ]);
+
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  fs.writeFileSync(path.join(dir, '.artifact-id'), address);
+  const pathname = `/api/agent/artboard/${address}/review`;
+  let response = '';
+  const res = {
+    writeHead() {},
+    end(body: string) {
+      response = body;
+    },
+  };
+  const ctx = {
+    root,
+    recordings: {
+      evidenceHash: (id: string, _board: string, source: string) =>
+        id === 'example' ? `${source}:preparing` : source,
+    },
+  };
+  await reviewEvidenceRoute.handle(
+    {} as http.IncomingMessage,
+    res as unknown as http.ServerResponse,
+    ctx as ServerContext,
+    {
+      match: [pathname, 'artboard', address, 'review'],
+      pathname,
+      url: new URL(pathname, 'http://localhost'),
+      key: null,
+    },
+  );
+  expect(JSON.parse(response)).toMatchObject({
+    artifact: `artboard/${address}`,
+    groups: [{ verdict: 'pending', evidence: [{ status: 'preparing' }] }],
+  });
+  fs.unlinkSync(path.join(dir, '.artifact-id'));
 
   fs.writeFileSync(evidence, '<div>Updated evidence</div>');
   expect(review()).toMatchObject({

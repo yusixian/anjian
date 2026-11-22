@@ -1908,6 +1908,16 @@ test('records explicit browser decisions for the visible revision and gives the 
     );
   expect(JSON.parse((await cli()).stdout)).toMatchObject({ currentRevision: request.revision });
 
+  const duplicate = path.join(path.dirname(directory), 'copy');
+  fs.cpSync(directory, duplicate, { recursive: true });
+  expect((await f.call(route)).status).toBe(404);
+  expect((await f.browser('approvals')).status).toBe(404);
+  expect(await getItem()).not.toHaveProperty('approval');
+  expect((await f.browser('questions', request)).body.code).toBe('approval_view_changed');
+  await expect(cli()).rejects.toMatchObject({ code: 1 });
+  fs.rmSync(duplicate, { recursive: true, force: true });
+  expect((await f.call(route)).body.decisions).toHaveLength(1);
+
   fs.mkdirSync(path.join(directory, 'assets'));
   fs.writeFileSync(path.join(directory, 'assets', 'annotation.txt'), 'new revision evidence');
   const latestView = await versionOfView();
