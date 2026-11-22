@@ -7,8 +7,10 @@ import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation'
 import { ShareButton } from '../components/ShareButton';
 import { useTranslation } from '../i18n';
 import { useWhiteboard, type WhiteboardCommentAction } from './useWhiteboard';
+import { useWhiteboardFrame } from './useWhiteboardFrame';
 import type { WhiteboardCanvasHandle } from './WhiteboardCanvas';
 import { WhiteboardComments } from './WhiteboardComments';
+import { WhiteboardFrames } from './WhiteboardFrames';
 
 const Canvas = lazy(() =>
   import('../document/shims')
@@ -28,6 +30,7 @@ function WhiteboardPage({ id }: { id: string }) {
     ids: [],
   });
   const canvasRef = useRef<WhiteboardCanvasHandle>(null);
+  const [frame, setFrame] = useWhiteboardFrame();
   const selected = selection.generation === generation ? selection.ids : [];
   const status = dirty ? t('whiteboard.unsaved') : t('whiteboard.saved');
 
@@ -61,6 +64,7 @@ function WhiteboardPage({ id }: { id: string }) {
           </div>
         )}
       </header>
+      {view && <WhiteboardFrames frame={frame} scene={view.scene} onFrame={setFrame} />}
       {conflict && (
         <div className="anjian-whiteboard-notice" role="alert">
           <span>{t('whiteboard.conflict')}</span>
@@ -104,6 +108,7 @@ function WhiteboardPage({ id }: { id: string }) {
           >
             <Canvas
               canvasRef={canvasRef}
+              frameId={frame}
               key={generation}
               scene={view.scene}
               onSceneChange={changed}

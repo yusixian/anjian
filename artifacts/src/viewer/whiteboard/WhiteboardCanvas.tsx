@@ -7,7 +7,7 @@ import type {
   ExcalidrawInitialDataState,
   ExcalidrawProps,
 } from '@excalidraw/excalidraw/types';
-import { type Ref, useImperativeHandle, useRef, useState } from 'react';
+import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 import type { WhiteboardScene } from '../../shared/whiteboard';
 import { useTranslation } from '../i18n';
@@ -28,12 +28,14 @@ type CanvasChange = NonNullable<ExcalidrawProps['onChange']>;
 export function WhiteboardCanvas({
   scene,
   readOnly = false,
+  frameId = null,
   canvasRef,
   onSceneChange,
   onSelectionChange,
 }: {
   scene: WhiteboardScene;
   readOnly?: boolean;
+  frameId?: string | null;
   canvasRef?: Ref<WhiteboardCanvasHandle>;
   onSceneChange?: (scene: WhiteboardScene, contentKey: string) => void;
   onSelectionChange?: (ids: string[]) => void;
@@ -43,8 +45,25 @@ export function WhiteboardCanvas({
   const [initialData] = useState(
     () => ({ ...scene, scrollToContent: true }) as unknown as ExcalidrawInitialDataState,
   );
+  const [ready, setReady] = useState(false);
+  const previousFrameRef = useRef<string | null>(null);
   const selectionKeyRef = useRef('');
   const contentKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!ready || (!frameId && !previousFrameRef.current)) return;
+    const animation = requestAnimationFrame(() => {
+      const current = apiRef.current;
+      if (!current) return;
+      const elements = current.getSceneElements();
+      const frame = elements.find(({ id, type }) => id === frameId && type === 'frame');
+      if (frame)
+        current.scrollToContent([frame], { fitToViewport: true, viewportZoomFactor: 0.85 });
+      else current.scrollToContent(elements, { fitToViewport: true });
+      previousFrameRef.current = frameId;
+    });
+    return () => cancelAnimationFrame(animation);
+  }, [frameId, ready]);
 
   useImperativeHandle(
     canvasRef,
@@ -69,6 +88,8 @@ export function WhiteboardCanvas({
   );
 
   const changed: CanvasChange = (elements, appState, files) => {
+    if (!ready && !appState.isLoading) setReady(true);
+    if (readOnly) return;
     const ids = Object.keys(appState.selectedElementIds).filter(
       (id) => appState.selectedElementIds[id],
     );
@@ -118,7 +139,7 @@ export function WhiteboardCanvas({
         excalidrawAPI={(instance) => {
           apiRef.current = instance;
         }}
-        onChange={readOnly ? undefined : changed}
+        onChange={changed}
       />
     </div>
   );

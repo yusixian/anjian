@@ -23,3 +23,9 @@ anjian comment reply --json --project-dir whiteboard/launch-sequence --thread "U
 ```
 
 Use `comment add --elements <id1,id2>` to create a new element discussion. The server owns `comments.json` and `.state/`. A public share is a read-only scene snapshot and omits review threads.
+
+## Link to a frame
+
+Save the frame first. Select it from the whiteboard's frame picker and use **Copy frame link**. An Agent can build the same link from the canonical whiteboard URL by setting the `frame` query parameter to the URL-encoded `id` of the saved, undeleted element with `type: "frame"`. Keep the element ID stable when renaming or moving the frame.
+
+Share the frame link with teammates who already have access. Strip the `key` parameter and other session details from links you hand off. For a public link, publish the whiteboard and copy the frame link from the published snapshot. Frames added after publication appear there after republishing.

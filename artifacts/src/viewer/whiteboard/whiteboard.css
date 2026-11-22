@@ -44,6 +44,9 @@
 }
 
 .anjian-whiteboard-actions > button,
+.anjian-whiteboard-frames button,
+.anjian-whiteboard-frames input,
+.anjian-whiteboard-frames select,
 .anjian-whiteboard-comments button,
 .anjian-whiteboard-notice button {
   display: inline-flex;
@@ -62,6 +65,7 @@
 }
 
 .anjian-whiteboard-actions > button:is(:hover, [aria-expanded='true']),
+.anjian-whiteboard-frames button:hover,
 .anjian-whiteboard-comments button:hover,
 .anjian-whiteboard-notice button:hover {
   background: var(--lobe-color-fill-tertiary);
@@ -80,6 +84,49 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
+}
+
+.anjian-whiteboard-frames {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--lobe-color-border-secondary);
+  background: var(--lobe-color-bg-container);
+  color: var(--lobe-color-text);
+  font: 12px/1.5 var(--lobe-font-family);
+}
+
+.anjian-whiteboard-frames label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.anjian-whiteboard-frames select {
+  min-width: 0;
+  max-width: min(50vw, 320px);
+}
+
+.anjian-whiteboard-frames input {
+  display: block;
+  width: min(100%, 320px);
+  min-width: 0;
+  cursor: text;
+}
+
+.anjian-whiteboard-shared {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.anjian-whiteboard-shared .anjian-whiteboard-canvas {
+  flex: 1;
+  height: auto;
 }
 
 .anjian-whiteboard-with-comments {

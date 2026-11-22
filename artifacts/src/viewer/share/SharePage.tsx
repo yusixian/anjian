@@ -2,7 +2,7 @@ import type { SerializedEditorState } from 'lexical';
 import { ChevronDown, Eye } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 
-import { ANJIAN_MARK_VIEWBOX,anjianMarkBody } from '../../shared/brand';
+import { ANJIAN_MARK_VIEWBOX, anjianMarkBody } from '../../shared/brand';
 import type { ArtifactType, CanvasLayout, CanvasSpec } from '../../shared/types';
 import type { WhiteboardScene } from '../../shared/whiteboard';
 
@@ -15,8 +15,8 @@ const PublicDocument = lazy(() =>
 );
 const PublicWhiteboard = lazy(() =>
   import('../document/shims')
-    .then(() => import('../whiteboard/WhiteboardCanvas'))
-    .then(({ WhiteboardCanvas }) => ({ default: WhiteboardCanvas })),
+    .then(() => import('../whiteboard/SharedWhiteboard'))
+    .then(({ SharedWhiteboard }) => ({ default: SharedWhiteboard })),
 );
 
 interface SharePayload {
@@ -141,7 +141,9 @@ export function SharePage() {
   }, [copy, data, lang]);
   const date = (stamp: number) => new Date(stamp).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US');
   return (
-    <div className={`share-page${data?.type === 'artboard' || data?.type === 'whiteboard' ? ' share-workbench' : ''}`}>
+    <div
+      className={`share-page${data?.type === 'artboard' || data?.type === 'whiteboard' ? ' share-workbench' : ''}`}
+    >
       <header className="share-header">
         <span className="share-brand">
           <svg
@@ -218,7 +220,7 @@ export function SharePage() {
             ) : data.type === 'whiteboard' && data.scene ? (
               <Suspense fallback={<div className="share-message">{copy.loading}</div>}>
                 <div className="share-artboard">
-                  <PublicWhiteboard key={data.contentBase} readOnly scene={data.scene} />
+                  <PublicWhiteboard key={data.contentBase} scene={data.scene} />
                 </div>
               </Suspense>
             ) : data.type === 'html' ? (

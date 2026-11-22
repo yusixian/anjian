@@ -8,6 +8,7 @@ import { CanvasErrorBoundary } from '../components/CanvasErrorBoundary';
 import { useTranslation } from '../i18n';
 import { culledBoards } from '../lib/cull';
 import { fitView } from '../lib/view';
+import { requestedFrame } from '../whiteboard/frames';
 import { styles } from './previewStyles';
 
 const DocumentPreview = lazy(() =>
@@ -83,11 +84,18 @@ export function PreviewView({
       <div {...stylex.props(styles.canvas)}>
         <CanvasErrorBoundary resetKey={data.scene}>
           <Suspense fallback={message(t('preview.loading'))}>
-            <WhiteboardPreview key={data.revision} readOnly scene={data.scene} />
+            <WhiteboardPreview
+              readOnly
+              frameId={requestedFrame(new URL(location.href))}
+              key={data.revision}
+              scene={data.scene}
+            />
           </Suspense>
         </CanvasErrorBoundary>
       </div>
-    ) : message(t('preview.unavailable'));
+    ) : (
+      message(t('preview.unavailable'))
+    );
   }
   const canvas = data.canvas;
   const page = canvas?.activePage ?? canvas?.pages[0]?.id;
