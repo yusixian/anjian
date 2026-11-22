@@ -11,6 +11,7 @@ import {
   type Slide,
   type SlideDeckSnapshot,
 } from '../../shared/slides';
+import { CommentRecovery } from '../comments/CommentRecovery';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { ShareButton } from '../components/ShareButton';
 import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
@@ -25,6 +26,7 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
   const [base, setBase] = useState(initial);
   const [deck, setDeck] = useState(initial.deck);
   const [audience, setAudience] = useState(false);
+  const [commentRevision, setCommentRevision] = useState(0);
   const [detail, setDetail] = useState<'notes' | 'comments'>('notes');
   const [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState<'conflict' | 'saveFailed' | ''>('');
@@ -169,6 +171,10 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
             <span>{c.save}</span>
           </Tool>
           <NativeFeedbackButton />
+          <CommentRecovery
+            url={url + '/comments'}
+            onRestore={() => setCommentRevision((value) => value + 1)}
+          />
           <ShareButton id={id} type="slides" />
           <span ref={presentButtonRef}>
             <Tool primary icon={Play} label={c.present} onClick={() => setAudience(true)}>
@@ -279,6 +285,7 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
                 <SlideComments
                   exists={base.deck.slides.some((s) => s.id === slide.id)}
                   initial={base}
+                  revision={commentRevision}
                   slideId={slide.id}
                   url={url}
                 />

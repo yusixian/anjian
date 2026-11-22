@@ -144,7 +144,7 @@ export type ServerMessage =
       agentActiveAt: number;
       now: number;
     }
-  | { type: 'doc-comments'; artifact: string; comments: CommentsFile; receiptOnly?: true }
+  | { type: 'doc-comments'; artifact: string; comments: CommentsFile; receiptOnly?: true; recoveryPending?: true }
   | {
       type: 'board-comments';
       artifact: string;

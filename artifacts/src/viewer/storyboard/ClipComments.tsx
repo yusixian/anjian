@@ -12,11 +12,13 @@ type CommentsState = Pick<StoryboardSnapshot, 'comments' | 'commentsWarning' | '
 export function ClipComments({
   url,
   initial,
+  revision,
   clipId,
   saved,
 }: {
   url: string;
   initial: CommentsState;
+  revision: number;
   clipId: string;
   saved: boolean;
 }) {
@@ -49,7 +51,7 @@ export function ClipComments({
       clearInterval(timer);
       window.removeEventListener('focus', refresh);
     };
-  }, [url]);
+  }, [url, revision]);
 
   async function send(op: ThreadOp | { op: 'create'; clipId: string; text: string }) {
     if (writingRef.current) return false;

@@ -8,6 +8,7 @@ import {
   type WhiteboardPage as Sheet,
   type WhiteboardSnapshot,
 } from '../../shared/whiteboard';
+import { CommentRecovery } from '../comments/CommentRecovery';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { ShareButton } from '../components/ShareButton';
 import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
@@ -113,6 +114,10 @@ function WhiteboardPage({
               {t('chrome.comments')}
             </button>
             <NativeFeedbackButton />
+            <CommentRecovery
+              url={`/api/whiteboard/${encodeURIComponent(id)}/comments`}
+              onRestore={() => void load()}
+            />
             <ShareButton id={id} type="whiteboard" />
           </div>
         )}

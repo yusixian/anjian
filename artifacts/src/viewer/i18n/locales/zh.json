@@ -125,6 +125,18 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "comments": {
+    "reviewRecordsRecovery": "此处恢复普通批注。验收与选项记录按画板当前证据管理。",
+    "pendingRecovery": "有待恢复的人工批注",
+    "recoveryAnonymousAuthor": "未署名读者",
+    "restoreBackup": "恢复批注",
+    "importBackupFile": "导入备份文件",
+    "noPendingRecovery": "工作区没有待恢复的批注。",
+    "reviewPendingRecovery": "工作区文件里有以下批注。核对作者和内容后，可以将它们合并到当前文档。",
+    "applyPendingRecovery": "合并这些批注",
+    "recoveryFailed": "恢复失败。可以关闭此窗口再试。",
+    "restoringBackup": "正在导入批注备份…",
+    "backupRestored": "已合并批注备份。",
+    "backupRestoreFailed": "无法导入。请检查文件是否为完整的批注备份，且大小不超过 4 MiB。",
     "history": "批注历史",
     "readByAgent": "Agent 已读",
     "waitingYou": "等你回复",

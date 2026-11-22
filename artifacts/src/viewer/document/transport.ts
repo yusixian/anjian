@@ -15,6 +15,7 @@ export interface DocumentState {
   comments?: CommentsFile;
   lineage: string;
   now?: number;
+  recoveryPending?: true;
   snapshot: string;
   streaming?: boolean;
 }

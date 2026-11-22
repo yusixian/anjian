@@ -7,6 +7,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 
 import { approvalViewKey } from '../../shared/approval-view';
 import { type CommentsFile, emptyComments, type HumanOp } from '../../shared/comments';
+import { CommentRecovery } from '../comments/CommentRecovery';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
 import { PHONE_QUERY, useMedia } from '../hooks/useMedia';
@@ -92,6 +93,7 @@ export function DocumentView({
   transport,
   live,
   resolveReference,
+  commentRecoveryUrl,
   fallback,
   actions: barActions,
 }: {
@@ -99,6 +101,7 @@ export function DocumentView({
   transport: DocumentTransport;
   live: boolean;
   resolveReference?: ArtifactReferenceResolver;
+  commentRecoveryUrl?: string;
   fallback?: ReactNode;
   actions?: ReactNode;
 }) {
@@ -108,6 +111,7 @@ export function DocumentView({
   const doc = loaded?.doc ?? null;
   const getAssetsRevision = useCallback(() => loaded?.assetsRevision, [loaded]);
   const getViewVersion = useCallback(() => (doc ? approvalViewKey(doc.frontiers()) : null), [doc]);
+  const [recoveryPending, setRecoveryPending] = useState(false);
   const [comments, setComments] = useState<CommentsFile>(emptyComments);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -152,6 +156,7 @@ export function DocumentView({
         setAgentActiveAt(state.agentActiveAt);
         syncClock(state.now);
         setComments(state.comments ?? emptyComments());
+        setRecoveryPending(Boolean(state.recoveryPending));
         const scroll = preserveScroll
           ? { left: window.scrollX, top: window.scrollY, behavior: 'instant' as const }
           : null;
@@ -178,7 +183,10 @@ export function DocumentView({
           setStreaming(event.streaming);
           setAgentActiveAt(event.agentActiveAt);
           syncClock(event.now);
-        } else if (event.type === 'doc-comments') setComments(event.comments);
+        } else if (event.type === 'doc-comments') {
+          setComments(event.comments);
+          setRecoveryPending(Boolean(event.recoveryPending));
+        }
       }),
     [channel, refreshMeta, syncClock],
   );
@@ -318,7 +326,6 @@ export function DocumentView({
       className={`anjian-doc ${stylex.props(styles.root).className ?? ''}`}
     >
       <TopBar
-        actions={barActions}
         activity={activity}
         agent={meta?.agent}
         agentSection={playback.section}
@@ -326,6 +333,19 @@ export function DocumentView({
         id={id}
         offline={offline && !quotaExceeded}
         openComments={openComments}
+        actions={
+          <>
+            {live && commentRecoveryUrl && !historyVisible ? (
+              <CommentRecovery
+                compact={phone}
+                pending={recoveryPending}
+                url={commentRecoveryUrl}
+                onRestore={setComments}
+              />
+            ) : null}
+            {barActions}
+          </>
+        }
         history={{
           available: true,
           open: historyVisible,

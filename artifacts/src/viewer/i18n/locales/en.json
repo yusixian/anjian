@@ -130,6 +130,18 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "comments": {
+    "reviewRecordsRecovery": "This restores discussion comments. Review verdicts and choices use the artboard’s current evidence.",
+    "pendingRecovery": "Human comments are ready for review",
+    "recoveryAnonymousAuthor": "Unnamed reader",
+    "restoreBackup": "Recover comments",
+    "importBackupFile": "Import backup file",
+    "noPendingRecovery": "There are no comments to recover from the workspace.",
+    "reviewPendingRecovery": "These comments came from a workspace file. Review the authors and contents before merging them into the document.",
+    "applyPendingRecovery": "Merge these comments",
+    "recoveryFailed": "Recovery failed. Close the dialog and try again.",
+    "restoringBackup": "Importing comment backup…",
+    "backupRestored": "Comment backup merged.",
+    "backupRestoreFailed": "Could not import. Check that you selected a complete comment backup of 4 MiB or less.",
     "history": "Comment history",
     "readByAgent": "Read by Agent",
     "waitingYou": "Waiting on you",

@@ -9,7 +9,10 @@ import { send, sendJson } from '../http';
 import { MAX_DOCUMENT_UPDATE } from '../limits';
 import { readCommentBody } from './comments';
 import { RemoteTransferError } from '../remote-transfer';
-import { refreshRequestStorageAdmission, requestStorageAdmission } from '../storage/request-admission';
+import {
+  refreshRequestStorageAdmission,
+  requestStorageAdmission,
+} from '../storage/request-admission';
 import type { HttpRoute } from './table';
 
 const API_DOCUMENT_STATE_ROUTE = /^\/api\/document\/([^/]+)\/state$/;

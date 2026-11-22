@@ -34,6 +34,7 @@ export default function DocumentPage({ id }: { id: string }) {
     <FeedbackProvider createApi={feedbackApi}>
       <DocumentView
         actions={<ShareButton id={id} type="document" />}
+        commentRecoveryUrl={`/api/document/${encodeURIComponent(id)}/comments`}
         id={id}
         live={live}
         resolveReference={resolveReference}

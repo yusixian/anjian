@@ -500,6 +500,68 @@ describe('comments', () => {
     ws.socket?.destroy();
   });
 
+  test('authorized backup import appends saved offline comments and blocks other origins', async () => {
+    const { server, root } = await start();
+    writeDocument(root, 'relay', { 'doc.xml': '<doc><p id="b1">x</p></doc>' });
+    await postJson(server, 'relay', { op: 'create', blockId: 'b1', quote: 'x', text: 'in Hub' });
+    const current = readJson(commentsFile(root, 'relay'));
+    const [thread] = current.threads;
+    const statusAt = '2026-11-01T15:00:00.000Z';
+    const imported = {
+      ...thread,
+      status: 'resolved',
+      statusAt,
+      statusBy: 'human',
+      messages: [{
+        id: 'offline', author: 'human', text: '', name: 'Offline reader',
+        at: statusAt, editedAt: statusAt, deleted: true,
+      }],
+    };
+    const target = `${base(server)}/api/document/relay/comments/restore`;
+    const sendBackup = (payload: unknown, Origin = base(server)) =>
+      post(target, Buffer.from(JSON.stringify(payload)), {
+        Cookie: cookie(server), Origin, 'Content-Type': 'application/json',
+      });
+    const backup = { version: 1, threads: [imported] };
+    expect((await sendBackup(backup, 'https://example.invalid')).status).toBe(403);
+    expect((await sendBackup({ version: 1, threads: [{ ...imported, messages: [null] }] })).status).toBe(400);
+    expect(readJson(commentsFile(root, 'relay'))).toEqual(current);
+    expect((await sendBackup(backup)).status).toBe(200);
+    const saved = readJson(commentsFile(root, 'relay')).threads[0];
+    expect(saved.anchor).toEqual(thread.anchor);
+    expect(saved.messages).toEqual(expect.arrayContaining([...thread.messages, ...imported.messages]));
+    expect((await sendBackup(backup)).status).toBe(200);
+    expect(readJson(commentsFile(root, 'relay')).threads[0].messages).toHaveLength(2);
+  });
+
+  test('only a reviewed workspace recovery is applied to live comments', async () => {
+    const { server, root } = await start();
+    writeDocument(root, 'relay', { 'doc.xml': '<doc><p id="b1">x</p></doc>' });
+    await postJson(server, 'relay', { op: 'create', blockId: 'b1', quote: '', text: 'in Hub' });
+    const file = commentsFile(root, 'relay');
+    const [first] = readJson(file).threads;
+    const at = '2026-11-15T00:00:00.000Z';
+    const second = {
+      ...first, id: 'workspace-thread', statusAt: at,
+      messages: [{ id: 'workspace-message', at, author: 'human', text: 'Saved on a branch' }],
+    };
+    fs.writeFileSync(file, JSON.stringify({ version: 1, threads: [first, second] }));
+    const call = (action: string, payload: unknown, Origin = base(server)) =>
+      post(`${base(server)}/api/document/relay/comments/recovery/${action}`, Buffer.from(JSON.stringify(payload)), {
+        Cookie: cookie(server), Origin, 'Content-Type': 'application/json',
+      });
+    expect((await call('review', {}, 'https://unrelated.example')).status).toBe(403);
+    const review = await call('review', {});
+    expect(review.status).toBe(200);
+    const { recovery } = JSON.parse(review.body);
+    expect(recovery.backup.threads).toEqual([second]);
+    expect((await api(server, '/api/document/relay/state')).comments.threads).toEqual([first]);
+    expect((await call('apply', { revision: 'f'.repeat(64) })).status).toBe(409);
+    expect((await call('apply', { revision: recovery.revision })).status).toBe(200);
+    expect(readJson(file).threads).toEqual([first, second]);
+    expect(JSON.parse((await call('review', {})).body).recovery).toBeNull();
+  });
+
   test('an agent reply is named after the agent that last started the server', async () => {
     const { server, root } = await start();
     writeDocument(root, 'relay', { 'doc.xml': '<doc><p id="b1">x</p></doc>' });

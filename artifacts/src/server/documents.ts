@@ -36,6 +36,7 @@ export interface DocumentRegistry {
   ) => { threadId: string; messageId?: string };
   applyCommentOp: (id: string, op: HumanOp, admit?: CommentAdmission) => CommentsFile;
   close: (prepare?: () => Promise<CommentAdmission>) => Promise<void>;
+  commentRecovery: (id: string) => ReturnType<CommentStore['recovery']>;
   comments: (id: string) => CommentsFile;
   commentsChanged: (id: string) => void;
   commentWarnings: (id: string) => string[];
@@ -47,6 +48,7 @@ export interface DocumentRegistry {
     initialize?: boolean,
   ) => number;
   fileChanged: (id: string) => void;
+  hasCommentRecovery: (id: string) => boolean;
   historySnapshot: (id: string) => Promise<Uint8Array | null>;
   listComments: (
     id: string,
@@ -62,6 +64,8 @@ export interface DocumentRegistry {
     all: boolean,
     admit?: CommentAdmission,
   ) => { threads: AgentThread[]; baseline: string[] | null };
+  restoreCommentRecovery: (id: string, revision: string, admit?: CommentAdmission) => boolean;
+  restoreComments: (id: string, backup: string, admit?: CommentAdmission) => void;
   viewerComments: (id: string) => CommentsFile;
   warnings: (id: string) => string[];
 }
@@ -126,6 +130,10 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
         undefined,
         admit,
         !!options.enqueueCommentWrite,
+        {
+          root: options.stateDir,
+          file: path.join(options.stateDir, 'document', id, 'comment-recovery.json'),
+        },
       );
       commentStores.set(id, store);
       if (!admit) queueCommentSync(id);
@@ -138,6 +146,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       type: 'doc-comments',
       artifact: `document/${id}`,
       comments: viewerComments(id),
+      ...(commentStore(id).hasRecovery() ? { recoveryPending: true as const } : {}),
       ...(receiptOnly ? { receiptOnly: true as const } : {}),
     });
   const syncComments = (id: string, admit?: CommentAdmission) => {
@@ -268,6 +277,21 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       const file = commentStore(id, admit).apply(op, admit);
       pushComments(id);
       return file;
+    },
+    commentRecovery: (id) => {
+      const store = commentStore(id);
+      store.sync();
+      return store.recovery();
+    },
+    hasCommentRecovery: (id) => commentStore(id).hasRecovery(),
+    restoreCommentRecovery: (id, revision, admit) => {
+      const restored = commentStore(id, admit).restoreRecovery(revision, admit);
+      if (restored) pushComments(id);
+      return restored;
+    },
+    restoreComments: (id, backup, admit) => {
+      commentStore(id, admit).restore(backup, admit);
+      pushComments(id);
     },
     applyAgentCommentOp: (id, op, agent, admit, replyId) => {
       const { threadId, messageId } = commentStore(id, admit).applyAgent(op, agent, admit, replyId);

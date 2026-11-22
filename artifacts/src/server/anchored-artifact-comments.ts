@@ -200,6 +200,10 @@ function createAnchoredStore<A>(dir: string, stateDir: string, options: Anchored
     },
     true,
     () => readComments(file, ErrorType, changedComments)?.toString('utf8') ?? null,
+    {
+      root: stateDir,
+      file: path.join(stateDir, type, path.basename(dir), 'comment-recovery.json'),
+    },
   );
   const cursors = createCommentCursors(stateDir, type);
   const validateThread = (threadId: string) => {
@@ -209,8 +213,24 @@ function createAnchoredStore<A>(dir: string, stateDir: string, options: Anchored
   };
   return {
     current: store.current,
-    sync: store.sync,
+    sync(admit?: CommentAdmission) {
+      if (admit) prepareWrite();
+      return store.sync(admit);
+    },
     warnings: store.warnings,
+    recovery() {
+      store.sync();
+      return store.recovery();
+    },
+    restore(text: string, admit?: CommentAdmission) {
+      prepareWrite();
+      return store.restore(text, admit);
+    },
+    restoreRecovery(revision: string, admit?: CommentAdmission) {
+      prepareWrite();
+      return store.restoreRecovery(revision, admit);
+    },
+
     apply(op: AnchoredHumanOp<A>, admit?: CommentAdmission) {
       if (op.op === 'create') options.assertAnchor(dir, anchors.read(op)!);
       else validateThread(op.threadId);

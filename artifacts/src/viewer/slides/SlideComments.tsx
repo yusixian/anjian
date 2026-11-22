@@ -14,11 +14,13 @@ export function SlideComments({
   url,
   slideId,
   initial,
+  revision,
   exists,
 }: {
   url: string;
   slideId: string;
   initial: CommentsState;
+  revision: number;
   exists: boolean;
 }) {
   const c = useSlidesCopy();
@@ -54,7 +56,7 @@ export function SlideComments({
       clearInterval(timer);
       window.removeEventListener('focus', update);
     };
-  }, [refresh]);
+  }, [refresh, revision]);
   async function send(op: CommentOp) {
     if (writingRef.current) return false;
     writingRef.current = true;

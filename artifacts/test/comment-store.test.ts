@@ -174,17 +174,32 @@ test('deferred normalization keeps readable stable IDs and retries only with adm
   fs.writeFileSync(file, original);
   const store = createCommentStore(file, names('Codex'), undefined, undefined, undefined, true);
   const view = structuredClone(store.current());
-  expect(view.threads[0]!.messages.at(-1)).toMatchObject({ text: 'pending normalization', id: expect.any(String) });
+  expect(view.threads[0]!.messages.at(-1)).toMatchObject({
+    text: 'pending normalization',
+    id: expect.any(String),
+  });
   expect(fs.readFileSync(file, 'utf8')).toBe(original);
   expect(store.sync()).toBe(false);
-  expect(() => store.sync(() => { throw new Error('quota'); })).toThrow('quota');
+  expect(() =>
+    store.sync(() => {
+      throw new Error('quota');
+    }),
+  ).toThrow('quota');
   expect(store.current()).toEqual(view);
   expect(fs.readFileSync(file, 'utf8')).toBe(original);
   const deltas: number[] = [];
-  expect(store.sync(delta => { deltas.push(delta); })).toBe(true);
+  expect(
+    store.sync((delta) => {
+      deltas.push(delta);
+    }),
+  ).toBe(true);
   expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(view);
   expect(deltas).toEqual([fs.statSync(file).size - Buffer.byteLength(original)]);
-  expect(store.sync(() => { throw new Error('already saved'); })).toBe(false);
+  expect(
+    store.sync(() => {
+      throw new Error('already saved');
+    }),
+  ).toBe(false);
 });
 
 test('deferred normalization does not overwrite a later invalid external file', () => {
@@ -194,6 +209,93 @@ test('deferred normalization does not overwrite a later invalid external file', 
   fs.writeFileSync(file, '{unfinished');
   expect(store.sync()).toBe(true);
   expect(store.warnings()).toHaveLength(1);
-  expect(store.sync(() => { throw new Error('must not write'); })).toBe(false);
+  expect(
+    store.sync(() => {
+      throw new Error('must not write');
+    }),
+  ).toBe(false);
   expect(fs.readFileSync(file, 'utf8')).toBe('{unfinished');
+});
+
+test('imports a backup from another contributor after an ordinary filesystem edit is rejected', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-comment-restore-'));
+  try {
+    const file = path.join(dir, 'comments.json');
+    const store = createCommentStore(file, names('Codex'));
+    const collaborator = createCommentStore(path.join(dir, 'collaborator.json'), {
+      human: () => ({ name: 'Collaborator' }),
+      agent: () => 'Agent',
+    });
+    const initial = store.apply({ op: 'create', blockId: 'b1', quote: '', text: 'Current note' });
+    const backup = collaborator.apply({
+      op: 'create',
+      blockId: 'b2',
+      quote: '',
+      text: 'Restored note',
+    });
+    fs.unlinkSync(file);
+    expect(store.sync()).toBe(false);
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, threads: [...initial.threads, ...backup.threads] }),
+    );
+    store.sync();
+    expect(store.current().threads.flatMap((thread) => thread.messages)).toEqual(
+      initial.threads[0]!.messages,
+    );
+    const text = JSON.stringify(backup);
+    expect(store.restore(text).threads).toEqual([...initial.threads, ...backup.threads]);
+    expect(store.restore(text).threads).toEqual([...initial.threads, ...backup.threads]);
+    expect(createCommentStore(file).current()).toEqual(store.current());
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('retains unconfirmed workspace comments before normalization, even across a restart', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-comment-recovery-'));
+  try {
+    const file = path.join(dir, 'comments.json');
+    const recoveryFile = { file: path.join(dir, 'recovery.json'), root: dir };
+    const open = () =>
+      createCommentStore(file, names('Codex'), undefined, undefined, undefined, true, recoveryFile);
+    const store = open();
+    const initial = store.apply({ op: 'create', blockId: 'here', quote: '', text: 'In Hub' });
+    const archive = createCommentStore(path.join(dir, 'backed-up.json'));
+    const older = archive.apply({ op: 'create', blockId: 'there', quote: '', text: 'On a branch' });
+    const raw = JSON.stringify({ version: 1, threads: [...initial.threads, ...older.threads] });
+    fs.writeFileSync(file, raw);
+    store.sync();
+    expect(store.current()).toEqual(initial);
+    expect(() =>
+      store.sync(() => {
+        throw new Error('quota');
+      }),
+    ).toThrow('quota');
+    expect(fs.readFileSync(file, 'utf8')).toBe(raw);
+    const beforeFlush = store.recovery();
+    expect(beforeFlush?.backup).toEqual(older);
+    expect(fs.existsSync(recoveryFile.file)).toBe(false);
+
+    store.sync(() => undefined);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(initial);
+    const reopened = open();
+    expect(reopened.recovery()).toEqual(beforeFlush);
+    const originalRevision = reopened.recovery()!.revision;
+
+    const newer = archive.apply({
+      op: 'create',
+      blockId: 'another',
+      quote: '',
+      text: 'On another branch',
+    });
+    fs.writeFileSync(file, JSON.stringify(newer));
+    expect(reopened.restoreRecovery(originalRevision, () => undefined)).toBe(false);
+    expect(reopened.current()).toEqual(initial);
+    expect(reopened.restoreRecovery(reopened.recovery()!.revision, () => undefined)).toBe(true);
+    expect(open().current().threads).toEqual([...initial.threads, ...newer.threads]);
+    expect(open().recovery()).toBeNull();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

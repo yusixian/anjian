@@ -27,6 +27,10 @@ Long threads open at the latest message. Scroll up inside the thread to read ear
 2. Select a clip and edit its timeline start, source in point, and duration under **Properties**. Use **Source** in the monitor to preview an asset. Save the timeline before commenting on a new clip.
 3. Choose **Render video** or **Save and render**. Play **Edited video** with sound, then choose **Download MP4** to save that same render. For local rendering, make sure `ffmpeg` and `ffprobe` are available to the Anjian server. The self-hosted Anjian Docker image includes both.
 
+## Recover comments
+
+After restoring files or switching or merging a Git branch, choose **Recover comments** in the original artboard, whiteboard, slide deck, storyboard, or document. Review the workspace comments and choose **Merge these comments**. You can also import the original artifact’s `comments.json` from a separate backup. Artboard verdicts and choices use the current evidence.
+
 ## Document decisions and verification
 
 - **Ask a question.** Ask the Agent to add an `<ask>` block with choices or a text answer. Enter an answer, save a draft to return to it later, or submit it to the connected Agent. The question shows the reply when the Agent responds.

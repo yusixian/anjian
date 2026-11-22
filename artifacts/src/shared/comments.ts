@@ -190,6 +190,51 @@ export function savedComments<A>(
 
 const stampOf = (m: Pick<Message, 'at' | 'editedAt'>) => m.editedAt ?? m.at;
 
+export function mergeRestoredComments<A>(
+  current: CommentsFile<A>,
+  backup: CommentsFile<A>,
+): CommentsFile<A> {
+  const threads = new Map(current.threads.map((thread) => [thread.id, thread]));
+  for (const restored of backup.threads) {
+    const existing = threads.get(restored.id);
+    if (!existing?.messages.length) {
+      threads.set(restored.id, restored);
+      continue;
+    }
+    const messages = new Map(existing.messages.map((message) => [message.id, message]));
+    for (const message of restored.messages) {
+      const saved = messages.get(message.id);
+      if (!saved) {
+        messages.set(message.id, message);
+      } else if (
+        !saved.deleted &&
+        message.author === saved.author &&
+        message.at === saved.at &&
+        (message.deleted || Date.parse(stampOf(message)) > Date.parse(stampOf(saved)))
+      ) {
+        const { text, editedAt, deleted } = message;
+        messages.set(message.id, {
+          ...saved,
+          text,
+          ...(editedAt && { editedAt }),
+          ...(deleted && { deleted }),
+        });
+      }
+    }
+    const newerStatus = Date.parse(restored.statusAt) > Date.parse(existing.statusAt);
+    threads.set(restored.id, {
+      ...existing,
+      ...(newerStatus && {
+        status: restored.status,
+        statusAt: restored.statusAt,
+        statusBy: restored.statusBy,
+      }),
+      messages: [...messages.values()].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)),
+    });
+  }
+  return { ...current, threads: [...threads.values()] };
+}
+
 function mergeMessage(
   base: Message,
   incoming: Loose<Message>,
@@ -315,17 +360,16 @@ export function mergeComments<A = Anchor>(
       statusBy: origin,
       messages: [],
     };
-    threads.push(
-      mergeThread(
-        fresh,
-        { ...thread, status: thread.status ?? 'open' },
-        origin,
-        now,
-        newId,
-        warnings,
-        name,
-      ),
+    const merged = mergeThread(
+      fresh,
+      { ...thread, status: thread.status ?? 'open' },
+      origin,
+      now,
+      newId,
+      warnings,
+      name,
     );
+    if (merged.messages.length) threads.push(merged);
   }
   return { file: { version: 1, threads }, warnings };
 }

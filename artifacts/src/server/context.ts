@@ -262,6 +262,7 @@ export function createServerContext(options: ServerOptions) {
       agentActiveAt: session.agentActiveAt(),
       now: Date.now(),
       comments: documents.viewerComments(id),
+      ...(documents.hasCommentRecovery(id) ? { recoveryPending: true as const } : {}),
       ...(approvalAssetsRevision ? { approvalAssetsRevision } : {}),
     };
   };
