@@ -1,5 +1,5 @@
 ---
-'anjian': minor
+'anjian-workflow': minor
 ---
 
 <!-- anjian:zh -->
