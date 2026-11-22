@@ -36,8 +36,17 @@ export interface SelectedNode extends SelectionNode {
 }
 export interface SelectionTweak extends SelectionNode, SelectionChange {}
 
+export const SELECTION_MAX_OBJECTS = 200;
+
+export interface SelectedArtboardObject {
+  id: string;
+  kind: 'board' | 'title' | 'sticky';
+  page: string;
+}
+
 export interface SelectionState {
   more: number;
+  objects?: SelectedArtboardObject[];
   nodes: SelectionNode[];
   selected: SelectedNode[];
   tweaks: SelectionTweak[];

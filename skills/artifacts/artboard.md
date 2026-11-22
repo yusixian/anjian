@@ -248,7 +248,12 @@ when revisited. All board positions and notes remain on the canvas.
 Your human partner can point at elements instead of describing them: they
 select nodes in the viewer, tweak CSS in the Inspector, or name a node by
 the ID the viewer shows on hover, `<board id>#<n>` (`hero-2#7`).
-`selection.json` holds the selection as it is right now:
+In **Select canvas objects**, they can select whole cards, titles, and
+sticky notes. `selection.json` holds the current selection:
+
+- `objects`: the selected canvas objects, each with a `kind` (`board`,
+  `title`, or `sticky`), stable `id`, and `page`. Match a board to
+  `canvas.json` → `boards[id]`, or a title or sticky to `notes[id]`.
 
 - `selected`: the selected nodes, each with its `file`, a CSS `path` from
   `body`, `text`, `html`, and its `tweaks` (`property`, `from`, `value`);
@@ -262,7 +267,7 @@ ones", name an ID, or refer to what they tweaked. Read only what you need:
 tokens.
 
 ```bash
-jq '{selected, more, tweaks}' .anjian/artifacts/.state/artboard/ < id > /selection.json
+jq '{objects, selected, more, tweaks}' ".anjian/artifacts/.state/artboard/$artboard_id/selection.json"
 ```
 
 Look up `nodes` only for an ID they typed:

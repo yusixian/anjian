@@ -42,6 +42,7 @@ export function watchArtifacts(ctx: ServerContext) {
         for (const [key, { ref, files: changed }] of byArtifact) {
           const dir = resolveArtifactDir(root, ref.type, ref.id);
           if (!dir) {
+            if (ref.type === 'artboard') ctx.selections.refreshArtboard(ref.id);
             signatures.delete(key);
             runtimeWarnings.delete(key);
             const frame = textFrame(

@@ -89,6 +89,12 @@
     "conflict": "此对象的位置已更新。请在当前布局中重试。",
     "saveFailed": "位置未保存。请重试。"
   },
+  "canvasObjects": {
+    "select": "选择画布对象",
+    "clear": "清除对象选区",
+    "selectObject": "选择 {{title}}",
+    "instructions": "点选卡片、标题或便签，Agent 可以读取选区。"
+  },
   "chrome": {
     "backToLibrary": "返回作品库",
     "library": "作品库",

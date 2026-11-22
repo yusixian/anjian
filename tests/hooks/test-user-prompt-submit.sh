@@ -79,6 +79,16 @@ out="$(run_hook "$dir" "看看：**hero-2#5** 和 hero-2#50")"
 expect "resolves an ID after punctuation and inside markdown" "$out" 'hero-2#5 <span> in pages/main/hero-2.html'
 if [[ "$out" != *"hero-2#50"* ]]; then pass "does not match a longer number as a known ID"; else fail "does not match a longer number as a known ID"; fi
 
+dir="$(project canvas-objects)"
+cat > "$dir/.anjian/artifacts/.state/artboard/node-id/selection.json" << 'JSON'
+{"artifact":"artboard/node-id","objects":[{"kind":"board","id":"main-card","page":"main"},{"kind":"title","id":"heading","page":"main"},{"kind":"sticky","id":"note","page":"main"}],"selected":[],"tweaks":[],"nodes":[],"more":0}
+JSON
+out="$(run_hook "$dir" "调整选中的画布对象")"
+expect "shows whole objects without any DOM selection" "$out" 'Selected canvas objects:'
+expect "names the board and page" "$out" 'board "main-card" on page "main"'
+expect "names the title and sticky by ID" "$out" 'title "heading" on page "main"'
+expect "preserves object type" "$out" 'sticky "note" on page "main"'
+
 dir="$(project crowded)"
 node -e '
 const fs = require("fs");

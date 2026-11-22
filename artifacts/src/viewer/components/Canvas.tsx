@@ -16,6 +16,7 @@ import { boardReady, boardSrc, canPlay } from '../lib/play';
 import { titleScale, type View } from '../lib/view';
 import { color } from '../tokens.stylex';
 import { ArtboardMoveHandle, type ArtboardPositionEditor } from './ArtboardMoveHandle';
+import { ArtboardObjectButton, type ArtboardObjectPicker } from './ArtboardObjectButton';
 import { CanvasConnections } from './CanvasConnections';
 import { MediaBoard } from './MediaBoard';
 import { WritingCursor } from './WritingCursor';
@@ -107,6 +108,7 @@ interface CanvasProps extends BoardsProps {
   agent?: string;
   connections?: CanvasSpec['connections'];
   live?: boolean;
+  objectPicker?: ArtboardObjectPicker;
   positionEditor?: ArtboardPositionEditor;
   notes: [string, NoteSpec][];
   view: View;
@@ -308,6 +310,7 @@ export function Canvas({
   gesturing,
   boards,
   connections,
+  objectPicker,
   positionEditor,
   notes,
   contentBase,
@@ -413,6 +416,32 @@ export function Canvas({
             {note.text}
           </div>
         ),
+      )}
+      {objectPicker && (
+        <>
+          {boards.map(([id, board]) => (
+            <ArtboardObjectButton
+              key={`board/${id}`}
+              object={{ id, kind: 'board', page: board.page }}
+              picker={objectPicker}
+              title={board.title || id}
+              x={board.x}
+              y={board.y}
+              zoom={view.k}
+            />
+          ))}
+          {notes.map(([id, note]) => (
+            <ArtboardObjectButton
+              key={`note/${id}`}
+              object={{ id, kind: note.kind, page: note.page }}
+              picker={objectPicker}
+              title={note.text || id}
+              x={note.x}
+              y={note.y}
+              zoom={view.k}
+            />
+          ))}
+        </>
       )}
       {positionEditor && (
         <>

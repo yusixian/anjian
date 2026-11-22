@@ -19,6 +19,7 @@ import { ExpandedBoard } from '../components/ExpandedBoard';
 import { HandCursor } from '../components/HandCursor';
 import { Labels } from '../components/Labels';
 import { TopLeftBar, TopRightBar } from '../components/Toolbar';
+import { useArtboardObjectSelection } from '../hooks/useArtboardObjectSelection';
 import { useArtboardPage } from '../hooks/useArtboardPage';
 import { useBoardComments } from '../hooks/useBoardComments';
 import { useBoardLifecycle } from '../hooks/useBoardLifecycle';
@@ -107,6 +108,8 @@ export type ArtboardViewProps = Omit<
   actions?: ReactNode;
   readOnly?: boolean;
   positionEditor?: ArtboardPositionEditor;
+  pickingObjects?: boolean;
+  objectModeRevision?: number;
   send?: (message: SelectionMessage) => void;
   comments?: BoardCommentsState | null;
   comment?: (op: BoardHumanOp) => Promise<BoardCommentsState>;
@@ -141,6 +144,8 @@ function DesktopArtboard({
   comment,
   actions,
   positionEditor,
+  pickingObjects = false,
+  objectModeRevision = 0,
   readOnly = false,
 }: ArtboardViewProps) {
   const [tool, setTool] = useState<Tool>('select');
@@ -201,8 +206,8 @@ function DesktopArtboard({
     }
     setParameterBoard((current) => (current === id ? null : id));
   };
-  const selectionEnabled = !positionEditor && tool === 'select' && !expanded && !panning;
-  const commentTool = !positionEditor && !readOnly && tool === 'comment';
+  const selectionEnabled = !pickingObjects && !positionEditor && tool === 'select' && !expanded && !panning;
+  const commentTool = !pickingObjects && !positionEditor && !readOnly && tool === 'comment';
   const inspectorEnabled = !expanded && (tool === 'select' || commentTool || inspectorOpen);
   const inspector = useInspector({
     enabled: inspectorEnabled,
@@ -234,11 +239,14 @@ function DesktopArtboard({
       else if (input.down) onKey(input);
     },
   });
+  const objectSelection = useArtboardObjectSelection(canvas, page, pickingObjects);
   useSelectionSync({
     artifact: readOnly ? null : artifact,
     boards: canvas?.boards,
     live: readOnly ? false : live,
     inspector,
+    objects: objectSelection.objects,
+    objectRevision: objectSelection.revision + objectModeRevision,
     send: readOnly ? undefined : send,
   });
   const boardComments = useBoardComments({
@@ -547,6 +555,7 @@ function DesktopArtboard({
               boards={boards}
               connections={canvas.connections}
               positionEditor={positionEditor}
+              objectPicker={pickingObjects ? objectSelection : undefined}
               contentBase={contentBase}
               culled={culled}
               frameLoaded={frameLoaded}

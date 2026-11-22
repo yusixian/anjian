@@ -93,6 +93,12 @@
     "conflict": "This object moved in another view. Try again from its current position.",
     "saveFailed": "Couldn’t save the position. Try again."
   },
+  "canvasObjects": {
+    "select": "Select canvas objects",
+    "clear": "Clear canvas selection",
+    "selectObject": "Select {{title}}",
+    "instructions": "Select boards, titles, or sticky notes for the Agent."
+  },
   "chrome": {
     "backToLibrary": "Back to library",
     "library": "Library",

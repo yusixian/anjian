@@ -1,7 +1,7 @@
 import { ActionIcon } from '@lobehub/ui';
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { Move } from 'lucide-react';
+import { ListChecks, Move } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import { type ArtboardMove, applyArtboardPositions } from '../../shared/artboard-positions';
@@ -40,6 +40,8 @@ const styles = stylex.create({
 export function ArtboardLayout({ id }: { id: string }) {
   const feed = useLocalFeed('artboard', id);
   const data = useCanvasData(feed);
+  const [pickingObjects, setPickingObjects] = useState(false);
+  const [objectModeRevision, setObjectModeRevision] = useState(0);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ArtboardMove | null>(null);
   const [busy, setBusy] = useState(false);
@@ -88,6 +90,8 @@ export function ArtboardLayout({ id }: { id: string }) {
           canvas={canvas}
           id={id}
           layout={layout}
+          pickingObjects={pickingObjects}
+          objectModeRevision={objectModeRevision}
           positionEditor={editing ? { busy, preview: setDraft, save } : undefined}
           actions={
             <>
@@ -95,7 +99,7 @@ export function ArtboardLayout({ id }: { id: string }) {
                 active={editing}
                 aria-label={toggle}
                 aria-pressed={editing}
-                disabled={busy || !data.canvas || data.stale}
+                disabled={busy || pickingObjects || !data.canvas || data.stale}
                 icon={Move}
                 size="small"
                 title={toggle}
@@ -103,6 +107,20 @@ export function ArtboardLayout({ id }: { id: string }) {
                   setEditing(!editing);
                   setDraft(null);
                   setStatus(editing ? '' : 'artboardLayout.instructions');
+                }}
+              />
+              <ActionIcon
+                active={pickingObjects}
+                aria-label={t(pickingObjects ? 'canvasObjects.clear' : 'canvasObjects.select')}
+                aria-pressed={pickingObjects}
+                disabled={editing || !data.canvas || data.stale}
+                icon={ListChecks}
+                size="small"
+                title={t(pickingObjects ? 'canvasObjects.clear' : 'canvasObjects.select')}
+                onClick={() => {
+                  setPickingObjects(!pickingObjects);
+                  setObjectModeRevision((revision) => revision + 1);
+                  setStatus(pickingObjects ? '' : 'canvasObjects.instructions');
                 }}
               />
               <CommentRecovery
