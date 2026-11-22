@@ -6,6 +6,10 @@
 
 ## 当前对照版本
 
+2026-11-22 核对 Ryugi 正式版 `v1.101.2`（`cda303f53fe96d1f2285d576469207b8aedbb717`）。相对 `v1.101.1` 新增一个提交，累计审计 168 个提交。12 个公开文件只更新版本号。用户和 Agent 的任务清单无需新增条目。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.101.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.101.1...v1.101.2)
+
+### v1.101.1 的能力差异
+
 2026-11-22 核对 Ryugi 正式版 `v1.101.1`（`e5ba9b62c1b1d576b7758d57d7e3be0567a54e18`）。新增四个提交，审计累计覆盖 167 个。案间使用[能力清单](docs/upstream-capabilities.md)维护等效证据、独立实现事项与下一轮审查起点。[增量差异](https://github.com/Innei/ryugi/compare/v1.99.1...v1.101.1)
 
 | 增量                                                   | 处置                                                                                                                                                                                                                                  |

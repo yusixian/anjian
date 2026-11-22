@@ -8,7 +8,12 @@ import {
   useState,
 } from 'react';
 
-import type { FeedbackConnection, QuestionItem, QuestionMutation } from '../feedback/api';
+import type {
+  FeedbackConnection,
+  LocalQuestionRecipient,
+  QuestionItem,
+  QuestionMutation,
+} from '../feedback/api';
 import { useOptionalFeedbackApi } from '../feedback/FeedbackProvider';
 
 interface QuestionStore {
@@ -17,6 +22,7 @@ interface QuestionStore {
   getAssetsRevision: () => string | undefined;
   getViewVersion: () => string | null;
   items: QuestionItem[];
+  localRecipients: LocalQuestionRecipient[];
   mutate: (mutation: QuestionMutation) => Promise<void>;
   refresh: () => Promise<void>;
   register: () => () => void;
@@ -38,6 +44,7 @@ export function DocumentQuestions({
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<QuestionItem[]>([]);
   const [connections, setConnections] = useState<FeedbackConnection[]>([]);
+  const [localRecipients, setLocalRecipients] = useState<LocalQuestionRecipient[]>([]);
   const [failed, setFailed] = useState(false);
   const revision = useRef(0);
   const register = useCallback(() => {
@@ -52,6 +59,7 @@ export function DocumentQuestions({
       if (request !== revision.current) return;
       setItems(snapshot.items);
       setConnections(snapshot.connections);
+      setLocalRecipients(snapshot.localRecipients ?? []);
       setFailed(false);
     } catch {
       if (request === revision.current) setFailed(true);
@@ -81,7 +89,17 @@ export function DocumentQuestions({
     <Context
       value={
         api
-          ? { items, connections, failed, getAssetsRevision, getViewVersion, register, refresh, mutate }
+          ? {
+              items,
+              connections,
+              localRecipients,
+              failed,
+              getAssetsRevision,
+              getViewVersion,
+              register,
+              refresh,
+              mutate,
+            }
           : null
       }
     >

@@ -34,6 +34,7 @@ import { createContentAccess } from './content-access';
 import { readArtifactSource, titleOf } from './context';
 import { serveDocsSite } from './docs-site';
 import { createFeedbackApi } from './feedback/api';
+import { createLocalQuestionDelivery } from './feedback/local-question-delivery';
 import { createGitHubAuth, type GitHubConfig, readGitHubConfig } from './github-auth';
 import { latestMtime } from './html';
 import { safeEqual, send, sendJson, urlHostForHttp } from './http';
@@ -328,6 +329,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               token: options.token,
               version: options.version,
               github,
+              localQuestionProject: loopback ? projectId(project) : undefined,
               recordingWrite: (work) =>
                 writeQuota(project, (prepare) =>
                   withProjectMutation(project, async () => {
@@ -420,6 +422,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         publicOrigin: options.publicOrigin,
         boardOrigin: options.boardOrigin,
         root: artifactsRootOf(project),
+        ...(loopback ? { localQuestionProject: projectId(project) } : {}),
       });
     } catch {}
   };
@@ -1037,8 +1040,16 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       snapshots: shares.storageSnapshots,
       sharedOwner: (member) => storageBackend.scopeFor(member) !== member,
     });
+  const localQuestionDelivery = loopback
+    ? createLocalQuestionDelivery({
+        home: options.paths.home,
+        projects: remoteProjects,
+        upload: writeQuota,
+      })
+    : null;
   const feedbackApi = createFeedbackApi({
     home: options.paths.home,
+    loopback,
     authenticate: remoteAuth.authenticate,
     deviceAuthorized: remoteAuth.deviceAuthorized,
     projects: remoteProjects,
@@ -1274,6 +1285,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await storageApi(req, res, url)) return;
       if (await migrationApi(req, res, url)) return;
       if (await remoteAuth.handle(req, res, url)) return;
+      if (await localQuestionDelivery?.(req, res, url)) return;
       if (await feedbackApi(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {

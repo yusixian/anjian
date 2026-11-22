@@ -22,6 +22,19 @@ const { beatOpenedSources, clearOpenedSources } =
     beatOpenedSources: (host: 'pi', session: string, sources: Map<string, Set<string>>) => void;
     clearOpenedSources: (host: 'pi', session: string, sources: Map<string, Set<string>>) => void;
   };
+const { createLocalQuestionDispatch } =
+  require('../skills/artifacts/app/local-question-dispatch.cjs') as {
+    createLocalQuestionDispatch: (
+      host: 'pi',
+      session: string,
+    ) => {
+      update: (sources: Map<string, Set<string>>) => void;
+      close: (sources: Map<string, Set<string>>) => void;
+      next: (
+        sources: Map<string, Set<string>>,
+      ) => Promise<{ message: string; acknowledge: () => Promise<void> } | undefined>;
+    };
+  };
 const { createProjectPoll, formatRoundSummary, unreadCount } =
   require('../skills/artifacts/app/comment-watch.cjs') as {
     createProjectPoll: (
@@ -66,6 +79,7 @@ export function watchPiFeedback({
   const sources = new Map<string, Set<string>>();
   const reader = `pi:${session}`;
   const poll = createProjectPoll('Pi', reader);
+  const questions = createLocalQuestionDispatch('pi', session);
   const pending = new Map<string, PendingFeedback>();
   let timer: ReturnType<typeof setInterval> | undefined;
   let running = false;
@@ -73,6 +87,7 @@ export function watchPiFeedback({
 
   const collect = () => {
     beatOpenedSources('pi', session, sources);
+    questions.update(sources);
     for (const feedback of poll(sources)) {
       const { project, event } = feedback;
       const round = event.type === 'anjian-choices' ? event.round : null;
@@ -86,6 +101,17 @@ export function watchPiFeedback({
     if (running) return;
     running = true;
     try {
+      if (canDeliver()) {
+        const question = await questions.next(sources);
+        if (question && !closed && canDeliver()) {
+          try {
+            await deliver(question.message);
+            await question.acknowledge();
+          } catch (error) {
+            if (!closed) onError?.(error);
+          }
+        }
+      }
       for (const [key, feedback] of pending) {
         if (closed || !canDeliver()) return;
         if (pending.get(key) !== feedback || feedback.retryAt > Date.now()) continue;
@@ -127,6 +153,7 @@ export function watchPiFeedback({
       clearInterval(timer);
       pending.clear();
       clearOpenedSources('pi', session, sources);
+      questions.close(sources);
       sources.clear();
     },
   };

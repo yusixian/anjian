@@ -247,6 +247,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     publicOrigin: options.publicOrigin,
     boardOrigin: options.boardOrigin,
     root,
+    localQuestionProject: mount?.localQuestionProject,
   });
 
   const watcher = watchArtifacts(ctx);

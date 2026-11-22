@@ -8,6 +8,11 @@ export interface FeedbackConnection {
   enabled: boolean;
   id: string;
 }
+export interface LocalQuestionRecipient {
+  host: 'agy' | 'codex' | 'pi';
+  id: string;
+  label: string;
+}
 export interface FeedbackSelection {
   messageIds: string[];
   threadId: string;
@@ -65,6 +70,7 @@ export type QuestionMutation = { id: string; version: string } & (
       action: 'draft' | 'submit' | 'withdraw';
       answer?: string;
       connectionId?: string;
+      localRecipient?: string;
       submissionKey?: string;
     }
 );
@@ -127,7 +133,11 @@ export function createFeedbackApi(base: string) {
   }
   return {
     questions: () =>
-      request<{ items: QuestionItem[]; connections: FeedbackConnection[] }>('questions'),
+      request<{
+        items: QuestionItem[];
+        connections: FeedbackConnection[];
+        localRecipients?: LocalQuestionRecipient[];
+      }>('questions'),
     answerQuestion: (mutation: QuestionMutation) =>
       request<{ item: QuestionItem }>('questions', mutation),
     connections: () => request<{ connections: FeedbackConnection[] }>('connections'),

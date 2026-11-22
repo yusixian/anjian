@@ -8,6 +8,7 @@ const path = require('node:path');
 const readline = require('node:readline');
 const { parseArgs, promisify } = require('node:util');
 
+const { createLocalQuestionDispatch } = require('./local-question-dispatch.cjs');
 const { beatOpenedSources, clearOpenedSources } = require('./comment-subscriptions.cjs');
 const { createCommentWatch, formatRoundSummary, unreadCount } = require('./comment-watch.cjs');
 
@@ -57,6 +58,8 @@ function runAntigravitySession({
   const subscriptions = new Set(artifacts);
   const sources = new Map([[project, subscriptions]]);
   const poll = createCommentWatch(project, 'Antigravity', receipt);
+  const questions = createLocalQuestionDispatch('agy', session);
+  let pollingQuestion = false;
   const prompts = [];
   const feedback = new Map();
   let active = null;
@@ -89,12 +92,41 @@ function runAntigravitySession({
         break;
       }
     }
-    if (active)
-      child.stdin.write(`${JSON.stringify({ event: 'user', message: { content: active } })}\n`);
+    if (!active) {
+      if (!pollingQuestion) {
+        pollingQuestion = true;
+        void questions
+          .next(sources)
+          .then((question) => {
+            if (
+              !question ||
+              closed ||
+              inputEnded ||
+              active ||
+              child.stdin.destroyed ||
+              child.stdin.writableEnded
+            )
+              return;
+            active = question.message;
+            child.stdin.write(
+              `${JSON.stringify({ event: 'user', message: { content: active } })}\n`,
+              (error) => {
+                if (!error) void question.acknowledge();
+              },
+            );
+          })
+          .finally(() => {
+            pollingQuestion = false;
+          });
+      }
+      return;
+    }
+    child.stdin.write(`${JSON.stringify({ event: 'user', message: { content: active } })}\n`);
   }
 
   function collect() {
     beatOpenedSources('agy', session, sources);
+    questions.update(sources);
     for (const event of poll(subscriptions)) {
       const round = event.type === 'anjian-choices' ? event.round : null;
       feedback.set(JSON.stringify([event.artifact, round]), event);
@@ -104,6 +136,7 @@ function runAntigravitySession({
   function stopWatching() {
     clearInterval(timer);
     clearOpenedSources('agy', session, sources);
+    questions.close(sources);
   }
 
   function interrupt() {

@@ -8,7 +8,13 @@ import {
   MAX_QUESTION_ANSWER_LENGTH,
 } from '../../shared/feedback';
 import { matchesFeedbackArtifact } from './artifact';
-import { type FeedbackData, feedbackError, hash, type QuestionDraft } from './store';
+import {
+  type FeedbackData,
+  feedbackError,
+  hash,
+  type LocalQuestionSubmission,
+  type QuestionDraft,
+} from './store';
 import { enqueueTask } from './tasks';
 
 interface QuestionWrite {
@@ -40,6 +46,20 @@ function taskOf(data: FeedbackData, artifact: string, id: string, address?: stri
   );
 }
 
+function activeLocalSubmission(
+  data: FeedbackData,
+  artifact: string,
+  id: string,
+  address?: string | null,
+) {
+  return data.localQuestions?.find(
+    (row) =>
+      row.state !== 'cancelled' &&
+      row.input.definition.id === id &&
+      matchesFeedbackArtifact(row, artifact, address),
+  );
+}
+
 function questionItem(
   data: FeedbackData,
   artifact: string,
@@ -48,7 +68,8 @@ function questionItem(
 ): FeedbackQuestionInput {
   const draft = draftOf(data, artifact, definition.id, address);
   const task = taskOf(data, artifact, definition.id, address);
-  const saved = task?.questionContext ?? draft;
+  const local = activeLocalSubmission(data, artifact, definition.id, address);
+  const saved = task?.questionContext ?? local?.input ?? draft;
   const answer = saved?.answer;
   const previousDefinition =
     answer !== undefined && saved && hash(saved.definition) !== hash(definition)
@@ -64,6 +85,15 @@ function questionItem(
     }),
     ...(answer !== undefined ? { answer } : {}),
     ...(previousDefinition ? { previousDefinition } : {}),
+    ...(local && local.state !== 'cancelled'
+      ? {
+          localSubmission: {
+            id: local.id,
+            state: local.state,
+            withdrawable: canWithdrawLocalQuestion(local),
+          },
+        }
+      : {}),
     ...(task
       ? {
           task: {
@@ -93,7 +123,11 @@ function writableQuestion(
   input: QuestionWrite,
   address?: string | null,
 ): DocumentQuestion {
-  if (taskOf(data, artifact, input.id, address)) feedbackError('question_already_submitted');
+  if (
+    taskOf(data, artifact, input.id, address) ||
+    activeLocalSubmission(data, artifact, input.id, address)
+  )
+    feedbackError('question_already_submitted');
   const definition = definitions.find(({ id }) => id === input.id);
   if (!definition || questionItem(data, artifact, definition, address).version !== input.version)
     return feedbackError('feedback_changed');
@@ -150,9 +184,13 @@ export function saveQuestionDraft(
   return questionItem(data, artifact, definition, address);
 }
 
-function submissionHash(connection: FeedbackConnection, artifact: string, input: QuestionWrite) {
+function submissionHash(
+  destination: { connectionId: string } | { recipient: string },
+  artifact: string,
+  input: QuestionWrite,
+) {
   return hash({
-    connectionId: connection.id,
+    ...destination,
     artifact,
     question: { id: input.id, version: input.version, answer: answerText(input.answer) },
   });
@@ -166,11 +204,13 @@ export function replayQuestionSubmission(
   input: QuestionWrite,
   address?: string | null,
 ): FeedbackTask | undefined {
+  if (data.localQuestions?.some((row) => row.submissionKey === key))
+    feedbackError('idempotency_conflict');
   const previous = data.tasks.find((task) => task.submissionKey === key);
   if (!previous) return;
   if (
     !matchesFeedbackArtifact(previous, artifact, address) ||
-    previous.submissionHash !== submissionHash(connection, artifact, input)
+    previous.submissionHash !== submissionHash({ connectionId: connection.id }, artifact, input)
   )
     feedbackError('idempotency_conflict');
   return previous;
@@ -190,17 +230,13 @@ export function submitQuestion(
   if (!connection.artifacts.includes(artifact)) feedbackError('connection_unavailable');
   const replay = replayQuestionSubmission(data, connection, artifact, key, input, address);
   if (replay) return replay;
-  const definition = writableQuestion(data, artifact, definitions, input, address);
-  const answer = answerText(input.answer);
-  if (!answer) feedbackError('invalid_question_answer', undefined, 400);
-  checkOption(definition, answer);
-  writeDraft(data, artifact, definition, answer, address);
+  const { definition, answer } = prepareSubmission(data, artifact, definitions, input, address);
   const task = enqueueTask(
     data,
     connection,
     artifact,
     key,
-    submissionHash(connection, artifact, input),
+    submissionHash({ connectionId: connection.id }, artifact, input),
     [],
     revision,
     now,
@@ -209,6 +245,92 @@ export function submitQuestion(
   task.questionId = definition.id;
   task.questionContext = { definition: structuredClone(definition), answer };
   return task;
+}
+
+function prepareSubmission(
+  data: FeedbackData,
+  artifact: string,
+  definitions: readonly DocumentQuestion[],
+  input: QuestionWrite,
+  address?: string | null,
+) {
+  const definition = writableQuestion(data, artifact, definitions, input, address);
+  const answer = answerText(input.answer);
+  if (!answer) feedbackError('invalid_question_answer', undefined, 400);
+  checkOption(definition, answer);
+  writeDraft(data, artifact, definition, answer, address);
+  return { definition, answer };
+}
+
+interface LocalQuestionTarget {
+  address: string;
+  artifact: string;
+  recipient: string;
+}
+
+export function replayLocalQuestion(
+  data: FeedbackData,
+  target: LocalQuestionTarget,
+  key: string,
+  input: QuestionWrite,
+): LocalQuestionSubmission | undefined {
+  if (data.tasks.some((task) => task.submissionKey === key)) feedbackError('idempotency_conflict');
+  const previous = data.localQuestions?.find((row) => row.submissionKey === key);
+  if (
+    previous &&
+    (!matchesFeedbackArtifact(previous, target.artifact, target.address) ||
+      previous.submissionHash !==
+        submissionHash({ recipient: target.recipient }, target.artifact, input))
+  )
+    feedbackError('idempotency_conflict');
+  return previous;
+}
+
+export function submitLocalQuestion(
+  data: FeedbackData,
+  target: LocalQuestionTarget,
+  key: string,
+  input: QuestionWrite,
+  definitions: readonly DocumentQuestion[],
+  revision: string,
+): LocalQuestionSubmission {
+  const replay = replayLocalQuestion(data, target, key, input);
+  if (replay) return replay;
+  const { artifact, address, recipient } = target;
+  if (definitions.find((item) => item.id === input.id)?.approve)
+    feedbackError('invalid_question_action', undefined, 400);
+  const question = prepareSubmission(data, artifact, definitions, input, address);
+  const submission: LocalQuestionSubmission = {
+    artifact,
+    artifactAddress: address,
+    recipient,
+    revision,
+    id: crypto.randomUUID(),
+    input: structuredClone(question),
+    state: 'queued',
+    submissionKey: key,
+    submissionHash: submissionHash({ recipient }, artifact, input),
+  };
+  (data.localQuestions ??= []).push(submission);
+  return submission;
+}
+
+function canWithdrawLocalQuestion(row: LocalQuestionSubmission) {
+  return row.state === 'queued' && (row.offer?.until ?? 0) <= Date.now();
+}
+
+export function withdrawLocalQuestion(
+  data: FeedbackData,
+  artifact: string,
+  address: string,
+  id: string,
+): void {
+  const submission = data.localQuestions?.find(
+    (row) => row.id === id && matchesFeedbackArtifact(row, artifact, address),
+  );
+  if (!submission || (submission.state !== 'cancelled' && !canWithdrawLocalQuestion(submission)))
+    return feedbackError('invalid_task_transition');
+  submission.state = 'cancelled';
 }
 
 export function withdrawQuestion(task: FeedbackTask, now: number): void {

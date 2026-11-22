@@ -8,7 +8,9 @@ import {
   questionItems,
   replayQuestionSubmission,
   saveQuestionDraft,
+  submitLocalQuestion,
   submitQuestion,
+  withdrawLocalQuestion,
   withdrawQuestion,
 } from '../src/server/feedback/questions';
 import { feedbackStore, hash } from '../src/server/feedback/store';
@@ -242,4 +244,92 @@ test('a replacement document can reuse a question ID without inheriting the prio
     answer: 'New answer.',
     task: { id: second.id },
   });
+});
+
+test('local delivery and Lody share one versioned submission while withdrawal preserves the draft', () => {
+  const { store, data, connection } = fixture();
+  const target = { artifact, address: 'A'.repeat(21), recipient: 'c'.repeat(43) };
+  const revision = 'sha256:' + 'd'.repeat(64);
+  const initial = questionItems(data, artifact, [choice], target.address)[0]!;
+  const input = { ...initial, answer: 'b' };
+  const queued = submitLocalQuestion(data, target, 'local', input, [choice], revision);
+  store.save(data, () => {});
+
+  const reloaded = store.load();
+  expect(questionItems(reloaded, artifact, [choice], target.address)[0]).toMatchObject({
+    answer: 'b',
+    localSubmission: { id: queued.id, state: 'queued' },
+  });
+  expect(submitLocalQuestion(reloaded, target, 'local', input, [], revision)).toEqual(queued);
+  expect(() =>
+    submitLocalQuestion(
+      reloaded,
+      { ...target, recipient: 'e'.repeat(43) },
+      'local',
+      input,
+      [],
+      revision,
+    ),
+  ).toThrow('idempotency_conflict');
+  expect(() =>
+    submitLocalQuestion(
+      reloaded,
+      { ...target, address: 'B'.repeat(21) },
+      'local',
+      input,
+      [],
+      revision,
+    ),
+  ).toThrow('idempotency_conflict');
+  expect(() =>
+    submitQuestion(
+      reloaded,
+      connection,
+      artifact,
+      'local',
+      input,
+      [choice],
+      revision,
+      2,
+      target.address,
+    ),
+  ).toThrow('idempotency_conflict');
+  expect(() =>
+    submitQuestion(
+      reloaded,
+      connection,
+      artifact,
+      'lody',
+      input,
+      [choice],
+      revision,
+      2,
+      target.address,
+    ),
+  ).toThrow('question_already_submitted');
+  expect(() => withdrawLocalQuestion(reloaded, artifact, 'B'.repeat(21), queued.id)).toThrow(
+    'invalid_task_transition',
+  );
+  withdrawLocalQuestion(reloaded, artifact, target.address, queued.id);
+  const draft = questionItems(reloaded, artifact, [choice], target.address)[0]!;
+  expect(draft.answer).toBe('b');
+  expect(draft.localSubmission).toBeUndefined();
+  expect(() => submitLocalQuestion(reloaded, target, 'stale', input, [choice], revision)).toThrow(
+    'feedback_changed',
+  );
+  const lody = submitQuestion(
+    reloaded,
+    connection,
+    artifact,
+    'lody',
+    { ...draft, answer: 'b' },
+    [choice],
+    revision,
+    3,
+    target.address,
+  );
+  expect(() =>
+    submitLocalQuestion(reloaded, target, 'another', { ...draft, answer: 'b' }, [choice], revision),
+  ).toThrow('question_already_submitted');
+  expect(questionItems(reloaded, artifact, [choice], target.address)[0]?.task?.id).toBe(lody.id);
 });
