@@ -54,7 +54,10 @@ export default defineConfig({
     }),
     react(),
   ],
-  resolve: { alias: { 'loro-crdt': 'loro-crdt/base64' } },
+  resolve: {
+    alias: { 'loro-crdt': 'loro-crdt/base64' },
+    dedupe: ['react', 'react-dom'],
+  },
   build: {
     outDir: fileURLToPath(new URL('dist/viewer', import.meta.url)),
     emptyOutDir: true,

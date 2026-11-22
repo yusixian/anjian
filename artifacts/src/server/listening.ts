@@ -1,12 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { FEEDBACK_ARTIFACT_TYPES } from '../shared/feedback-artifact';
-
 const HOSTS = ['claude', 'codex', 'pi', 'agy'];
-const COMMENT_ARTIFACT = new RegExp(
-  `^(?:${FEEDBACK_ARTIFACT_TYPES.join('|')})/[a-z0-9][a-z0-9-]*$`,
-);
+const COMMENT_ARTIFACT = /^(?:document|artboard|whiteboard|slides|storyboard)\/[a-z0-9][a-z0-9-]*$/;
 const FRESH_MS = 10_000;
 
 function readSubscription(file: string): string[] {
