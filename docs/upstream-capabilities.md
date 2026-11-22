@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对案间 `0.4.0`（`04d711a`）与 Ryugi 正式版 `v1.101.1`（`e5ba9b6`）。首批同步修复已在案间候选分支本地验收。[上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.101.1) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.101.1`（`e5ba9b6`）。案间以 `0.4.0`（`04d711a`）为实施起点。首批同步及两个后续能力已发布至 `0.5.0`（`26d574a`）。[案间 0.5.0 发布说明与安装包](https://github.com/yusixian/anjian/releases/tag/v0.5.0) · [上游发行版](https://github.com/Innei/ryugi/releases/tag/v1.101.1) · [案间总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -14,20 +14,28 @@
 | 公开分享一个只读作品并撤销访问                             | [公开分享测试](../artifacts/test/public-share.test.ts)                                                                                                                                                |
 | 通过案间发布记录查看中英文更新说明                         | [双语 Changesets](versioned-releases.md) · [已生成版本说明](../CHANGELOG.md)                                                                                                                          |
 
-## 待交付能力
+## v0.5.0 已交付能力
 
-| 能力                                                 | 当前进度或依赖                                                                                                                                                                                                  |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 同批选择轮次分别通知，Hub 被拖长的注册请求按时结束   | 首批候选已本地验收。[#40](https://github.com/yusixian/anjian/issues/40)                                                                                                                                         |
-| 另一 worktree 的显式反馈订阅                         | 独立候选已本地验证，待发布。两个真实 worktree 的同名文档和同名选择轮次分别送到指定会话。使用真实 CLI 与 Hub，Codex 队列传输为测试替身。[#41](https://github.com/yusixian/anjian/issues/41)                      |
-| 查看每个会话的批注阅读状态，主动将预览选区发给 Agent | 两项分别跟踪，可复用已有游标和临时选区。[#42](https://github.com/yusixian/anjian/issues/42) · [#43](https://github.com/yusixian/anjian/issues/43)                                                               |
-| 文档内提问并收集提交后的答案                         | 独立候选已验证选择题、开放题、草稿恢复、撤回及实际 Lody 回复和验收。题目保存在正文，回答进入既有持久反馈任务。[#44](https://github.com/yusixian/anjian/issues/44)                                               |
-| 从文档准确定位作品并附评审状态                       | 用既有作品身份、权限与快照语义。[#45](https://github.com/yusixian/anjian/issues/45)                                                                                                                             |
-| 用报告汇总机器检查、人工验收和未验证事项             | 可先复用画板验收，作品引用可用后加入目标状态。[#46](https://github.com/yusixian/anjian/issues/46)                                                                                                               |
-| 独立白板、幻灯片与演讲者视图、产品分镜与视频导出     | 分别实现和验收，白板可评估复用嵌入式绘图的依赖。[#47](https://github.com/yusixian/anjian/issues/47) · [#48](https://github.com/yusixian/anjian/issues/48) · [#49](https://github.com/yusixian/anjian/issues/49) |
-| 从 CLI 读取人工改动和评审证据                        | 从现有文档历史及 CLI 输出契约扩展。[#50](https://github.com/yusixian/anjian/issues/50)                                                                                                                          |
-| 维护可复用的设计约定，实施时固定到人工批准的修订     | 设计规范可独立推进，设计批准依赖文档问答。[#51](https://github.com/yusixian/anjian/issues/51) · [#54](https://github.com/yusixian/anjian/issues/54)                                                             |
-| 更多本地宿主接入与 macOS 双架构制品                  | 分批验证实际宿主和平台。[#52](https://github.com/yusixian/anjian/issues/52) · [#53](https://github.com/yusixian/anjian/issues/53)                                                                               |
+| 用户或 Agent 的任务                                               | 入口和验证证据                                                                                                                                                                                              |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 让同批画板轮次分别通知，结束迟迟未完成的 Hub 注册请求             | [同步修复与验证 #56](https://github.com/yusixian/anjian/pull/56)                                                                                                                                            |
+| 在另一工作区订阅反馈，分会话确认已读，从 HTML 发送选区            | [跨工作区验证 #57](https://github.com/yusixian/anjian/pull/57) · [会话回执集成测试](../artifacts/test/comment-receipts.test.ts) · [组合浏览器验证 #81](https://github.com/yusixian/anjian/pull/81)          |
+| 在文档提问、记录回答，或批准精确的设计修订                        | [文档评审组合验收 #79](https://github.com/yusixian/anjian/pull/79) · [CLI 批准入口](artifacts-cli.md#确认设计批准)                                                                                          |
+| 在文档中引用作品，追踪人工改动、评审状态和验收证据                | [作品定位集成测试](../artifacts/test/artifact-reference-api.test.ts) · [CLI 查询](artifacts-cli.md#查看人工改动与评审)                                                                                      |
+| 用可复用的设计规范生成可追溯的验收报告                            | [规范集成测试](../artifacts/test/design-spec.test.ts) · [实际浏览器与报告验证](ryugi/skill-evals/2026-11-22-anjian-design-specifications.md)                                                                |
+| 编辑独立白板，按页、画框及元素定位                                | [白板多页验证 #72](https://github.com/yusixian/anjian/pull/72) · [画框集成测试](../artifacts/test/whiteboard-frames.test.ts)                                                                                |
+| 编辑幻灯片，使用同步演讲者窗口并按页批注                          | [双窗口、键盘和手机验收 #73](https://github.com/yusixian/anjian/pull/73)                                                                                                                                    |
+| 剪多轨分镜，按片段批注并导出 MP4                                  | [分镜浏览器与 CLI 验证 #75](https://github.com/yusixian/anjian/pull/75) · [FFmpeg 渲染测试](../artifacts/test/storyboard-render.test.ts) · [Linux 容器实测 #81](https://github.com/yusixian/anjian/pull/81) |
+| 把白板、幻灯片和分镜的批注提交给已连接的 Lody 会话                | [三类作品评审集成 #77](https://github.com/yusixian/anjian/pull/77) · [真实 Lody 白板回传与验收 #81](https://github.com/yusixian/anjian/pull/81)                                                             |
+| 在 Pi 或 Antigravity 接收本地批注，在 Apple 芯片或 Intel 安装 CLI | [宿主实际验证 #80](https://github.com/yusixian/anjian/pull/80) · [正式发布打包流水线](https://github.com/yusixian/anjian/actions/runs/44991156677)                                                          |
+| 让 Agent 在同一画板里比较多套手机样机                             | [启动和 390 px 浏览器验证 #84](https://github.com/yusixian/anjian/pull/84)                                                                                                                                  |
+| 匿名分享文档和明确选中的同项目引用快照                            | [发布、匿名访问和撤销验证 #85](https://github.com/yusixian/anjian/pull/85) · [公开分享指南](https://anjian.cosine.ren/zh/docs/sharing/)                                                                     |
+
+实际操作入口见[线上新功能上手指南](https://anjian.cosine.ren/zh/docs/review-workflows/)。上表中的浏览器与 Agent 流程证据来自隔离环境，公开指南及更新说明已经在线验收。
+
+## 下一批
+
+[案间 #86](https://github.com/yusixian/anjian/issues/86) 跟踪本地 Agent 唤醒中的提交摘要。画板部分见 [#90](https://github.com/yusixian/anjian/pull/90)，文档问答的本地投递仍待开发和验证。
 
 ## 后续同步
 
