@@ -1,5 +1,36 @@
 # anjian-workflow
 
+## 0.6.0
+
+### Minor Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+本地文档问答可以发送给已打开该文档的 Codex、Pi 或 Antigravity 会话。选定会话后点击「发送给…」，Agent 会收到题目、答案和文档修订。排队时可撤回并保留草稿。需要在文档里接收答复时，可以继续选用已连接的 Lody 会话。
+
+<!-- anjian:en -->
+
+#### English
+
+Send a local document answer to the Codex, Pi, or Antigravity session that opened the document. Choose a session and select **Send to…** to deliver the question, answer, and document revision. You can withdraw a queued answer and keep the draft. Choose a connected Lody session to receive the Agent’s reply in the document.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+提交本地画板选择后，已订阅的 Codex、Pi 和 Antigravity 会话可以直接看到该轮的答案、推荐项和相关批注定位。通知保留读取完整反馈的命令，并保持该会话原有的已读状态。
+
+<!-- anjian:en -->
+
+#### English
+
+When you submit a local artboard round, subscribed Codex, Pi, and Antigravity sessions can see the round's answers, defaults from recommendations, and related comment locations. The notification keeps the command for reading full feedback and preserves the session's read status.
+
+<!-- anjian:end -->
+
 ## 0.5.0
 
 ### Minor Changes
