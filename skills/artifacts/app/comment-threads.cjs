@@ -1,5 +1,7 @@
 'use strict';
 
+const { readerKey, receiptChanges } = require('./comment-receipt-events.cjs');
+
 const stampOf = (m) => m.editedAt || m.at;
 const humanStatus = (thread) => (thread.statusBy || 'human') === 'human';
 
@@ -46,4 +48,18 @@ function unreadThreadCount(file, cursor) {
   ).length;
 }
 
-module.exports = { unreadThreadCount };
+function unreadReceiptCount(file, book, session) {
+  const reader = book?.[readerKey('local', session)];
+  const threads = file && Array.isArray(file.threads) ? file.threads : [];
+  return threads.filter((thread) => {
+    if (!thread || !Array.isArray(thread.messages)) return false;
+    if (isChoiceRecord(thread)) return false;
+    if (!reader) return waitingOnAgent(thread);
+    const versionsOf = (entries) =>
+      entries && Object.hasOwn(entries, thread.id) ? entries[thread.id] : {};
+    const snapshot = { ...versionsOf(reader.baseline), ...versionsOf(reader.read) };
+    return receiptChanges(thread, snapshot).changes.length > 0;
+  }).length;
+}
+
+module.exports = { unreadReceiptCount, unreadThreadCount };

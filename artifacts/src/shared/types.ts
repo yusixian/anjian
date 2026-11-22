@@ -144,11 +144,12 @@ export type ServerMessage =
       agentActiveAt: number;
       now: number;
     }
-  | { type: 'doc-comments'; artifact: string; comments: CommentsFile }
+  | { type: 'doc-comments'; artifact: string; comments: CommentsFile; receiptOnly?: true }
   | {
       type: 'board-comments';
       artifact: string;
       comments: BoardCommentsFile;
       stale: string[];
       listening?: boolean;
+      receiptOnly?: true;
     };

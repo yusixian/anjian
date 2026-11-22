@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
+const { selectionSend, text: previewText } = require('./selection-dispatch-fixture.cjs');
 
 const repo = path.resolve(__dirname, '../..');
 const watcher = path.join(repo, 'hooks/watch-comments.cjs');
@@ -47,7 +48,9 @@ test('native artifact comments notify without consuming them', (t) => {
   f.save('artboard/settings', [{ ...thread(), anchor: { page: 'p', board: 'a', x: 1, y: 2 } }]);
   f.save('slides/briefing', [{ ...thread(), anchor: { slideId: 'plan' } }]);
   f.save('storyboard/demo', [{ ...thread(), anchor: { clipId: 'cut' } }]);
-  f.save('whiteboard/flow', [{ ...thread(), anchor: { elementIds: ['shape-a', 'shape-b'], page: 'next' } }]);
+  f.save('whiteboard/flow', [
+    { ...thread(), anchor: { elementIds: ['shape-a', 'shape-b'], page: 'next' } },
+  ]);
   const events = poll();
   assert.deepEqual(events.map((event) => event.artifact).sort(), [
     'artboard/settings',
@@ -211,8 +214,10 @@ function monitor(t, cwd, overrides) {
     CLAUDE_PROJECT_DIR: cwd,
     ...overrides,
   };
+  // Replace the Unix shell so test teardown signals the actual monitor.
+  const command = entry && (process.platform === 'win32' ? entry.command : `exec ${entry.command}`);
   const child =
-    entry && spawn(entry.command, { cwd, env, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    command && spawn(command, { cwd, env, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const state = { output: '', errors: '', child };
   if (state.child) {
     state.child.stdout.on('data', (data) => {
@@ -239,15 +244,33 @@ function launcher(t) {
   for (const name of fs.readdirSync(source))
     if (/\.(?:cjs|json)$/.test(name))
       fs.copyFileSync(path.join(source, name), path.join(app, name));
-  fs.writeFileSync(path.join(app, 'cli.cjs'), "console.log('{}');\n");
-  return (project, session, ...args) => {
+  fs.writeFileSync(
+    path.join(app, 'cli.cjs'),
+    `
+const args = process.argv.slice(2);
+const option = (name) => args[args.indexOf(name) + 1];
+process.send?.({ type: 'artifact-opened', project: option('--project-dir'), artifact: option('--artifact') });
+console.log('{}');
+`,
+  );
+  const runtime = path.join(app, 'runtime');
+  const run = (project, session, ...args) => {
     const result = spawnSync(
       process.execPath,
       [path.join(app, 'anjian.cjs'), ...args, '--json', '--project-dir', project],
-      { env: { ...process.env, CODEX_THREAD_ID: undefined, CLAUDE_CODE_SESSION_ID: session }, encoding: 'utf8' },
+      {
+        env: {
+          ...process.env,
+          CODEX_THREAD_ID: undefined,
+          CLAUDE_CODE_SESSION_ID: session,
+          ANJIAN_RUNTIME_DIR: runtime,
+        },
+        encoding: 'utf8',
+      },
     );
     assert.equal(result.status, 0, result.stderr);
   };
+  return { run, runtime };
 }
 
 async function until(check, deadlineMs = 3500) {
@@ -257,10 +280,13 @@ async function until(check, deadlineMs = 3500) {
 
 test('a Claude Code session hears only comments on artifacts it opened through the launcher', async (t) => {
   const f = fixture(t);
-  const run = launcher(t);
+  const { run, runtime } = launcher(t);
   const mine = randomUUID();
   const other = randomUUID();
-  const watcher = monitor(t, f.project, { CLAUDE_CODE_SESSION_ID: mine });
+  const watcher = monitor(t, f.project, {
+    CLAUDE_CODE_SESSION_ID: mine,
+    ANJIAN_RUNTIME_DIR: runtime,
+  });
   run(f.project, mine, 'start', '--artifact', 'slides/briefing');
   run(f.project, other, 'start', '--artifact', 'artboard/mac-app-shell');
   run(f.project, mine, 'start');
@@ -279,6 +305,23 @@ test('a Claude Code session hears only comments on artifacts it opened through t
     ['slides/briefing'],
     watcher.errors,
   );
+});
+
+test('Claude receives feedback from a separately opened project in the same session', async (t) => {
+  const local = fixture(t);
+  const external = fixture(t);
+  const { run, runtime } = launcher(t);
+  const session = randomUUID();
+  const watcher = monitor(t, local.project, {
+    CLAUDE_CODE_SESSION_ID: session,
+    ANJIAN_RUNTIME_DIR: runtime,
+  });
+  run(external.project, session, 'start', '--artifact', 'document/plan');
+  external.save('document/other', [thread()]);
+  external.save('document/plan', [thread()]);
+  await until(() => watcher.output.includes('document/plan'));
+  assert.ok(watcher.output.includes(external.project));
+  assert.equal(watcher.output.trim().split('\n').length, 1, watcher.errors);
 });
 
 test('the declared plugin monitor notices artifacts created later from a repository subdirectory', async (t) => {
@@ -408,4 +451,35 @@ test('a last comment and the submit in one tick wake once', (t) => {
     poll().map((event) => event.type),
     ['anjian-choices'],
   );
+});
+
+test('the Claude monitor emits a snapshot reference only for an exact HTML subscription', async (t) => {
+  const f = fixture(t);
+  const session = randomUUID();
+  f.write(`.state/claude-comment-watch/${session}.json`, { artifacts: ['*', 'html/mockup'] });
+  const selection = selectionSend(f.project, 'claude', session);
+  const wildcard = selectionSend(f.project, 'claude', session, { artifact: 'html/private' });
+  const child = spawn(process.execPath, [watcher, f.project], {
+    env: {
+      ...process.env,
+      CLAUDE_CODE_SESSION_ID: session,
+      ANJIAN_RUNTIME_DIR: path.join(f.project, 'runtime'),
+    },
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  t.after(() => child.kill());
+  let output = '';
+  child.stdout.on('data', (chunk) => {
+    output += chunk;
+  });
+  const deadline = Date.now() + 5000;
+  while ((!output.includes('\n') || !fs.existsSync(selection.marker)) && Date.now() < deadline)
+    await delay(25);
+  const event = JSON.parse(output.trim());
+  assert.equal(event.type, 'anjian-selection');
+  assert.equal(event.snapshot, selection.snapshot);
+  assert.ok(event.instruction.includes('preview data'));
+  assert.ok(!output.includes(previewText));
+  assert.ok(fs.existsSync(selection.marker));
+  assert.ok(!fs.existsSync(wildcard.marker));
 });

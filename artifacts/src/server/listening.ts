@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const HOSTS = ['claude', 'codex'];
+import { FEEDBACK_ARTIFACT_TYPES } from '../shared/feedback-artifact';
+
+const HOSTS = ['claude', 'codex', 'pi', 'agy'];
+const COMMENT_ARTIFACT = new RegExp(
+  `^(?:${FEEDBACK_ARTIFACT_TYPES.join('|')})/[a-z0-9][a-z0-9-]*$`,
+);
 const FRESH_MS = 10_000;
 
 function readSubscription(file: string): string[] {
@@ -24,9 +29,24 @@ function beatAt(file: string): number | null {
   }
 }
 
+function hasOpenedBeat(dir: string, artifact: string, now: number): boolean {
+  if (!COMMENT_ARTIFACT.test(artifact)) return false;
+  const opened = path.join(dir, 'opened', artifact);
+  try {
+    return fs.readdirSync(opened).some((name) => {
+      if (!name.endsWith('.alive')) return false;
+      const stamp = beatAt(path.join(opened, name));
+      return stamp !== null && now - stamp < FRESH_MS;
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function listeningOn(stateDir: string, artifact: string, now = Date.now()): boolean {
   for (const host of HOSTS) {
     const dir = path.join(stateDir, `${host}-comment-watch`);
+    if (hasOpenedBeat(dir, artifact, now)) return true;
     let names: string[];
     try {
       names = fs.readdirSync(dir);

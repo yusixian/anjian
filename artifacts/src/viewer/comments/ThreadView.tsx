@@ -52,6 +52,7 @@ const styles = stylex.create({
     marginBottom: 2,
   },
   time: { color: cssVar.colorTextQuaternary, fontWeight: 400 },
+  receipt: { display: 'block', color: cssVar.colorTextTertiary, fontSize: 11 },
   deleted: { color: cssVar.colorTextQuaternary, fontStyle: 'italic' },
   text: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
   small: { marginInlineStart: 'auto', display: 'flex', gap: 6 },
@@ -84,6 +85,12 @@ const styles = stylex.create({
 
 const timeOf = (iso: string) =>
   new Date(iso).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
+
+export function AgentReadReceipt({ message }: { message: Message }) {
+  const { t } = useTranslation();
+  if (message.author !== 'human' || message.deleted || !message.agentRead) return null;
+  return <span {...stylex.props(styles.receipt)}>{t('comments.readByAgent')}</span>;
+}
 
 export function MessageView({
   message,
@@ -127,6 +134,7 @@ export function MessageView({
       ) : (
         <div {...stylex.props(styles.text)}>{message.text}</div>
       )}
+      <AgentReadReceipt message={message} />
     </div>
   );
 }

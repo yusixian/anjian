@@ -45,6 +45,8 @@ function fixture(t) {
     ...process.env,
     PLUGIN_ROOT: repo,
     PLUGIN_DATA: data,
+    ANJIAN_RUNTIME_DIR: path.join(root, 'runtime'),
+    ANJIAN_SERVER_HOME: path.join(root, 'server'),
     CODEX_THREAD_ID: inherited,
     ANJIAN_CODEX_REMOTE: 'unix:///tmp/anjian-test.sock',
     PATH: `${bin}${path.delimiter}${process.env.PATH}`,
@@ -63,26 +65,23 @@ function fixture(t) {
       fs.copyFileSync(path.join(path.dirname(adapter), name), path.join(app, name));
   fs.writeFileSync(
     path.join(app, 'cli.cjs'),
-    "console.log(JSON.stringify({type:'server-started'}));\n",
+    `
+const args = process.argv.slice(2);
+const option = (name) => args[args.indexOf(name) + 1];
+if (args.includes('--fail-start')) process.exit(1);
+process.send?.({ type: 'artifact-opened', project: option('--project-dir'), artifact: option('--artifact') });
+if (args.includes('--foreground')) setInterval(() => {}, 1000);
+console.log(JSON.stringify({ type: 'server-started' }));
+`,
   );
-  const open = (artifact, session = id) => {
+  const launcher = path.join(app, 'anjian.cjs');
+  const open = (artifact, session = id, target = project, extra = [], overrides = {}) => {
     const result = spawnSync(
       process.execPath,
-      [
-        path.join(app, 'anjian.cjs'),
-        'start',
-        '--json',
-        '--project-dir',
-        project,
-        '--artifact',
-        artifact,
-      ],
-      {
-        env: { ...env, CODEX_THREAD_ID: session },
-        encoding: 'utf8',
-      },
+      [launcher, 'start', '--json', '--project-dir', target, '--artifact', artifact, ...extra],
+      { env: { ...env, CODEX_THREAD_ID: session, ...overrides }, encoding: 'utf8' },
     );
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, extra.includes('--fail-start') ? 1 : 0, result.stderr);
   };
   const read = () =>
     fs.existsSync(log)
@@ -93,8 +92,8 @@ function fixture(t) {
           .filter(Boolean)
           .map((line) => JSON.parse(line))
       : [];
-  const write = (artifact, value) => {
-    const file = path.join(project, '.anjian/artifacts', artifact, 'comments.json');
+  const write = (artifact, value, target = project) => {
+    const file = path.join(target, '.anjian/artifacts', artifact, 'comments.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value));
   };
@@ -135,7 +134,21 @@ function fixture(t) {
     }
     fs.rmSync(root, { recursive: true, force: true });
   });
-  return { root, project, data, env, input, read, write, comments, start, fail, open };
+  return {
+    root,
+    project,
+    data,
+    env,
+    input,
+    read,
+    write,
+    comments,
+    start,
+    fail,
+    open,
+    launcher,
+    children,
+  };
 }
 
 function hooks() {
@@ -207,6 +220,87 @@ test('comments wake only the session that opened that artifact through the launc
   assert.equal(f.read().length, 1);
 });
 
+test('an explicit successful worktree open queues only its exact artifact to the active session', async (t) => {
+  const f = fixture(t);
+  const worktree = path.join(f.root, 'linked worktree');
+  for (const args of [
+    ['init', '-q'],
+    [
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=test@example.com',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'base',
+    ],
+    ['worktree', 'add', '-q', '--detach', worktree],
+  ]) {
+    const result = spawnSync('git', args, { cwd: f.project, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const bareStart = spawnSync(process.execPath, [f.launcher, 'start', '--project-dir', worktree], {
+    env: { ...f.env, CODEX_THREAD_ID: id },
+  });
+  assert.equal(bareStart.status, 0);
+  f.open('document/other-session', inherited, worktree);
+  f.open('document/failed', id, worktree, ['--fail-start']);
+  const rounds = (target, state) => {
+    const file = path.join(target, '.anjian/artifacts/.state/artboard/settings/rounds.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ rounds: [{ id: 'r1', state }] }));
+  };
+  for (const target of [f.project, worktree]) {
+    f.open('artboard/settings', id, target);
+    f.write('artboard/settings', { version: 1, threads: [] }, target);
+    rounds(target, 'open');
+  }
+  f.open('document/plan');
+  f.write('document/other-session', f.comments(), worktree);
+  f.write('document/failed', f.comments(), worktree);
+  f.write('document/unrelated', f.comments(), worktree);
+  const foreground = spawn(
+    process.execPath,
+    [f.launcher, 'start', '--project-dir', worktree, '--artifact', 'document/plan', '--foreground'],
+    { env: { ...f.env, CODEX_THREAD_ID: id }, stdio: 'ignore' },
+  );
+  f.children.push(foreground);
+  const worktreeBeat = path.join(
+    worktree,
+    '.anjian/artifacts/.state/codex-comment-watch/opened/document/plan',
+    `${id}.alive`,
+  );
+  f.start({}, false);
+  await until(
+    () => fs.existsSync(worktreeBeat),
+    'foreground start never subscribed before exiting',
+  );
+  assert.equal(foreground.exitCode, null);
+  const broadBeat = path.join(
+    worktree,
+    '.anjian/artifacts/.state/codex-comment-watch',
+    `${id}.alive`,
+  );
+  assert.equal(fs.existsSync(broadBeat), false, 'external wildcard must not appear active');
+  f.write('document/plan', f.comments());
+  f.write('document/plan', f.comments(), worktree);
+  await until(() => f.read().length === 2, 'same-name artifacts were not delivered separately');
+  await delay(1200);
+  const comments = f.read();
+  assert.equal(comments.length, 2);
+  for (const target of [f.project, worktree]) rounds(target, 'submitted');
+  await until(() => f.read().length === 4, 'same-name rounds were not delivered separately');
+  const queued = f.read();
+  for (const args of queued) assert.equal(args[args.indexOf('--thread') + 1], id);
+  const messages = (commands) => commands.map((args) => args[args.indexOf('--message') + 1]);
+  for (const batch of [comments, queued.slice(2)]) {
+    assert.ok(messages(batch).some((message) => message.includes('linked worktree')));
+    assert.ok(messages(batch).some((message) => message.includes('project with')));
+  }
+  assert.ok(messages(queued.slice(2)).every((message) => message.includes('round r1')));
+});
+
 test('hosts without PLUGIN_DATA keep worker ownership separate from launcher subscriptions', async (t) => {
   const f = fixture(t);
   delete f.env.PLUGIN_DATA;
@@ -217,6 +311,62 @@ test('hosts without PLUGIN_DATA keep worker ownership separate from launcher sub
   f.write('document/plan', f.comments());
   await until(() => f.read().length > 0, 'launcher registration stopped its own watcher');
   assert.equal(child.exitCode, null);
+});
+
+test('an unavailable external comment never blocks local delivery and can resume later', async (t) => {
+  const f = fixture(t);
+  const external = path.join(f.root, 'external');
+  fs.mkdirSync(external);
+  f.start({}, false);
+  f.open('document/external', id, external);
+  f.open('document/plan');
+  fs.writeFileSync(f.fail, 'offline');
+  f.write('document/external', f.comments(), external);
+  await until(() => f.read().length === 1, 'no first external delivery attempt');
+  fs.unlinkSync(path.join(external, '.anjian/artifacts/document/external/comments.json'));
+  f.write('document/plan', f.comments());
+  fs.unlinkSync(f.fail);
+  await until(() => f.read().length === 2, 'unavailable external comment blocked local notice');
+  const messageAt = (index) => {
+    const args = f.read()[index];
+    return args[args.indexOf('--message') + 1];
+  };
+  assert.match(messageAt(1), /--artifact document\/plan/);
+  f.write('document/external', f.comments(), external);
+  await until(() => f.read().length === 3, 'external comment did not resume');
+  assert.match(messageAt(2), /--artifact document\/external/);
+});
+
+test('an explicit open with a different Hub home still reaches the session watcher', async (t) => {
+  const f = fixture(t);
+  f.env.ANJIAN_RUNTIME_DIR = path.relative(os.homedir(), f.env.ANJIAN_RUNTIME_DIR);
+  f.start({}, false);
+  f.open('document/plan', id, f.project, [], {
+    ANJIAN_SERVER_HOME: path.join(f.root, 'other-hub'),
+  });
+  f.write('document/plan', f.comments());
+  await until(() => f.read().length === 1, 'different Hub home hid the subscription');
+});
+
+test('nested hosts can run commands without subscribing a session', () => {
+  const { register } = require(path.join(path.dirname(adapter), 'comment-subscriptions.cjs'));
+  const env = { CODEX_THREAD_ID: id, CLAUDE_CODE_SESSION_ID: inherited };
+  assert.doesNotThrow(() => register(['stop'], env));
+  assert.doesNotThrow(() => register(['start'], env));
+});
+
+test('an ambiguous launcher does not wake the inherited Codex session', async (t) => {
+  const f = fixture(t);
+  f.start({}, false);
+  f.open('document/plan', id, f.project, [], { CLAUDE_CODE_SESSION_ID: inherited });
+  f.write('document/plan', f.comments());
+  await delay(1400);
+  assert.equal(f.read().length, 0);
+  f.open('document/plan', id, f.project, [], {
+    CLAUDE_CODE_SESSION_ID: inherited,
+    ANJIAN_COMMENT_HOST: 'codex',
+  });
+  await until(() => f.read().length === 1, 'explicit host did not activate the watcher');
 });
 
 test('a comment resolved during an outage is not delivered when transport recovers', async (t) => {
@@ -270,7 +420,8 @@ test('the shipped lifecycle hooks invoke the portable watcher and stop it on ses
   const entry = config.SessionStart?.[0]?.hooks?.[0];
   assert.ok(entry, 'the Codex plugin has no startup hook');
   assert.equal(entry.async, true);
-  const child = spawn(entry.command, {
+  const command = process.platform === 'win32' ? entry.command : `exec ${entry.command}`;
+  const child = spawn(command, {
     cwd: f.project,
     env: f.env,
     shell: true,
@@ -297,14 +448,19 @@ test('the shipped lifecycle hooks invoke the portable watcher and stop it on ses
   );
 });
 
-test('a submitted round is queued even with no unread comments, and the watcher beats', async (t) => {
+test('each submitted round is queued even when two rounds change in the same poll', async (t) => {
   const f = fixture(t);
   const rounds = (state) => {
     const file = path.join(f.project, '.anjian/artifacts/.state/artboard/settings/rounds.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
-      JSON.stringify({ rounds: [{ id: 'r1', page: 'p', state, groups: ['q1'], boards: ['a'] }] }),
+      JSON.stringify({
+        rounds: [
+          { id: 'r1', state },
+          { id: 'r2', state },
+        ],
+      }),
     );
   };
   f.write('artboard/settings', { version: 1, threads: [] });
@@ -313,11 +469,10 @@ test('a submitted round is queued even with no unread comments, and the watcher 
   const alive = path.join(f.project, '.anjian/artifacts/.state/codex-comment-watch', `${id}.alive`);
   await until(() => fs.existsSync(alive), 'codex watcher never wrote a heartbeat');
   rounds('submitted');
-  await until(() => f.read().length > 0, 'submitted round never reached codex queue');
-  const args = f.read()[0];
-  const message = args[args.indexOf('--message') + 1];
-  assert.ok(message.includes('artboard/settings'));
-  assert.ok(message.includes('submitted'));
+  await until(() => f.read().length === 2, 'both submitted rounds must reach codex queue');
+  const messages = f.read().map((args) => args[args.indexOf('--message') + 1]);
+  assert.match(messages[0], /round r1 on artboard\/settings were submitted/);
+  assert.match(messages[1], /round r2 on artboard\/settings were submitted/);
 });
 
 test('the heartbeat keeps beating while a queue call is in flight', async (t) => {
@@ -331,4 +486,49 @@ test('the heartbeat keeps beating while a queue call is in flight', async (t) =>
   const during = Number(fs.readFileSync(alive, 'utf8'));
   await delay(2500);
   assert.ok(Number(fs.readFileSync(alive, 'utf8')) > during, 'heartbeat stopped while queueing');
+});
+
+test('HTML selection sends use the subscribed Codex session, retry, and acknowledge separately', async (t) => {
+  const { selectionSend, text: previewText } = require('./selection-dispatch-fixture.cjs');
+  const f = fixture(t);
+  f.open('html/mockup');
+  f.open('html/private', inherited);
+  const first = selectionSend(f.project, 'codex', id);
+  const second = selectionSend(f.project, 'codex', id);
+  const ignored = [
+    selectionSend(f.project, 'claude', id),
+    selectionSend(f.project, 'codex', inherited),
+    selectionSend(f.project, 'codex', id, { expiresAt: Date.now() - 1 }),
+    selectionSend(f.project, 'codex', id, { artifact: 'html/private' }),
+  ];
+  fs.writeFileSync(f.fail, '');
+  f.start({}, false);
+  const worker = path.join(f.data, 'codex-comment-watch/workers', `${id}.json`);
+  await until(
+    () =>
+      fs.existsSync(worker) && fs.readFileSync(worker, 'utf8').includes('transport unavailable'),
+    'the queue failure was not observed',
+  );
+  const heartbeat = path.join(
+    f.project,
+    '.anjian/artifacts/.state/codex-comment-watch/opened/html/mockup',
+    `${id}.alive`,
+  );
+  assert.ok(Number(fs.readFileSync(heartbeat, 'utf8')) > Date.now() - 10_000);
+  assert.ok(!fs.existsSync(first.marker) && !fs.existsSync(second.marker));
+  fs.rmSync(f.fail);
+  await until(
+    () => [first, second].every(({ marker }) => fs.existsSync(marker)),
+    'missing delivery marker',
+  );
+  const queue = f.read();
+  assert.equal(queue.length, 3);
+  for (const args of queue) {
+    assert.equal(args[0], 'queue');
+    assert.equal(args[args.indexOf('--thread') + 1], id);
+    const message = args[args.indexOf('--message') + 1];
+    assert.ok([first, second].some(({ snapshot }) => message.includes(JSON.stringify(snapshot))));
+    assert.ok(!message.includes(previewText));
+  }
+  assert.ok(ignored.every(({ marker }) => !fs.existsSync(marker)));
 });

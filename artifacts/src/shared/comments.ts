@@ -1,6 +1,7 @@
 export type Author = 'human' | 'agent';
 
 export interface Message {
+  agentRead?: true;
   at: string;
   author: Author;
   avatar?: string;
@@ -170,7 +171,9 @@ export function savedComments<A>(
     const anchor = spec.read(t.anchor);
     if (!t.id || !anchor || !t.statusAt || (t.status !== 'open' && t.status !== 'resolved'))
       continue;
-    const messages = (t.messages ?? []).filter(isSavedMessage);
+    const messages = (t.messages ?? [])
+      .filter(isSavedMessage)
+      .map(({ agentRead: _agentRead, ...message }) => message);
     const statusBy =
       t.statusBy === 'human' || t.statusBy === 'agent' ? { statusBy: t.statusBy } : {};
     threads.push({

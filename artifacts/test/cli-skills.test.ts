@@ -37,7 +37,9 @@ function fixture(launcher = false) {
       'comment-subscriptions.cjs',
       'comment-watch.cjs',
       'comment-threads.cjs',
+      'comment-receipt-events.cjs',
       'codex-comment-watch.cjs',
+      'selection-dispatch.cjs',
     ])
       fs.copyFileSync(path.join(source, 'app', name), path.join(app, name));
   }
@@ -80,7 +82,7 @@ test.each([false, true])(
       const markdown = run(...args);
       expect(markdown.status, markdown.stderr).toBe(0);
       const json = run(...args, '--json');
-      expect(json.status, json.stderr).toBe(0);
+      expect(json.status, json.stderr || json.stdout).toBe(0);
       const value = JSON.parse(json.stdout);
       expect(value.reference).toBe(reference);
       expect(markdown.stdout).toBe(value.content + '\n');

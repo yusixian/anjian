@@ -16,38 +16,38 @@ import { type asBoardHumanOp, createBoardCommentRegistry } from './board-comment
 import { originsFor } from './board-port';
 import { commentNames } from './comment-names';
 import { ensureConfig } from './config';
-import type { createGitHubAuth, GitHubConfig } from './github-auth';
-import { documentQuestions } from './document-codec';
+import { createDeferredInputs } from './deferred-inputs';
 import { readDocument } from './document';
+import { documentQuestions } from './document-codec';
+import type { CommentAdmission } from './document-comments';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
-import type { CommentAdmission } from './document-comments';
-import { createBackgroundWrites } from './storage/background-writes';
-import { createDeferredInputs } from './deferred-inputs';
+import type { createGitHubAuth, GitHubConfig } from './github-auth';
 import { readHtml } from './html';
-import { readSlideDeck } from './slides';
-import { listStoryboardAssets, readStoryboard } from './storyboard-source';
-import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
 import { readDocumentApprovalRevisions } from './remote-transfer';
 import { createSelectionStore } from './selection';
+import { readSlideDeck } from './slides';
 import { socketAuthorized } from './socket-access';
 import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactState } from './state';
+import { createBackgroundWrites } from './storage/background-writes';
+import { createPreparedStateFiles } from './storage/prepared-files';
+import { listStoryboardAssets, readStoryboard } from './storyboard-source';
 import { createVerifyRecordings } from './verify-recordings';
 import { readWhiteboardScene, whiteboardTitle } from './whiteboard';
 import { textFrame } from './ws';
 
 export interface ServerOptions {
-  github?: GitHubConfig;
+  boardOrigin?: string;
   configFile?: string;
   debounceMs?: number;
   documentTiming?: DocumentTiming;
   fetch?: typeof fetch;
+  github?: GitHubConfig;
   host: string;
   mount?: MountSettings;
   publicOrigin?: string;
-  boardOrigin?: string;
   root: string;
   runtimeDir?: string;
   urlHost: string;
@@ -55,13 +55,13 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
-  recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
-  backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
-  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   authorize?: (req: http.IncomingMessage) => boolean;
-  github?: ReturnType<typeof createGitHubAuth>;
+  backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
   boardPort: number;
+  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
+  github?: ReturnType<typeof createGitHubAuth>;
   port: number;
+  recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
   token: string;
   version: string;
 }
@@ -259,7 +259,7 @@ export function createServerContext(options: ServerOptions) {
       streaming: session.streaming(),
       agentActiveAt: session.agentActiveAt(),
       now: Date.now(),
-      comments: documents.comments(id),
+      comments: documents.viewerComments(id),
       ...(approvalAssetsRevision ? { approvalAssetsRevision } : {}),
     };
   };
@@ -286,7 +286,7 @@ export function createServerContext(options: ServerOptions) {
     ...(ref.type !== 'html' ? { agent: names.agent() } : {}),
     ...(ref.type === 'artboard'
       ? {
-          comments: boardComments.comments(ref.id),
+          comments: boardComments.viewerComments(ref.id),
           staleThreads: boardComments.stale(ref.id),
           listening: boardComments.listening(ref.id),
         }

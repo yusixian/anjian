@@ -291,14 +291,14 @@ describe('anjian start', () => {
     const oldPid = serverPid();
     const res = await fetch(`http://127.0.0.1:${port}/api/hub/restart`, { method: 'POST' });
     expect(res.status).toBe(202);
-    const newPid = () => {
+    await waitFor(() => {
       try {
-        return serverPid();
+        const pid = serverPid();
+        return Number.isInteger(pid) && pid > 0 && pid !== oldPid;
       } catch {
-        return oldPid;
+        return false;
       }
-    };
-    await waitFor(() => newPid() !== oldPid, 15000);
+    }, 15000);
     let status = 0;
     for (let tries = 0; tries < 50 && status !== 200; tries++) {
       status = await get(`http://127.0.0.1:${port}/api/status`)
@@ -307,6 +307,7 @@ describe('anjian start', () => {
       if (status !== 200) await new Promise((resolve) => setTimeout(resolve, 100));
     }
     expect(status).toBe(200);
+    expect(() => process.kill(serverPid(), 0)).not.toThrow();
     expect(fs.existsSync(machine().stopped)).toBe(false);
     expect(() => process.kill(oldPid, 0)).toThrow();
   }, 40000);

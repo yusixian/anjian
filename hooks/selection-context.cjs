@@ -2,7 +2,11 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { unreadThreadCount } = require('../skills/artifacts/app/comment-threads.cjs');
+const { sessionOf, UUID } = require('../skills/artifacts/app/comment-subscriptions.cjs');
+const {
+  unreadReceiptCount,
+  unreadThreadCount,
+} = require('../skills/artifacts/app/comment-threads.cjs');
 
 const MAX_CONTEXT = 8000;
 const MAX_HTML = 600;
@@ -119,15 +123,18 @@ function artifactIds(root, type) {
   }
 }
 
-function commentReminders(project, root, key) {
+function commentReminders(project, root, key, session) {
   const waiting = [];
   for (const type of ['document', 'artboard', 'whiteboard', 'slides', 'storyboard']) {
     for (const id of artifactIds(root, type)) {
       const file = readJson(path.join(root, type, id, 'comments.json'));
       if (!file) continue;
-      const cursors = readJson(path.join(root, '.state', type, id, 'comment-cursors.json'));
+      const state = path.join(root, '.state', type, id);
+      const cursors = session ? null : readJson(path.join(state, 'comment-cursors.json'));
       const cursor = cursors && typeof cursors[key] === 'string' ? cursors[key] : null;
-      const count = unreadThreadCount(file, cursor);
+      const count = session
+        ? unreadReceiptCount(file, readJson(path.join(state, 'comment-receipts.json')), session)
+        : unreadThreadCount(file, cursor);
       if (count) waiting.push({ artifact: `${type}/${id}`, count });
     }
   }
@@ -139,7 +146,8 @@ function commentReminders(project, root, key) {
       : types.size === 1
         ? `${[...types][0]}/<id>`
         : '<type>/<id>';
-  const command = `List them with \`node "${LAUNCHER}" comment list --json --project-dir "${project}" --artifact ${target}\`.`;
+  const args = session ? ` --session ${session}` : '';
+  const command = `List them with \`node "${LAUNCHER}" comment list --json --project-dir "${project}" --artifact ${target}${args}\`.`;
   const head = 'Comment threads changed since you last listed: ';
   const named = [];
   for (const [index, { artifact, count }] of waiting.entries()) {
@@ -191,7 +199,13 @@ function main() {
   const prompt = typeof input.prompt === 'string' ? input.prompt : '';
   const root = path.join(project, '.anjian', 'artifacts');
   const state = path.join(root, '.state');
-  const reminders = commentReminders(project, root, cursorKey(process.env));
+  const commentSession = UUID.test(input.session_id || '') ? input.session_id : sessionOf('claude');
+  const reminders = commentReminders(
+    project,
+    root,
+    cursorKey(process.env),
+    commentSession ? `claude:${commentSession}` : undefined,
+  );
   const files = selectionFiles(state).sort((a, b) =>
     String(b.value.updatedAt).localeCompare(String(a.value.updatedAt)),
   );
