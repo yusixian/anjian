@@ -14,6 +14,7 @@ import {
 import type { BoardHumanOp } from '../../shared/board-comments';
 import { type Bounds, type CanvasLayout, type CanvasSpec, isMediaBoard } from '../../shared/types';
 import { SubmitBar } from '../choices/SubmitBar';
+import type { ArtboardPositionEditor } from '../components/ArtboardMoveHandle';
 import { Canvas } from '../components/Canvas';
 import { CanvasErrorBoundary } from '../components/CanvasErrorBoundary';
 import { Labels } from '../components/Labels';
@@ -95,6 +96,7 @@ interface Props {
   loaded: boolean;
   pending: string[];
   readOnly?: boolean;
+  positionEditor?: ArtboardPositionEditor;
   versions: Record<string, number>;
   warnings: string[];
 }
@@ -119,6 +121,7 @@ export function PhoneArtboard({
   comment,
   comments,
   actions,
+  positionEditor,
   readOnly = false,
 }: Props) {
   const {
@@ -383,6 +386,7 @@ export function PhoneArtboard({
               boardSandbox={readOnly ? 'allow-scripts' : source?.sandbox}
               boards={boards}
               connections={canvas.connections}
+              positionEditor={positionEditor}
               contentBase={contentBase}
               culled={culled}
               frameLoaded={readOnly ? frameLoaded : noLoad}

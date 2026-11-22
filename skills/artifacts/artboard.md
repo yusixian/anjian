@@ -14,9 +14,12 @@ acceptance to the user. Unconnected local/manual rounds retain the workflow belo
 An artboard is the space of a business requirement: boards are options,
 groups are questions, pages are areas. You put design explorations on it by
 writing files into the artboard's directory; the canvas updates the moment a
-file changes. Your human partner cannot move boards in the browser. In a
-choice group they pick a board and submit the round there; anything else
-they tell you in the terminal ("make q3-a's header lighter").
+file changes. In an editable artboard, your human partner can select **Edit
+layout** and drag the handles on cards, titles, and sticky notes. The Hub
+keeps these positions for objects with the same IDs on the same page when
+you upload updated source. Keep those IDs when revising content and edit
+board HTML in place for content-only changes. In a choice group they can
+still pick a board and submit the round.
 
 Start the server and get the link as `SKILL.md` describes, with
 `--artifact artboard/<id>`.

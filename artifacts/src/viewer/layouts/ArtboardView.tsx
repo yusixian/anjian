@@ -10,6 +10,7 @@ import type { SelectionMessage } from '../../shared/selection';
 import { type Bounds, isMediaBoard } from '../../shared/types';
 import { SubmitBar } from '../choices/SubmitBar';
 import { CommentsPanel, type CommentsTab } from '../comments/CommentsPanel';
+import type { ArtboardPositionEditor } from '../components/ArtboardMoveHandle';
 import { Canvas } from '../components/Canvas';
 import { CanvasErrorBoundary } from '../components/CanvasErrorBoundary';
 import { CommentLayer } from '../components/CommentLayer';
@@ -105,6 +106,7 @@ export type ArtboardViewProps = Omit<
   live?: boolean;
   actions?: ReactNode;
   readOnly?: boolean;
+  positionEditor?: ArtboardPositionEditor;
   send?: (message: SelectionMessage) => void;
   comments?: BoardCommentsState | null;
   comment?: (op: BoardHumanOp) => Promise<BoardCommentsState>;
@@ -138,6 +140,7 @@ function DesktopArtboard({
   comments,
   comment,
   actions,
+  positionEditor,
   readOnly = false,
 }: ArtboardViewProps) {
   const [tool, setTool] = useState<Tool>('select');
@@ -198,8 +201,8 @@ function DesktopArtboard({
     }
     setParameterBoard((current) => (current === id ? null : id));
   };
-  const selectionEnabled = tool === 'select' && !expanded && !panning;
-  const commentTool = !readOnly && tool === 'comment';
+  const selectionEnabled = !positionEditor && tool === 'select' && !expanded && !panning;
+  const commentTool = !positionEditor && !readOnly && tool === 'comment';
   const inspectorEnabled = !expanded && (tool === 'select' || commentTool || inspectorOpen);
   const inspector = useInspector({
     enabled: inspectorEnabled,
@@ -543,6 +546,7 @@ function DesktopArtboard({
               boardSandbox={readOnly ? 'allow-scripts' : source?.sandbox}
               boards={boards}
               connections={canvas.connections}
+              positionEditor={positionEditor}
               contentBase={contentBase}
               culled={culled}
               frameLoaded={frameLoaded}

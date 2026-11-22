@@ -7,7 +7,7 @@ import type { ArtifactFeed } from '../lib/feed';
 import { useArtifactSocket } from './useArtifactSocket';
 import { useContentRefresh } from './useContentRefresh';
 
-export function useLocalFeed(type: ArtifactType, id: string): ArtifactFeed {
+export function useLocalFeed(type: ArtifactType, id: string): ArtifactFeed & { refresh: () => void } {
   const [revision, setRevision] = useState(0);
   const [expiresAt, setExpiresAt] = useState<unknown>();
   const [boardComments, setBoardComments] = useState<BoardCommentsState | null>(null);
@@ -38,5 +38,5 @@ export function useLocalFeed(type: ArtifactType, id: string): ArtifactFeed {
     },
     [id],
   );
-  return { live, revision, load, send, ...(type === 'artboard' ? { boardComments, comment } : {}) };
+  return { live, revision, load, send, refresh: bump, ...(type === 'artboard' ? { boardComments, comment } : {}) };
 }

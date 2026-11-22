@@ -134,7 +134,7 @@ const MAX_BODY = 64 * 1024;
 const ARTIFACT_KEY = new RegExp(`^(?:${ARTIFACT_TYPE_PATH})/[a-z0-9][a-z0-9-]*$`);
 const DELETED_ARTIFACT_PATH = new RegExp(`^/(${ARTIFACT_TYPE_PATH})/([\\w-]+)/?$`);
 const ARTIFACT_MUTATION_PATH =
-  /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments|document\/[^/]+\/update|(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments\/(?:restore|recovery\/apply)|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?|whiteboard\/[^/]+(?:\/pages)?)$/;
+  /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments|artboard\/[^/]+\/positions|document\/[^/]+\/update|(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments\/(?:restore|recovery\/apply)|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?|whiteboard\/[^/]+(?:\/pages)?)$/;
 
 const ARTIFACT_CREATION = new Map<string, {
   type: ArtifactType;

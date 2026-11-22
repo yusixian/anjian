@@ -83,6 +83,16 @@
     "unanswered": "{{groups}} unanswered",
     "withdraw": "Withdraw"
   },
+  "artboardLayout": {
+    "edit": "Edit layout",
+    "done": "Finish editing layout",
+    "moveObject": "Move {{title}}",
+    "instructions": "Drag a handle or focus it and use the arrow keys.",
+    "saving": "Saving position…",
+    "saved": "Position saved",
+    "conflict": "This object moved in another view. Try again from its current position.",
+    "saveFailed": "Couldn’t save the position. Try again."
+  },
   "chrome": {
     "backToLibrary": "Back to library",
     "library": "Library",

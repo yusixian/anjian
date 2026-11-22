@@ -1,5 +1,6 @@
 import type { ServerContext } from '../context';
 import { agentBoardCommentsRoute, agentCheckRoute, agentCommentsRoute } from './agent';
+import { artboardPositionsRoute } from './artboard-positions';
 import {
   artifactApiRoute,
   avatarRoute,
@@ -41,6 +42,7 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   agentCheckRoute,
   reviewEvidenceRoute,
   boardCommentsRoute,
+  artboardPositionsRoute,
   selectionSendRoute,
   storyboardAssetsRoute,
   storyboardRenderRoute,
