@@ -1,0 +1,59 @@
+name: macOS packages
+on:
+  pull_request:
+    paths:
+      - .github/workflows/macos-package.yml
+      - .github/workflows/release.yml
+      - scripts/release/**
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  package:
+    name: Package and test macOS on ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.5'
+          architecture: ${{ matrix.arch }}
+          cache: pnpm
+          cache-dependency-path: artifacts/pnpm-lock.yaml
+      - run: pnpm --dir artifacts install --frozen-lockfile
+      - run: pnpm --dir artifacts build
+      - name: Verify the extracted package in an isolated project
+        env:
+          EXPECTED_SHA: ${{ inputs.sha || github.sha }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          directory="$RUNNER_TEMP/anjian-packages"
+          archive=$(node scripts/release/package-macos.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH")
+          node scripts/release/smoke-macos-package.mjs "$archive" "$EXPECTED_SHA" "$TARGET_ARCH"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anjian-macos-${{ matrix.arch }}
+          path: ${{ runner.temp }}/anjian-packages/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
