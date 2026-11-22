@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import type http from 'node:http';
 import path from 'node:path';
 
+import type { SerializedEditorState } from 'lexical';
+
+import type { SerializedReferenceNode } from '../shared/artifact-reference-node';
 import { computeLayout } from '../shared/geometry';
+import { isPublicShareToken, PUBLIC_ARTIFACT_REFERENCE, PUBLIC_SHARE_TOKEN, type SerializedPublicArtifactReference } from '../shared/public-artifact-reference';
 import { SLIDE_DECK_FILE } from '../shared/slides';
 import type { CanvasSpec } from '../shared/types';
 import { parseWhiteboardPages, parseWhiteboardScene, WHITEBOARD_DEFAULT_PAGE, WHITEBOARD_PAGES_FILE, whiteboardPageFile } from '../shared/whiteboard';
@@ -20,8 +24,7 @@ interface Options {
   runtimeDir?: string;
   registered: (project: string) => boolean;
 }
-const TOKEN = '[A-Za-z0-9_-]{43}';
-const ROUTE = new RegExp(`^/s/(${TOKEN})(?:/(.*))?$`);
+const ROUTE = new RegExp(`^/s/(${PUBLIC_SHARE_TOKEN})(?:/(.*))?$`);
 const unavailable = '<!doctype html><html lang="zh-CN"><meta name="viewport" content="width=device-width,initial-scale=1"><title>分享无法访问 · 案间</title><body style="font:15px system-ui;max-width:520px;padding:60px 24px;margin:auto;line-height:1.8"><h1>此分享暂时无法访问</h1><p>链接可能已失效，或分享者已关闭访问。</p><p>请联系分享者获取有效链接。</p></body></html>';
 const baseHeaders = {
   'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
@@ -32,6 +35,23 @@ const fileBase = (options: Options, record: ShareRecord) => `${options.previewOr
 const relativeFile = (value: string) => value.length > 0 && !/[\\\x00-\x1f\x7f]/.test(value) &&
   value.split('/').every((part) => part.length > 0 && !part.startsWith('.'));
 
+function publicDocumentState(state: SerializedEditorState, references: ShareRecord['references']) {
+  // The document codec accepts typed references only as direct children of the root.
+  state.root.children = state.root.children.map((node, index) => {
+    if (node.type !== 'artifact-reference') return node;
+    const { type, label } = (node as SerializedReferenceNode).reference;
+    const token = references?.[String(index)];
+    return {
+      type: PUBLIC_ARTIFACT_REFERENCE,
+      version: 1,
+      artifactType: type,
+      ...(label !== undefined ? { label } : {}),
+      ...(token && isPublicShareToken(token) ? { token } : {}),
+    } satisfies SerializedPublicArtifactReference;
+  });
+  return state;
+}
+
 /** Projection never returns disk paths, credentials, comments or editor history. */
 function payload(options: Options, record: ShareRecord, requestedPage: string | null) {
   const result = { type: record.type, title: record.title, publishedAt: record.publishedAt,
@@ -39,7 +59,7 @@ function payload(options: Options, record: ShareRecord, requestedPage: string | 
   if (record.type === 'document') {
     const file = options.store.file(record, 'doc.xml');
     if (!file) throw new Error('Missing document');
-    return { ...result, state: parseDocument(fs.readFileSync(file, 'utf8')) };
+    return { ...result, state: publicDocumentState(parseDocument(fs.readFileSync(file, 'utf8')), record.references) };
   }
   if (record.type === 'slides') {
     const file = options.store.file(record, SLIDE_DECK_FILE);

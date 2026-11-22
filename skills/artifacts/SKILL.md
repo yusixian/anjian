@@ -51,7 +51,7 @@ Do not install `ryugi-artifacts` or an unverified `anjian` npm package.
 | -------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------ |
 | A diagram or sketch the human and Agent can both edit and discuss by element     | `whiteboard`               | `whiteboard.md`                                                          |
 | Architecture, engineering design, a review, proposal or flow walkthrough         | `document`                 | `document.md`                                                            |
-| A live talk, briefing, or walkthrough presented from an ordered deck              | `slides`                   | `slides.md`                                                              |
+| A live talk, briefing, or walkthrough presented from an ordered deck             | `slides`                   | `slides.md`                                                              |
 | A product demo video with layered clips, sound, and a playable export            | `storyboard`               | `storyboard.md`                                                          |
 | One surface or one dimension — a component, type scale, background, motion       | `html`                     | `html.md`, `ui.md` for components                                        |
 | A business space — several screens, dimensions, states or questions at once      | `artboard`                 | `artboard.md`; `artboard-prototype.md` for playable boards or parameters |
@@ -111,6 +111,11 @@ In a source installation, paths below are relative to this skill's directory:
 resolve `app/` to its absolute path. When reading through `skills get`, the CLI
 substitutes its executable into these examples; no source checkout is required.
 A background start returns one JSON startup result; foreground mode stays running.
+
+For phone screen mockups on an artboard, add `--mockup` to local `start` and
+read the `mockupGuide` field before authoring. Read [phone-mockups.md](phone-mockups.md)
+via `skills get artifacts --reference phone-mockups.md` for remote work or if
+your harness truncates the JSON.
 
 ```bash
 node app/anjian.cjs start --json --project-dir /path/to/project --artifact html/arrow-tuner

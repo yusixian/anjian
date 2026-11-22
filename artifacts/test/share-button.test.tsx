@@ -42,6 +42,20 @@ beforeEach(() => {
     }
     if (url === '/api/hub/share' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      if (body.action === 'preview') {
+        return new Response(JSON.stringify({
+          title: 'Review document',
+          share: current,
+          referencePreview: {
+            revision: 'document-revision',
+            choices: [
+              { key: '1', type: 'html', label: 'Included demo', revision: 'demo-revision' },
+              { key: '2', type: 'artboard', label: 'Kept private', revision: 'board-revision' },
+              { key: '3', type: 'storyboard', label: 'Unavailable draft', reason: 'unsupported' },
+            ],
+          },
+        }));
+      }
       posts.push(body);
       if (quotaNext) { quotaNext = false; return new Response(JSON.stringify({ code: 'storage_quota_exceeded' }), { status: 413 }); }
       if (failNext) { failNext = false; failRead = true; throw new Error('lost connection'); }
@@ -59,8 +73,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
-  await act(async () => root.render(<ShareButton type="artboard" id="example" />));
+async function render(type: 'artboard' | 'document' = 'artboard') {
+  await act(async () => root.render(<ShareButton type={type} id="example" />));
 }
 async function click(button: HTMLButtonElement) {
   await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -76,7 +90,7 @@ test('publishes only after explicit action; updates without resetting expiry; ca
   await render();
   await click(document.querySelector<HTMLButtonElement>('button[aria-label="Share"]')!);
   expect(posts).toHaveLength(0);
-  const expiry = document.querySelector<HTMLSelectElement>('#share-expiry')!;
+  const expiry = document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;
   await act(async () => { expiry.value = '30'; expiry.dispatchEvent(new Event('change', { bubbles: true })); });
   await click(button('Create public link'));
   expect(posts[0]).toMatchObject({ type: 'artboard', id: 'example', action: 'publish', expiresInDays: 30 });
@@ -113,4 +127,26 @@ test('quota rejection explains temporary snapshot space and preserves the existi
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('complete new snapshot');
   expect(document.body.textContent).toContain('/s/published-share');
   expect(button('Turn off sharing').disabled).toBe(false);
+});
+
+test('publishes the document and only the reference checked by the publisher', async () => {
+  await render('document');
+  await click(document.querySelector<HTMLButtonElement>('button[aria-label="Share"]')!);
+  expect(posts).toHaveLength(0);
+  const choices = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  expect(choices).toHaveLength(3);
+  expect(choices.every(({ checked }) => !checked)).toBe(true);
+  expect(choices[2]?.disabled).toBe(true);
+  await act(async () => choices[0]!.click());
+  expect(choices[0]?.checked).toBe(true);
+  await click(button('Create public link'));
+  expect(posts).toHaveLength(1);
+  expect(posts[0]).toMatchObject({
+    action: 'publish',
+    type: 'document',
+    referenceSelection: {
+      revision: 'document-revision',
+      choices: [{ key: '1', revision: 'demo-revision' }],
+    },
+  });
 });

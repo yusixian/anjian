@@ -1,0 +1,63 @@
+---
+title: 新功能上手指南
+description: 从白板、幻灯片和分镜开始，完成一轮文档评审与 Agent 反馈。
+---
+
+## 先看版本
+
+以下流程需要运行包含 [Ryugi 同步批次](https://github.com/yusixian/anjian/pull/81)及下方补充功能的案间构建。[正式更新记录](/docs/updates)随发行版更新。自托管实例和本机 CLI 分别升级，源码构建步骤见[本机安装与启动](/docs/local)。
+
+## 白板
+
+1. 在作品库选择项目，点「新建白板」，画出流程框和箭头。
+2. 选中一个或多个元素，打开「评论」添加批注。重开批注时可以定位回选中的元素。
+3. 新增独立页面可以另放一组流程。用画框选择器打开已保存的画框并复制链接。需要匿名访问时，先发布只读快照，再从公开白板复制画框链接。
+
+## 幻灯片
+
+1. 在作品库点「新建幻灯片」，添加并排列页面，写好演讲者备注。批注附在当前页上。
+2. 点「放映」打开观众视图，再打开「演讲者窗口」查看备注和下一页。若浏览器阻止弹窗，允许后再试。
+3. 用「分享」发布只读卡组。公开快照包含幻灯片标题和正文，演讲者备注与批注留在项目内。
+
+## 分镜
+
+1. 在作品库点「新建分镜」→「导入素材」。把视频或图片加入画面轨道，把配音加入音频轨道。
+2. 点选片段，在「属性」里调整时间线起点、素材入点和时长。保存新片段后，可以给它添加批注。
+3. 点「生成成片」或「保存并生成成片」，在「成片预览」确认画面和声音，再点「下载 MP4」。
+
+分镜由运行案间服务的机器渲染。本机源码和 macOS 安装包需要该机器提供 `ffmpeg` 和 `ffprobe`。案间的自托管 Docker 镜像已内置这两个工具。可将下载的 MP4 发给别人。
+
+## 把文档变成评审入口
+
+1. 请 Agent 在评审文档加入作品引用。给它需要链接的作品地址，并指定画板的哪张卡片或哪一组方案。打开引用卡片可跳到对应作品。
+2. 请 Agent 加入一个选择题或开放题。读者可以先保存答案草稿，再点发送给已连接的 Agent。回复会出现在题目下，收到回复前可以撤回答案。
+3. 要批准实施时，请 Agent 加入批准题，再用明确选项提交决定。批准记录对应当时的文档和附件修订。修改后重新查看并批准新版本。
+4. 验收时给 Agent 测试输出、截图或画板验收组，让它生成验收报告并列出未检查项。Agent 可以用 `changes` 查看保留的人工改动，用 `review` 查评论和验收证据，用 `approval` 核对当前修订。
+
+可以把这句直接发给 Agent：
+
+> 在案间新建一份评审文档，引用我的设计画板和演示分镜。在文档里问我选哪个方案，并加一题确认是否批准这版设计实施。把浏览器链接发给我。
+
+`anjian` 指本机构建的 CLI 或项目已有的包装器。命令示例和项目指引见[批注与 Agent](/docs/agent)和[文档](/docs/documents)。
+
+## 把反馈交给正在工作的 Agent
+
+- **白板、幻灯片和分镜。** 先在作品的「Agent 反馈」连接目标 Lody 会话。给元素、页面或片段添加批注，选中要处理的批注后点「提交给 Agent」。结果回来后打开原批注和对应作品，核对再点「验收通过」。
+- **本地 HTML 预览。** 在想接收反馈的 Codex 或 Claude Code 会话里运行下方命令。打开它返回的链接，在网页选中文字，点「发送选区」，然后选择接收会话。发送的是点击当时的选区和预览版本。
+- **另一工作区。** 从要接收反馈的 Codex 或 Claude Code 会话，用项目已有的启动器打开另一工作区里的具体作品。通知里的命令指向实际作品目录。不同会话的已读状态独立。用通知里的 `comment list --session <会话>` 读取该会话的反馈，或加 `--all` 查看历史并保留未读状态。
+- **Pi 或 Antigravity。** Pi 安装本地案间包后，用 `/anjian-open document/plan` 打开并订阅。Antigravity CLI 用案间的 `antigravity-session.cjs` 启动专用本地会话。安装和其他读取方式见[源码安装说明](https://github.com/yusixian/anjian/blob/integration/ryugi-local-workflows/docs/install.md)。
+
+```bash title="在当前 Codex 或 Claude Code 会话执行"
+anjian start --project-dir "$project" --artifact html/demo --json
+```
+
+把 `$project` 设为实际作品目录，把 `demo` 换成 HTML 作品的目录名。自托管项目的连接方法见[设备与 CLI](/docs/remote-cli)。
+
+## macOS 安装包
+
+Apple 芯片和 Intel 安装包已经通过候选测试。正式下载以[案间 Releases](https://github.com/yusixian/anjian/releases) 为准。正式发布提供制品后，Apple 芯片选择 `darwin-arm64`，Intel 选择 `darwin-x64`。下载对应的 `.tar.gz.sha256` 文件，在解压前运行 `shasum -a 256 -c <校验文件>`。也可以从源码构建案间。
+
+## 手机样机和引用分享
+
+- **手机样机 [#84](https://github.com/yusixian/anjian/pull/84)。** 让 Agent 用 `anjian start --mockup --json --project-dir "$project" --artifact artboard/phone-review` 启动。Agent 读取返回的 `mockupGuide`，按同一手机尺寸和安全区制作多套方案，再把画板链接给你比较和批注。也可以运行 `anjian skills get artifacts --reference phone-mockups.md` 单独读取指南。
+- **连同引用快照分享 [#85](https://github.com/yusixian/anjian/pull/85)。** 打开评审文档的「分享」，在「引用的作品」勾选允许访客打开的同项目作品，再点「创建公开链接」或「更新分享」。子文档里的下一层引用显示为标签。撤销主文档链接会同时关闭这次发布的引用快照；作品以前单独发布的链接各自管理。详见[公开分享](/docs/sharing)。
