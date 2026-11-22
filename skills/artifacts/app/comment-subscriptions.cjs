@@ -11,6 +11,7 @@ const HOSTS = {
   codex: { env: 'CODEX_THREAD_ID', dir: 'codex-comment-watch' },
   claude: { env: 'CLAUDE_CODE_SESSION_ID', dir: 'claude-comment-watch' },
   pi: { dir: 'pi-comment-watch' },
+  agy: { dir: 'agy-comment-watch' },
 };
 
 function readJson(file) {

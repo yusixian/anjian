@@ -40,7 +40,7 @@ node /绝对路径/anjian/artifacts/dist/cli.cjs skills get artifacts --referenc
 
 `get` 默认完整输出 Markdown（管道中也一样），加 `--json` 输出包含 `content`、`command` 和 `reference` 的结构。`list` 列出允许的参考名称，包括可运行示例；只能读取这些内嵌资源，不能传任意文件路径。输出标明当前可执行入口，相对文档链接用 `--reference` 继续读取。源码启动器和打包后的 `bin/anjian.cjs` 支持相同命令；读取 Skill 和帮助不启动服务、打开浏览器、注册批注订阅或写入授权。
 
-也可以在宿主中加载 `skills/artifacts/`，或显式读取其 `SKILL.md`。CLI 可读取 Skill 不代表宿主自动加载或自动执行；仅克隆仓库同样不会让所有新会话加载指引。
+也可以在宿主中加载 `skills/artifacts/`，或显式读取其 `SKILL.md`。CLI 可读取 Skill 不代表宿主自动加载或自动执行；仅克隆仓库同样不会让所有新会话加载指引。Antigravity CLI 可使用[案间反馈会话](antigravity-feedback.md)接收本地作品批注。
 
 在实际作品项目的 `AGENTS.md` 加入以下入口说明，替换成自己的绝对路径。若已有固定项目与客户端目录的包装器，直接记录包装器路径即可。
 
