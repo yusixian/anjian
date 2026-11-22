@@ -8,8 +8,9 @@ import {
   thumbnailRoute,
 } from './artifacts';
 import { boardCommentsRoute } from './comments';
+import { commentRecoveryRoute } from './comment-recovery';
 import { contentRoute, robotsRoute, statusRoute } from './content';
-import { documentCommentRecoveryRoute, documentCommentRestoreRoute, documentStateRoute, documentWriteRoute } from './documents';
+import { documentStateRoute, documentWriteRoute } from './documents';
 import { reviewEvidenceRoute } from './review-evidence';
 import { selectionSendRoute } from './selection-send';
 import { slideDeckRoute } from './slides';
@@ -53,8 +54,7 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   slidesAgentCommentRoute,
   documentStateRoute,
   documentWriteRoute,
-  documentCommentRestoreRoute,
-  documentCommentRecoveryRoute,
+  commentRecoveryRoute,
   whiteboardSceneRoute,
   whiteboardPagesRoute,
   whiteboardCommentRoute,

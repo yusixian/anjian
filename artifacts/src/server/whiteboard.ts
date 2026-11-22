@@ -450,12 +450,32 @@ function createWhiteboardComments(dir: string, stateDir: string) {
       revision = revisionOf(data);
     },
     true,
+    () => readBoundedFile(file)?.toString('utf8') ?? null,
+    {
+      root: stateDir,
+      file: path.join(stateDir, 'whiteboard', path.basename(dir), 'comment-recovery.json'),
+    },
   );
   const cursors = createCommentCursors(stateDir, 'whiteboard');
   return {
     current: store.current,
-    sync: () => store.sync(),
+    sync(admit?: CommentAdmission) {
+      if (admit) revision = editableRevision();
+      return store.sync(admit);
+    },
     warnings: store.warnings,
+    recovery() {
+      store.sync();
+      return store.recovery();
+    },
+    restore(text: string, admit?: CommentAdmission) {
+      revision = editableRevision();
+      return store.restore(text, admit);
+    },
+    restoreRecovery(expected: string, admit?: CommentAdmission) {
+      revision = editableRevision();
+      return store.restoreRecovery(expected, admit);
+    },
     apply(op: WhiteboardHumanOp, admit?: CommentAdmission) {
       revision = editableRevision();
       return store.apply(op, admit);

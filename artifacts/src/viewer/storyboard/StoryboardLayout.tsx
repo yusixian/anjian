@@ -13,6 +13,7 @@ import {
   type StoryboardSnapshot,
   type StoryboardTrack,
 } from '../../shared/storyboard';
+import { CommentRecovery } from '../comments/CommentRecovery';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
 import { useStoryboardCopy } from './copy';
@@ -47,6 +48,7 @@ function Workbench({
   const [selection, setSelection] = useState<Selection | null>(
     first ? { trackId: first.id, clipId: first.clips[0]?.id } : null,
   );
+  const [commentRevision, setCommentRevision] = useState(0);
   const [comments, setComments] = useState(false);
   const [imported, setImported] = useState<StoryboardAsset[]>([]);
   const [source, setSource] = useState<string | undefined>(
@@ -227,6 +229,11 @@ function Workbench({
         {!readOnly && (
           <div className="sb-toolbar-actions">
             <NativeFeedbackButton />
+            <CommentRecovery
+              id={id}
+              type="storyboard"
+              onRestore={() => setCommentRevision((value) => value + 1)}
+            />
             <span className="sb-save-state" role="status">
               {!draft.dirty && <Check size={14} />}{' '}
               {draft.busy ? c.saving : draft.dirty ? c.dirty : c.saved}
@@ -283,6 +290,7 @@ function Workbench({
             base={base}
             changeTrack={(name) => selectedTrack && updateTrack({ ...selectedTrack, name })}
             clip={selectedClip}
+            commentRevision={commentRevision}
             comments={comments}
             moveTrack={moveTrack}
             setComments={setComments}

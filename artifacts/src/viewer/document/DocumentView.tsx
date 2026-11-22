@@ -7,6 +7,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 
 import { approvalViewKey } from '../../shared/approval-view';
 import { type CommentsFile, emptyComments, type HumanOp } from '../../shared/comments';
+import { CommentRecovery } from '../comments/CommentRecovery';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { useFeedbackEnabled } from '../feedback/FeedbackProvider';
 import { PHONE_QUERY, useMedia } from '../hooks/useMedia';
@@ -16,7 +17,6 @@ import { agentActivity } from './agentActivity';
 import type { AgentPlaybackState } from './AgentPlayback';
 import { type ArtifactReferenceResolver, LiveReferenceContext } from './ArtifactReferenceCard';
 import type { ThreadActions } from './CommentCard';
-import { CommentRecovery } from './CommentRecovery';
 import { DesktopDocument } from './DesktopDocument';
 import { DocumentEditor, extraNodes } from './DocumentEditor';
 import { useDocumentHistory } from './DocumentHistory';
@@ -333,11 +333,12 @@ export function DocumentView({
         openComments={openComments}
         actions={
           <>
-            {live && transport.restoreComments && !historyVisible ? (
+            {live && !historyVisible ? (
               <CommentRecovery
                 compact={phone}
+                id={id}
                 pending={recoveryPending}
-                transport={transport}
+                type="document"
                 onRestore={setComments}
               />
             ) : null}

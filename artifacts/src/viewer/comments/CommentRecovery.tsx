@@ -5,7 +5,12 @@ import { useId, useRef, useState } from 'react';
 
 import type { CommentsFile } from '../../shared/comments';
 import { useTranslation } from '../i18n';
-import type { CommentRecoveryPreview, DocumentTransport } from './transport';
+
+type RecoveryArtifact = 'document' | 'artboard' | 'slides' | 'storyboard' | 'whiteboard';
+interface CommentRecoveryPreview {
+  backup: CommentsFile<unknown>;
+  revision: string;
+}
 
 const styles = stylex.create({
   button: {
@@ -58,16 +63,18 @@ const styles = stylex.create({
   },
 });
 
-export function CommentRecovery({
+export function CommentRecovery<A>({
+  id,
+  type,
   compact,
   pending,
-  transport,
   onRestore,
 }: {
-  compact: boolean;
-  pending: boolean;
-  transport: DocumentTransport;
-  onRestore: (comments: CommentsFile) => void;
+  id: string;
+  type: RecoveryArtifact;
+  compact?: boolean;
+  pending?: boolean;
+  onRestore?: (comments: CommentsFile<A>) => void;
 }) {
   const { t } = useTranslation();
   const heading = useId();
@@ -79,25 +86,39 @@ export function CommentRecovery({
     'loading' | 'ready' | 'saving' | 'done' | 'failed' | 'importFailed'
   >('loading');
 
+  async function post<Result>(action: string, body: BodyInit) {
+    const response = await fetch(`/api/${type}/${encodeURIComponent(id)}/comments/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    if (!response.ok) throw new Error(`Comment recovery failed (${response.status})`);
+    return (await response.json()) as Result;
+  }
+
   async function open() {
     dialog.current?.showModal();
     const request = ++reviewRequest.current;
     setStatus('loading');
     setPreview(null);
     try {
-      const current = await transport.commentRecovery?.();
+      const { recovery } = await post<{ recovery: CommentRecoveryPreview | null }>(
+        'recovery/review',
+        '{}',
+      );
       if (request !== reviewRequest.current) return;
-      setPreview(current ?? null);
+      setPreview(recovery);
       setStatus('ready');
     } catch {
       if (request === reviewRequest.current) setStatus('failed');
     }
   }
 
-  async function restore(operation: Promise<CommentsFile>, failure: 'failed' | 'importFailed') {
+  async function restore(action: string, body: BodyInit, failure: 'failed' | 'importFailed') {
     setStatus('saving');
     try {
-      onRestore(await operation);
+      const { comments } = await post<{ comments: CommentsFile<A> }>(action, body);
+      onRestore?.(comments);
       setPreview(null);
       setStatus('done');
     } catch {
@@ -113,7 +134,7 @@ export function CommentRecovery({
         title={t(pending ? 'comments.pendingRecovery' : 'comments.restoreBackup')}
         type="button"
         onClick={() => void open()}
-        {...stylex.props(styles.button, compact && styles.compact)}
+        {...stylex.props(styles.button, compact === true && styles.compact)}
       >
         <FileUp aria-hidden="true" size={17} />
         {pending && <span aria-hidden="true" {...stylex.props(styles.dot)} />}
@@ -127,6 +148,7 @@ export function CommentRecovery({
         {...stylex.props(styles.dialog)}
       >
         <h2 id={heading}>{t('comments.restoreBackup')}</h2>
+        {type === 'artboard' && <p>{t('comments.reviewRecordsRecovery')}</p>}
         <div role="status">
           {status === 'loading' && t('common.loading')}
           {status === 'ready' && !preview && t('comments.noPendingRecovery')}
@@ -155,12 +177,16 @@ export function CommentRecovery({
           </>
         )}
         <div {...stylex.props(styles.actions)}>
-          {status === 'ready' && preview && transport.applyCommentRecovery ? (
+          {status === 'ready' && preview ? (
             <button
               type="button"
               {...stylex.props(styles.action)}
               onClick={() =>
-                void restore(transport.applyCommentRecovery!(preview.revision), 'failed')
+                void restore(
+                  'recovery/apply',
+                  JSON.stringify({ revision: preview.revision }),
+                  'failed',
+                )
               }
             >
               {t('comments.applyPendingRecovery')}
@@ -191,8 +217,7 @@ export function CommentRecovery({
           onChange={(event) => {
             const backup = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
-            if (backup && transport.restoreComments)
-              void restore(transport.restoreComments(backup), 'importFailed');
+            if (backup) void restore('restore', backup, 'importFailed');
           }}
         />
       </dialog>

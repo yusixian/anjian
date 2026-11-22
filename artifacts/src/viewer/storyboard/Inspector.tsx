@@ -53,6 +53,7 @@ function TimeField({
 export function Inspector({
   assetName,
   comments,
+  commentRevision,
   setComments,
   tracks,
   track,
@@ -68,6 +69,7 @@ export function Inspector({
   transfer,
 }: {
   comments: boolean;
+  commentRevision: number;
   setComments: (open: boolean) => void;
   tracks: StoryboardTrack[];
   assetName: (path: string) => string;
@@ -108,6 +110,7 @@ export function Inspector({
           <ClipComments
             clipId={clip.id}
             initial={base}
+            revision={commentRevision}
             saved={base.storyboard.tracks.some((t) => t.clips.some((item) => item.id === clip.id))}
             url={url}
           />

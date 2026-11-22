@@ -125,9 +125,10 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "comments": {
+    "reviewRecordsRecovery": "此处恢复普通批注。验收与选项记录按画板当前证据管理。",
     "pendingRecovery": "有待恢复的人工批注",
     "recoveryAnonymousAuthor": "未署名读者",
-    "restoreBackup": "恢复文档批注",
+    "restoreBackup": "恢复批注",
     "importBackupFile": "导入备份文件",
     "noPendingRecovery": "工作区没有待恢复的批注。",
     "reviewPendingRecovery": "工作区文件里有以下批注。核对作者和内容后，可以将它们合并到当前文档。",

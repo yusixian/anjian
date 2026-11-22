@@ -196,8 +196,9 @@ function readCommentBackup<F extends CommentsFile<unknown>>(
   return backup;
 }
 
-interface CommentRecovery {
+interface CommentRecovery<F> {
   file: string;
+  filter?: (backup: F, visible: F) => F;
   root: string;
 }
 
@@ -232,7 +233,7 @@ export function createCommentStore(
   newId = () => nanoid(10),
   admit?: CommentAdmission,
   deferNormalization = false,
-  recoveryFile?: CommentRecovery,
+  recoveryFile?: CommentRecovery<CommentsFile>,
 ): CommentStore {
   return createStore(
     file,
@@ -258,7 +259,7 @@ export function createStore<F extends CommentsFile<unknown>, H, G>(
   persist?: (next: F, admit?: CommentAdmission) => void,
   deferNormalization = false,
   read?: () => string | null,
-  recoveryFile?: CommentRecovery,
+  recoveryFile?: CommentRecovery<F>,
 ): Store<F, H, G> {
   let current = rules.empty();
   let lastSeen: string | null = null;
@@ -351,7 +352,8 @@ export function createStore<F extends CommentsFile<unknown>, H, G>(
       const base = loaded ? current : rules.saved(incoming);
       merged = rules.merge(base, incoming, 'agent', now(), newId, names.agent());
       if (recoveryFile && loaded && merged.warnings.length) {
-        const deferred = rejectedHumanComments(rules.saved(incoming), merged.file);
+        const rejectedHuman = rejectedHumanComments(rules.saved(incoming), merged.file);
+        const deferred = recoveryFile.filter?.(rejectedHuman, merged.file) ?? rejectedHuman;
         if (deferred.threads.length) {
           const validated = readCommentBackup(JSON.stringify(deferred), rules.saved);
           rejected = rejected
@@ -395,7 +397,7 @@ export function createStore<F extends CommentsFile<unknown>, H, G>(
     restore: (text, admit) => {
       const backup = readCommentBackup(text, rules.saved);
       sync(admit);
-      return mergeBackup(backup, admit);
+      return mergeBackup(recoveryFile?.filter?.(backup, current) ?? backup, admit);
     },
     hasRecovery: () => Boolean(recoveryFile && (rejected || fs.existsSync(recoveryFile.file))),
     recovery: pendingRecovery,
@@ -404,7 +406,8 @@ export function createStore<F extends CommentsFile<unknown>, H, G>(
       sync();
       const offered = pendingRecovery();
       if (!offered || offered.revision !== revision) return false;
-      write({ ...current, ...mergeRestoredComments(current, offered.backup) }, admit, false);
+      const backup = recoveryFile.filter?.(offered.backup, current) ?? offered.backup;
+      write({ ...current, ...mergeRestoredComments(current, backup) }, admit, false);
       rejected = undefined;
       fs.rmSync(recoveryFile.file, { force: true });
       return true;

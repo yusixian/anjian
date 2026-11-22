@@ -295,6 +295,27 @@ export function createBoardCommentRegistry(options: Options) {
           }
           writeJsonFiles(options.root, files, admission);
         },
+        true,
+        undefined,
+        {
+          root: options.stateDir,
+          file: path.join(options.stateDir, 'artboard', id, 'comment-recovery.json'),
+          filter: (backup, visible) => {
+            const protectedThread = ({ anchor }: BoardThread) =>
+              anchor.verdict !== undefined ||
+              anchor.round !== undefined ||
+              isChoiceRecord({ anchor });
+            const protectedIds = new Set(
+              visible.threads.filter(protectedThread).map(({ id }) => id),
+            );
+            return {
+              ...backup,
+              threads: backup.threads.filter(
+                (thread) => !protectedThread(thread) && !protectedIds.has(thread.id),
+              ),
+            };
+          },
+        },
       );
       stores.set(id, found);
     }
@@ -372,6 +393,20 @@ export function createBoardCommentRegistry(options: Options) {
 
   return {
     comments: (id: string) => store(id).current(),
+    commentRecovery(id: string) {
+      const comments = store(id);
+      comments.sync();
+      return comments.recovery();
+    },
+    restoreComments(id: string, text: string, admit?: CommentAdmission) {
+      store(id, admit).restore(text, admit);
+      push(id);
+    },
+    restoreCommentRecovery(id: string, revision: string, admit?: CommentAdmission) {
+      const restored = store(id, admit).restoreRecovery(revision, admit);
+      if (restored) push(id);
+      return restored;
+    },
     listening,
     refreshListening: () => {
       for (const id of stores.keys()) if (listening(id) !== lastListening.get(id)) push(id);

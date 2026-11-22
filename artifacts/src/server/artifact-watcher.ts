@@ -6,8 +6,17 @@ import {
   resolveArtifactDir,
 } from './artifacts';
 import type { ServerContext } from './context';
+import { slidesCommentsOf } from './slides-comments';
+import { storyboardCommentsOf } from './storyboard-comments';
 import { watchTree } from './watch';
+import { whiteboardCommentsOf } from './whiteboard';
 import { textFrame } from './ws';
+
+const watchedComments = {
+  slides: slidesCommentsOf,
+  storyboard: storyboardCommentsOf,
+  whiteboard: whiteboardCommentsOf,
+};
 
 export function watchArtifacts(ctx: ServerContext) {
   const { root, signatures, clients, documents, boardComments, runtimeWarnings } = ctx;
@@ -48,8 +57,18 @@ export function watchArtifacts(ctx: ServerContext) {
             documents.fileChanged(ref.id);
           if (ref.type === 'document' && changed.includes('comments.json'))
             documents.commentsChanged(ref.id);
+          if (
+            changed.includes('comments.json') &&
+            (ref.type === 'slides' || ref.type === 'storyboard' || ref.type === 'whiteboard')
+          ) {
+            const commentsOf = watchedComments[ref.type];
+            ctx.backgroundWrites.enqueue(`comments/${key}`, (admit) => {
+              const current = resolveArtifactDir(root, ref.type, ref.id);
+              if (current === dir) commentsOf(ctx, dir).sync(admit);
+            });
+          }
           if (ref.type === 'artboard')
-            ctx.backgroundWrites.enqueue(`artboard/${ref.id}`, admit => {
+            ctx.backgroundWrites.enqueue(`artboard/${ref.id}`, (admit) => {
               boardComments.sync(ref.id, admit);
               boardComments.boardsChanged(ref.id, admit);
             });

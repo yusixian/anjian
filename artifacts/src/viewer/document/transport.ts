@@ -20,19 +20,11 @@ export interface DocumentState {
   streaming?: boolean;
 }
 
-export interface CommentRecoveryPreview {
-  backup: CommentsFile;
-  revision: string;
-}
-
 export interface DocumentTransport {
-  applyCommentRecovery?: (revision: string) => Promise<CommentsFile>;
   artifact: string;
   channel: Channel;
   comment: (op: HumanOp) => Promise<CommentsFile>;
-  commentRecovery?: () => Promise<CommentRecoveryPreview | null>;
   meta: () => Promise<DocumentMeta | null>;
-  restoreComments?: (backup: File) => Promise<CommentsFile>;
   send: (message: unknown) => void;
   state: () => Promise<DocumentState>;
   update: (bytes: Uint8Array) => Promise<void>;
@@ -86,25 +78,6 @@ export function createLocalTransport({
           throw new DocumentQuotaError('Storage quota exceeded');
         throw new Error(`update failed (${res.status})`);
       }
-    },
-    async commentRecovery() {
-      const res = await post('comments/recovery/review', '{}', 'application/json');
-      if (!res.ok) throw new Error(`recovery failed (${res.status})`);
-      return ((await res.json()) as { recovery: CommentRecoveryPreview | null }).recovery;
-    },
-    async applyCommentRecovery(revision) {
-      const res = await post(
-        'comments/recovery/apply',
-        JSON.stringify({ revision }),
-        'application/json',
-      );
-      if (!res.ok) throw new Error(`restore failed (${res.status})`);
-      return ((await res.json()) as { comments: CommentsFile }).comments;
-    },
-    async restoreComments(backup) {
-      const res = await post('comments/restore', backup, 'application/json');
-      if (!res.ok) throw new Error(`restore failed (${res.status})`);
-      return ((await res.json()) as { comments: CommentsFile }).comments;
     },
     async comment(op) {
       const res = await post('comments', JSON.stringify(op), 'application/json');
