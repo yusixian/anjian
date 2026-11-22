@@ -205,6 +205,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const githubConfig = options.github ?? readGitHubConfig();
   const localBinding = isLoopbackHost(options.host);
   const loopback = localBinding && !options.publicOrigin;
+  const localQuestionHome = loopback ? path.resolve(options.paths.home) : undefined;
   const projectsFile = options.paths.projects;
   const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const settings = createStorageSettings(options.paths.home);
@@ -329,6 +330,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               token: options.token,
               version: options.version,
               github,
+              localQuestionHome,
               localQuestionProject: loopback ? projectId(project) : undefined,
               recordingWrite: (work) =>
                 writeQuota(project, (prepare) =>
@@ -422,6 +424,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         publicOrigin: options.publicOrigin,
         boardOrigin: options.boardOrigin,
         root: artifactsRootOf(project),
+        localQuestionHome,
         ...(loopback ? { localQuestionProject: projectId(project) } : {}),
       });
     } catch {}

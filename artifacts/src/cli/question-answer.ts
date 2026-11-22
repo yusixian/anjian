@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { assertArtifactNotTrashed } from '../server/artifact-trash';
 import { feedbackStore } from '../server/feedback/store';
@@ -10,6 +12,22 @@ import { CliError, projectPaths } from './paths';
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const PREFIX = 'document/';
+
+function localMachine(paths: ReturnType<typeof projectPaths>, projectId: string) {
+  try {
+    const info = JSON.parse(fs.readFileSync(paths.info, 'utf8'));
+    if (
+      info.root === paths.root &&
+      info.localQuestionProject === projectId &&
+      typeof info.localQuestionHome === 'string' &&
+      path.isAbsolute(info.localQuestionHome)
+    )
+      return machinePaths({ ANJIAN_SERVER_HOME: info.localQuestionHome });
+  } catch {
+    // The Hub may have stopped since the address was delivered.
+  }
+  return machinePaths();
+}
 
 export const questionAnswerCommand: CommandSpec = {
   name: 'question-answer',
@@ -32,11 +50,12 @@ export const questionAnswerCommand: CommandSpec = {
       throw new CliError('--submission must be a delivery ID');
     if (typeof recipient !== 'string' || !/^[\w-]{43}$/.test(recipient))
       throw new CliError('--recipient must be the ID from the delivery message');
-    const { project } = projectPaths(projectDir);
-    const machine = machinePaths();
+    const paths = projectPaths(projectDir);
+    const { project } = paths;
+    const projectId = createHash('sha256').update(project).digest('hex').slice(0, 32);
+    const machine = localMachine(paths, projectId);
     if (!readProjects(machine.projects).some(({ dir }) => project === dir))
       throw new CliError('This worktree is not registered with the local Anjian Hub.');
-    const projectId = createHash('sha256').update(project).digest('hex').slice(0, 32);
     const data = feedbackStore(machine.home, projectId).load();
     const row = data.localQuestions?.find(
       ({ artifact: source, id, recipient: destination, state }) =>

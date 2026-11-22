@@ -384,6 +384,19 @@ test('reads one local answer by delivery reference and keeps the feedback file u
     );
   const before = fs.readFileSync(path.join(home, 'feedback', projectId + '.json'), 'utf8');
   expect(read(project)).toBe(0);
+  const artifactRoot = path.join(project, '.anjian/artifacts');
+  fs.mkdirSync(path.join(artifactRoot, '.state'));
+  fs.writeFileSync(
+    path.join(artifactRoot, '.state/server-info'),
+    JSON.stringify({
+      root: artifactRoot,
+      localQuestionProject: projectId,
+      localQuestionHome: home,
+    }),
+  );
+  vi.stubEnv('ANJIAN_SERVER_HOME', path.join(root, 'different-hub'));
+  expect(read(project)).toBe(0);
+  vi.stubEnv('ANJIAN_SERVER_HOME', home);
   expect(output).toHaveBeenCalledWith({
     type: 'local-document-question-answer',
     artifact,
