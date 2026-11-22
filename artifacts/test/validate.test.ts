@@ -43,6 +43,28 @@ describe('validateCanvas', () => {
     expect(validateCanvas(base(), exists)).toEqual([]);
   });
 
+  test('validates labelled same-page connections between board IDs', () => {
+    const canvas = base();
+    canvas.connections = { next: { from: 'a', to: 'b', label: 'Continue' } };
+    expect(validateCanvas(canvas, exists)).toEqual([]);
+    expect(
+      validateCanvas({ ...canvas, connections: { next: { from: 'a', to: 'b', label: ' ' } } }, exists),
+    ).toContain('connection "next" needs board IDs "from", "to" and a non-empty "label"');
+    canvas.pages.push({ id: 'q', name: 'Q' });
+    canvas.boards.b!.page = 'q';
+    expect(validateCanvas(canvas, exists)).toContain(
+      'connection "next" must link boards on the same page',
+    );
+    canvas.connections.next!.to = 'constructor';
+    expect(validateCanvas(canvas, exists)).toContain(
+      'connection "next" references unknown destination board "constructor"',
+    );
+    canvas.connections.next!.to = 'a';
+    expect(validateCanvas(canvas, exists)).toContain(
+      'connection "next" must link two different boards',
+    );
+  });
+
   test('rejects an artifact title that repeats its slug', () => {
     expect(
       validateCanvas({ ...base(), title: 'Settings-Page' }, exists, { artifact: 'settings-page' }),

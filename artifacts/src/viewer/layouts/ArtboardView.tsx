@@ -542,6 +542,7 @@ function DesktopArtboard({
               boardBase={source?.base}
               boardSandbox={readOnly ? 'allow-scripts' : source?.sandbox}
               boards={boards}
+              connections={canvas.connections}
               contentBase={contentBase}
               culled={culled}
               frameLoaded={frameLoaded}

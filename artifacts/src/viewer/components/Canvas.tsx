@@ -9,12 +9,13 @@ import {
   STICKY_LINE_H,
   STICKY_PAD,
 } from '../../shared/geometry';
-import { type BoardSpec, isMediaBoard, type NoteSpec } from '../../shared/types';
+import { type BoardSpec, type CanvasSpec, isMediaBoard, type NoteSpec } from '../../shared/types';
 import type { Inspector } from '../hooks/useInspector';
 import type { BoardPhase } from '../lib/board-lifecycle';
 import { boardReady, boardSrc, canPlay } from '../lib/play';
 import { titleScale, type View } from '../lib/view';
 import { color } from '../tokens.stylex';
+import { CanvasConnections } from './CanvasConnections';
 import { MediaBoard } from './MediaBoard';
 import { WritingCursor } from './WritingCursor';
 
@@ -103,6 +104,7 @@ interface BoardsProps {
 
 interface CanvasProps extends BoardsProps {
   agent?: string;
+  connections?: CanvasSpec['connections'];
   live?: boolean;
   notes: [string, NoteSpec][];
   view: View;
@@ -303,6 +305,7 @@ export function Canvas({
   culled,
   gesturing,
   boards,
+  connections,
   notes,
   contentBase,
   versions,
@@ -371,6 +374,9 @@ export function Canvas({
         zoom={view.k}
         onExpand={onExpand}
       />
+      {connections && (
+        <CanvasConnections boards={boards} connections={connections} zoom={view.k} />
+      )}
       {notes.map(([id, note]) =>
         note.kind === 'title' ? (
           <h2
