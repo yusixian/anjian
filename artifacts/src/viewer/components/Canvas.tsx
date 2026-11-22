@@ -15,6 +15,7 @@ import type { BoardPhase } from '../lib/board-lifecycle';
 import { boardReady, boardSrc, canPlay } from '../lib/play';
 import { titleScale, type View } from '../lib/view';
 import { color } from '../tokens.stylex';
+import { ArtboardMoveHandle, type ArtboardPositionEditor } from './ArtboardMoveHandle';
 import { CanvasConnections } from './CanvasConnections';
 import { MediaBoard } from './MediaBoard';
 import { WritingCursor } from './WritingCursor';
@@ -106,6 +107,7 @@ interface CanvasProps extends BoardsProps {
   agent?: string;
   connections?: CanvasSpec['connections'];
   live?: boolean;
+  positionEditor?: ArtboardPositionEditor;
   notes: [string, NoteSpec][];
   view: View;
   worldRef?: Ref<HTMLDivElement>;
@@ -306,6 +308,7 @@ export function Canvas({
   gesturing,
   boards,
   connections,
+  positionEditor,
   notes,
   contentBase,
   versions,
@@ -410,6 +413,30 @@ export function Canvas({
             {note.text}
           </div>
         ),
+      )}
+      {positionEditor && (
+        <>
+          {boards.map(([id, board]) => (
+            <ArtboardMoveHandle
+              editor={positionEditor}
+              key={`board/${id}`}
+              position={board}
+              target={{ kind: 'board', id }}
+              title={board.title || id}
+              zoom={view.k}
+            />
+          ))}
+          {notes.map(([id, note]) => (
+            <ArtboardMoveHandle
+              editor={positionEditor}
+              key={`note/${id}`}
+              position={note}
+              target={{ kind: 'note', id }}
+              title={note.text || id}
+              zoom={view.k}
+            />
+          ))}
+        </>
       )}
       {active && (
         <WritingCursor

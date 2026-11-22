@@ -96,6 +96,62 @@ async function fixture() {
 
 const encode = (text: string) => Buffer.from(text).toString('base64');
 
+test('artboard moves survive source upload and restart with per-object conflict checks', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const artifact = 'artboard/flow';
+  const pathToArtifact = path.join(fx.alpha, '.anjian/artifacts', artifact);
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/artifacts/${artifact}`;
+  const source = (title: string, x = 0) => ({
+    version: 1, title, pages: [{ id: 'p', name: 'Page' }],
+    boards: { panel: { page: 'p', x, y: 0, w: 240, h: 160, file: 'pages/panel.html' } },
+    notes: { tip: { kind: 'sticky', page: 'p', x: 500, y: 0, text: title } },
+  });
+  const put = (baseRevision: string | null, title: string, x = 0) => fx.request(route, {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      baseRevision,
+      files: {
+        'canvas.json': encode(JSON.stringify(source(title, x))),
+        'pages/panel.html': encode('<!doctype html><html><body>Panel</body></html>'),
+      },
+    }),
+  });
+  const created = await put(null, 'Original');
+  expect(created.status, await created.clone().text()).toBe(200);
+  const { revision, url } = await created.json();
+  const browserPath = new URL(url).pathname;
+  const browser = { Origin: fx.origin, 'Content-Type': 'application/json' };
+  const move = (kind: 'board' | 'note', id: string, from: number, x: number, origin = fx.origin) =>
+    fx.request(`/api${browserPath}/positions?key=${MASTER}`, {
+      method: 'POST',
+      headers: { ...browser, Origin: origin },
+      body: JSON.stringify({ target: { kind, id }, expected: { page: 'p', x: from, y: 0 }, x, y: 0 }),
+    });
+  expect((await move('board', 'panel', 0, 125, 'https://wrong.example')).status).toBe(403);
+  const [board, note] = await Promise.all([
+    move('board', 'panel', 0, 120),
+    move('note', 'tip', 500, 600),
+  ]);
+  expect(board.status, await board.clone().text()).toBe(200);
+  expect(note.status, await note.clone().text()).toBe(200);
+  expect((await move('board', 'panel', 0, 999)).status).toBe(409);
+  expect((await move('board', 'panel', 0, 120)).status).toBe(200);
+
+  const upload = await put(revision, 'Updated by Agent', 15);
+  expect(upload.status, await upload.clone().text()).toBe(200);
+  expect(JSON.parse(fs.readFileSync(path.join(pathToArtifact, 'canvas.json'), 'utf8')).boards.panel.x).toBe(15);
+  await fx.restart();
+  const current = await (await fx.request(`/api/artifacts/${artifact}?key=${MASTER}`)).json();
+  expect(current.canvas).toMatchObject({
+    title: 'Updated by Agent',
+    boards: { panel: { x: 120 } },
+    notes: { tip: { x: 600, text: 'Updated by Agent' } },
+  });
+  expect(current.layout.pages.p.notes.tip.x).toBe(600);
+});
+
 test('whiteboard sync and browser edits share current scene and keep feedback outside the manifest', async () => {
   const fx = await fixture();
   const { headers } = await fx.login();

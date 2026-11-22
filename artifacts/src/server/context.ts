@@ -378,7 +378,7 @@ export function createServerContext(options: ServerOptions) {
       payload = readArtifactSource(stagedDir, { id, type });
       extra = {};
     } else {
-      const canvas = readCanvas(stagedDir, id);
+      const canvas = readCanvas(stagedDir, id, path.join(stateDir, 'artboard', id, 'manual-layout.json'));
       const eligible = new Set(Object.values(canvas.canvas?.groups ?? {})
         .filter((group) => group.verify).flatMap((group) => group.boards));
       const pending = new Set(canvas.pending);

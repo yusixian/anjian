@@ -79,6 +79,16 @@
     "unanswered": "{{groups}} 未选",
     "withdraw": "撤回"
   },
+  "artboardLayout": {
+    "edit": "调整布局",
+    "done": "完成布局调整",
+    "moveObject": "移动 {{title}}",
+    "instructions": "拖动移动把手，或聚焦把手后按方向键。",
+    "saving": "正在保存位置…",
+    "saved": "位置已保存",
+    "conflict": "此对象的位置已更新。请在当前布局中重试。",
+    "saveFailed": "位置未保存。请重试。"
+  },
   "chrome": {
     "backToLibrary": "返回作品库",
     "library": "作品库",

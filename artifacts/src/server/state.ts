@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
+import { applyArtboardPositions } from '../shared/artboard-positions';
 import { computeLayout } from '../shared/geometry';
 import { type CanvasPayload, type CanvasSpec, isMediaBoard } from '../shared/types';
 import { structuralWarnings, validateCanvas } from '../shared/validate';
+import { artboardPositionsFile, readArtboardPositions } from './artboard-positions';
 import type { CommentAdmission } from './document-comments';
 import { writeJsonFiles } from './storage/json-files';
 import { resolveBoardFile } from './paths';
@@ -56,7 +58,11 @@ function boardVersions(boardDir: string, canvas: CanvasSpec) {
   return { versions, writing };
 }
 
-export function readCanvas(boardDir: string, artifactName = path.basename(boardDir)): CanvasPayload {
+export function readCanvas(
+  boardDir: string,
+  artifactName = path.basename(boardDir),
+  positionsFile = artboardPositionsFile(boardDir),
+): CanvasPayload {
   const { raw, warning } = readRaw(boardDir);
   if (warning)
     return { canvas: null, warnings: [warning], pending: [], layout: null, versions: {} };
@@ -64,7 +70,7 @@ export function readCanvas(boardDir: string, artifactName = path.basename(boardD
     const structural = structuralWarnings(raw);
     if (structural.length > 0)
       return { canvas: null, warnings: structural, pending: [], layout: null, versions: {} };
-    const canvas = { ...(raw as CanvasSpec) };
+    const canvas = applyArtboardPositions(raw as CanvasSpec, readArtboardPositions(positionsFile));
     canvas.boards = Object.fromEntries(
       Object.entries(canvas.boards).map(([id, board]) => [
         id,

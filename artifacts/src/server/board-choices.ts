@@ -1,11 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { applyArtboardPositions } from '../shared/artboard-positions';
 import type { BoardAnchor, BoardThread } from '../shared/board-comments';
 import { groupChoice, isChoiceRecord, roundSubmission } from '../shared/choices';
 import { computeLayout } from '../shared/geometry';
 import { choiceRounds, type RoundInfo, roundOfGroup } from '../shared/rounds';
 import type { CanvasSpec } from '../shared/types';
+
+import { artboardPositionsFile, readArtboardPositions } from './artboard-positions';
 
 export type RoundState = 'open' | 'submitted' | 'closed';
 
@@ -29,7 +32,8 @@ export function choiceContext(dir: string): ChoiceContext {
     const canvas = JSON.parse(fs.readFileSync(path.join(dir, 'canvas.json'), 'utf8')) as CanvasSpec;
     if (!Array.isArray(canvas.pages) || typeof canvas.boards !== 'object' || !canvas.boards)
       return { canvas: null, rounds: [] };
-    return { canvas, rounds: choiceRounds(canvas, computeLayout(canvas)) };
+    const projected = applyArtboardPositions(canvas, readArtboardPositions(artboardPositionsFile(dir)));
+    return { canvas: projected, rounds: choiceRounds(projected, computeLayout(projected)) };
   } catch {
     return { canvas: null, rounds: [] };
   }
