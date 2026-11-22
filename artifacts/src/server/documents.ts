@@ -12,6 +12,7 @@ import {
 import type { ServerMessage } from '../shared/types';
 import { createCommentCursors } from './comment-cursors';
 import type { CommentNames } from './comment-names';
+import { type CommentReader, createCommentReceipts } from './comment-receipts';
 import { boxDrawingDiagrams } from './document-codec';
 import { type CommentAdmission, type CommentStore, createCommentStore } from './document-comments';
 import {
@@ -38,7 +39,15 @@ export interface DocumentRegistry {
   comments: (id: string) => CommentsFile;
   commentsChanged: (id: string) => void;
   commentWarnings: (id: string) => string[];
+  confirmCommentReads: (
+    id: string,
+    reader: CommentReader,
+    tokens: string[],
+    admit?: CommentAdmission,
+    initialize?: boolean,
+  ) => number;
   fileChanged: (id: string) => void;
+  historySnapshot: (id: string) => Promise<Uint8Array | null>;
   listComments: (
     id: string,
     agent: string,
@@ -47,6 +56,13 @@ export interface DocumentRegistry {
   ) => AgentThread[];
   open: (id: string) => Promise<DocumentSession | null>;
   quiesce: (prepare?: () => Promise<CommentAdmission>) => Promise<() => void>;
+  receiptSnapshot: (
+    id: string,
+    reader: CommentReader,
+    all: boolean,
+    admit?: CommentAdmission,
+  ) => { threads: AgentThread[]; baseline: string[] | null };
+  viewerComments: (id: string) => CommentsFile;
   warnings: (id: string) => string[];
 }
 
@@ -54,6 +70,8 @@ export type AgentThread = Thread & {
   waitingOn: ReturnType<typeof waitingOn>;
   changes?: string[];
   messageIds?: string[];
+  receipts?: string[];
+  unread?: boolean;
 };
 
 const forAgent = <T extends Thread>(thread: T) => ({
@@ -97,6 +115,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
   const docFile = (id: string) => path.join(options.root, 'document', id, 'doc.xml');
   const commentStores = new Map<string, CommentStore>();
   const cursors = createCommentCursors(options.stateDir);
+  const receipts = createCommentReceipts(options.stateDir, 'document');
   const commentStore = (id: string, admit?: CommentAdmission) => {
     let store = commentStores.get(id);
     if (!store) {
@@ -113,11 +132,13 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
     }
     return store;
   };
-  const pushComments = (id: string) =>
+  const viewerComments = (id: string) => receipts.forViewer(id, commentStore(id).current());
+  const pushComments = (id: string, receiptOnly = false) =>
     options.broadcast({
       type: 'doc-comments',
       artifact: `document/${id}`,
-      comments: commentStore(id).current(),
+      comments: viewerComments(id),
+      ...(receiptOnly ? { receiptOnly: true as const } : {}),
     });
   const syncComments = (id: string, admit?: CommentAdmission) => {
     const store = commentStore(id, admit);
@@ -219,6 +240,16 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
 
   return {
     open,
+    async historySnapshot(id) {
+      const active = await sessions.get(id);
+      if (active) return active.snapshot();
+      try {
+        return await fs.promises.readFile(path.join(options.stateDir, 'document', id, 'doc.loro'));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+      }
+    },
     fileChanged: (id) => {
       if (quiescing) return;
       const known = sessions.has(id);
@@ -230,6 +261,7 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       });
     },
     comments: (id) => commentStore(id).current(),
+    viewerComments,
     commentWarnings: (id) => commentStore(id).warnings(),
     commentsChanged: syncComments,
     applyCommentOp: (id, op, admit) => {
@@ -249,6 +281,32 @@ export function createDocumentRegistry(options: RegistryOptions): DocumentRegist
       const { threads, newest } = unreadThreads(file, cursors.get(id, agent));
       if (newest) cursors.set(id, agent, newest, admit);
       return threads.map(forAgent);
+    },
+    receiptSnapshot: (id, reader, all, admit) => {
+      syncComments(id, admit);
+      const { threads } = commentStore(id).current();
+      const { entries, baseline } = receipts.snapshot(id, reader, threads, all);
+      return {
+        baseline,
+        threads: entries.flatMap(({ thread, ...state }) =>
+          all && thread.messages.every((message) => message.deleted)
+            ? []
+            : [{ ...forAgent(thread), ...state }],
+        ),
+      };
+    },
+    confirmCommentReads: (id, reader, tokens, admit, initialize) => {
+      syncComments(id, admit);
+      const { confirmed, modified } = receipts.confirm(
+        id,
+        reader,
+        commentStore(id).current().threads,
+        tokens,
+        admit,
+        initialize,
+      );
+      if (modified) pushComments(id, true);
+      return confirmed;
     },
     warnings: (id) => [...(warnings.get(id) ?? []), ...commentStore(id).warnings()],
     quiesce: async (prepare) => {

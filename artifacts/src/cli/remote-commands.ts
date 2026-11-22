@@ -32,7 +32,7 @@ const artifactOption = {
   artifact: {
     type: 'string' as const,
     value: '<type>/<id>',
-    help: 'Document, artboard or HTML artifact',
+    help: 'Document, artboard, HTML, slides, storyboard or whiteboard artifact',
   },
 };
 const permissionError = (status: number, json: Record<string, any>) =>
@@ -46,7 +46,9 @@ const validSnapshot = (artifact: string, value: Record<string, any>): value is R
     return false;
   try {
     validateFiles(artifact, value.files as Record<string, string>);
-    return true;
+    if (!artifact.startsWith('slides/') && !artifact.startsWith('storyboard/')) return true;
+    const empty = Object.keys(value.files).length === 0;
+    return value.revision === null ? empty : !empty && /^sha256:[a-f0-9]{64}$/.test(value.revision);
   } catch {
     return false;
   }
@@ -55,8 +57,8 @@ const validSnapshot = (artifact: string, value: Record<string, any>): value is R
 async function remoteSnapshot(dir: string, artifact: string) {
   const { binding } = bindingFor(dir);
   const result = await authenticatedRequest(dir, artifactRoute(binding, artifact));
-  if (result.status !== 200 || !validSnapshot(artifact, result.json))
-    throw permissionError(result.status, result.json);
+  if (result.status !== 200) throw permissionError(result.status, result.json);
+  if (!validSnapshot(artifact, result.json)) throw new CliError('Remote returned an invalid artifact snapshot');
   return result.json;
 }
 
@@ -258,6 +260,7 @@ async function push(dir: string, artifact: string | undefined, emit: Emit) {
     const { binding } = bindingFor(dir);
     const local = localFiles(dir, artifact);
     if (!Object.keys(local).length) throw new CliError(`No local source files for ${artifact}`);
+    validateFiles(artifact, local);
     const previous = binding.revisions[artifact];
     if (!previous) {
       const remote = await remoteSnapshot(dir, artifact);
@@ -273,8 +276,9 @@ async function push(dir: string, artifact: string | undefined, emit: Emit) {
     });
     if (result.status === 409)
       throw new CliError(`${artifact} changed remotely; pull and compare before pushing`);
-    if (result.status !== 200 || !validSnapshot(artifact, result.json) || !result.json.revision)
-      throw permissionError(result.status, result.json);
+    if (result.status !== 200) throw permissionError(result.status, result.json);
+    if (!validSnapshot(artifact, result.json) || !result.json.revision)
+      throw new CliError('Remote upload returned an invalid artifact snapshot');
     if (
       bindingFor(dir).binding.origin !== binding.origin ||
       bindingFor(dir).binding.projectId !== binding.projectId

@@ -82,7 +82,7 @@ function entryAddress(entry: TrashEntry) {
   let pathname: string;
   try { pathname = new URL(entry.url, 'http://anjian.local').pathname; }
   catch { throw new ArtifactTrashError(500, 'trash_corrupt', 'Invalid trash URL'); }
-  const match = /^\/(document|artboard|html)\/([^/]+)$/.exec(pathname);
+  const match = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
   if (!match || match[1] !== entry.type || !isArtifactAddress(match[2]!))
     throw new ArtifactTrashError(500, 'trash_corrupt', 'Invalid trash address');
   return match[2]!;
@@ -222,12 +222,17 @@ export function listTrash(projectDir: string, now = Date.now()): TrashEntry[] {
     .map((r) => r.entry).sort((a, b) => b.deletedAt - a.deletedAt);
 }
 
-export function findTrashedArtifact(projectDir: string, type: ArtifactType, locator: string): TrashEntry | null {
+export function findTrashedArtifact(
+  projectDir: string,
+  type: ArtifactType,
+  locator: string,
+  match: 'locator' | 'address' = 'locator',
+): TrashEntry | null {
   if (!isArtifactType(type) || !isArtifactId(locator) && !isArtifactAddress(locator)) return null;
-  const match = records(projectDir).records.find((r) =>
+  const found = records(projectDir).records.find((r) =>
     r.phase !== 'restored' && r.entry.type === type &&
-    (r.entry.id === locator || entryAddress(r.entry) === locator));
-  return match?.entry ?? null;
+    ((match === 'locator' && r.entry.id === locator) || entryAddress(r.entry) === locator));
+  return found?.entry ?? null;
 }
 
 export function assertArtifactNotTrashed(projectDir: string, type: ArtifactType, id: string) {

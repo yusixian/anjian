@@ -2,10 +2,10 @@ import crypto from 'node:crypto';
 
 import type { Thread } from '../../shared/comments';
 import type { FeedbackClaim, FeedbackConnection, FeedbackTask } from '../../shared/feedback';
+import { feedbackArtifactParts, matchesFeedbackArtifact } from './artifact';
 import { type FeedbackData, feedbackError, hash } from './store';
 
 export const LEASE_MS = 5 * 60 * 1000;
-export const artifactPattern = /^(document|artboard)\/[a-z0-9][a-z0-9-]*$/;
 export function text(value: unknown, name: string, max = 200): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max)
     feedbackError(
@@ -17,6 +17,7 @@ export function text(value: unknown, name: string, max = 200): string {
 }
 export function publicTask(task: FeedbackTask) {
   const {
+    artifactAddress: _address,
     tokenHash: _token,
     claimRecoverySeq: _recovery,
     claimOwner: _owner,
@@ -68,7 +69,7 @@ export function connect(
     !body.artifacts.length ||
     body.artifacts.length > 100 ||
     !body.artifacts.every(
-      (a) => typeof a === 'string' && a.length <= 200 && artifactPattern.test(a),
+      (a) => typeof a === 'string' && a.length <= 200 && feedbackArtifactParts(a) !== null,
     )
   )
     feedbackError('invalid_connection', undefined, 400);
@@ -285,7 +286,7 @@ function claimBlockReason(
     data.tasks.some(
       (t) =>
         t.id !== task.id &&
-        t.artifact === task.artifact &&
+        matchesFeedbackArtifact(t, task.artifact, task.artifactAddress) &&
         (t.state === 'running' || t.state === 'needs_attention'),
     )
   )

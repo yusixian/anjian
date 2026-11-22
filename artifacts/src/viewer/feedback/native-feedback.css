@@ -1,0 +1,49 @@
+.native-feedback-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--lobe-color-border);
+  border-radius: 10px;
+  background: var(--lobe-color-bg-container);
+  color: var(--lobe-color-text);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.native-feedback-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.native-feedback-button,
+.native-feedback-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.native-feedback-close {
+  float: inline-end;
+  margin: 4px;
+}
+.native-feedback-error {
+  margin: 12px;
+  color: var(--lobe-color-error);
+}
+@media (max-width: 640px) {
+  .native-feedback-button span {
+    display: none;
+  }
+  .native-feedback-button,
+  .native-feedback-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

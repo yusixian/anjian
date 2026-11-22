@@ -22,19 +22,29 @@ export function usePageQuery() {
     },
     [view],
   );
-  const page = useSyncExternalStore(subscribe, () =>
-    new URLSearchParams(view.location.search).get('page'),
-  );
+  const search = useSyncExternalStore(subscribe, () => view.location.search);
+  const query = new URLSearchParams(search);
   const write = useCallback(
     (id: string | null, replace: boolean) => {
       const url = new URL(view.location.href);
-      if (url.searchParams.get('page') === id) return;
+      if (!replace) {
+        url.searchParams.delete('ref');
+        url.searchParams.delete('board');
+        url.searchParams.delete('group');
+      }
       if (id === null) url.searchParams.delete('page');
       else url.searchParams.set('page', id);
+      if (url.href === view.location.href) return;
       view.history[replace ? 'replaceState' : 'pushState'](view.history.state, '', url);
       view.dispatchEvent(new Event('anjian:pagechange'));
     },
     [view],
   );
-  return [page, write] as const;
+  return [
+    query.get('page'),
+    write,
+    query.get('board'),
+    query.get('group'),
+    query.get('ref') === '1',
+  ] as const;
 }

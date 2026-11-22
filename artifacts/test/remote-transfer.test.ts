@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, test } from 'vitest';
 
+import { applyLocalFiles, filesHash, localFiles, validateFiles } from '../src/cli/remote-core';
+import { MAX_SLIDE_DECK_BYTES } from '../src/shared/slides';
 import {
   readRemoteArtifact,
   RemoteTransferError,
@@ -70,6 +72,104 @@ describe('remote artifact transfer', () => {
       ...result.files,
       'comments.json': encode('{}'),
     })).toThrowError(expect.objectContaining({ status: 400 }));
+  });
+
+  test('transfers only the whiteboard scene and preserves feedback across revision-checked updates', () => {
+    const root = project();
+    const artifact = 'whiteboard/diagram';
+    const scene = (color: string) => ({
+      'scene.excalidraw': encode(JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: color },
+      })),
+    });
+    expect(readRemoteArtifact(root, artifact)).toEqual({ revision: null, files: {} });
+    const first = write(root, artifact, null, scene('#ffffff'));
+    const dir = path.join(root, '.anjian/artifacts', artifact);
+    fs.writeFileSync(path.join(dir, 'comments.json'), 'human feedback');
+    fs.writeFileSync(path.join(dir, 'preview.svg'), 'local note');
+    expect(readRemoteArtifact(root, artifact)).toEqual(first);
+
+    for (const files of [
+      { ...scene('#fcfcfc'), 'comments.json': encode('{}') },
+      { ...scene('#fcfcfc'), 'assets/external.png': encode('contents') },
+      { 'scene.excalidraw': encode('{"type":"not-excalidraw"}') },
+    ]) {
+      expect(() => write(root, artifact, first.revision, files)).toThrowError(
+        expect.objectContaining({ status: 400 }),
+      );
+      expect(readRemoteArtifact(root, artifact)).toEqual(first);
+    }
+    const second = write(root, artifact, first.revision, scene('#f4f4f4'));
+    expect(second.revision).not.toBe(first.revision);
+    expect(() => write(root, artifact, first.revision, scene('#f3f3f3'))).toThrowError(
+      expect.objectContaining({ status: 409, code: 'revision_conflict' }),
+    );
+    expect(readRemoteArtifact(root, artifact)).toEqual(second);
+    expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('human feedback');
+    expect(fs.readFileSync(path.join(dir, 'preview.svg'), 'utf8')).toBe('local note');
+  });
+
+  test('transfers only listed whiteboard pages and removes obsolete scenes without touching feedback', () => {
+    const root = project();
+    const artifact = 'whiteboard/review';
+    const scene = encode(JSON.stringify({ type: 'excalidraw', version: 2, elements: [] }));
+    const manifest = (...ids: string[]) => encode(JSON.stringify({
+      version: 1, pages: ids.map((id) => ({ id, title: id })),
+    }));
+    const initial = {
+      'scene.excalidraw': scene,
+      'pages.json': manifest('agenda', 'summary'),
+      'pages/agenda.excalidraw': scene,
+      'pages/summary.excalidraw': scene,
+    };
+    const first = write(root, artifact, null, initial);
+    expect(readRemoteArtifact(root, artifact)).toEqual(first);
+    const dir = path.join(root, '.anjian/artifacts', artifact);
+    fs.writeFileSync(path.join(dir, 'comments.json'), 'human feedback');
+    fs.writeFileSync(path.join(dir, 'pages/notes.txt'), 'unmanaged note');
+    const orphan = path.join(dir, 'pages/orphan.excalidraw');
+    fs.writeFileSync(orphan, 'unlisted scene data');
+    expect(readRemoteArtifact(root, artifact)).toEqual(first);
+
+    const withoutSummary = { ...initial, 'pages.json': manifest('agenda') };
+    const invalidFiles = [
+      withoutSummary,
+      { ...initial, 'pages.json': manifest('agenda', 'agenda') },
+      { ...initial, 'pages.json': manifest('agenda', '../summary') },
+      { ...initial, 'pages.json': manifest('agenda', 'missing') },
+      { ...initial, 'pages.json': manifest('main', 'agenda', 'summary') },
+      { ...initial, 'pages/Agenda.excalidraw': scene },
+      { ...initial, 'pages/summary.excalidraw': encode('{}') },
+    ];
+    for (const files of invalidFiles) {
+      expect(() => write(root, artifact, first.revision, files)).toThrowError(
+        expect.objectContaining({ status: 400 }),
+      );
+      expect(readRemoteArtifact(root, artifact)).toEqual(first);
+    }
+
+    const updated = {
+      'scene.excalidraw': scene,
+      'pages.json': manifest('agenda'),
+      'pages/agenda.excalidraw': scene,
+    };
+    const next = write(root, artifact, first.revision, updated);
+    expect(next.revision).not.toBe(first.revision);
+    expect(readRemoteArtifact(root, artifact).files).toEqual(updated);
+    expect(fs.existsSync(path.join(dir, 'pages/summary.excalidraw'))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('human feedback');
+    expect(fs.readFileSync(path.join(dir, 'pages/notes.txt'), 'utf8')).toBe('unmanaged note');
+    expect(fs.readFileSync(orphan, 'utf8')).toBe('unlisted scene data');
+    expect(() => write(root, artifact, next.revision, {
+      ...updated,
+      'pages.json': manifest('agenda', 'orphan'),
+      'pages/orphan.excalidraw': scene,
+    })).toThrow('Unlisted whiteboard file already exists');
+    expect(readRemoteArtifact(root, artifact)).toEqual(next);
+    expect(fs.readFileSync(orphan, 'utf8')).toBe('unlisted scene data');
   });
 
   test('rejects unsafe paths, duplicate case, invalid payloads and oversized input without changing files', () => {
@@ -226,4 +326,121 @@ test('generated state commit failure restores both source and state', () => {
   }))).toThrow('state install failed');
   expect(readRemoteArtifact(root, 'html/rollback')).toEqual(before);
   expect(fs.readFileSync(stateFile, 'utf8')).toBe('old state');
+});
+
+const deck = (body: string) => ({
+  'deck.json': encode(JSON.stringify({
+    version: 1,
+    title: 'Design review',
+    slides: [{ id: 'intro', title: 'Introduction', body, notes: 'Private notes' }],
+  })),
+});
+
+test('transfers only the slide deck and preserves comments and revisions', () => {
+  const root = project();
+  const artifact = 'slides/design-review';
+  const original = write(root, artifact, null, deck('First draft'));
+  const dir = path.join(root, '.anjian/artifacts', artifact);
+  const comments = path.join(dir, 'comments.json');
+  fs.writeFileSync(comments, 'human feedback');
+  expect(readRemoteArtifact(root, artifact)).toEqual(original);
+  expect(() => write(root, artifact, null, deck('Outdated edit'))).toThrowError(
+    expect.objectContaining({ code: 'revision_conflict' }),
+  );
+  const updated = write(root, artifact, original.revision, deck('Second draft'));
+  expect(updated.files).toEqual(deck('Second draft'));
+  expect(updated.revision).not.toBe(original.revision);
+  expect(fs.readFileSync(comments, 'utf8')).toBe('human feedback');
+});
+
+test('rejects invalid slide source uploads and pull manifests', () => {
+  const root = project();
+  const artifact = 'slides/design-review';
+  const original = write(root, artifact, null, deck('First draft'));
+  expect(() => write(root, artifact, original.revision, {})).toThrowError(
+    expect.objectContaining({ code: 'invalid_artifact' }),
+  );
+  const invalidFiles: Record<string, string>[] = [
+    { 'deck.json': encode(Buffer.from([0xff])) },
+    { 'deck.json': encode('{"version":1,"title":"Missing slides"}') },
+    { 'deck.json': encode('{') },
+    { 'deck.json': encode(Buffer.alloc(MAX_SLIDE_DECK_BYTES + 1)) },
+    { ...original.files, 'comments.json': encode('{}') },
+    { ...original.files, 'pages/extra.html': encode('<p>extra</p>') },
+    { ...original.files, '../deck.json': encode('{}') },
+    { 'Deck.json': original.files['deck.json']! },
+  ];
+  for (const files of invalidFiles) {
+    expect(() => write(root, artifact, original.revision, files)).toThrowError(RemoteTransferError);
+    expect(() => validateFiles(artifact, files)).toThrow();
+    expect(readRemoteArtifact(root, artifact)).toEqual(original);
+  }
+  fs.writeFileSync(path.join(root, '.anjian/artifacts', artifact, 'deck.json'), '{');
+  expect(() => readRemoteArtifact(root, artifact)).toThrowError(
+    expect.objectContaining({ code: 'invalid_artifact' }),
+  );
+});
+
+test('keeps malformed local slide bytes available for backup before replacing the deck', () => {
+  const root = project();
+  const artifact = 'slides/design-review';
+  const dir = path.join(root, '.anjian/artifacts', artifact);
+  fs.mkdirSync(dir, { recursive: true });
+  const broken = Buffer.from([0x7b, 0xff]);
+  fs.writeFileSync(path.join(dir, 'deck.json'), broken);
+  fs.writeFileSync(path.join(dir, 'comments.json'), 'human feedback');
+
+  const local = localFiles(root, artifact);
+  expect(local).toEqual({ 'deck.json': encode(broken) });
+  expect(() => validateFiles(artifact, local)).toThrow();
+  applyLocalFiles(root, artifact, deck('Replacement'), filesHash(local));
+  expect(localFiles(root, artifact)).toEqual(deck('Replacement'));
+  expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('human feedback');
+});
+
+test('storyboard transfer keeps the timeline and media together and excludes review history', () => {
+  const root = project();
+  const artifact = 'storyboard/demo';
+  const files = {
+    'timeline.json': encode(JSON.stringify({
+      version: 1, title: 'Review', tracks: [{
+        id: 'picture', name: 'Picture', kind: 'video', clips: [{
+          id: 'first', asset: 'assets/opening.png', startMs: 0, trimMs: 0, durationMs: 500,
+        }],
+      }],
+    })),
+    'assets/opening.png': encode('fixture bytes'),
+  };
+  const saved = write(root, artifact, null, files);
+  const dir = path.join(root, '.anjian/artifacts', artifact);
+  fs.writeFileSync(path.join(dir, 'comments.json'), 'keep feedback');
+  expect(readRemoteArtifact(root, artifact)).toEqual(saved);
+  expect(() => write(root, artifact, saved.revision, {
+    'timeline.json': files['timeline.json'],
+  })).toThrow('missing storyboard asset');
+  expect(() => validateFiles(artifact, { 'timeline.json': files['timeline.json'] })).toThrow('Missing storyboard asset');
+  expect(() => write(root, artifact, saved.revision, {
+    ...files, 'exports/demo.mp4': encode('generated'),
+  })).toThrow('source file is not allowed');
+  expect(readRemoteArtifact(root, artifact)).toEqual(saved);
+  expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('keep feedback');
+});
+
+test('validates realistic storyboard media manifests without recursive Base64 patterns', () => {
+  const artifact = 'storyboard/remote';
+  const files = {
+    'timeline.json': encode(JSON.stringify({ version: 1, title: 'Review', tracks: [] })),
+    'assets/footage.mp4': Buffer.alloc(4 * 1024 * 1024).toString('base64'),
+  };
+  expect(() => validateFiles(artifact, files)).not.toThrow();
+});
+
+test('storyboard transfers enforce the same media count limit as the editor', () => {
+  const artifact = 'storyboard/count';
+  const files = {
+    'timeline.json': encode(JSON.stringify({ version: 1, title: 'Demo', tracks: [] })),
+    ...Object.fromEntries(Array.from({ length: 257 }, (_, i) => [`assets/clip-${i}.png`, 'YQ=='])),
+  };
+  expect(() => write(project(), artifact, null, files)).toThrow('too many media files');
+  expect(() => validateFiles(artifact, files)).toThrow('too many media files');
 });

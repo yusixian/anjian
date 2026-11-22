@@ -1,12 +1,17 @@
+import { $reconcileRoot, createLoroBinding } from '@haklex/rich-collab-loro';
+import { $getRoot } from 'lexical';
+import { LoroDoc } from 'loro-crdt';
 import { describe, expect, test } from 'vitest';
 
 import {
   boxDrawingDiagrams,
+  documentQuestions,
   documentTitle,
   parseDocument,
   serializeDocument,
   stampBlockIds,
 } from '../src/server/document-codec';
+import { createDocumentHeadlessEditor } from '../src/server/document-headless';
 
 const sample = `<doc>
   <h2 id="h1">Relay <b>sync</b></h2>
@@ -41,6 +46,100 @@ describe('parseDocument', () => {
       state.root.children.map((node) => node.type),
     );
     expect(serializeDocument(again)).toContain('const a = 1 &lt; 2');
+  });
+
+  test('round trips presets and open questions with stable keys independent of block ids', () => {
+    const state = parseDocument(`<doc>
+      <p>请回答两个问题。</p>
+      <ask key="delivery" prompt="A &amp; B &lt; C？"
+        options='[{"id":"now","label":"现在 &amp; 今日"},{"id":"later","label":"稍后"}]'
+        recommended="now"/>
+      <ask key="notes" prompt="还有什么需要补充？"/>
+    </doc>`);
+    const stamped = stampBlockIds(state);
+    const xml = serializeDocument(stamped);
+    const reloaded = parseDocument(xml);
+    expect(reloaded).toEqual(stamped);
+    expect(documentQuestions(reloaded)).toEqual([
+      {
+        id: 'delivery',
+        prompt: 'A & B < C？',
+        options: [
+          { id: 'now', label: '现在 & 今日' },
+          { id: 'later', label: '稍后' },
+        ],
+        recommended: 'now',
+      },
+      { id: 'notes', prompt: '还有什么需要补充？' },
+    ]);
+  });
+
+  test('round trips approval questions', () => {
+    const state = parseDocument(`<doc><ask key="design" prompt="批准当前设计？"
+      options='[{"id":"yes","label":"批准"},{"id":"revise","label":"要求修改"}]'
+      approve="yes"/></doc>`);
+    const xml = serializeDocument(state);
+    expect(xml).toContain('approve="yes"');
+    expect(parseDocument(xml)).toEqual(state);
+    expect(documentQuestions(state)[0]?.approve).toBe('yes');
+  });
+
+  test('reconciles a question edit through Loro without replacing its node', () => {
+    const editor = createDocumentHeadlessEditor();
+    const doc = new LoroDoc();
+    const binding = createLoroBinding(editor, doc);
+    const question = (prompt: string) =>
+      parseDocument(`<doc><ask id="b1" key="question" prompt="${prompt}"/></doc>`);
+    editor.update(() => $reconcileRoot(question('Before').root as never), { discrete: true });
+    const peer = new LoroDoc();
+    peer.import(doc.export({ mode: 'snapshot' }));
+    const peerEditor = createDocumentHeadlessEditor();
+    const peerBinding = createLoroBinding(peerEditor, peer);
+    const key = () => peerEditor.getEditorState().read(() => $getRoot().getFirstChild()?.getKey());
+
+    try {
+      const originalKey = key();
+      expect(originalKey).toBeDefined();
+
+      const from = doc.oplogVersion();
+      try {
+        editor.update(() => $reconcileRoot(question('After').root as never), { discrete: true });
+        peerBinding.import(doc.export({ mode: 'update', from }));
+      } finally {
+        from.free();
+      }
+      expect(key()).toBe(originalKey);
+      const reloaded = parseDocument(serializeDocument(peerEditor.getEditorState().toJSON()));
+      expect(documentQuestions(reloaded)).toEqual([{ id: 'question', prompt: 'After' }]);
+    } finally {
+      peerBinding.dispose();
+      binding.dispose();
+    }
+  });
+
+  test.each([
+    ['<ask prompt="缺少标识"/>', 'key must contain'],
+    ['<ask key="empty" prompt="  "/>', 'prompt must contain'],
+    ['<ask key="bad" prompt="Bad" options="{"/>', 'options must be a JSON array'],
+    ['<ask key="open" prompt="Why?" recommended="a"/>', 'recommended must match'],
+    [
+      `<ask key="bad" prompt="Bad" options='[{"id":"a","label":"1"},{"id":"a","label":"2"}]'/>`,
+      'duplicate option id',
+    ],
+    ['<ask key="design" prompt="Review" approve="yes"/>', 'approve must match'],
+    [
+      `<ask key="design" prompt="Review" options='[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]' approve="other"/>`,
+      'approve must match',
+    ],
+    [
+      `<ask key="design" prompt="Review" options='[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]' approve="yes" recommended="no"/>`,
+      'approval cannot specify recommended',
+    ],
+    ['<p><ask key="nested" prompt="Why?"/></p>', 'top-level block'],
+    ['<ask key="same" prompt="First"/><ask key="same" prompt="Second"/>', 'duplicate key'],
+    ['<ask key="nonempty" prompt="First"><p>Body</p></ask>', 'must be empty'],
+  ])('rejects malformed questions in %s', (xml, error) => {
+    expect(() => parseDocument(xml)).toThrow(error);
   });
 
   test('a chart keeps its spec and block id through a round trip', () => {
@@ -202,6 +301,94 @@ describe('parseDocument', () => {
     expect(() =>
       parseDocument('<doc><codeblock><![CDATA[<poll></div>]]></codeblock></doc>'),
     ).not.toThrow();
+  });
+});
+
+describe('artifact reference blocks', () => {
+  const target = 'AB12ab12ab12ab12ab12x';
+  const board = `type="artboard" target="${target}"`;
+
+  test('round-trips whole artifacts and artboard focus with independent block IDs', () => {
+    const state = stampBlockIds(
+      parseDocument(
+        `<ref id="review" ${board} group="review" label="对比 A &amp; B > C" />
+      <ref ${board} board="details-v2" />
+      <ref type="document" target="${target}" />
+      <ref type="html" target="${target}" />`,
+      ),
+    );
+    expect(state.root.children).toEqual([
+      {
+        $: { blockId: 'review' },
+        type: 'artifact-reference',
+        reference: {
+          type: 'artboard',
+          target,
+          focus: { kind: 'group', id: 'review' },
+          label: '对比 A & B > C',
+        },
+        version: 1,
+      },
+      expect.objectContaining({
+        reference: { type: 'artboard', target, focus: { kind: 'board', id: 'details-v2' } },
+      }),
+      expect.objectContaining({ reference: { type: 'document', target } }),
+      expect.objectContaining({ reference: { type: 'html', target } }),
+    ]);
+    expect(parseDocument(serializeDocument(state))).toEqual(state);
+  });
+
+  test.each([
+    ['<blockquote><ref ' + board + ' /></blockquote>', 'top-level'],
+    ['<footnote-section><def ref="1"><ref ' + board + ' /></def></footnote-section>', 'top-level'],
+    ['<p><ref ' + board + ' /></p>', 'top-level'],
+    ['<ref ' + board + '>text</ref>', 'empty'],
+    ['<ref ' + board + '><p>text</p></ref>', 'empty'],
+    ['<ref ' + board + ' board="b" group="g" />', 'either board or group'],
+    [`<ref type="document" target="${target}" board="b" />`, 'only supported for artboards'],
+    ['<ref ' + board + ' group="x?key=private" />', 'URL-safe ID'],
+    ['<ref ' + board + ' group="' + 'a'.repeat(129) + '" />', 'URL-safe ID'],
+    ['<ref ' + board + ' label=" " />', '1–160 characters'],
+    ['<ref ' + board + ' key="private" />', 'invalid or repeated attributes'],
+    ['<ref ' + board + ' target="slug" />', 'invalid or repeated attributes'],
+    ['<ref type="html" target="slug" />', 'stable artifact ID'],
+    ['<ref type="html" target="https://example.com/x?key=private" />', 'stable artifact ID'],
+    ['<ref type="other" target="' + target + '" />', 'type must be'],
+  ])('rejects malformed source %s', (xml, message) => {
+    expect(() => parseDocument(xml)).toThrow(message);
+  });
+
+  test('retains references and block IDs through Loro snapshot and updates', () => {
+    const xml = `<ref id="ref-a" ${board} group="review" label="Review" />`;
+    const state = parseDocument(xml);
+    const doc = new LoroDoc();
+    const editor = createDocumentHeadlessEditor();
+    const binding = createLoroBinding(editor, doc);
+    const copy = new LoroDoc();
+    try {
+      editor.update(() => $reconcileRoot(state.root as never), { discrete: true });
+      copy.import(doc.export({ mode: 'snapshot' }));
+      const copyEditor = createDocumentHeadlessEditor();
+      const copyBinding = createLoroBinding(copyEditor, copy);
+      try {
+        expect(parseDocument(serializeDocument(copyEditor.getEditorState().toJSON()))).toEqual(
+          state,
+        );
+        const updated = parseDocument(xml.replace('label="Review"', 'label="Updated review"'));
+        const from = doc.oplogVersion();
+        editor.update(() => $reconcileRoot(updated.root as never), { discrete: true });
+        copyBinding.import(doc.export({ mode: 'update', from }));
+        expect(parseDocument(serializeDocument(copyEditor.getEditorState().toJSON()))).toEqual(
+          updated,
+        );
+      } finally {
+        copyBinding.dispose();
+      }
+    } finally {
+      copy.free();
+      binding.dispose();
+      doc.free();
+    }
   });
 });
 

@@ -107,10 +107,11 @@ export function sendFile(
   file: string,
   headers: Record<string, string> = {},
   range?: string,
+  opened?: { fd: number; size: number },
 ) {
-  fs.stat(file, (err, stat) => {
-    if (err || !stat.isFile()) {
-      send(res, 404, 'Not found');
+  const serve = (size: number) => {
+    if (res.destroyed) {
+      if (opened) fs.closeSync(opened.fd);
       return;
     }
     const base = {
@@ -120,21 +121,29 @@ export function sendFile(
       'Accept-Ranges': 'bytes',
       ...headers,
     };
-    const part = byteRange(range, stat.size);
+    const part = byteRange(range, size);
     if (part === 'unsatisfiable') {
-      res.writeHead(416, { ...base, 'Content-Range': `bytes */${stat.size}` });
+      if (opened) fs.closeSync(opened.fd);
+      res.writeHead(416, { ...base, 'Content-Range': `bytes */${size}` });
       res.end();
       return;
     }
     if (part)
       res.writeHead(206, {
         ...base,
-        'Content-Range': `bytes ${part.start}-${part.end}/${stat.size}`,
+        'Content-Range': `bytes ${part.start}-${part.end}/${size}`,
         'Content-Length': String(part.end - part.start + 1),
       });
-    else res.writeHead(200, { ...base, 'Content-Length': String(stat.size) });
-    fs.createReadStream(file, part ?? {})
-      .on('error', () => res.destroy())
-      .pipe(res);
-  });
+    else res.writeHead(200, { ...base, 'Content-Length': String(size) });
+    const extent = part ?? (opened && size > 0 ? { start: 0, end: size - 1 } : {});
+    const stream = fs.createReadStream(file, { ...extent, fd: opened?.fd });
+    res.once('close', () => stream.destroy());
+    stream.on('error', () => res.destroy()).pipe(res);
+  };
+  if (opened) serve(opened.size);
+  else
+    fs.stat(file, (err, stat) => {
+      if (err || !stat.isFile()) send(res, 404, 'Not found');
+      else serve(stat.size);
+    });
 }

@@ -50,6 +50,20 @@ test('notes select only the exact version and require both languages in new chan
   assert.throws(() => parseNotes(note.replace('English change', ''), true), /Missing en/);
   assert.throws(() => parseNotes('中文', true), /requires/);
 });
+test('released notes retain language headings at the same level as the version', (t) => {
+  const directory = fixture(t);
+  const titled = note.replaceAll('#### ', '## ');
+  const older = note.replace('中文变化', '旧版本').replace('English change', 'Older release');
+  fs.writeFileSync(
+    path.join(directory, 'CHANGELOG.md'),
+    ['# Changelog', '## 0.5.0', titled, '## Details', note, '## 0.4.0', older].join('\n\n'),
+  );
+  assert.deepEqual(currentNotes(directory, '0.5.0'), {
+    zh: '中文变化\n\n中文变化',
+    en: 'English change\n\nEnglish change',
+  });
+  assert.deepEqual(currentNotes(directory, '0.4.0'), { zh: '旧版本', en: 'Older release' });
+});
 test('build identity distinguishes clean, dirty, source export and unknown', (t) => {
   const directory = fixture(t);
   const git = (args) =>
@@ -83,14 +97,27 @@ function publishing() {
     previousVersion: '0.1.0',
     info: { sha, state: 'clean', version: '0.2.0', notes: { zh: '变化', en: 'Change' } },
   };
-  const store = { tag: null, release: null, writes: 0 };
+  const store = { tag: null, release: null, assets: [], writes: 0 };
   const api = (endpoint, method, data) => {
     if (method === 'POST') {
       store.writes++;
       if (endpoint === 'git/refs')
         return (store.tag = { ref: data.ref, object: { type: 'commit', sha: data.sha } });
-      return (store.release = { ...data, html_url: 'https://example.test/release' });
+      return (store.release = { ...data, id: 1, html_url: 'https://example.test/release' });
     }
+    if (method === 'PATCH' && endpoint === 'releases/1') {
+      assert.equal(store.release.draft, true);
+      assert.equal(store.assets.length, 4);
+      store.writes++;
+      return (store.release = { ...store.release, ...data });
+    }
+    if (method === 'DELETE' && endpoint === 'releases/assets/2') {
+      assert.equal(store.release.draft, true);
+      store.assets = store.assets.filter((item) => item.id !== 2);
+      store.writes++;
+      return;
+    }
+    if (endpoint.startsWith('releases/1/assets?')) return store.assets;
     if (endpoint.startsWith('compare/')) return { status: 'ahead' };
     if (endpoint.startsWith('git/matching')) return store.tag ? [store.tag] : [];
     return store.release ? [store.release] : [];
@@ -144,6 +171,73 @@ test('failed CI, dirty identity, unchanged version and conflicting tags or relea
   assert.throws(() => publishRelease(input, api, gate), /Release conflict/);
   assert.equal(store.writes, 0);
 });
+function packageAssets(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-assets-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const names = ['arm64', 'x64'].map((arch) => `anjian-v0.2.0-darwin-${arch}.tar.gz`);
+  for (const name of names) {
+    const file = path.join(directory, name);
+    fs.writeFileSync(file, name);
+    fs.writeFileSync(`${file}.sha256`, `${hashFile(file)}  ${name}\n`);
+  }
+  return { directory, names };
+}
+
+test('requires complete matching macOS packages before creating a tag or release', (t) => {
+  const { input, store, api, gate } = publishing();
+  const { directory, names } = packageAssets(t);
+  const publish = () => publishRelease({ ...input, assetsDirectory: directory }, api, gate);
+  fs.appendFileSync(path.join(directory, names[0]), 'modified');
+  assert.throws(publish, /Checksum mismatch/);
+  fs.writeFileSync(path.join(directory, names[0]), names[0]);
+  fs.rmSync(path.join(directory, `${names[1]}.sha256`));
+  assert.throws(publish, /ENOENT/);
+  assert.equal(store.writes, 0);
+});
+
+test('resumes a partially uploaded draft and verifies published assets without changing them', (t) => {
+  const { input, store, api, gate } = publishing();
+  const { directory } = packageAssets(t);
+  const asset = (file) => ({
+    name: path.basename(file),
+    state: 'uploaded',
+    digest: `sha256:${hashFile(file)}`,
+  });
+  const publish = (upload) =>
+    publishRelease({ ...input, assetsDirectory: directory }, api, gate, upload);
+  assert.throws(
+    () =>
+      publish((tag, files) => {
+        assert.equal(tag, 'v0.2.0');
+        assert.equal(store.release.draft, true);
+        assert.equal(files.length, 4);
+        store.assets.push(asset(files[0]), {
+          id: 2,
+          state: 'starter',
+          size: 0,
+          name: path.basename(files[1]),
+        });
+        throw new Error('upload interrupted');
+      }),
+    /upload interrupted/,
+  );
+  assert.equal(store.release.draft, true);
+  assert.throws(() => publish(() => {}), /Release assets incomplete/);
+  publish((_, files) => {
+    assert.equal(files.length, 3);
+    assert(!files.some((file) => path.basename(file) === store.assets[0].name));
+    store.assets.push(...files.map(asset));
+  });
+  assert.equal(store.release.draft, false);
+  const unexpectedUpload = () => assert.fail('published release assets must not be changed');
+  publish(unexpectedUpload);
+  store.assets.pop();
+  assert.throws(() => publish(unexpectedUpload), /Release assets incomplete/);
+  store.assets[0].digest = 'sha256:conflicting';
+  assert.throws(() => publish(unexpectedUpload), /Release asset conflict/);
+  assert.equal(store.writes, 4);
+});
+
 test('legacy bump command cannot decide a new version', () => {
   assert.throws(() =>
     execFileSync('bash', ['scripts/bump-version.sh', '9.9.9'], { cwd: root, stdio: 'pipe' }),

@@ -76,7 +76,8 @@ export const styles = stylex.create({
     'paddingInline': 32,
     '@media (max-width: 700px)': { paddingBlockStart: 20, paddingInline: 16 },
   },
-  heading: { display: 'flex', alignItems: 'baseline', gap: 10 },
+  createActions: { display: 'flex', flexWrap: 'wrap', gap: 6 },
+  heading: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 },
   headingTitle: {
     margin: 0,
     fontSize: 22,
@@ -99,7 +100,7 @@ export const styles = stylex.create({
     'minHeight': 32,
     '@media (max-width: 700px)': { alignItems: 'stretch', flexDirection: 'column', gap: 8 },
   },
-  tabs: { flexShrink: 0 },
+  tabs: { maxWidth: '100%', overflowX: 'auto' },
   tabLabel: { display: 'inline-flex', gap: 7, alignItems: 'center', fontSize: 12 },
   tabCount: { fontSize: 10, color: cssVar.colorTextSecondary, fontVariantNumeric: 'tabular-nums' },
   tools: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' },

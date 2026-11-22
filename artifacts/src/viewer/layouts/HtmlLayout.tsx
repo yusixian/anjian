@@ -6,7 +6,12 @@ import { HtmlView } from './HtmlView';
 export function HtmlLayout({ id }: { id: string }) {
   return (
     <LibraryNavigation>
-      <HtmlView feed={useLocalFeed('html', id)} id={id} actions={<ShareButton type="html" id={id} />} />
+      <HtmlView
+        actions={<ShareButton id={id} type="html" />}
+        feed={useLocalFeed('html', id)}
+        id={id}
+        selectionSendEndpoint={`/api/html/${encodeURIComponent(id)}/selection-send`}
+      />
     </LibraryNavigation>
   );
 }

@@ -6,12 +6,13 @@ import path from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
+import type { PreparedRemoteDocument } from '../src/server/document-session';
+import * as documentSession from '../src/server/document-session';
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
+import * as storageAdmission from '../src/server/storage/request-admission';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageUsage } from '../src/server/storage/usage';
-import * as documentSession from '../src/server/document-session';
-import type { PreparedRemoteDocument } from '../src/server/document-session';
 import { tempRoot } from './helpers';
 
 const MASTER = 'm'.repeat(48);
@@ -95,6 +96,115 @@ async function fixture() {
 
 const encode = (text: string) => Buffer.from(text).toString('base64');
 
+test('whiteboard sync and browser edits share current scene and keep feedback outside the manifest', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const artifact = 'whiteboard/diagram';
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}`;
+  const browser = `/api/${artifact}`;
+  const browserHeaders = { Origin: fx.origin, 'Content-Type': 'application/json' };
+  const scene = (width: number) => ({
+    type: 'excalidraw',
+    version: 2,
+    elements: [{ id: 'box', type: 'rectangle', x: 0, y: 0, width, height: 40 }],
+  });
+  const put = (project: string, baseRevision: string | null, width: number) => fx.request(
+    `/api/remote/projects/${project}/artifacts/${artifact}`, {
+      method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseRevision, files: { 'scene.excalidraw': encode(JSON.stringify(scene(width))) } }),
+    },
+  );
+  expect((await put(fx.id(fx.beta), null, 60)).status).toBe(404);
+  const created = await put(fx.id(fx.alpha), null, 80);
+  expect(created.status, await created.clone().text()).toBe(200);
+  const first = await created.json() as { revision: string; url: string };
+  expect(first.url).toMatch(/\/whiteboard\/[a-z0-9]{21}$/i);
+
+  const current = await fx.request(`${browser}?key=${MASTER}`);
+  expect(current.status, await current.clone().text()).toBe(200);
+  const { revision: browserRevision } = await current.json() as { revision: string };
+  const beforeEvents = await fx.request(`${route}/events`, { headers });
+  expect(beforeEvents.status).toBe(200);
+  const { cursor } = await beforeEvents.json() as { cursor: string };
+  const comment = await fx.request(`${browser}/comments?key=${MASTER}`, {
+    method: 'POST', headers: browserHeaders,
+    body: JSON.stringify({ op: 'create', elementIds: ['box'], text: 'Review the width' }),
+  });
+  expect(comment.status, await comment.clone().text()).toBe(200);
+  const events = await fx.request(`${route}/events?cursor=${encodeURIComponent(cursor)}`, { headers });
+  expect(events.status).toBe(200);
+  expect((await events.json()).events).toContainEqual(expect.objectContaining({ artifact, type: 'change' }));
+
+  const amended = await put(fx.id(fx.alpha), first.revision, 120);
+  expect(amended.status, await amended.clone().text()).toBe(200);
+  const { revision: remoteRevision } = await amended.json() as { revision: string };
+  expect((await put(fx.id(fx.alpha), first.revision, 90)).status).toBe(409);
+  expect((await fx.request(`${browser}?key=${MASTER}`, {
+    method: 'POST', headers: browserHeaders,
+    body: JSON.stringify({ scene: scene(60), revision: browserRevision }),
+  })).status).toBe(409);
+
+  const refreshed = await fx.request(`${browser}?key=${MASTER}`);
+  const newest = await refreshed.json() as { revision: string };
+  const saved = await fx.request(`${browser}?key=${MASTER}`, {
+    method: 'POST', headers: browserHeaders,
+    body: JSON.stringify({ scene: scene(160), revision: newest.revision }),
+  });
+  expect(saved.status, await saved.clone().text()).toBe(200);
+  expect((await put(fx.id(fx.alpha), remoteRevision, 90)).status).toBe(409);
+
+  const fetched = await fx.request(`${route}/artifacts/${artifact}`, { headers });
+  const { files } = await fetched.json() as { files: Record<string, string> };
+  expect(Object.keys(files)).toEqual(['scene.excalidraw']);
+  expect(JSON.parse(Buffer.from(files['scene.excalidraw']!, 'base64').toString())).toEqual(scene(160));
+  const check = await fx.request(`${route}/agent/${artifact}/check`, { method: 'POST', headers });
+  expect(check.status, await check.clone().text()).toBe(200);
+  expect((await check.json()).warnings).toEqual([]);
+  const comments = await fx.request(`${route}/agent/${artifact}/comments`, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'list', all: true }),
+  });
+  expect(comments.status, await comments.clone().text()).toBe(200);
+  expect((await comments.json()).threads).toMatchObject([
+    { anchor: { elementIds: ['box'] }, messages: [{ text: 'Review the width' }] },
+  ]);
+});
+
+test('a whiteboard comment rechecks the device grant before writing', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const dir = path.join(fx.alpha, '.anjian/artifacts/whiteboard/diagram');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'scene.excalidraw'), JSON.stringify({
+    type: 'excalidraw', version: 2, elements: [{ id: 'box', type: 'rectangle' }],
+  }));
+
+  let resumeComment!: () => void;
+  const waitForRevocation = new Promise<void>((resolve) => { resumeComment = resolve; });
+  const refresh = storageAdmission.refreshRequestStorageAdmission;
+  const paused = vi.spyOn(storageAdmission, 'refreshRequestStorageAdmission')
+    .mockImplementationOnce(async (req) => { await waitForRevocation; await refresh(req); });
+  const route = `/api/remote/projects/${fx.id(fx.alpha)}/agent/whiteboard/diagram/comments`;
+  const pendingComment = fx.request(route, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'add', elementIds: ['box'], text: 'Review the box' }),
+  });
+  try {
+    await vi.waitFor(() => expect(paused).toHaveBeenCalledTimes(1));
+    expect((await fx.request('/api/remote/auth/session', { method: 'DELETE', headers })).status)
+      .toBe(200);
+    resumeComment();
+    const response = await pendingComment;
+    expect(response.status, await response.clone().text()).toBe(401);
+    expect(await response.json()).toMatchObject({ code: 'unauthorized' });
+    expect(fs.existsSync(path.join(dir, 'comments.json'))).toBe(false);
+  } finally {
+    resumeComment();
+    await pendingComment.catch(() => undefined);
+    paused.mockRestore();
+  }
+});
+
 test('a scoped device transfers its project with revision checks but cannot control the server', async () => {
   const fx = await fixture();
   const { headers } = await fx.login();
@@ -121,6 +231,32 @@ test('a scoped device transfers its project with revision checks but cannot cont
   const second = await put(project, created.revision, '<doc><p>newer</p></doc>');
   expect(second.status, await second.clone().text()).toBe(200);
   expect((await put(project, created.revision, '<doc><p>stale</p></doc>')).status).toBe(409);
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  fs.writeFileSync(path.join(fx.alpha, '.anjian/artifacts/document/plan/.artifact-id'), address + '\n');
+  const review = (projectId: string, id = 'plan') =>
+    fx.request(`/api/remote/projects/${projectId}/agent/document/${id}/review`, {
+      method: 'POST', headers,
+    });
+  expect((await review(other)).status).toBe(404);
+  const reviewed = await review(project);
+  expect(reviewed.status).toBe(200);
+  expect(await reviewed.json()).toMatchObject({ type: 'review', artifact: 'document/plan', empty: true });
+
+  const versions = (projectId: string, id = 'plan') =>
+    fx.request(`/api/remote/projects/${projectId}/agent/document/${id}/changes`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versions: true }),
+    });
+  expect((await versions(other)).status).toBe(404);
+  const listed = await versions(project);
+  expect(listed.status).toBe(200);
+  expect(await listed.json()).toMatchObject({ type: 'document-changes', latest: expect.any(String) });
+  expect((await review(other, address)).status).toBe(404);
+  expect((await review(project, address)).status).toBe(200);
+  expect((await versions(other, address)).status).toBe(404);
+  expect((await versions(project, address)).status).toBe(200);
+
   const fetched = await fx.request(`/api/remote/projects/${project}/artifacts/document/plan`, { headers });
   expect(fetched.status).toBe(200);
   expect(Buffer.from((await fetched.json()).files['doc.xml'], 'base64').toString()).toContain('newer');
@@ -461,6 +597,38 @@ test('CLI unread cursor writes cannot bypass storage quota', async () => {
   expect((await (await post()).json()).threads).toHaveLength(0);
 });
 
+test('comment receipts bind to the authenticated device even when session names match', async () => {
+  const fx = await fixture();
+  const first = await fx.login();
+  const second = await fx.login();
+  const artifact = 'document/receipt-device';
+  const dir = path.join(fx.alpha, '.anjian/artifacts', artifact);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'doc.xml'), '<doc><p id="b1">Review</p></doc>');
+  const human = await fx.request(`/api/${artifact}/comments?key=${MASTER}`, {
+    method: 'POST', headers: { Origin: fx.origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'create', blockId: 'b1', quote: 'Review', text: 'Please review' }),
+  });
+  expect(human.status).toBe(200);
+  const post = (headers: Record<string, string>, body: object, project = fx.id(fx.alpha)) =>
+    fx.request(`/api/remote/projects/${project}/agent/${artifact}/comments`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: 'codex:shared-name', ...body }),
+    });
+  const original = await post(first.headers, { op: 'receipt-list' });
+  expect(original.status).toBe(200);
+  const { threads: [{ receipts }] } = await original.json();
+  expect(await (await post(second.headers, { op: 'confirm-read', receipts })).json()).toEqual({ confirmed: 0 });
+  const settings = createStorageSettings(fx.home);
+  settings.setSharedLimit(0);
+  expect((await post(first.headers, { op: 'confirm-read', receipts })).status).toBe(413);
+  settings.setSharedLimit(1024 * 1024);
+  expect(await (await post(first.headers, { op: 'confirm-read', receipts })).json()).toEqual({ confirmed: 2 });
+  expect((await (await post(first.headers, { op: 'receipt-list' })).json()).threads).toEqual([]);
+  expect((await (await post(second.headers, { op: 'receipt-list' })).json()).threads).toHaveLength(1);
+  expect((await post(first.headers, { op: 'receipt-list' }, fx.id(fx.beta))).status).toBe(404);
+});
+
 test('document download at zero quota returns persisted bytes without uncharged normalization', async () => {
   const fx = await fixture();
   const { headers } = await fx.login();
@@ -493,4 +661,76 @@ test('document download at zero quota returns persisted bytes without uncharged 
     expect(updated.status, await updated.clone().text()).toBe(200);
     expect(fs.readFileSync(file, 'utf8')).toContain('next edit');
   } finally { settings.setSharedLimit(1024 * 1024); }
+});
+
+test('a linked device can transfer a deck and review it by stable slide ID', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const project = fx.id(fx.alpha);
+  const other = fx.id(fx.beta);
+  const prefix = `/api/remote/projects/${project}`;
+  const artifact = 'slides/briefing';
+  const deck = {
+    version: 1,
+    title: 'Briefing',
+    slides: [{ id: 'plan', title: 'Plan', body: 'Customer rollout', notes: 'Internal notes' }],
+  };
+  const files = { 'deck.json': encode(JSON.stringify(deck)) };
+  const json = (method: string, body: unknown) => ({
+    method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const uploaded = await fx.request(`${prefix}/artifacts/${artifact}`, json('PUT', { baseRevision: null, files }));
+  expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+  const source = await uploaded.json();
+  expect(source).toMatchObject({ files, revision: expect.stringMatching(/^sha256:/) });
+  const comment = (body: unknown, projectId = project) =>
+    fx.request(`/api/remote/projects/${projectId}/agent/${artifact}/comments`, json('POST', body));
+  const addition = { op: 'add', slideId: 'plan', text: 'Clear next steps', cursor: 'review-device' };
+  expect((await comment(addition, other)).status).toBe(404);
+  expect((await comment({ ...addition, slideId: 'missing' })).status).toBe(409);
+  expect((await comment(addition)).status).toBe(200);
+  const listed = await comment({ op: 'list', all: true, cursor: 'review-device' });
+  expect(listed.status, await listed.clone().text()).toBe(200);
+  expect((await listed.json()).threads[0]).toMatchObject({ anchor: { slideId: 'plan' } });
+
+  const fetched = await fx.request(`${prefix}/artifacts/${artifact}`, { headers });
+  expect(fetched.status).toBe(200);
+  expect(await fetched.json()).toMatchObject({ files, revision: source.revision });
+  const checked = await fx.request(`${prefix}/agent/${artifact}/check`, json('POST', {}));
+  expect(checked.status, await checked.clone().text()).toBe(200);
+  expect((await checked.json()).warnings).toEqual([]);
+});
+
+test('a linked device syncs storyboards and keeps clip reviews outside the source manifest', async () => {
+  const fx = await fixture();
+  const { headers } = await fx.login();
+  const prefix = `/api/remote/projects/${fx.id(fx.alpha)}`;
+  const source = `${prefix}/artifacts/storyboard/demo`;
+  const comments = `${prefix}/agent/storyboard/demo/comments`;
+  const json = (method: string, body: unknown) => ({
+    method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const timeline = {
+    version: 1, title: 'Demo', tracks: [{
+      id: 'picture', kind: 'video', name: 'Picture', clips: [{
+        id: 'opening', asset: 'assets/cover.png', durationMs: 250, startMs: 0, trimMs: 0,
+      }],
+    }],
+  };
+  const files = {
+    'timeline.json': encode(JSON.stringify(timeline)),
+    'assets/cover.png': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jcXQAAAAASUVORK5CYII=',
+  };
+  const uploaded = await fx.request(source, json('PUT', { baseRevision: null, files }));
+  expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+  const snapshot = await uploaded.json();
+  const pushed = await fx.request(comments, json('POST', { op: 'add', clipId: 'opening', text: 'Tighten the opening' }));
+  expect(pushed.status, await pushed.clone().text()).toBe(200);
+  const listed = await fx.request(comments, json('POST', { op: 'list', all: true }));
+  expect((await listed.json()).threads[0]).toMatchObject({ anchor: { clipId: 'opening' } });
+  const checked = await fx.request(`${prefix}/agent/storyboard/demo/check`, json('POST', {}));
+  expect(checked.status, await checked.clone().text()).toBe(200);
+  expect((await checked.json()).warnings).toEqual([]);
+  const pulled = await fx.request(source, { headers });
+  expect(await pulled.json()).toMatchObject({ files, revision: snapshot.revision });
 });

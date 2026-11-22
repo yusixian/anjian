@@ -51,7 +51,7 @@ export const avatarRoute: HttpRoute<ServerContext> = {
 export const previewApiRoute: HttpRoute<ServerContext> = {
   path: API_PREVIEW_ROUTE,
   auth: 'viewer',
-  handle: (req, res, ctx, { match }) => {
+  handle: (req, res, ctx, { match, url }) => {
     const [, type = '', id = ''] = match;
     const dir = resolveArtifactDir(ctx.root, type, id);
     const ref = artifactKeyOf(`${type}/${id}`);
@@ -63,7 +63,7 @@ export const previewApiRoute: HttpRoute<ServerContext> = {
       const payload = ctx.readArtifact(dir, ref);
       const title = titleOf(payload);
       sendJson(res, 200, {
-        ...previewPayload(ref, dir, title, payload),
+        ...previewPayload(ref, dir, title, payload, url.searchParams.get('page') ?? undefined),
         title,
         warnings: payload.warnings,
         contentBase: `${ctx.contentPrefix}${type}/${id}/`,

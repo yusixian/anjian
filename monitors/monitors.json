@@ -2,7 +2,7 @@
   {
     "name": "artifact-comments",
     "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" watch-comments",
-    "description": "Anjian document and Artboard comments",
+    "description": "Anjian document, artboard, whiteboard, slide and storyboard comments",
     "when": "on-skill-invoke:anjian:artifacts"
   }
 ]

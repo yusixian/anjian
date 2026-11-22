@@ -30,6 +30,7 @@ import {
 } from './board-choices';
 import { createCommentCursors } from './comment-cursors';
 import type { CommentNames } from './comment-names';
+import { type CommentReader, createCommentReceipts } from './comment-receipts';
 import {
   asHumanOp,
   type CommentAdmission,
@@ -269,6 +270,7 @@ export function createBoardCommentRegistry(options: Options) {
   const lastListening = new Map<string, boolean>();
   const listening = (id: string) => listeningOn(options.stateDir, `artboard/${id}`);
   const cursors = createCommentCursors(options.stateDir, 'artboard');
+  const receipts = createCommentReceipts(options.stateDir, 'artboard');
   const dirOf = (id: string) => path.join(options.root, 'artboard', id);
   const store = (id: string, admit?: CommentAdmission) => {
     let found = stores.get(id);
@@ -321,7 +323,8 @@ export function createBoardCommentRegistry(options: Options) {
       .threads.filter((thread) => isStale(thread, now, groups))
       .map((thread) => thread.id);
   };
-  const push = (id: string) => {
+  const viewerComments = (id: string) => receipts.forViewer(id, store(id).current());
+  const push = (id: string, receiptOnly = false) => {
     const ids = stale(id);
     lastStale.set(id, JSON.stringify(ids));
     const heard = listening(id);
@@ -329,7 +332,8 @@ export function createBoardCommentRegistry(options: Options) {
     options.broadcast({
       type: 'board-comments',
       artifact: `artboard/${id}`,
-      comments: store(id).current(),
+      comments: viewerComments(id),
+      ...(receiptOnly ? { receiptOnly: true as const } : {}),
       stale: ids,
       listening: heard,
     });
@@ -392,7 +396,7 @@ export function createBoardCommentRegistry(options: Options) {
         op.op === 'create' && !record ? { ...op, anchor: stamp(op.anchor, fresh(id), groups) } : op;
       store(id, admit).apply(stamped, admit);
       push(id);
-      return { comments: store(id).current(), stale: stale(id), listening: listening(id) };
+      return { comments: viewerComments(id), stale: stale(id), listening: listening(id) };
     },
     applyAgent: (
       id: string,
@@ -449,6 +453,47 @@ export function createBoardCommentRegistry(options: Options) {
       const { threads, newest } = unreadThreads(file, cursors.get(id, agent));
       if (newest) cursors.set(id, agent, newest, admit);
       return threads.filter(comment).map(format);
+    },
+    viewerComments,
+    receiptSnapshot: (
+      id: string,
+      reader: CommentReader,
+      all: boolean,
+      admit?: CommentAdmission,
+    ) => {
+      const found = store(id, admit);
+      if (found.sync(admit)) push(id);
+      const threads = found.current().threads.filter((thread) => !isChoiceRecord(thread));
+      const format = forAgent(id, new Set(stale(id)));
+      const { entries, baseline } = receipts.snapshot(id, reader, threads, all);
+      return {
+        baseline,
+        threads: entries.flatMap(({ thread, ...state }) =>
+          all && thread.messages.every((message) => message.deleted)
+            ? []
+            : [{ ...format(thread), ...state }],
+        ),
+      };
+    },
+    confirmCommentReads: (
+      id: string,
+      reader: CommentReader,
+      tokens: string[],
+      admit?: CommentAdmission,
+      initialize?: boolean,
+    ) => {
+      const found = store(id, admit);
+      if (found.sync(admit)) push(id);
+      const { confirmed, modified } = receipts.confirm(
+        id,
+        reader,
+        found.current().threads.filter((thread) => !isChoiceRecord(thread)),
+        tokens,
+        admit,
+        initialize,
+      );
+      if (modified) push(id, true);
+      return confirmed;
     },
     groups: (id: string) => {
       const specs = boardSpecs(dirOf(id));

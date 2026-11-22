@@ -1,7 +1,7 @@
 import type { BoardCommentsFile } from './board-comments';
 import type { CommentsFile } from './comments';
 
-export const ARTIFACT_TYPES = ['artboard', 'document', 'html'] as const;
+export const ARTIFACT_TYPES = ['artboard', 'document', 'html', 'whiteboard', 'slides', 'storyboard'] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
 export interface Rect {
@@ -144,11 +144,12 @@ export type ServerMessage =
       agentActiveAt: number;
       now: number;
     }
-  | { type: 'doc-comments'; artifact: string; comments: CommentsFile }
+  | { type: 'doc-comments'; artifact: string; comments: CommentsFile; receiptOnly?: true }
   | {
       type: 'board-comments';
       artifact: string;
       comments: BoardCommentsFile;
       stale: string[];
       listening?: boolean;
+      receiptOnly?: true;
     };

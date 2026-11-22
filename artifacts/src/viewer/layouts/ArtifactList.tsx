@@ -1,6 +1,6 @@
 import { Button, Input, Segmented, Select, toast } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
-import { Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
 
 import type { HubArtifact, HubProjectStatus } from '../../shared/hub';
@@ -28,6 +28,14 @@ const openArtifact = (artifact: HubArtifact, newTab: boolean) => {
   else location.assign(artifact.url);
 };
 
+const creationOptions = {
+  slides: { path: 'slides', label: 'slideLibrary.create', error: 'slideLibrary.createFailed' },
+  storyboard: { path: 'storyboards', label: 'storyboardLibrary.create', error: 'storyboardLibrary.createFailed' },
+  whiteboard: { path: 'whiteboards', label: 'whiteboard.create', error: 'whiteboard.createFailed' },
+} as const;
+type CreatableArtifact = keyof typeof creationOptions;
+const creatableTypes = Object.keys(creationOptions) as CreatableArtifact[];
+
 export function ArtifactList() {
   const { t } = useTranslation();
   const { list, error, refresh, removeProject } = useHubArtifacts();
@@ -45,6 +53,7 @@ export function ArtifactList() {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [confirmMove, setConfirmMove] = useState<TrashTarget[] | null>(null);
   const [moving, setMoving] = useState(false);
+  const [creating, setCreating] = useState<CreatableArtifact | null>(null);
   const [moveDone, setMoveDone] = useState(0);
   const [moved, setMoved] = useState<TrashEntry[]>([]);
   const [failedTargets, setFailedTargets] = useState<TrashTarget[]>([]);
@@ -73,6 +82,29 @@ export function ArtifactList() {
   const picked = items.filter((artifact) => chosen.has(artifactSelectionKey(artifact)));
   const retryable = failedTargets.filter((target) => picked.some((artifact) => artifactSelectionKey(artifact) === artifactSelectionKey(target)));
   const allVisibleSelected = items.length > 0 && items.every((artifact) => chosen.has(artifactSelectionKey(artifact)));
+
+  const createArtifact = async (kind: CreatableArtifact) => {
+    if (!selected || creating) return;
+    setCreating(kind);
+    try {
+      const response = await fetch(`/api/hub/${creationOptions[kind].path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: document.documentElement.lang,
+          project: selected.dir,
+          title: t(`type.${kind}`),
+        }),
+      });
+      const data = (await response.json()) as { url?: string };
+      if (!response.ok || !data.url?.startsWith(`/${kind}/`)) throw new Error('Artifact could not be created');
+      location.assign(data.url);
+    } catch {
+      toast.error(t(creationOptions[kind].error));
+    } finally {
+      setCreating(null);
+    }
+  };
 
   const clearChosen = (notify = false) => {
     if (notify && chosen.size) toast.info(t('bulk.selectionCleared'));
@@ -267,6 +299,22 @@ export function ArtifactList() {
                   ? t('home.recentSubtitle')
                   : t('library.count', { count: base.length })}
             </span>
+            {selected && !selecting && (
+              <div {...stylex.props(styles.createActions)}>
+                {creatableTypes.map((kind) => (
+                  <Button
+                    key={kind}
+                    icon={Plus}
+                    disabled={creating !== null}
+                    loading={creating === kind}
+                    size="small"
+                    onClick={() => void createArtifact(kind)}
+                  >
+                    {t(creationOptions[kind].label)}
+                  </Button>
+                ))}
+              </div>
+            )}
             {selection !== 'trash' && (
               <Button className={stylex.props(bulkStyles.touchAction).className} size="small" onClick={() => {
                 setSelecting((current) => !current);
@@ -289,14 +337,15 @@ export function ArtifactList() {
           ) : (
           <>
           <div {...stylex.props(styles.toolbar)}>
-            <Segmented<ArtifactType | 'all'>
-              className={stylex.props(styles.tabs).className}
-              options={tabs}
-              size="small"
-              styles={{ item: { height: 30, paddingInline: 8 } }}
-              value={type}
-              onChange={(next) => { if (next !== type) clearChosen(true); setType(next); }}
-            />
+            <div {...stylex.props(styles.tabs)}>
+              <Segmented<ArtifactType | 'all'>
+                options={tabs}
+                size="small"
+                styles={{ item: { height: 30, paddingInline: 8 } }}
+                value={type}
+                onChange={(next) => { if (next !== type) clearChosen(true); setType(next); }}
+              />
+            </div>
             <div {...stylex.props(styles.tools)}>
               <div aria-label={t('home.scopeLabel')} role="group" {...stylex.props(styles.scope)}>
                 {scopes.map((option) => (

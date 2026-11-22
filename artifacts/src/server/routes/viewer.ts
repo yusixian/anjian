@@ -18,7 +18,7 @@ import type { HttpRoute, RouteParams } from './table';
 
 const SHELL_ROUTE = new RegExp(`^/(?:library/?|(${ARTIFACT_TYPES.join('|')})/([^/]+)/?)?$`);
 const PREVIEW_ROUTE = new RegExp(
-  `^/preview/(artboard|document|html)/${ARTIFACT_LOCATOR_SOURCE}/?$`,
+  `^/preview/(${ARTIFACT_TYPES.join('|')})/${ARTIFACT_LOCATOR_SOURCE}/?$`,
 );
 
 export const viewerCsp = (boardOrigins: string[]) =>
@@ -61,7 +61,14 @@ function serveShell(
     ? t('meta.artifact', {
         project,
         title,
-        type: ref.type === 'artboard' ? 'Artboard' : ref.type === 'document' ? 'Document' : 'HTML',
+        type: {
+          artboard: 'Artboard',
+          document: 'Document',
+          html: 'HTML',
+          slides: 'Slides',
+          storyboard: 'Storyboard',
+          whiteboard: 'Whiteboard',
+        }[ref.type],
       })
     : t('meta.library', { project });
   const preview = PREVIEW_ROUTE.test(pathname);
@@ -90,7 +97,9 @@ function serveShell(
     headers['Set-Cookie'] = browserCookie(ctx.cookieName, ctx.token, Boolean(secure));
   }
   const entry =
-    preview && fs.existsSync(path.join(viewerDir, 'preview.html')) ? 'preview.html' : 'index.html';
+    preview && ref?.type !== 'storyboard' && fs.existsSync(path.join(viewerDir, 'preview.html'))
+      ? 'preview.html'
+      : 'index.html';
   void fs.promises
     .readFile(path.join(viewerDir, entry), 'utf8')
     .then((template) => {

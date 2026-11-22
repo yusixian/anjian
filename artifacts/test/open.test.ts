@@ -217,8 +217,17 @@ describe('automatic browser open', () => {
       expect(fs.existsSync(file)).toBe(false);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, `<!doctype html><html><body>${id}</body></html>`);
-      await waitFor(() => readJson(warningsFile).pending?.length === remaining, 3000);
-      expect(readJson(warningsFile).warnings).toEqual([]);
+      let warnings: { pending?: string[]; warnings: string[] } | undefined;
+      await waitFor(() => {
+        try {
+          warnings = readJson(warningsFile);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+          throw error;
+        }
+        return warnings?.pending?.length === remaining;
+      }, 3000);
+      expect(warnings?.warnings).toEqual([]);
       expect(opened(log)).toHaveLength(1);
     }
   }, 15000);

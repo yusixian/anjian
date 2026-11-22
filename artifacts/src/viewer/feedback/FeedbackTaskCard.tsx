@@ -71,7 +71,8 @@ export function FeedbackTaskCard({
         </time>
       </div>
       <p {...stylex.props(styles.summary)}>
-        {detail?.roundContext?.title ||
+        {detail?.questionContext?.definition.prompt ||
+          detail?.roundContext?.title ||
           (task.roundId
             ? detail?.roundContext
               ? t('feedback.roundSummary', { count: detail.roundContext.groups.length })
@@ -84,7 +85,9 @@ export function FeedbackTaskCard({
       )}
       {task.needsRecovery && <p {...stylex.props(styles.error)}>{t('feedback.recoveryHint')}</p>}
       {task.state === 'awaiting_review' && (
-        <p {...stylex.props(styles.secondary)}>{t('feedback.readyHint')}</p>
+        <p {...stylex.props(styles.secondary)}>
+          {t(task.questionId ? 'question.replyReady' : 'feedback.readyHint')}
+        </p>
       )}
       {failed && (
         <p role="alert">
@@ -154,7 +157,22 @@ export function FeedbackTaskCard({
       )}
       {resultOpen && (
         <div {...stylex.props(styles.stack)}>
-          <p {...stylex.props(styles.secondary)}>{t('feedback.resultHint')}</p>
+          {!task.questionId && (
+            <p {...stylex.props(styles.secondary)}>{t('feedback.resultHint')}</p>
+          )}
+          {detail?.questionContext && (
+            <div>
+              <strong>{t('question.submittedAnswer')}</strong>
+              <p {...stylex.props(styles.reply)}>
+                {detail.questionContext.definition.options?.find(
+                  (option) => option.id === detail.questionContext?.answer,
+                )?.label ?? detail.questionContext.answer}
+              </p>
+              {detail.questionResult && (
+                <p {...stylex.props(styles.reply)}>{detail.questionResult.reply}</p>
+              )}
+            </div>
+          )}
           {detail?.roundContext && (
             <div>
               <strong>{t('feedback.roundSelection')}</strong>
@@ -181,6 +199,7 @@ export function FeedbackTaskCard({
           {!detail && !failed ? (
             <p>{t('common.loading')}</p>
           ) : (
+            !task.questionId &&
             !detail?.operation?.replies?.length && (
               <p>{t(task.roundId ? 'feedback.roundNoReplies' : 'feedback.noReplies')}</p>
             )

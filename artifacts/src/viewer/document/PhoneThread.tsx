@@ -2,6 +2,7 @@ import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 
 import { type Thread, waitingOn } from '../../shared/comments';
+import { AgentReadReceipt } from '../comments/ThreadView';
 import { t } from '../i18n';
 import { color } from '../tokens.stylex';
 import { anchorLabel } from './anchor';
@@ -133,6 +134,7 @@ export function PhoneThread({
                 <div {...stylex.props(styles.text, message.deleted && styles.deleted)}>
                   {message.deleted ? t('common.deleted') : message.text}
                 </div>
+                <AgentReadReceipt message={message} />
               </div>
             );
           })}

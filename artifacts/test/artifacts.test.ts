@@ -50,10 +50,10 @@ describe('listArtifacts', () => {
   });
 
   test('warns about unknown type directories and invalid ids', () => {
-    const root = tempRoot(['slides/deck', 'html/Bad.Name', 'html/ok']);
+    const root = tempRoot(['unsupported/item', 'html/Bad.Name', 'html/ok']);
     const { artifacts, warnings } = listArtifacts(root);
     expect(artifacts.map((a) => a.id)).toEqual(['ok']);
-    expect(warnings.some((w) => w.includes('slides'))).toBe(true);
+    expect(warnings.some((w) => w.includes('unsupported'))).toBe(true);
     expect(warnings.some((w) => w.includes('Bad.Name'))).toBe(true);
   });
 
@@ -73,7 +73,7 @@ describe('resolveArtifactDir', () => {
 
   test('rejects unknown types, invalid ids and missing directories', () => {
     const root = tempRoot(['html/a']);
-    expect(resolveArtifactDir(root, 'slides', 'a')).toBeNull();
+    expect(resolveArtifactDir(root, 'unsupported', 'a')).toBeNull();
     expect(resolveArtifactDir(root, 'html', '..')).toBeNull();
     expect(resolveArtifactDir(root, 'html', 'missing')).toBeNull();
   });
@@ -83,12 +83,13 @@ describe('artifactKeyOf', () => {
   test('maps a watched path to its artifact', () => {
     expect(artifactKeyOf('html/b/img/x.png')).toEqual({ type: 'html', id: 'b' });
     expect(artifactKeyOf('artboard/q/canvas.json')).toEqual({ type: 'artboard', id: 'q' });
+    expect(artifactKeyOf('slides/deck/deck.json')).toEqual({ type: 'slides', id: 'deck' });
     expect(artifactKeyOf('html/b')).toEqual({ type: 'html', id: 'b' });
   });
 
   test('returns null for state, unknown types and invalid ids', () => {
     expect(artifactKeyOf('.state/html/b/warnings.json')).toBeNull();
-    expect(artifactKeyOf('slides/x/index.html')).toBeNull();
+    expect(artifactKeyOf('unsupported/x/index.html')).toBeNull();
     expect(artifactKeyOf('html/.hidden/index.html')).toBeNull();
     expect(artifactKeyOf('html')).toBeNull();
   });

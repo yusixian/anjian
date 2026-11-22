@@ -1,6 +1,8 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState } from 'react';
 
+import type { Thread } from '../../shared/comments';
+import { AgentReadReceipt } from '../comments/ThreadView';
 import { useTranslation } from '../i18n';
 import { type FeedbackTask, selectableInput } from './api';
 import { useFeedbackEnabled } from './FeedbackProvider';
@@ -11,14 +13,16 @@ import { useFeedback } from './useFeedback';
 export interface FeedbackPanelProps {
   artifact: string;
   onOpenThread?: (id: string) => void;
+  polling?: boolean;
+  threads?: readonly Thread<unknown>[];
 }
 
 export function FeedbackPanel(props: FeedbackPanelProps) {
   return useFeedbackEnabled() ? <ConnectedFeedbackPanel {...props} /> : null;
 }
-function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) {
+function ConnectedFeedbackPanel({ artifact, onOpenThread, polling, threads }: FeedbackPanelProps) {
   const { t } = useTranslation();
-  const feedback = useFeedback(artifact);
+  const feedback = useFeedback(artifact, polling);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [copyState, setCopyState] = useState<'copied' | 'copyFailed' | null>(null);
   const eligible = feedback.input ? selectableInput(feedback.input) : [];
@@ -28,7 +32,7 @@ function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) 
   const history = tasks.filter((task) => task.state === 'accepted' || task.state === 'cancelled');
   const active = tasks.filter((task) => task.state !== 'accepted' && task.state !== 'cancelled');
   const connectionGuide = t('feedback.connectionGuide', {
-    artifact,
+    artifact: feedback.input?.artifact ?? artifact,
     origin: window.location.origin,
   });
   const openThread = (id: string) => {
@@ -132,6 +136,12 @@ function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) 
           <div {...stylex.props(styles.list)}>
             {eligible.map((selection) => {
               const thread = feedback.input?.threads.find((item) => item.id === selection.threadId);
+              const preview = thread?.messages.find((message) => !message.deleted);
+              const live = threads
+                ?.find(({ id }) => id === selection.threadId)
+                ?.messages.find(
+                  (message) => message.id === preview?.id && message.text === preview.text,
+                );
               return (
                 <label key={selection.threadId} {...stylex.props(styles.label)}>
                   <input
@@ -146,7 +156,10 @@ function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) 
                       )
                     }
                   />
-                  <span>{thread?.messages.find((message) => !message.deleted)?.text}</span>
+                  <span>
+                    {preview?.text}
+                    {live && <AgentReadReceipt message={live} />}
+                  </span>
                 </label>
               );
             })}

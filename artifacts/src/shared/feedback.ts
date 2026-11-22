@@ -1,5 +1,6 @@
 import type { BoardThread } from './board-comments';
 import type { Thread } from './comments';
+import type { DocumentQuestion } from './document-questions';
 import type { CanvasSpec } from './types';
 
 export type FeedbackState =
@@ -34,6 +35,7 @@ export interface FeedbackOperation {
 }
 export interface FeedbackTask {
   artifact: string;
+  artifactAddress?: string;
   attempt: number;
   claimOwner?: string;
   claimRecoverySeq?: number;
@@ -48,6 +50,9 @@ export interface FeedbackTask {
   leaseUntil?: number;
   operation?: FeedbackOperation;
   outputRevision?: string;
+  questionContext?: FeedbackQuestionContext;
+  questionId?: string;
+  questionResult?: { id: string; payloadHash: string; reply: string };
   recoveryConsumedSeq?: number;
   recoveryRequestSeq?: number;
   roundContext?: FeedbackRoundContext;
@@ -58,6 +63,44 @@ export interface FeedbackTask {
   threads: Thread<unknown>[];
   tokenHash?: string;
   updatedAt: number;
+}
+
+export const MAX_QUESTION_ANSWER_LENGTH = 4000;
+
+export interface FeedbackQuestionContext {
+  answer: string;
+  definition: DocumentQuestion;
+}
+
+export interface DesignDecision {
+  documentId: string;
+  revision: string;
+  question: DocumentQuestion;
+  choice: string;
+  by: { id: string; login?: string };
+  at: number;
+}
+
+export interface DesignApproval {
+  currentAssetsRevision?: string;
+  currentRevision: string | null;
+  decision?: DesignDecision;
+  state: 'pending' | 'approved' | 'changes_requested' | 'needs_review';
+}
+
+export interface FeedbackQuestionInput {
+  approval?: DesignApproval;
+  answer?: string;
+  definition: DocumentQuestion;
+  id: string;
+  previousDefinition?: DocumentQuestion;
+  task?: {
+    id: string;
+    state: FeedbackState;
+    reply?: string;
+    withdrawable: boolean;
+  };
+  version: string;
 }
 
 export interface FeedbackRoundGroup {

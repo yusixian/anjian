@@ -130,6 +130,7 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "comments": {
+    "readByAgent": "Read by Agent",
     "waitingYou": "Waiting on you",
     "waitingAgent": "Waiting on {{agent}}",
     "agentReadsNext": "{{agent}} reads this next turn",
@@ -252,6 +253,7 @@
     "railComments": "Comments {{count}}"
   },
   "feedback": {
+    "targetMissing": "The original comment or its target no longer exists.",
     "title": "Agent feedback",
     "manage": "Manage connection",
     "refresh": "Refresh",
@@ -593,11 +595,56 @@
     "nextBoard": "Next board"
   },
   "preview": {
+    "selectionSend": "Send selection",
+    "selectionRecipient": "Choose an Agent",
+    "selectionDelivery": {
+      "queued": "Queued for the Agent",
+      "delivered": "Sent to the Agent",
+      "expired": "Delivery expired. Select the text again to retry.",
+      "stale": "Select the text again to send it.",
+      "failed": "Couldn’t send the selection. Try again.",
+      "noRecipient": "Open this preview from an Agent session to send a selection."
+    },
     "unavailable": "Preview unavailable",
     "loading": "Loading preview…",
     "waitingPage": "Waiting for page content…",
     "waitingDocument": "Waiting for document content…",
     "waitingCanvas": "Waiting for canvas content…"
+  },
+  "question": {
+    "approvalOwner": "Owner",
+    "approvalAssetsChanged": "Attachments changed. Reopen the document before reviewing.",
+    "reopenDocument": "Reopen document",
+    "recordApproval": "Record decision",
+    "approvalRecorded": "“{{choice}}” recorded by {{reviewer}} on {{time}}",
+    "approvalChanged": "The document or question changed. Review it and select an option again.",
+    "approvalFailed": "Couldn’t confirm the decision. Check its status and try again.",
+    "approvalState": {
+      "pending": "Awaiting review",
+      "approved": "Current revision approved",
+      "changes_requested": "Changes requested for the current revision",
+      "needs_review": "The document changed since the last decision. Review the current revision."
+    },
+    "recommended": "Recommended",
+    "placeholder": "Write your answer…",
+    "previous": "This answer refers to an earlier version of the question.",
+    "replyReady": "The Agent replied. You can review the answer and reply.",
+    "submittedAnswer": "Submitted answer",
+    "conflict": "The saved answer changed to “{{answer}}”. Your edits are still here.",
+    "empty": "No answer",
+    "restore": "Use saved answer",
+    "keep": "Keep my edits",
+    "target": "Choose an Agent",
+    "save": "Save draft",
+    "submit": "Send to {{agent}}",
+    "noAgent": "Connect an Agent to this document to send your answer. You can save a draft now.",
+    "withdraw": "Withdraw submission",
+    "saved": "Draft saved",
+    "syncing": "Waiting for the latest question to load.",
+    "changed": "The question or task changed. Review its current state and try again.",
+    "failed": "Couldn’t confirm the change. Your answer is still here.",
+    "loadFailed": "Couldn’t load the latest answers.",
+    "reload": "Refresh"
   },
   "questions": {
     "previous": "Previous question",
@@ -605,6 +652,10 @@
     "jumpTo": "Jump to",
     "boards_one": "{{count}} board",
     "boards_other": "{{count}} boards"
+  },
+  "reference": {
+    "static": "Artifact reference",
+    "unavailable": "Reference unavailable"
   },
   "release": {
     "closeNotes": "Close",
@@ -696,6 +747,10 @@
     "quotaExceeded": "Not enough storage. Publishing needs room for a complete new snapshot. The old snapshot stays until publication succeeds. Free up space and try again.",
     "actionUnconfirmed": "Sharing status has been refreshed. Check the link and status before continuing.",
     "actionUnknown": "The result is not confirmed. Retry loading before you publish or turn off sharing again."
+  },
+  "slideLibrary": {
+    "create": "New slide deck",
+    "createFailed": "Could not create the slide deck. Try again."
   },
   "storage": {
     "migration": {
@@ -822,6 +877,10 @@
       "cacheHelp": "Shared allocations are not disk capacity. S3 caches and retained originals still use local space. S3 capacity is not estimated here."
     }
   },
+  "storyboardLibrary": {
+    "create": "New storyboard",
+    "createFailed": "Could not create the storyboard. Try again."
+  },
   "time": {
     "justNow": "just now",
     "notRecorded": "Time not recorded",
@@ -832,10 +891,13 @@
     "hours": "{{count}} h"
   },
   "type": {
+    "storyboard": "Storyboard",
+    "slides": "Slides",
     "all": "All",
     "artboard": "Artboard",
     "document": "Document",
-    "html": "HTML"
+    "html": "HTML",
+    "whiteboard": "Whiteboard"
   },
   "verdict": {
     "passed": "Passed",
@@ -863,5 +925,46 @@
     "speed": "Speed",
     "loop": "Loop",
     "expand": "Expand"
+  },
+  "whiteboard": {
+    "anchorMissing": "The commented elements are no longer on this whiteboard.",
+    "canvas": "Whiteboard canvas",
+    "commentFailed": "The comment could not be saved. Try again.",
+    "commentsWarning": "Comments could not be read. Check the project's comments file.",
+    "conflict": "A newer version is available. Your unsaved changes are still here.",
+    "create": "New whiteboard",
+    "createFailed": "Could not create the whiteboard.",
+    "copyFrame": "Copy frame link",
+    "discardConfirm": "Discard your unsaved changes and load the latest whiteboard?",
+    "frame": "Frame",
+    "frameCopied": "Frame link copied.",
+    "frameCopyFailed": "Copy the link from the field below.",
+    "frameLink": "Frame link",
+    "frameMissing": "This frame is unavailable. Showing the whole page.",
+    "frameOverview": "Whole page",
+    "frameUnavailable": "Unavailable frame",
+    "frameUntitled": "Frame {{count}}",
+    "loadFailed": "The whiteboard could not be loaded.",
+    "locate_one": "Locate {{count}} element",
+    "locate_other": "Locate {{count}} elements",
+    "noComments": "No comments yet.",
+    "goToMain": "Go to main page",
+    "page": "Page",
+    "pageAdd": "Add page",
+    "pageMain": "Main",
+    "pageMissing": "Unavailable page",
+    "pageRename": "Rename page",
+    "pageSaveFailed": "The page could not be saved. Try again.",
+    "pageTitle": "Page name",
+    "pageUnsaved": "{{title}} (unsaved)",
+    "reload": "Reload latest version",
+    "reply": "Reply",
+    "save": "Save",
+    "saveFailed": "Changes could not be saved. Try again.",
+    "saved": "Saved",
+    "selected_one": "Comment on {{count}} element",
+    "selected_other": "Comment on {{count}} elements",
+    "selectToComment": "Select elements to comment",
+    "unsaved": "Unsaved changes"
   }
 }

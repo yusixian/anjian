@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { parseNotes } from './notes.mjs';
+import { currentNotes, parseNotes, releaseBody } from './notes.mjs';
 import { root, syncVersions } from './versions.mjs';
 
 syncVersions(root, true);
@@ -20,4 +20,5 @@ if (process.argv.includes('--check')) process.exit(0);
 if (pending.length)
   execFileSync('pnpm', ['exec', 'changeset', 'version'], { cwd: root, stdio: 'inherit' });
 else console.info('No unreleased changesets; versions unchanged.');
-syncVersions();
+const version = syncVersions();
+if (pending.length) releaseBody(version, currentNotes(root, version));

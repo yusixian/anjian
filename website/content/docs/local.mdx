@@ -6,11 +6,12 @@ description: 让作品留在自己的电脑里。完成构建后，在浏览器�
 <Environment />
 
 <Notice title="开始前">
-  案间尚未发布 npm 安装包。请使用本项目源码，不要安装上游 Ryugi 包或同名的未知软件包。下面命令需要
-  Git、Node.js 和 pnpm。
+  请从案间 GitHub Releases 获取安装包，或从本仓库构建。下方源码构建命令需要 Git、Node.js 和 pnpm。
 </Notice>
 
 ## 安装与启动
+
+在 macOS 上，可以 [下载对应架构的安装包](https://github.com/yusixian/anjian/releases)，校验 SHA-256 并解压，再运行包内的 `anjian`。步骤见 [macOS 安装与离线更新](https://github.com/yusixian/anjian/blob/main/docs/install.md#macos-安装包)。
 
 <Steps>
 <Step title="获取源码并构建">
@@ -51,4 +52,4 @@ node dist/cli.cjs start \
 
 ## 更新案间
 
-保留并备份作品与服务状态，从本仓库获取新版源码后重新安装依赖、构建，再重启服务。不要使用上游自动更新命令。
+备份作品与服务状态。安装包用户可下载新版和校验文件，离线解压后切换入口。源码用户可获取新版、重新构建并重启。

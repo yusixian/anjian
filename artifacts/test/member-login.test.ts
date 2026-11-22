@@ -71,9 +71,14 @@ test('invited members enter isolated workspaces and cannot read owner or other m
   const bobUrl = new URL(await f.hub.linkFor(bob.project, 'html', 'private')).pathname;
   const ownerUrl = new URL(await f.hub.linkFor(fs.realpathSync(f.ownerProject), 'html', 'private')).pathname;
   expect((await f.request(aliceUrl, alice.cookie)).status).toBe(200);
+  const reference = (url: string) => '/api/artifact-reference' + url;
+  const ownReference = await f.request(reference(aliceUrl), alice.cookie);
+  expect(ownReference.status).toBe(200);
+  expect(await ownReference.json()).toMatchObject({ href: aliceUrl + '?ref=1' });
   for (const foreign of [bobUrl, ownerUrl]) {
     expect((await f.request(foreign, alice.cookie)).status).toBe(404);
     expect((await f.request('/api/artifacts' + foreign, alice.cookie)).status).toBe(404);
+    expect((await f.request(reference(foreign), alice.cookie)).status).toBe(404);
   }
   const list = await (await f.request('/api/hub/artifacts', alice.cookie)).json();
   expect(list.artifacts).toHaveLength(1);

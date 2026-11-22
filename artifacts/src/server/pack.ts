@@ -19,7 +19,7 @@ export function formatBytes(bytes: number) {
 }
 
 const excluded = (type: ArtifactType, relative: string) =>
-  (type === 'document' || type === 'artboard') && relative === 'comments.json';
+  (type === 'document' || type === 'artboard' || type === 'slides' || type === 'storyboard') && relative === 'comments.json';
 
 export function packArtifact(
   dir: string,

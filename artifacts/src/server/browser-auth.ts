@@ -1,13 +1,15 @@
 import type http from 'node:http';
 
-import { ANJIAN_MARK_VIEWBOX,anjianMarkBody } from '../shared/brand';
+import { ANJIAN_MARK_VIEWBOX, anjianMarkBody } from '../shared/brand';
+import { ARTIFACT_TYPES } from '../shared/types';
 import { type AccessPolicy, hostAllowed, originAllowed } from './access';
-import { type createGitHubAuth,GitHubAuthError } from './github-auth';
+import { type createGitHubAuth, GitHubAuthError } from './github-auth';
 import { parseCookies, safeEqual, send } from './http';
 
 const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
-const PAGE =
-  /^\/(?:index\.html|library\/?|devices|connect|members|storage|(?:(?:preview|embed)\/)?(?:artboard|document|html)\/[\w-]+\/?)?$/;
+const PAGE = new RegExp(
+  `^/(?:index\\.html|library/?|devices|connect|members|storage|(?:(?:preview|embed)/)?(?:${ARTIFACT_TYPES.join('|')})/[\\w-]+/?)?$`,
+);
 const escape = (value: string) =>
   value.replaceAll(
     /[&<>"']/g,

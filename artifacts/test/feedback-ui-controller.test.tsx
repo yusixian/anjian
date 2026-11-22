@@ -40,8 +40,8 @@ let controller: ReturnType<typeof useFeedback>;
 let root: Root;
 let container: HTMLDivElement;
 let fetchMock: ReturnType<typeof vi.fn>;
-function Harness(): ReactNode {
-  controller = useFeedback('document/demo');
+function Harness({ polling }: { polling: boolean }): ReactNode {
+  controller = useFeedback('document/demo', polling);
   return null;
 }
 function json(data: unknown, status = 200) {
@@ -50,11 +50,11 @@ function json(data: unknown, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
-async function mount() {
+async function mount(polling = true) {
   await act(async () => {
     root.render(
       <FeedbackProvider createApi={feedbackApi}>
-        <Harness />
+        <Harness polling={polling} />
       </FeedbackProvider>,
     );
   });
@@ -298,4 +298,26 @@ it('clears the queued submission notice once the same task progresses', async ()
   });
   expect(controller.notice).toBeNull();
   vi.useRealTimers();
+});
+
+it('pauses polling while hidden and refreshes on reopen without losing the selection', async () => {
+  vi.useFakeTimers();
+  try {
+    await mount();
+    await select();
+
+    await mount(false);
+    fetchMock.mockClear();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await mount();
+    expect(fetchMock.mock.calls).toHaveLength(3);
+    expect(controller.selected).toEqual(['thread-1']);
+    expect(controller.target).toBe(connection.id);
+  } finally {
+    vi.useRealTimers();
+  }
 });

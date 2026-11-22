@@ -2,6 +2,7 @@ import { installInspector } from '../inspector/runtime';
 import { installSnapshot, serializeBoard } from '../inspector/snapshot';
 import { installTweaks } from '../runtime/tweaks';
 import { COMMENT_CURSOR, INSPECTOR_PROPERTIES, POINTER_CURSOR } from '../shared/inspector';
+import { PREVIEW_SELECTION_SELECTOR, PREVIEW_SELECTION_TEXT } from '../shared/selection-send';
 import { tweakTools } from '../shared/tweaks';
 import { EMBEDDED_STYLE, injectionPoint } from './strip-runtime';
 
@@ -55,9 +56,24 @@ const RUNTIME = `(() => {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   };
+  let selectionChannel = '';
+  const reportSelection = () => {
+    if (!selectionChannel) return;
+    const selection = getSelection();
+    const anchor = selection?.anchorNode;
+    const element = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
+    const text = selection?.toString().trim().slice(0, ${PREVIEW_SELECTION_TEXT}) || '';
+    const selector = element?.id ? '#' + CSS.escape(element.id) : element?.localName || '';
+    post({ type: 'anjian:selection-text', channel: selectionChannel, url: location.href, text, selector: selector.slice(0, ${PREVIEW_SELECTION_SELECTOR}) });
+  };
   addEventListener('message', (event) => {
     if (event.source !== parent) return;
     const data = event.data || {};
+    if (data.type === 'anjian:watch-selection' && typeof data.channel === 'string' && data.channel.length > 0 && data.channel.length <= 64) {
+      if (!selectionChannel) document.addEventListener('selectionchange', reportSelection);
+      selectionChannel = data.channel;
+      reportSelection();
+    }
     if (data.type === 'anjian:snapshot') {
       const state = { scroll: [scrollX, scrollY], fields: {} };
       fields().forEach((el, index) => {
@@ -117,11 +133,17 @@ const UI_META = /<meta[^>]+name=["']anjian-ui["'][^>]*>/i;
 
 export function injectRuntime(
   html: string,
-  options: { uiRuntimeUrl?: string; embedded?: boolean; inspector?: boolean; readOnlyInspector?: boolean } = {},
+  options: {
+    uiRuntimeUrl?: string;
+    embedded?: boolean;
+    inspector?: boolean;
+    readOnlyInspector?: boolean;
+  } = {},
 ): string {
-  const inspect = options.inspector || options.readOnlyInspector
-    ? `${options.readOnlyInspector ? '' : `;(${installTweaks.toString().replaceAll('\n', ' ')})(window,${tweakTools.toString().replaceAll('\n', ' ')});`};(${installInspector.toString().replaceAll('\n', ' ')})(window,${JSON.stringify(INSPECTOR_PROPERTIES)},${JSON.stringify(COMMENT_CURSOR)},${JSON.stringify(POINTER_CURSOR)},${options.readOnlyInspector === true});;(${installSnapshot.toString().replaceAll('\n', ' ')})(window,${serializeBoard.toString().replaceAll('\n', ' ')});`
-    : '';
+  const inspect =
+    options.inspector || options.readOnlyInspector
+      ? `${options.readOnlyInspector ? '' : `;(${installTweaks.toString().replaceAll('\n', ' ')})(window,${tweakTools.toString().replaceAll('\n', ' ')});`};(${installInspector.toString().replaceAll('\n', ' ')})(window,${JSON.stringify(INSPECTOR_PROPERTIES)},${JSON.stringify(COMMENT_CURSOR)},${JSON.stringify(POINTER_CURSOR)},${options.readOnlyInspector === true});;(${installSnapshot.toString().replaceAll('\n', ' ')})(window,${serializeBoard.toString().replaceAll('\n', ' ')});`
+      : '';
   const tag = `${options.embedded ? EMBEDDED_STYLE : ''}<script>${inspect || RUNTIME_LINE}</script>`;
   const ui =
     options.uiRuntimeUrl && !options.inspector && (UI_MARKER.test(html) || UI_META.test(html))

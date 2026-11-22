@@ -10,8 +10,28 @@ import {
   remoteUploadRevision,
   writeRemoteArtifact,
 } from '../remote-transfer';
+import { requireFeedbackArtifact } from './artifact';
 import { feedbackError, hash } from './store';
 import { text } from './tasks';
+
+/** Commit an answer reply with the task in one feedback-store write. */
+export function applyQuestionReply(task: FeedbackTask, body: Record<string, unknown>): boolean {
+  if (!task.questionContext || body.upload !== undefined || body.replies !== undefined)
+    feedbackError('invalid_result', undefined, 400);
+  const id = text(body.operationId, 'operationId');
+  const reply = text(body.questionReply, 'questionReply', 20000).trim();
+  const payloadHash = hash({ reply });
+  if (task.questionResult) {
+    if (task.questionResult.id !== id || task.questionResult.payloadHash !== payloadHash)
+      feedbackError('idempotency_conflict');
+    return false;
+  }
+  task.questionResult = { id, payloadHash, reply };
+  task.state = 'awaiting_review';
+  task.updatedAt = Date.now();
+  delete task.errorCode;
+  return true;
+}
 
 /** The caller holds quota and project locks. Every await is followed by reauthorization/fencing. */
 export async function applyResult(options: {
@@ -51,7 +71,7 @@ export async function applyResult(options: {
   )
     feedbackError('invalid_result', undefined, 400);
   const payloadHash = hash({ upload, replies });
-  const [type, id] = task.artifact.split('/') as ['document' | 'artboard', string];
+  const { type, id } = requireFeedbackArtifact(task.artifact);
   if (!mounted.feedbackComments || !mounted.feedbackReply)
     feedbackError('feedback_unavailable', undefined, 503);
   guard();
@@ -108,9 +128,9 @@ export async function applyResult(options: {
       upload,
       admission,
       prepared,
-      type === 'artboard'
-        ? (directory) => mounted.prepareArtifactUpload(type, id, directory)
-        : undefined,
+      type === 'document' || type === 'whiteboard'
+        ? undefined
+        : (directory) => mounted.prepareArtifactUpload(type, id, directory),
     );
     current = readRemoteArtifact(project, task.artifact).revision;
     if (current !== operation.expectedRevision) feedbackError('result_reconciliation_required');

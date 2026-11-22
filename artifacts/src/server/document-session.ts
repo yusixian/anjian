@@ -1,5 +1,5 @@
-import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -11,10 +11,19 @@ import {
 import { $getRoot, type SerializedEditorState } from 'lexical';
 import { decodeImportBlobMeta, LoroDoc, type OpId } from 'loro-crdt';
 
+import { approvalViewKey } from '../shared/approval-view';
+import { validateArtifactReference } from '../shared/artifact-reference';
 import { DOCUMENT_FEATURES } from '../shared/document-features';
-import { boxDrawingDiagrams, parseDocument, serializeDocument, stampBlockIds } from './document-codec';
-import { createDocumentHeadlessEditor } from './document-headless';
+import { type DocumentQuestion, validateDocumentQuestion } from '../shared/document-questions';
+import {
+  boxDrawingDiagrams,
+  DocumentRejected,
+  parseDocument,
+  serializeDocument,
+  stampBlockIds,
+} from './document-codec';
 import type { CommentAdmission } from './document-comments';
+import { createDocumentHeadlessEditor } from './document-headless';
 import { createPreparedStateFiles } from './storage/prepared-files';
 
 export type DocumentOutcome =
@@ -29,27 +38,28 @@ export type DocumentEvent =
   | { type: 'saved' };
 
 export interface DocumentSessionOptions {
+  enqueueWrite?: (work: (admit: CommentAdmission) => void) => void;
   file: string;
-  stateRoot?: string;
   log?: (line: string) => void;
   snapshotFile: string;
   snapshotIntervalMs?: number;
+  stateRoot?: string;
   writeDelayMs?: number;
-  enqueueWrite?: (work: (admit: CommentAdmission) => void) => void;
 }
 
 export interface DocumentSession {
   agentActiveAt: () => number;
+  approvalView: () => string | null;
   close: (admit?: CommentAdmission) => Promise<void>;
   flush: (admit?: CommentAdmission) => Promise<void>;
-  quiesce: (admit?: CommentAdmission) => Promise<() => void>;
   importUpdate: (bytes: Uint8Array, features?: readonly string[]) => void;
-  saveUpdate: (bytes: Uint8Array, features?: readonly string[], admit?: CommentAdmission) => void;
   lineage: () => string;
   onFileText: (text: string) => void;
-  prepareRemoteText: (text: string) => PreparedRemoteDocument;
-  readyForRemoteUpload: (admit?: CommentAdmission) => Promise<void>;
   outcome: () => DocumentOutcome;
+  prepareRemoteText: (text: string) => PreparedRemoteDocument;
+  quiesce: (admit?: CommentAdmission) => Promise<() => void>;
+  readyForRemoteUpload: (admit?: CommentAdmission) => Promise<void>;
+  saveUpdate: (bytes: Uint8Array, features?: readonly string[], admit?: CommentAdmission) => void;
   settled: () => Promise<void>;
   snapshot: () => Uint8Array;
   state: () => SerializedEditorState;
@@ -58,16 +68,16 @@ export interface DocumentSession {
 }
 
 export interface PreparedRemoteDocument {
-  xml: string;
-  warnings: string[];
+  abort: () => void;
+  addStateFile: (file: string, data: string | Uint8Array) => void;
+  commit: () => void;
+  finalize: () => void;
+  stage: () => void;
   /** Signed change in persisted document state, excluding doc.xml itself. */
   stateDeltaBytes: number;
   validate: () => void;
-  stage: () => void;
-  addStateFile: (file: string, data: string | Uint8Array) => void;
-  abort: () => void;
-  commit: () => void;
-  finalize: () => void;
+  warnings: string[];
+  xml: string;
 }
 
 function snapshotSignature(file: string): string | null {
@@ -82,7 +92,11 @@ function snapshotSignature(file: string): string | null {
 }
 
 /** The first upload has no live session; prepare its initial collaboration state off disk. */
-export function prepareNewRemoteDocument(text: string, snapshotFile: string, stateRoot = path.dirname(snapshotFile)): PreparedRemoteDocument {
+export function prepareNewRemoteDocument(
+  text: string,
+  snapshotFile: string,
+  stateRoot = path.dirname(snapshotFile),
+): PreparedRemoteDocument {
   const document = new LoroDoc();
   document.setRecordTimestamp(true);
   const editor = createDocumentHeadlessEditor();
@@ -94,14 +108,17 @@ export function prepareNewRemoteDocument(text: string, snapshotFile: string, sta
     editor.update(() => $reconcileRoot(stamped.root as never), { discrete: true });
   document.commit();
   const xml = serializeDocument(editor.getEditorState().toJSON());
-  const warnings = boxDrawingDiagrams(editor.getEditorState().toJSON()).map((id) =>
-    `block ${id} draws a diagram with box-drawing characters; this document is rendered, not Markdown, so use <mermaid>`,
+  const warnings = boxDrawingDiagrams(editor.getEditorState().toJSON()).map(
+    (id) =>
+      `block ${id} draws a diagram with box-drawing characters; this document is rendered, not Markdown, so use <mermaid>`,
   );
   const snapshot = document.export({ mode: 'snapshot' });
   binding.dispose();
   const state = createPreparedStateFiles(stateRoot, [{ file: snapshotFile, data: snapshot }]);
   return {
-    xml, warnings, stateDeltaBytes: snapshot.byteLength,
+    xml,
+    warnings,
+    stateDeltaBytes: snapshot.byteLength,
     validate: () => {
       if (fsSync.existsSync(snapshotFile)) throw new Error('Document state appeared during upload');
     },
@@ -115,6 +132,36 @@ export class OutdatedClient extends Error {}
 export class DocumentPersistenceError extends Error {}
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+function validateDocumentBlockTree(candidate: LoroDoc) {
+  const root = candidate.getTree(TREE_NAME).roots()[0];
+  if (!root) return;
+  const stack = root.children() ?? [];
+  const ids = new Set<string>();
+  while (stack.length) {
+    const node = stack.pop()!;
+    const children = node.children();
+    if (children) for (const child of children) stack.push(child);
+    const type = node.data.get('type');
+    if (type !== 'question' && type !== 'artifact-reference') continue;
+    if (node.parent()?.id !== root.id)
+      throw new DocumentRejected(
+        `<${type === 'question' ? 'ask' : 'ref'}> must be a top-level block`,
+      );
+    try {
+      if (type === 'artifact-reference') {
+        validateArtifactReference(node.data.get('reference'));
+        continue;
+      }
+      const definition = node.data.get('definition') as DocumentQuestion;
+      validateDocumentQuestion(definition);
+      if (ids.has(definition.id)) throw new Error(`<ask> duplicate key "${definition.id}"`);
+      ids.add(definition.id);
+    } catch (error) {
+      throw new DocumentRejected(messageOf(error));
+    }
+  }
+}
 
 function lcsLength(a: string[], b: string[]) {
   const table = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
@@ -193,17 +240,23 @@ export async function createDocumentSession(
   const { file, snapshotFile, log = () => undefined } = options;
   const writeDelayMs = options.writeDelayMs ?? 300;
   const listeners = new Set<(event: DocumentEvent) => void>();
-  const emit = (event: DocumentEvent) => listeners.forEach((listener) => {
-    try { listener(event); }
-    catch (error) {
-      try { log(`document event listener failed: ${messageOf(error)}`); }
-      catch { /* Observer diagnostics must not abort a committed document edit. */ }
-    }
-  });
+  const emit = (event: DocumentEvent) =>
+    listeners.forEach((listener) => {
+      try {
+        listener(event);
+      } catch (error) {
+        try {
+          log(`document event listener failed: ${messageOf(error)}`);
+        } catch {
+          /* Observer diagnostics must not abort a committed document edit. */
+        }
+      }
+    });
 
   const loro = new LoroDoc();
   loro.setRecordTimestamp(true);
-  const versionKey = () => JSON.stringify([...loro.oplogVersion().toJSON()].sort(([a], [b]) => a.localeCompare(b)));
+  const versionKey = () =>
+    JSON.stringify([...loro.oplogVersion().toJSON()].sort(([a], [b]) => a.localeCompare(b)));
   let persistedVersion: string | null = null;
   let persistedSnapshotSignature: string | null = null;
   try {
@@ -276,6 +329,13 @@ export async function createDocumentSession(
       target as never,
       `agent: ${stats}`,
     );
+    const candidate = loro.fork();
+    try {
+      candidate.import(update);
+      validateDocumentBlockTree(candidate);
+    } finally {
+      candidate.free();
+    }
     remember(text, headsAfter(base, update));
     return { stats, update };
   };
@@ -294,19 +354,18 @@ export async function createDocumentSession(
       setOutcome({ kind: 'rejected', message: messageOf(err) });
       return;
     }
-    const fallback = lastGoodText ?? serializeDocument(editor.getEditorState().toJSON());
-    const floor = lastAgentText;
-    lastAgentText = text;
     const queued = streaming > 0;
-    lastGoodText = text;
     streaming += 1;
     emitStatus();
     playing = playing.then(() => {
       try {
         // Autosaves pause during streaming, so queued file edits build on the preceding agent write.
-        const baseText = queued ? fallback : closestBase(written, text, fallback, floor);
+        const fallback = lastGoodText ?? serializeDocument(editor.getEditorState().toJSON());
+        const baseText = queued ? fallback : closestBase(written, text, fallback, lastAgentText);
         const { stats, update } = prepareAgentEdit(baseText, text, target);
         binding.import(update);
+        lastGoodText = text;
+        lastAgentText = text;
         revision++;
         emit({ type: 'update', bytes: update });
         log(`agent edit merged: ${stats}`);
@@ -315,7 +374,10 @@ export async function createDocumentSession(
       } catch (err) {
         log(`agent edit failed: ${messageOf(err)}`);
         streaming -= 1;
-        setOutcome({ kind: 'failed', message: messageOf(err) });
+        setOutcome({
+          kind: err instanceof DocumentRejected ? 'rejected' : 'failed',
+          message: messageOf(err),
+        });
       } finally {
         scheduleWrite();
       }
@@ -324,30 +386,53 @@ export async function createDocumentSession(
 
   const persistDocument = (xml: string | null, snapshot: Uint8Array, admit?: CommentAdmission) => {
     const size = (target: string) => {
-      try { return fsSync.statSync(target).size; }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
+      try {
+        return fsSync.statSync(target).size;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+        throw error;
+      }
     };
     const stateFiles: Array<{ file: string; data: string | Uint8Array }> = [
       { file: snapshotFile, data: snapshot },
       ...(activityDirty ? [{ file: activityFile, data: String(agentActiveAt) }] : []),
     ];
-    const delta = (xml === null ? 0 : Buffer.byteLength(xml) - size(file)) +
+    const delta =
+      (xml === null ? 0 : Buffer.byteLength(xml) - size(file)) +
       stateFiles.reduce((sum, entry) => sum + Buffer.byteLength(entry.data) - size(entry.file), 0);
     admit?.(delta);
-    const content = createPreparedStateFiles(path.dirname(file), xml === null ? [] : [{ file, data: xml }]);
-    const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), stateFiles);
+    const content = createPreparedStateFiles(
+      path.dirname(file),
+      xml === null ? [] : [{ file, data: xml }],
+    );
+    const state = createPreparedStateFiles(
+      options.stateRoot ?? path.dirname(snapshotFile),
+      stateFiles,
+    );
     try {
-      content.stage(); state.stage();
-      content.commit(); state.commit();
+      content.stage();
+      state.stage();
+      content.commit();
+      state.commit();
     } catch (error) {
       const errors: unknown[] = [error];
       for (const transaction of [state, content]) {
-        try { transaction.abort(); } catch (rollback) { errors.push(rollback); }
+        try {
+          transaction.abort();
+        } catch (rollback) {
+          errors.push(rollback);
+        }
       }
-      throw new DocumentPersistenceError('Document could not be saved. Please retry.', { cause: errors.length > 1 ? new AggregateError(errors, 'Document save rollback failed') : error });
+      throw new DocumentPersistenceError('Document could not be saved. Please retry.', {
+        cause:
+          errors.length > 1 ? new AggregateError(errors, 'Document save rollback failed') : error,
+      });
     }
     activityDirty = false;
-    return () => { content.finalize(); state.finalize(); };
+    return () => {
+      content.finalize();
+      state.finalize();
+    };
   };
 
   const write = (admit?: CommentAdmission) => {
@@ -358,8 +443,12 @@ export async function createDocumentSession(
       // Preserve recoverable collaborative edits without overwriting invalid
       // externally supplied XML or acknowledging that source as saved.
       const version = versionKey();
-      if (activityDirty || version !== persistedVersion || persistedSnapshotSignature === null ||
-          snapshotSignature(snapshotFile) !== persistedSnapshotSignature) {
+      if (
+        activityDirty ||
+        version !== persistedVersion ||
+        persistedSnapshotSignature === null ||
+        snapshotSignature(snapshotFile) !== persistedSnapshotSignature
+      ) {
         const finalize = persistDocument(null, loro.export({ mode: 'snapshot' }), admit);
         persistedVersion = version;
         persistedSnapshotSignature = snapshotSignature(snapshotFile);
@@ -369,8 +458,9 @@ export async function createDocumentSession(
       return;
     }
     let onDisk: string | null;
-    try { onDisk = fsSync.readFileSync(file, 'utf8'); }
-    catch (error) {
+    try {
+      onDisk = fsSync.readFileSync(file, 'utf8');
+    } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       onDisk = null;
     }
@@ -385,8 +475,13 @@ export async function createDocumentSession(
     const text = serializeDocument(editor.getEditorState().toJSON());
     const version = versionKey();
     const changed = text !== lastFileText;
-    if (!activityDirty && !changed && version === persistedVersion && persistedSnapshotSignature !== null &&
-        snapshotSignature(snapshotFile) === persistedSnapshotSignature) {
+    if (
+      !activityDirty &&
+      !changed &&
+      version === persistedVersion &&
+      persistedSnapshotSignature !== null &&
+      snapshotSignature(snapshotFile) === persistedSnapshotSignature
+    ) {
       snapshotDirty = false;
       return;
     }
@@ -406,41 +501,50 @@ export async function createDocumentSession(
 
   const flush = (admit?: CommentAdmission): Promise<void> => {
     const previous = writing;
-    writing = playing.then(() => previous).then(() => write(admit), () => write(admit));
+    writing = playing
+      .then(() => previous)
+      .then(
+        () => write(admit),
+        () => write(admit),
+      );
     return writing.then(() => (streaming > 0 || writeTimer ? flush(admit) : undefined));
   };
 
   const enqueueBackgroundWrite = () => {
     if (disposed || paused) return;
     if (options.enqueueWrite) {
-      options.enqueueWrite(admit => {
+      options.enqueueWrite((admit) => {
         if (!disposed && !paused) write(admit);
       });
-    } else void flush().catch(err => log(`autosave failed: ${messageOf(err)}`));
+    } else void flush().catch((err) => log(`autosave failed: ${messageOf(err)}`));
   };
 
   function scheduleWrite() {
     snapshotDirty = true;
     clearTimeout(writeTimer);
-    if (paused) { pausedWrite = true; writeTimer = undefined; return; }
-    writeTimer = setTimeout(
-      () => { writeTimer = undefined; enqueueBackgroundWrite(); },
-      writeDelayMs,
-    );
+    if (paused) {
+      pausedWrite = true;
+      writeTimer = undefined;
+      return;
+    }
+    writeTimer = setTimeout(() => {
+      writeTimer = undefined;
+      enqueueBackgroundWrite();
+    }, writeDelayMs);
   }
 
   const startSnapshotTimer = () => {
-    snapshotTimer = setInterval(
-      enqueueBackgroundWrite,
-      options.snapshotIntervalMs ?? 5000,
-    );
+    snapshotTimer = setInterval(enqueueBackgroundWrite, options.snapshotIntervalMs ?? 5000);
     snapshotTimer.unref();
   };
   const resume = () => {
     if (!paused || disposed) return;
     paused = false;
     startSnapshotTimer();
-    if (pausedWrite) { pausedWrite = false; scheduleWrite(); }
+    if (pausedWrite) {
+      pausedWrite = false;
+      scheduleWrite();
+    }
   };
   startSnapshotTimer();
   scheduleWrite();
@@ -464,17 +568,41 @@ export async function createDocumentSession(
         `this page cannot show <${missing.join('>, <')}> blocks; reload the page`,
       );
     const probe = loro.fork();
-    probe.import(bytes);
-    if (probe.getTree(TREE_NAME).roots().length > 1)
-      throw new Error('update belongs to a different document; reload the page');
+    try {
+      probe.import(bytes);
+      if (probe.getTree(TREE_NAME).roots().length > 1)
+        throw new Error('update belongs to a different document; reload the page');
+      validateDocumentBlockTree(probe);
+      return probe;
+    } catch (error) {
+      probe.free();
+      throw error;
+    }
   };
 
   return {
+    approvalView: () => {
+      if (
+        streaming ||
+        outcome.kind === 'rejected' ||
+        outcome.kind === 'failed' ||
+        versionKey() !== persistedVersion ||
+        !loro.frontiers().length
+      )
+        return null;
+      try {
+        return fsSync.readFileSync(file, 'utf8') === lastFileText
+          ? approvalViewKey(loro.frontiers())
+          : null;
+      } catch {
+        return null;
+      }
+    },
     snapshot: () => loro.export({ mode: 'snapshot' }),
     state: () => editor.getEditorState().toJSON(),
     lineage: () => loro.getTree(TREE_NAME).roots()[0]?.id ?? '',
     importUpdate: (bytes, features = []) => {
-      validateUpdate(bytes, features);
+      validateUpdate(bytes, features).free();
       binding.import(bytes);
       emit({ type: 'update', bytes });
       scheduleWrite();
@@ -482,18 +610,17 @@ export async function createDocumentSession(
     saveUpdate: (bytes, features = [], admit) => {
       if (streaming > 0 || outcome.kind === 'rejected' || writeTimer || snapshotDirty)
         throw new Error('Document is not ready to save; retry after flushing');
-      validateUpdate(bytes, features);
       if (fsSync.readFileSync(file, 'utf8') !== lastFileText)
         throw new Error('Document source changed; retry after flushing');
-      const candidate = loro.fork();
+      const candidate = validateUpdate(bytes, features);
       const candidateEditor = createDocumentHeadlessEditor();
-      const candidateBinding = createLoroBinding(candidateEditor, candidate);
+      let candidateBinding: ReturnType<typeof createLoroBinding> | undefined;
       let xml: string;
       let snapshot: Uint8Array;
       let update: Uint8Array;
+      const from = loro.oplogVersion();
       try {
-        const from = candidate.oplogVersion();
-        candidateBinding.import(bytes);
+        candidateBinding = createLoroBinding(candidateEditor, candidate);
         const before = candidateEditor.getEditorState().toJSON();
         const stamped = stampBlockIds(before);
         if (JSON.stringify(stamped) !== JSON.stringify(before))
@@ -501,7 +628,11 @@ export async function createDocumentSession(
         xml = serializeDocument(candidateEditor.getEditorState().toJSON());
         snapshot = candidate.export({ mode: 'snapshot' });
         update = candidate.export({ mode: 'update', from });
-      } finally { candidateBinding.dispose(); }
+      } finally {
+        candidateBinding?.dispose();
+        from.free();
+        candidate.free();
+      }
       const finalize = persistDocument(xml, snapshot, admit);
       binding.import(update);
       revision++;
@@ -516,49 +647,86 @@ export async function createDocumentSession(
       emit({ type: 'saved' });
     },
     onFileText,
-    readyForRemoteUpload: async admit => { await flush(admit); },
+    readyForRemoteUpload: async (admit) => {
+      await flush(admit);
+    },
     prepareRemoteText: (text) => {
-      if (streaming > 0 || outcome.kind === 'rejected') throw new Error('Document is not ready for upload');
+      if (streaming > 0 || outcome.kind === 'rejected')
+        throw new Error('Document is not ready for upload');
       const target = parseDocument(text);
       const fallback = lastGoodText ?? serializeDocument(editor.getEditorState().toJSON());
       const baseText = closestBase(written, text, fallback, lastAgentText);
       const base = written.get(baseText) ?? loro.frontiers();
       const stats = blockStats(parseDocument(baseText), target);
-      const update = editAtVersion(loro, base, createDocumentHeadlessEditor, target as never, `agent: ${stats}`);
+      const update = editAtVersion(
+        loro,
+        base,
+        createDocumentHeadlessEditor,
+        target as never,
+        `agent: ${stats}`,
+      );
       const candidate = loro.fork();
       const candidateEditor = createDocumentHeadlessEditor();
       const candidateBinding = createLoroBinding(candidateEditor, candidate);
       const from = candidate.oplogVersion();
       candidateBinding.import(update);
       const beforeStamp = candidateEditor.getEditorState().toJSON();
+      try {
+        validateDocumentBlockTree(candidate);
+      } catch (error) {
+        candidateBinding.dispose();
+        throw error;
+      }
       const stamped = stampBlockIds(beforeStamp);
       if (stamped !== beforeStamp && JSON.stringify(stamped) !== JSON.stringify(beforeStamp))
         candidateEditor.update(() => $reconcileRoot(stamped.root as never), { discrete: true });
       const xml = serializeDocument(candidateEditor.getEditorState().toJSON());
-      const warnings = boxDrawingDiagrams(candidateEditor.getEditorState().toJSON()).map((id) =>
-        `block ${id} draws a diagram with box-drawing characters; this document is rendered, not Markdown, so use <mermaid>`,
+      const warnings = boxDrawingDiagrams(candidateEditor.getEditorState().toJSON()).map(
+        (id) =>
+          `block ${id} draws a diagram with box-drawing characters; this document is rendered, not Markdown, so use <mermaid>`,
       );
       const mergedUpdate = candidate.export({ mode: 'update', from });
       const candidateSnapshot = candidate.export({ mode: 'snapshot' });
       candidateBinding.dispose();
-      const size = (file: string) => { try { return fsSync.statSync(file).size; }
-        catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; } };
+      const size = (file: string) => {
+        try {
+          return fsSync.statSync(file).size;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+          throw error;
+        }
+      };
       const at = Date.now();
       const activity = String(at);
-      const stateDeltaBytes = candidateSnapshot.byteLength - size(snapshotFile) +
-        Buffer.byteLength(activity) - size(activityFile);
+      const stateDeltaBytes =
+        candidateSnapshot.byteLength -
+        size(snapshotFile) +
+        Buffer.byteLength(activity) -
+        size(activityFile);
       const expectedRevision = revision;
       const expectedFrontiers = JSON.stringify(loro.frontiers());
       const state = createPreparedStateFiles(options.stateRoot ?? path.dirname(snapshotFile), [
-        { file: snapshotFile, data: candidateSnapshot }, { file: activityFile, data: activity },
+        { file: snapshotFile, data: candidateSnapshot },
+        { file: activityFile, data: activity },
       ]);
       const validate = () => {
-        if (revision !== expectedRevision || JSON.stringify(loro.frontiers()) !== expectedFrontiers ||
-            streaming > 0 || outcome.kind === 'rejected') throw new Error('Document changed during upload');
+        if (
+          revision !== expectedRevision ||
+          JSON.stringify(loro.frontiers()) !== expectedFrontiers ||
+          streaming > 0 ||
+          outcome.kind === 'rejected'
+        )
+          throw new Error('Document changed during upload');
       };
       return {
-        xml, warnings, stateDeltaBytes, validate, stage: state.stage, addStateFile: state.addStateFile,
-        abort: state.abort, finalize: state.finalize,
+        xml,
+        warnings,
+        stateDeltaBytes,
+        validate,
+        stage: state.stage,
+        addStateFile: state.addStateFile,
+        abort: state.abort,
+        finalize: state.finalize,
         commit: () => {
           validate();
           state.commit();
@@ -591,7 +759,7 @@ export async function createDocumentSession(
     agentActiveAt: () => agentActiveAt,
     settled: () => playing,
     flush,
-    quiesce: async admit => {
+    quiesce: async (admit) => {
       if (paused || disposed) throw new Error('Document session is already paused or closed');
       paused = true;
       clearTimeout(writeTimer);
@@ -612,7 +780,7 @@ export async function createDocumentSession(
         throw error;
       }
     },
-    close: async admit => {
+    close: async (admit) => {
       clearInterval(snapshotTimer);
       await flush(admit);
       binding.dispose();

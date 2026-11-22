@@ -7,7 +7,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { BoardHumanOp } from '../../shared/board-comments';
 import type { InspectorReport } from '../../shared/inspector';
 import type { SelectionMessage } from '../../shared/selection';
-import { isMediaBoard } from '../../shared/types';
+import { type Bounds, isMediaBoard } from '../../shared/types';
 import { SubmitBar } from '../choices/SubmitBar';
 import { CommentsPanel, type CommentsTab } from '../comments/CommentsPanel';
 import { Canvas } from '../components/Canvas';
@@ -165,15 +165,15 @@ function DesktopArtboard({
   const [commentsTab, setCommentsTab] = useState<CommentsTab>('open');
   const pageBounds = (id: string | null) => (id && layout?.pages[id]?.bounds) || null;
   const fitPage = useCallback(
-    (id: string) => {
-      const bounds = layout?.pages[id]?.bounds;
+    (id: string, focus?: Bounds) => {
+      const bounds = focus ?? layout?.pages[id]?.bounds;
       if (!bounds) return false;
       fit(bounds);
       return true;
     },
     [layout, fit],
   );
-  const { page, changePage } = useArtboardPage({ canvas, layout, fitPage });
+  const { page, changePage, focusUnavailable } = useArtboardPage({ canvas, layout, fitPage });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [playing, setPlaying] = useState<ReadonlySet<string>>(() => new Set());
   const [replays, setReplays] = useState<Record<string, number>>({});
@@ -464,6 +464,8 @@ function DesktopArtboard({
     },
     [parameters.loaded, inspector.loaded, readOnly],
   );
+
+  if (focusUnavailable) return <p role="status">{t('reference.unavailable')}</p>;
 
   return (
     <div {...stylex.props(styles.layout)}>

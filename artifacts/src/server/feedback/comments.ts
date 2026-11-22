@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Thread } from '../../shared/comments';
+import type { FeedbackArtifactType } from '../../shared/feedback-artifact';
+import { slideAnchors } from '../../shared/slides';
+import { storyboardAnchors } from '../../shared/storyboard';
+import { MAX_WHITEBOARD_SCENE_BYTES, whiteboardAnchors } from '../../shared/whiteboard';
 import { feedbackError, hash } from './store';
 
 export function validThread(value: unknown): value is Thread<unknown> {
@@ -34,28 +38,60 @@ export const feedbackSelection = (threads: Thread<unknown>[]) =>
       messageIds: t.messages.filter((m) => !m.deleted).map((m) => m.id),
       version: hash(t),
     }));
+const nativeAnchors = {
+  whiteboard: whiteboardAnchors,
+  slides: slideAnchors,
+  storyboard: storyboardAnchors,
+};
+
 /** Read the saved boundary without normalizing comments or consuming an agent cursor. */
 export function readFeedbackComments(
   root: string,
-  type: 'document' | 'artboard',
+  type: FeedbackArtifactType,
   id: string,
 ): Thread<unknown>[] {
   const file = path.join(root, type, id, 'comments.json');
+  let fd: number;
   try {
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 * 1024)
-      feedbackError('unsafe_feedback_comments');
-    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fd = fs.openSync(
+      file,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === 'ENOENT') return [];
+    if (code === 'ELOOP') feedbackError('unsafe_feedback_comments');
+    throw error;
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    const maxBytes = type === 'whiteboard' ? MAX_WHITEBOARD_SCENE_BYTES : 4 * 1024 * 1024;
+    if (!stat.isFile() || stat.size > maxBytes) feedbackError('unsafe_feedback_comments');
+    const contents = Buffer.alloc(stat.size + 1);
+    let length = 0;
+    while (length < contents.length) {
+      const chunk = fs.readSync(fd, contents, length, contents.length - length, null);
+      if (!chunk) break;
+      length += chunk;
+    }
+    if (length !== stat.size) feedbackError('feedback_changed');
+    const value = JSON.parse(contents.toString('utf8', 0, length));
+    const anchors = type === 'artboard' || type === 'document' ? null : nativeAnchors[type];
     if (
-      value.version !== 1 ||
+      value?.version !== 1 ||
       !Array.isArray(value.threads) ||
-      !value.threads.every(validThread) ||
+      !value.threads.every(
+        (thread: unknown) =>
+          validThread(thread) && (anchors === null || anchors.read(thread.anchor) !== null),
+      ) ||
       new Set(value.threads.map((t: Thread<unknown>) => t.id)).size !== value.threads.length
     )
       feedbackError('invalid_feedback_comments');
     return value.threads;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    if (error instanceof SyntaxError) feedbackError('invalid_feedback_comments');
     throw error;
+  } finally {
+    fs.closeSync(fd);
   }
 }

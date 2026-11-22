@@ -4,6 +4,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
+import { TREE_NAME } from '@haklex/rich-collab-loro';
+import { LoroDoc } from 'loro-crdt';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { commentText } from '../src/cli/comment';
@@ -155,6 +157,101 @@ describe('anjian comment', () => {
     expect(thread.messages.at(-1)).toMatchObject({ author: 'human', text: '人的回复' });
   });
 
+  test('explicit sessions can inspect and confirm only the captured messages', async () => {
+    const dir = await project();
+    const args = ['comment', 'list', ...doc(dir)];
+    const threadId = (await run(['comment', 'add', ...doc(dir), '--block', 'b1', '--text', 'q?']))
+      .out.threadId;
+    await humanReply(dir, threadId, 'First reply');
+    const first = await run([...args, '--session', 'codex:first', '--all']);
+    expect(first.out.threads).toMatchObject([{ id: threadId, unread: true }]);
+    const snapshot = path.join(dir, 'read-snapshot.json');
+    fs.writeFileSync(snapshot, first.stdout);
+    expect((await run([...args, '--session', 'codex:first', '--peek'])).out.threads).toHaveLength(
+      1,
+    );
+
+    await humanReply(dir, threadId, 'Second reply');
+    const confirm = await run([
+      'comment',
+      'read',
+      ...doc(dir),
+      '--snapshot',
+      snapshot,
+      '--thread',
+      threadId,
+    ]);
+    expect(confirm.out).toMatchObject({ type: 'comment-read', confirmed: 1 });
+    const later = await run([...args, '--session', 'codex:first']);
+    expect(later.out.threads[0]).toMatchObject({
+      id: threadId,
+      changes: ['new-message'],
+      messageIds: [comments(dir).threads[0].messages[2].id],
+    });
+    const second = await run([...args, '--session', 'codex:second']);
+    expect(second.out.threads[0].messageIds).toHaveLength(2);
+    expect((await run([...args, '--session', 'codex:first', '--all'])).out.threads[0].unread).toBe(
+      false,
+    );
+    expect((await run(args)).out.threads).toHaveLength(1);
+    expect((await run(args)).out.threads).toEqual([]);
+  });
+
+  test('Codex and Claude use the same session names as their notification watchers', async () => {
+    const dir = await project();
+    const args = ['comment', 'list', ...doc(dir)];
+    const threadId = (await run(['comment', 'add', ...doc(dir), '--block', 'b1', '--text', 'q?']))
+      .out.threadId;
+    await humanReply(dir, threadId, 'Review the new draft');
+    const uuid = '8f46e9e2-96ca-4489-aa20-caf3f3e516f6';
+    for (const [agent, host] of [
+      [{ CODEX_THREAD_ID: uuid }, 'codex'],
+      [{ CLAUDE_CODE_SESSION_ID: uuid }, 'claude'],
+    ] as const) {
+      const first = await run(args, { agent });
+      expect(first.out).toMatchObject({ session: `${host}:${uuid}`, threads: [{ unread: true }] });
+      expect((await run([...args, '--session', `${host}:${uuid}`])).out.threads).toEqual([]);
+    }
+    const nested = { CODEX_THREAD_ID: uuid, CLAUDE_CODE_SESSION_ID: uuid };
+    expect((await run(args, { agent: nested })).out.error).toContain('--session');
+    expect(
+      (await run(args, { agent: { ...nested, ANJIAN_COMMENT_HOST: 'claude' } })).out.session,
+    ).toBe(`claude:${uuid}`);
+  });
+
+  test('large comment histories are acknowledged in separate requests', async () => {
+    const dir = await project({ running: false });
+    const time = '2026-11-22T10:00:00.000Z';
+    fs.writeFileSync(
+      path.join(dir, '.anjian/artifacts/document/relay/comments.json'),
+      JSON.stringify({
+        version: 1,
+        threads: [
+          {
+            id: 'batch',
+            anchor: { blockId: 'b1', quote: '' },
+            status: 'open',
+            statusAt: time,
+            messages: Array.from({ length: 1450 }, (_, index) => ({
+              id: `m-${index}`,
+              author: 'human',
+              at: time,
+              text: 'Feedback',
+            })),
+          },
+        ],
+      }),
+    );
+    expect((await run(['start', '--project-dir', dir, '--background'])).out.type).toBe(
+      'server-started',
+    );
+    const args = ['comment', 'list', ...doc(dir), '--session', 'large-session'];
+    const first = await run(args);
+    expect(first.code).toBe(0);
+    expect(first.out.threads[0].messages).toHaveLength(1450);
+    expect((await run(args)).out.threads).toEqual([]);
+  });
+
   test('rejects a missing message, a non-document artifact and an unknown action', async () => {
     const dir = await project({ running: false });
     expect(
@@ -164,7 +261,7 @@ describe('anjian comment', () => {
       (await run(['comment', 'list', '--project-dir', dir, '--artifact', 'html/x'])).out.error,
     ).toContain('document/<id>');
     expect((await run(['comment', 'erase', ...doc(dir)])).out.error).toContain(
-      'list, add, reply, resolve, choose or submit',
+      'list, read, add, reply, resolve, choose or submit',
     );
     expect((await run(['comment', 'reply', ...doc(dir), '--text', 'x'])).out.error).toContain(
       '--thread',
@@ -489,4 +586,77 @@ describe('artboard comments', () => {
       ].join('\n'),
     );
   });
+});
+
+test('reads document changes and saved review evidence without consuming comments', async () => {
+  const dir = await project({ running: false });
+  const root = path.join(dir, '.anjian', 'artifacts');
+  const state = path.join(root, '.state', 'document', 'relay');
+  const source = path.join(root, 'document', 'relay', 'doc.xml');
+  const commentFile = path.join(root, 'document', 'relay', 'comments.json');
+  const snapshotFile = path.join(state, 'doc.loro');
+  const original = fs.readFileSync(source, 'utf8');
+  const at = '2026-01-01T00:00:00.000Z';
+  const saved = `${JSON.stringify({
+    version: 1,
+    threads: [{
+      id: 'review',
+      anchor: { blockId: 'b1', quote: '事件' },
+      status: 'open',
+      statusAt: at,
+      messages: [{ id: 'initial', author: 'human', name: 'Reviewer', text: 'Please verify.', at }],
+    }],
+  }, null, 2)}\n`;
+  const loro = new LoroDoc();
+  loro.setPeerId('1');
+  const block = loro.getTree(TREE_NAME).createNode().createNode();
+  block.data.set('$', { blockId: 'b1' });
+  loro.commit({ timestamp: 100, message: 'session start' });
+  block.data.set('change', 'reviewed by a human');
+  loro.commit({ timestamp: 200, message: 'human' });
+  const snapshot = loro.export({ mode: 'snapshot' });
+  loro.free();
+
+  fs.mkdirSync(state, { recursive: true });
+  fs.writeFileSync(commentFile, saved);
+  fs.writeFileSync(snapshotFile, snapshot);
+  expect((await run(['start', '--project-dir', dir, '--background'])).out.type).toBe('server-started');
+
+  const versions = await run(['changes', ...doc(dir), '--versions']);
+  expect(versions.code).toBe(0);
+  expect(versions.out).toMatchObject({ type: 'document-changes', versions: [
+    { source: 'human', version: expect.any(String) },
+    { source: 'session', version: expect.any(String) },
+  ] });
+  const from = versions.out.versions[1].version;
+  const latest = versions.out.latest;
+  const changes = await run(['changes', ...doc(dir), '--from', from]);
+  expect(changes.code).toBe(0);
+  expect(changes.out).toMatchObject({ from, to: latest, empty: false, changes: [{
+    author: { source: 'human', peer: '1' },
+    blocks: [{ blockId: 'b1' }],
+  }] });
+  expect((await run(['changes', ...doc(dir), '--from', latest])).out).toMatchObject({ empty: true });
+  expect((await run(['changes', ...doc(dir), '--from', 'invalid'])).code).toBe(1);
+
+  const review = await run(['review', ...doc(dir)]);
+  expect(review.code).toBe(0);
+  expect(review.out).toMatchObject({ type: 'review', threads: [{ id: 'review', messages: [{ id: 'initial' }] }] });
+  expect((await run(['review', ...doc(dir)])).out).toEqual(review.out);
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  fs.writeFileSync(path.join(root, 'document', 'relay', '.artifact-id'), address + '\n');
+  const addressed = ['--project-dir', dir, '--artifact', 'document/' + address];
+  expect((await run(['changes', ...addressed, '--versions'])).out).toMatchObject({
+    type: 'document-changes',
+    latest,
+  });
+  expect((await run(['review', ...addressed])).out).toEqual({
+    ...review.out,
+    artifact: 'document/' + address,
+  });
+  expect(fs.readFileSync(source, 'utf8')).toBe(original);
+  expect(fs.readFileSync(commentFile, 'utf8')).toBe(saved);
+  expect(fs.readFileSync(snapshotFile)).toEqual(Buffer.from(snapshot));
+  const unread = await run(['comment', 'list', ...doc(dir)]);
+  expect(JSON.stringify(unread.out)).toContain('Please verify.');
 });

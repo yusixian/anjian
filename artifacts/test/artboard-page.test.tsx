@@ -115,3 +115,28 @@ test('clearing the agent active page preserves the page the human partner chose'
   expect(current.page).toBe('review');
   expect(location.search).toBe('?key=local-key&page=review');
 });
+
+test('a board link opens its current page, fits only that board and releases focus on navigation', async () => {
+  history.replaceState(null, '', '/artboard/abc?board=cover&ref=1&page=first');
+  await render({
+    ...canvas,
+    boards: {
+      cover: { page: 'review', file: 'cover.html', x: 10, y: 80, w: 60, h: 40 },
+    },
+  });
+  expect(current.page).toBe('review');
+  expect(fitPage).toHaveBeenLastCalledWith('review', { minX: 10, minY: 32, maxX: 70, maxY: 120 });
+  await act(async () => current.changePage('first'));
+  expect(location.search).toBe('?page=first');
+});
+
+test('a strict group link cannot resolve a board with the same id', async () => {
+  history.replaceState(null, '', '/artboard/abc?group=cover&ref=1');
+  await render({
+    ...canvas,
+    boards: {
+      cover: { page: 'review', file: 'cover.html', x: 10, y: 80, w: 60, h: 40 },
+    },
+  });
+  expect(current.focusUnavailable).toBe(true);
+});

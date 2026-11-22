@@ -3,6 +3,7 @@ import type http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
+import { missingStoryboardAsset, STORYBOARD_FILE } from '../shared/storyboard';
 import type { CanvasPayload, DocumentPayload, HtmlPayload, ServerMessage } from '../shared/types';
 import { accessPolicy, isLoopbackHost } from './access';
 import {
@@ -15,33 +16,38 @@ import { type asBoardHumanOp, createBoardCommentRegistry } from './board-comment
 import { originsFor } from './board-port';
 import { commentNames } from './comment-names';
 import { ensureConfig } from './config';
-import type { createGitHubAuth, GitHubConfig } from './github-auth';
+import { createDeferredInputs } from './deferred-inputs';
 import { readDocument } from './document';
+import { documentQuestions } from './document-codec';
+import type { CommentAdmission } from './document-comments';
 import { createDocumentRegistry, type DocumentTiming } from './documents';
 import { createDynamicBlocks, dynamicUrls } from './dynamic-blocks';
-import type { CommentAdmission } from './document-comments';
-import { createBackgroundWrites } from './storage/background-writes';
-import { createDeferredInputs } from './deferred-inputs';
+import type { createGitHubAuth, GitHubConfig } from './github-auth';
 import { readHtml } from './html';
-import { createPreparedStateFiles } from './storage/prepared-files';
 import { parseCookies, randomToken, readPersisted, safeEqual } from './http';
 import { MAX_RUNTIME_WARNINGS } from './limits';
+import { readDocumentApprovalRevisions } from './remote-transfer';
 import { createSelectionStore } from './selection';
+import { readSlideDeck } from './slides';
 import { socketAuthorized } from './socket-access';
 import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactState } from './state';
+import { createBackgroundWrites } from './storage/background-writes';
+import { createPreparedStateFiles } from './storage/prepared-files';
+import { listStoryboardAssets, readStoryboard } from './storyboard-source';
 import { createVerifyRecordings } from './verify-recordings';
+import { readWhiteboardScene, whiteboardTitle } from './whiteboard';
 import { textFrame } from './ws';
 
 export interface ServerOptions {
-  github?: GitHubConfig;
+  boardOrigin?: string;
   configFile?: string;
   debounceMs?: number;
   documentTiming?: DocumentTiming;
   fetch?: typeof fetch;
+  github?: GitHubConfig;
   host: string;
   mount?: MountSettings;
   publicOrigin?: string;
-  boardOrigin?: string;
   root: string;
   runtimeDir?: string;
   urlHost: string;
@@ -49,13 +55,13 @@ export interface ServerOptions {
 }
 
 export interface MountSettings {
-  recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
-  backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
-  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   authorize?: (req: http.IncomingMessage) => boolean;
-  github?: ReturnType<typeof createGitHubAuth>;
+  backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
   boardPort: number;
+  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
+  github?: ReturnType<typeof createGitHubAuth>;
   port: number;
+  recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
   token: string;
   version: string;
 }
@@ -72,9 +78,36 @@ export function readArtifactSource(
   runtime: string[] = [],
 ): ArtifactPayload {
   if (ref.type === 'artboard') return readCanvas(dir);
+  if (ref.type === 'whiteboard') {
+    try {
+      const { scene } = readWhiteboardScene(dir);
+      return { title: whiteboardTitle(scene, dir), version: 0, warnings: [] };
+    } catch {
+      return { title: ref.id, version: 0, warnings: ['Whiteboard scene could not be read'] };
+    }
+  }
   if (ref.type === 'document') {
     const payload = readDocument(dir, ref.id);
     return { ...payload, warnings: [...payload.warnings, ...runtime] };
+  }
+  if (ref.type === 'storyboard') {
+    try {
+      const { bytes, storyboard } = readStoryboard(dir);
+      const assets = listStoryboardAssets(dir);
+      const missing = missingStoryboardAsset(storyboard, new Set(assets.map(({ path }) => path)));
+      const warnings = bytes === 0 ? [`${STORYBOARD_FILE} not found`]
+        : missing ? [`Missing or invalid storyboard media: ${missing}`] : [];
+      return { title: storyboard.title, version: 0, warnings };
+    } catch {
+      return { title: ref.id, version: 0, warnings: ['Storyboard could not be read'] };
+    }
+  }
+  if (ref.type === 'slides') {
+    try {
+      return { title: readSlideDeck(dir).deck.title, version: 0, warnings: [] };
+    } catch {
+      return { title: ref.id, version: 0, warnings: ['Slide deck could not be read'] };
+    }
   }
   const payload = readHtml(dir, ref.id);
   return {
@@ -207,15 +240,29 @@ export function createServerContext(options: ServerOptions) {
   const documentState = (
     id: string,
     session: NonNullable<Awaited<ReturnType<typeof documents.open>>>,
-  ) => ({
-    snapshot: Buffer.from(session.snapshot()).toString('base64'),
-    lineage: session.lineage(),
-    outcome: session.outcome(),
-    streaming: session.streaming(),
-    agentActiveAt: session.agentActiveAt(),
-    now: Date.now(),
-    comments: documents.comments(id),
-  });
+  ) => {
+    let approvalAssetsRevision: string | undefined;
+    try {
+      if (options.mount && documentQuestions(session.state()).some((question) => question.approve)) {
+        approvalAssetsRevision = readDocumentApprovalRevisions(
+          path.resolve(root, '../..'),
+          id,
+        )?.assetsRevision;
+      }
+    } catch {
+      // Unsafe or oversized source cannot be approved, but can still be opened for repair.
+    }
+    return {
+      snapshot: Buffer.from(session.snapshot()).toString('base64'),
+      lineage: session.lineage(),
+      outcome: session.outcome(),
+      streaming: session.streaming(),
+      agentActiveAt: session.agentActiveAt(),
+      now: Date.now(),
+      comments: documents.viewerComments(id),
+      ...(approvalAssetsRevision ? { approvalAssetsRevision } : {}),
+    };
+  };
 
   const verdictPreparing = (id: string, op: NonNullable<ReturnType<typeof asBoardHumanOp>>) => {
     if (op.op !== 'create' || !op.anchor.verdict) return false;
@@ -239,7 +286,7 @@ export function createServerContext(options: ServerOptions) {
     ...(ref.type !== 'html' ? { agent: names.agent() } : {}),
     ...(ref.type === 'artboard'
       ? {
-          comments: boardComments.comments(ref.id),
+          comments: boardComments.viewerComments(ref.id),
           staleThreads: boardComments.stale(ref.id),
           listening: boardComments.listening(ref.id),
         }
@@ -309,8 +356,8 @@ export function createServerContext(options: ServerOptions) {
       },
     };
   };
-  const prepareArtifactMetadata = (type: 'artboard' | 'html', id: string, stagedDir: string) => {
-    let payload: CanvasPayload | HtmlPayload;
+  const prepareArtifactMetadata = (type: 'artboard' | 'html' | 'slides' | 'storyboard', id: string, stagedDir: string) => {
+    let payload: ArtifactPayload;
     let extra: Record<string, unknown>;
     let validateRuntime = () => undefined;
     if (type === 'html') {
@@ -324,6 +371,9 @@ export function createServerContext(options: ServerOptions) {
         if (JSON.stringify(runtimeWarnings.get(key) ?? []) !== JSON.stringify(runtime) || ranVersions.get(key) !== ran)
           throw new Error('HTML runtime state changed during upload');
       };
+    } else if (type === 'slides' || type === 'storyboard') {
+      payload = readArtifactSource(stagedDir, { id, type });
+      extra = {};
     } else {
       const canvas = readCanvas(stagedDir, id);
       const eligible = new Set(Object.values(canvas.canvas?.groups ?? {})

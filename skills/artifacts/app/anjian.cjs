@@ -36,20 +36,35 @@ function main() {
   const args = process.argv.slice(2);
   const end = args.indexOf('--');
   const flags = end === -1 ? args : args.slice(0, end);
+  const localSessionReceipt =
+    args[0] === 'comment' &&
+    args[1] === 'list' &&
+    flags.some(
+      (arg, index) =>
+        /^--session=(?:pi|agy):/.test(arg) ||
+        (arg === '--session' && /^(?:pi|agy):/.test(flags[index + 1] || '')),
+    );
   const readOnly =
     args[0] === 'skills' ||
     flags.includes('--help') ||
     flags.includes('-h') ||
     args[0] === '--version' ||
     args[0] === '-v' ||
-    (args[0] === 'remote' && args[1] === 'status');
-  if (!readOnly && (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID)) {
+    (args[0] === 'remote' && args[1] === 'status') ||
+    localSessionReceipt;
+  const watch = !readOnly && (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID);
+  const explicitStart =
+    watch &&
+    args[0] === 'start' &&
+    flags.some((arg) => arg === '--artifact' || arg.startsWith('--artifact='));
+  const subscribe = (register) => {
     try {
-      require('./comment-subscriptions.cjs').register(args);
+      register(require('./comment-subscriptions.cjs'));
     } catch (error) {
       console.error(JSON.stringify({ type: 'comment-watch-error', message: error.message }));
     }
-  }
+  };
+  if (watch && !explicitStart) subscribe(({ register }) => register(flags));
   const env = {
     ...process.env,
     ANJIAN_ARTIFACTS_COMMAND: `node "${__filename}"`,
@@ -59,7 +74,16 @@ function main() {
   const given = Number(env.ANJIAN_ARTIFACTS_OWNER);
   const owner = Number.isInteger(given) && given > 1 ? given : ownerPid();
   if (owner) env.ANJIAN_ARTIFACTS_OWNER = String(owner);
-  const child = spawn(process.execPath, [cli, ...args], { env, stdio: 'inherit' });
+  const child = spawn(process.execPath, [cli, ...args], {
+    env,
+    stdio: explicitStart ? ['inherit', 'inherit', 'inherit', 'ipc'] : 'inherit',
+  });
+  if (explicitStart) {
+    child.on('message', (message) => {
+      if (message?.type === 'artifact-opened')
+        subscribe(({ registerOpened }) => registerOpened(message.project, message.artifact));
+    });
+  }
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
   child.on('error', (error) => {
     console.error(error.message);

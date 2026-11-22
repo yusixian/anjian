@@ -125,6 +125,7 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "comments": {
+    "readByAgent": "Agent 已读",
     "waitingYou": "等你回复",
     "waitingAgent": "等 {{agent}}",
     "agentReadsNext": "{{agent}} 下一轮会读到这条",
@@ -246,6 +247,7 @@
     "railComments": "评论 {{count}}"
   },
   "feedback": {
+    "targetMissing": "原批注或其指向的内容已不存在。",
     "title": "Agent 反馈",
     "manage": "管理连接",
     "refresh": "刷新",
@@ -577,17 +579,66 @@
     "nextBoard": "下一张"
   },
   "preview": {
+    "selectionSend": "发送选区",
+    "selectionRecipient": "选择 Agent",
+    "selectionDelivery": {
+      "queued": "等待 Agent 接收",
+      "delivered": "已发送给 Agent",
+      "expired": "发送已过期。请重新选择文字。",
+      "stale": "请重新选择要发送的文字。",
+      "failed": "选区发送失败，请重试。",
+      "noRecipient": "从 Agent 会话打开此预览后，即可发送选区。"
+    },
     "unavailable": "预览暂不可用",
     "loading": "正在加载预览…",
     "waitingPage": "等待页面内容…",
     "waitingDocument": "等待文档内容…",
     "waitingCanvas": "等待画布内容…"
   },
+  "question": {
+    "approvalOwner": "作品所有者",
+    "approvalAssetsChanged": "附件已更新，请重新打开文档后再审核。",
+    "reopenDocument": "重新打开文档",
+    "recordApproval": "记录决定",
+    "approvalRecorded": "{{reviewer}} 于 {{time}} 选择了“{{choice}}”",
+    "approvalChanged": "文档或问题已更新，请核对后重新选择。",
+    "approvalFailed": "无法确认决定是否已记录，请核对状态后重试。",
+    "approvalState": {
+      "pending": "待审核",
+      "approved": "当前版本已通过",
+      "changes_requested": "当前版本需要修改",
+      "needs_review": "上次决定后文档已更新，请审核当前版本。"
+    },
+    "recommended": "推荐",
+    "placeholder": "写下你的回答…",
+    "previous": "此回答对应修改前的问题。",
+    "replyReady": "Agent 已回复，可以查看回答和回复。",
+    "submittedAnswer": "已提交的回答",
+    "conflict": "已保存的回答变为“{{answer}}”。你刚编辑的内容仍保留在这里。",
+    "empty": "暂无回答",
+    "restore": "使用已保存的回答",
+    "keep": "保留我的修改",
+    "target": "选择 Agent",
+    "save": "保存草稿",
+    "submit": "发送给 {{agent}}",
+    "noAgent": "连接此文档的 Agent 后即可发送回答。你可以先保存草稿。",
+    "withdraw": "撤回提交",
+    "saved": "草稿已保存",
+    "changed": "问题或任务已更新，请核对后重试。",
+    "failed": "无法确认操作结果。你的回答仍保留在这里。",
+    "syncing": "正在等待最新题目载入。",
+    "loadFailed": "暂时无法获取最新回答。",
+    "reload": "刷新"
+  },
   "questions": {
     "previous": "上一题",
     "next": "下一题",
     "jumpTo": "跳到",
     "boards_other": "{{count}} 张"
+  },
+  "reference": {
+    "static": "作品引用",
+    "unavailable": "引用不可用"
   },
   "release": {
     "closeNotes": "关闭",
@@ -679,6 +730,10 @@
     "quotaExceeded": "存储额度不足。发布需要容纳一份完整的新快照，成功后才会释放旧快照。请释放空间后重试。",
     "actionUnconfirmed": "已重新读取分享状态，请核对链接和状态后继续。",
     "actionUnknown": "操作结果暂时无法确认。请先重试读取，避免重复发布或关闭。"
+  },
+  "slideLibrary": {
+    "create": "新建幻灯片",
+    "createFailed": "无法创建幻灯片，请重试。"
   },
   "storage": {
     "migration": {
@@ -805,6 +860,10 @@
       "cacheHelp": "共享额度不是磁盘容量。接入 S3 后，缓存和保留原文件仍占本地空间；此处不估算 S3 容量。"
     }
   },
+  "storyboardLibrary": {
+    "create": "新建分镜",
+    "createFailed": "无法创建分镜，请重试。"
+  },
   "time": {
     "justNow": "刚刚",
     "notRecorded": "时间未记录",
@@ -815,10 +874,13 @@
     "hours": "{{count}} 小时"
   },
   "type": {
+    "storyboard": "分镜",
+    "slides": "幻灯片",
     "all": "全部",
     "artboard": "画板",
     "document": "文档",
-    "html": "HTML"
+    "html": "HTML",
+    "whiteboard": "白板"
   },
   "verdict": {
     "passed": "已通过",
@@ -845,5 +907,44 @@
     "speed": "倍速",
     "loop": "循环",
     "expand": "放大"
+  },
+  "whiteboard": {
+    "anchorMissing": "这条批注指向的元素已不在白板上。",
+    "canvas": "白板画布",
+    "commentFailed": "批注未能保存，请重试。",
+    "commentsWarning": "无法读取批注，请检查项目中的批注文件。",
+    "conflict": "白板有更新版本。你的未保存改动仍在当前画布上。",
+    "create": "新建白板",
+    "createFailed": "未能创建白板。",
+    "copyFrame": "复制画框链接",
+    "discardConfirm": "放弃未保存的改动，加载白板的最新版本吗？",
+    "frame": "画框",
+    "frameCopied": "已复制画框链接。",
+    "frameCopyFailed": "请从下方输入框复制链接。",
+    "frameLink": "画框链接",
+    "frameMissing": "该画框已不可用，正在显示整页。",
+    "frameOverview": "整页",
+    "frameUnavailable": "画框不可用",
+    "frameUntitled": "画框 {{count}}",
+    "loadFailed": "无法加载白板。",
+    "locate_other": "定位 {{count}} 个元素",
+    "noComments": "还没有批注。",
+    "goToMain": "返回主页",
+    "page": "页面",
+    "pageAdd": "新建页面",
+    "pageMain": "主页",
+    "pageMissing": "页面不可用",
+    "pageRename": "重命名页面",
+    "pageSaveFailed": "页面未能保存，请重试。",
+    "pageTitle": "页面名称",
+    "pageUnsaved": "{{title}}（未保存）",
+    "reload": "加载最新版本",
+    "reply": "回复",
+    "save": "保存",
+    "saveFailed": "改动未能保存，请重试。",
+    "saved": "已保存",
+    "selected_other": "批注 {{count}} 个元素",
+    "selectToComment": "选中元素后添加批注",
+    "unsaved": "未保存"
   }
 }

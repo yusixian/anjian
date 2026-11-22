@@ -39,11 +39,11 @@ export interface StartOptions {
 export type Emit = (value: Record<string, unknown>) => void;
 
 interface ServerInfo {
-  localUrl?: string;
-  publicOrigin?: string;
   boardOrigin?: string;
   host?: string;
+  localUrl?: string;
   port: number;
+  publicOrigin?: string;
   url: string;
   urlHost?: string;
   version?: string;
@@ -234,6 +234,16 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
     recordAgent(paths);
     const wantsOpen = options.open && (!reused || !known);
     await register(info, paths, wantsOpen ? (options.artifact ?? true) : undefined);
+    if (options.artifact && process.connected && process.send) {
+      process.send(
+        {
+          type: 'artifact-opened',
+          project: paths.project,
+          artifact: options.artifact,
+        },
+        () => {},
+      );
+    }
     const base = withLink(info, paths, options.artifact);
     if (reused) base.reused = true;
     if (hint) base.hint = hint;
@@ -249,9 +259,7 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
       !process.env.ARTIFACTS_OPEN_CMD
     ) {
       const local = out.link as string;
-      await openBrowser(local, [local]).catch(
-        (error: Error) => console.error(error.message),
-      );
+      await openBrowser(local, [local]).catch((error: Error) => console.error(error.message));
     }
   };
 
@@ -281,7 +289,8 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
       const mismatch =
         (info.host ?? '127.0.0.1') !== options.host ||
         (info.urlHost ?? 'localhost') !== options.urlHost ||
-        (info.publicOrigin ?? '') !== (process.env.ANJIAN_PUBLIC_ORIGIN ?? '').replace(/\/+$/, '') ||
+        (info.publicOrigin ?? '') !==
+          (process.env.ANJIAN_PUBLIC_ORIGIN ?? '').replace(/\/+$/, '') ||
         (info.boardOrigin ?? '') !== (process.env.ANJIAN_BOARD_ORIGIN ?? '').replace(/\/+$/, '') ||
         (options.port !== undefined && String(info.port) !== options.port);
       if (decision !== 'replace' && !mismatch && (await answers(info))) {

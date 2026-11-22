@@ -3,8 +3,10 @@ import * as stylex from '@stylexjs/stylex';
 import { type ReactNode, useEffect } from 'react';
 
 import { LibraryBar } from '../components/LibraryNavigation';
+import { PreviewSelectionSend } from '../components/PreviewSelectionSend';
 import { WarningsBadge } from '../components/WarningsBadge';
 import { useHtmlData } from '../hooks/useHtmlData';
+import { usePreviewSelection } from '../hooks/usePreviewSelection';
 import { HTML_SANDBOX, useSandboxFrame } from '../hooks/useSandboxFrame';
 import { useTypeFavicon } from '../hooks/useTypeFavicon';
 import type { ArtifactFeed } from '../lib/feed';
@@ -35,10 +37,12 @@ export function HtmlView({
   id,
   feed,
   actions,
+  selectionSendEndpoint,
 }: {
   id: string;
   feed: ArtifactFeed;
   actions?: ReactNode;
+  selectionSendEndpoint?: string;
 }) {
   const { data, send } = useHtmlData(id, feed);
 
@@ -49,17 +53,37 @@ export function HtmlView({
 
   const ready = data?.found && !data.warnings.includes('index.html not found');
   const target = ready ? `${data.contentBase}index.html?v=${data.version}` : null;
+  const selection = usePreviewSelection();
   const { frameRef, src, onLoad } = useSandboxFrame(target, {
     onError: (message) => send({ type: 'runtime-error', artifact: `html/${id}`, message }),
+    onMessage: selectionSendEndpoint ? selection.receive : undefined,
     onLoaded: (loaded) => {
       const version = Number(new URL(loaded, location.href).searchParams.get('v'));
+      if (selectionSendEndpoint) selection.open(frameRef.current?.contentWindow, loaded);
       send({ type: 'loaded', artifact: `html/${id}`, version });
     },
   });
 
   return (
     <div {...stylex.props(styles.root)}>
-      <LibraryBar actions={actions} />
+      <LibraryBar
+        actions={
+          selectionSendEndpoint &&
+          selection.capture &&
+          selection.capture.selection.revision === data?.version ? (
+            <>
+              <PreviewSelectionSend
+                capture={selection.capture}
+                endpoint={selectionSendEndpoint}
+                key={selection.capture.id}
+              />
+              {actions}
+            </>
+          ) : (
+            actions
+          )
+        }
+      />
       {ready && src ? (
         <iframe
           allow="clipboard-write"

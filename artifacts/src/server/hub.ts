@@ -6,7 +6,10 @@ import type { Duplex } from 'node:stream';
 
 import { BUILD_INFO } from '../shared/build-info';
 import type { HubArtifact, HubArtifactList, HubProjectStatus, HubStatus } from '../shared/hub';
-import type { ArtifactType } from '../shared/types';
+import { MAX_SLIDE_TITLE, SLIDE_DECK_FILE } from '../shared/slides';
+import { MAX_STORYBOARD_TITLE, STORYBOARD_FILE } from '../shared/storyboard';
+import { ARTIFACT_TYPES, type ArtifactType } from '../shared/types';
+import { emptyWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
 import {
   accessPolicy,
   hostAllowed,
@@ -17,6 +20,7 @@ import {
 import { mountArtifactsProject, type MountedProject } from './app';
 import { artifactPath } from './artifact-address';
 import { createArtifactIndex } from './artifact-index';
+import { createArtifactReferenceRoute } from './artifact-reference-route';
 import {
   ArtifactTrashError,
   findTrashedArtifact,
@@ -59,7 +63,9 @@ import { openReady } from './ready';
 import { createRemoteApi } from './remote-api';
 import { createRemoteAuth } from './remote-auth';
 import { createRemoteEvents } from './remote-events';
+import { RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
 import { createShareStore } from './share-store';
+import { defaultSlideDeck } from './slides';
 import { writeJsonAtomic } from './state';
 import { createStorageApi } from './storage/api';
 import { createStorageBackend } from './storage/backend';
@@ -72,6 +78,7 @@ import { createStorageRuntime } from './storage/runtime';
 import { createStorageSettings } from './storage/settings';
 import { planMigrationSources } from './storage/sources';
 import { createStorageUsage } from './storage/usage';
+import { defaultStoryboard } from './storyboard-source';
 
 export interface HubOptions {
   boardOrigin?: string;
@@ -118,11 +125,50 @@ const CONTROL_PATH = /^\/api\/hub\/(?:stop|restart|log)$/;
 const LOG_TAIL_BYTES = 256 * 1024;
 const STATUS_SCAN_MS = 10_000;
 const LOG_TAIL_LINES = 500;
-const ARTIFACT_IN_PATH = /(?:^|\/)(artboard|document|html)\/([\w-]+)/;
+const ARTIFACT_TYPE_PATH = ARTIFACT_TYPES.join('|');
+const ARTIFACT_IN_PATH = new RegExp(`(?:^|/)(${ARTIFACT_TYPE_PATH})/([\\w-]+)`);
 const CONTENT_PATH = /^\/c\/([^/]+)\//;
 const PROJECT_HEADER = 'x-anjian-project';
 const MAX_BODY = 64 * 1024;
-const ARTIFACT_KEY = /^(?:artboard|document|html)\/[a-z0-9][a-z0-9-]*$/;
+const ARTIFACT_KEY = new RegExp(`^(?:${ARTIFACT_TYPE_PATH})/[a-z0-9][a-z0-9-]*$`);
+const DELETED_ARTIFACT_PATH = new RegExp(`^/(${ARTIFACT_TYPE_PATH})/([\\w-]+)/?$`);
+const ARTIFACT_MUTATION_PATH =
+  /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments|document\/[^/]+\/update|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?|whiteboard\/[^/]+(?:\/pages)?)$/;
+
+const ARTIFACT_CREATION = new Map<string, {
+  type: ArtifactType;
+  label: string;
+  prefix: string;
+  file: string;
+  maxTitle: number;
+  create: (title: string, language: unknown) => unknown;
+}>([
+  ['/api/hub/slides', {
+    type: 'slides',
+    label: 'Slide deck',
+    prefix: 'deck',
+    file: SLIDE_DECK_FILE,
+    maxTitle: MAX_SLIDE_TITLE,
+    create: (title) => defaultSlideDeck(title),
+  }],
+  ['/api/hub/storyboards', {
+    type: 'storyboard',
+    label: 'Storyboard',
+    prefix: 'storyboard',
+    file: STORYBOARD_FILE,
+    maxTitle: MAX_STORYBOARD_TITLE,
+    create: (title, language) =>
+      defaultStoryboard(title, language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined),
+  }],
+  ['/api/hub/whiteboards', {
+    type: 'whiteboard',
+    label: 'Whiteboard',
+    prefix: 'board',
+    file: WHITEBOARD_SCENE_FILE,
+    maxTitle: 120,
+    create: (title) => ({ ...emptyWhiteboardScene(), appState: { name: title } }),
+  }],
+]);
 
 const realDir = (dir: string) => {
   try {
@@ -340,6 +386,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               return;
             if (!('artifact' in message)) return;
             storageRuntime.changed(members.projectOwner(project));
+            if ('receiptOnly' in message && message.receiptOnly) return;
             try {
               remoteEvents.append(projectId(project), message.artifact, message.type, {
                 action: 'Read current comments or pull the changed artifact',
@@ -451,6 +498,14 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       .split(';')
       .some((part) => safeEqual(part.trim(), `anjian_artifacts_${port}=${options.token}`));
   const projectAccess = createProjectAccess({ members, github, isOwner: authorized, registered });
+  const artifactReference = createArtifactReferenceRoute({
+    list: index.list,
+    mount: mountOf,
+    visible: (req, url, project) =>
+      originAllowed(policy, req.headers.origin) &&
+      navigationAllowed(req.headers['sec-fetch-site'] as string | undefined) &&
+      projectAccess.canAccess(projectAccess.principal(req, url), project),
+  });
   const contentAccess = createContentAccess(projectAccess.canAccess);
   const privateContent = async (
     req: http.IncomingMessage,
@@ -707,6 +762,67 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     res: http.ServerResponse,
     url: URL,
   ): Promise<boolean> => {
+    const creation = ARTIFACT_CREATION.get(url.pathname);
+    if (creation) {
+      if (req.method !== 'POST') {
+        send(res, 405, 'Method not allowed');
+        return true;
+      }
+      if (
+        !authenticated(req, url) ||
+        !req.headers.origin ||
+        !originAllowed(policy, req.headers.origin) ||
+        !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined) ||
+        req.headers['content-type']?.split(';')[0] !== 'application/json'
+      ) {
+        send(res, 403, 'Forbidden');
+        return true;
+      }
+      const body = (await readBody(req).catch(() => null)) as {
+        language?: unknown;
+        project?: unknown;
+        title?: unknown;
+      } | null;
+      const title = typeof body?.title === 'string' ? body.title.trim() : '';
+      if (!body || typeof body.project !== 'string' || !title || title.length > creation.maxTitle) {
+        sendJson(res, 400, { error: `Invalid ${creation.label.toLowerCase()} request` });
+        return true;
+      }
+      const reference = body.project;
+      const target = resolveProject(req, reference);
+      if (!target) {
+        sendJson(res, 404, { error: 'Project not found' });
+        return true;
+      }
+      try {
+        const id = `${creation.prefix}-${crypto.randomUUID()}`;
+        const source = creation.create(title, body.language);
+        const link = await writeQuota(target, (prepare) =>
+          withProjectMutation(target, async () => {
+            const admit = await prepare();
+            if (!projectAccess.authorized(req, target) || resolveProject(req, reference) !== target)
+              throw new RemoteTransferError(403, 'forbidden', 'Project access changed');
+            assertAvailable(target);
+            writeRemoteArtifact(
+              target,
+              `${creation.type}/${id}`,
+              {
+                baseRevision: null,
+                files: { [creation.file]: Buffer.from(JSON.stringify(source)).toString('base64') },
+              },
+              admit,
+            );
+            return artifactPath(artifactsRootOf(target), creation.type, id);
+          }),
+        );
+        sendJson(res, 201, { id, url: link });
+      } catch (error) {
+        sendJson(res, error instanceof RemoteTransferError ? error.status : 500, {
+          error: `${creation.label} could not be created`,
+        });
+      }
+      return true;
+    }
     if (url.pathname !== '/api/hub/projects') return false;
     const fromPage =
       req.method === 'DELETE' &&
@@ -928,6 +1044,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     projects: remoteProjects,
     mount: mountOf,
     upload: writeQuota,
+    resolveDocument: (dir, documentId) => {
+      const matches = index.list().filter(
+        (entry) => entry.project === dir && entry.type === 'document' && entry.address === documentId,
+      );
+      return matches.length === 1 ? matches[0]!.id : undefined;
+    },
     browserProject: (req, artifact) => {
       if (
         (req.method !== 'GET' && !req.headers.origin) ||
@@ -939,7 +1061,28 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const found = index.find(type, id);
       if (!found || !projectAccess.authorized(req, found.project) || !available(found.project))
         return null;
-      return { id: projectId(found.project), dir: found.project, artifact: `${type}/${found.id}` };
+      const principal = projectAccess.principal(req, new URL(req.url ?? '/', origin));
+      if (!principal) return null;
+      const login =
+        principal.role === 'member'
+          ? members.list().members.find((member) => member.id === principal.id)?.login
+          : undefined;
+      const documentId =
+        type === 'document'
+          ? (index
+              .list(1000)
+              .find(
+                (entry) =>
+                  entry.project === found.project && entry.type === type && entry.id === found.id,
+              )?.address ?? undefined)
+          : undefined;
+      return {
+        id: projectId(found.project),
+        dir: found.project,
+        artifact: `${type}/${found.id}`,
+        documentId,
+        actor: { id: principal.id, ...(login ? { login } : {}) },
+      };
     },
   });
   const remoteApi = createRemoteApi({
@@ -1085,7 +1228,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     publish: writeQuota,
     resolve: (req, input) => {
       if (
-        typeof input.type !== 'string' ||
+        typeof input.type !== 'string' || input.type === 'storyboard' ||
         typeof input.id !== 'string' ||
         (input.project !== undefined && typeof input.project !== 'string')
       )
@@ -1123,6 +1266,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (options.docsDir && url.pathname === '/login' && !url.searchParams.has('returnTo'))
         url.searchParams.set('returnTo', '/library');
       if (await browserAuth(req, res, url)) return;
+      if (await artifactReference(req, res, url)) return;
       if (await shareApi(req, res, url)) return;
       if (await memberApi(req, res, url)) return;
       if (await storageApi(req, res, url)) return;
@@ -1235,7 +1379,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         });
         return;
       }
-      const deletedRoute = /^\/(document|artboard|html)\/([\w-]+)\/?$/.exec(pathname);
+      const deletedRoute = DELETED_ARTIFACT_PATH.exec(pathname);
       if (
         deletedRoute &&
         authenticated(req, url) &&
@@ -1269,12 +1413,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }
       const mounted = await route(req, url, pathname);
       if (!mounted) send(res, 404, 'Not found');
-      else if (
-        req.method === 'POST' &&
-        /^\/api\/(?:(?:agent\/)?(?:document|artboard)\/[^/]+\/comments|document\/[^/]+\/update)$/.test(
-          pathname,
-        )
-      ) {
+      else if (req.method === 'POST' && ARTIFACT_MUTATION_PATH.test(pathname)) {
         const project = path.resolve(mounted.root, '../..');
         if (
           !projectAccess.authorized(req, project) ||
