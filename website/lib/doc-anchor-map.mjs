@@ -26,6 +26,16 @@ export const docAnchorMap = {
     devices: { zh: '查看与撤销设备', en: 'review-and-revoke-devices' },
     connection: { zh: '连接问题', en: 'connection-problems' },
   },
+  'review-workflows': {
+    version: { zh: '先看版本', en: 'check-your-version' },
+    whiteboards: { zh: '白板', en: 'whiteboards' },
+    slides: { zh: '幻灯片', en: 'slides' },
+    storyboards: { zh: '分镜', en: 'storyboards' },
+    documents: { zh: '把文档变成评审入口', en: 'document-decisions-and-verification' },
+    feedback: { zh: '把反馈交给正在工作的-agent', en: 'send-feedback-to-an-agent' },
+    packages: { zh: 'macos-安装包', en: 'macos-installation' },
+    candidates: { zh: '另两项独立候选', en: 'other-candidates' },
+  },
   'first-artifact': {
     agent: { zh: '用-agent-创建', en: 'create-with-an-agent' },
     html: { zh: '手动创建-html', en: 'create-html-manually' },

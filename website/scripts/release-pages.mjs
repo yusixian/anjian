@@ -27,6 +27,9 @@ export function releasePage(releases, language) {
   const intro = english
     ? 'Release records do not indicate which version your server or local CLI is running.'
     : '发布记录不代表你的服务器或本机 CLI 已升级到相应版本。';
+  const guide = english
+    ? '[Try the new workflows](/docs/review-workflows) for steps and candidate availability.'
+    : '[查看新功能上手指南](/docs/review-workflows)，了解操作步骤与候选版本。';
   const sections = releases.map((release) => {
     const other = english ? 'zh' : 'en';
     const content = release[language] || release[other] || release.original;
@@ -38,7 +41,7 @@ export function releasePage(releases, language) {
         : '> 暂无中文翻译，以下显示原始更新说明。\n\n';
     return `## ${release.version}\n\n${fallback}<div${contentLanguage ? ` lang="${contentLanguage === 'zh' ? 'zh-CN' : 'en'}"` : ''}>\n\n${content || (english ? 'No release notes recorded.' : '此版本暂无更新说明。')}\n\n</div>`;
   });
-  return `---\ntitle: ${title}\ndescription: ${description}\n---\n\n<div lang="${english ? 'en' : 'zh-CN'}" className="max-w-2xl [overflow-wrap:anywhere]">\n\n${intro}\n\n${sections.join('\n\n')}\n\n</div>\n`;
+  return `---\ntitle: ${title}\ndescription: ${description}\n---\n\n<div lang="${english ? 'en' : 'zh-CN'}" className="max-w-2xl [overflow-wrap:anywhere]">\n\n${intro}\n\n${guide}\n\n${sections.join('\n\n')}\n\n</div>\n`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

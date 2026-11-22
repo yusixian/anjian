@@ -12,11 +12,11 @@ const visible = (html) =>
     .replaceAll(/<style\b[^>]*>[\s\S]*?<\/style>/g, '')
     .replaceAll(/<[^>]+>/g, '');
 
-test('all 17 guides have explicit English content, matching sections and command flags', async () => {
+test('all 18 guides have explicit English content, matching sections and command flags', async () => {
   const names = (await readdir(docs)).filter(
     (name) => name.endsWith('.mdx') && !name.includes('.en.') && name !== 'updates-en.mdx',
   );
-  assert.equal(names.length, 17);
+  assert.equal(names.length, 18);
   for (const name of names) {
     const zh = await readFile(new URL(name, docs), 'utf8');
     const en = await readFile(new URL(name.replace('.mdx', '.en.mdx'), docs), 'utf8');
