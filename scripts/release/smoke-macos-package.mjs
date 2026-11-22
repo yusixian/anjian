@@ -6,12 +6,14 @@ import path from 'node:path';
 
 import { hashFile } from './build-info.mjs';
 
-const [archive, expectedSha, expectedArch] = process.argv.slice(2);
-const name = path.basename(archive);
-assert.match(name, /^anjian-v.+-darwin-(arm64|x64)\.tar\.gz$/);
+const [archive, expectedSha, expectedArch, mode] = process.argv.slice(2);
+const name = path.basename(archive ?? '');
+assert.match(name, /^anjian-v.+-darwin-(arm64|x64)\.(?:tar\.gz|dmg)$/);
+const image = name.endsWith('.dmg');
+assert.ok(mode === undefined || (image && mode === '--notarized'));
 assert.equal(fs.readFileSync(`${archive}.sha256`, 'utf8').trim(), `${hashFile(archive)}  ${name}`);
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-install-'));
-const installed = path.join(directory, name.slice(0, -7));
+const installed = path.join(directory, image ? 'mounted image' : name.slice(0, -7));
 const launcher = path.join(installed, 'anjian');
 const project = path.join(directory, 'Example project');
 const state = path.join(directory, 'server');
@@ -35,8 +37,21 @@ const anjian = (...args) =>
       .split('\n')
       .pop(),
   );
+let mounted = false;
 try {
-  run('/usr/bin/tar', ['-xzf', path.resolve(archive)]);
+  if (image) {
+    const file = path.resolve(archive);
+    run('/usr/bin/hdiutil', ['verify', '-quiet', file]);
+    if (mode === '--notarized') {
+      run('/usr/bin/codesign', ['--verify', '--strict', file]);
+      run('/usr/bin/xcrun', ['stapler', 'validate', file]);
+      run('/usr/sbin/spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', file]);
+    }
+    fs.mkdirSync(installed);
+    run('/usr/bin/hdiutil', ['attach', '-quiet', '-readonly', '-nobrowse', '-mountpoint', installed, file]);
+    mounted = true;
+    run('/usr/bin/codesign', ['--verify', '--strict', path.join(installed, 'lib/node')]);
+  } else run('/usr/bin/tar', ['-xzf', path.resolve(archive)]);
   const metadata = JSON.parse(fs.readFileSync(path.join(installed, 'build.json')));
   assert.deepEqual(
     [metadata.commit, metadata.platform, metadata.architecture],
@@ -91,6 +106,7 @@ try {
   try {
     if (fs.existsSync(path.join(state, 'server.pid'))) anjian('stop');
   } finally {
+    if (mounted) run('/usr/bin/hdiutil', ['detach', '-quiet', installed]);
     fs.rmSync(directory, { recursive: true, force: true });
   }
 }

@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-22 核对 Ryugi 正式版 `v1.102.6`（`de9f13d`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.1`（`e09efaa`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.1) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.6) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-22 核对 Ryugi 正式版 `v1.102.6`（`de9f13d`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.2`（`3c361eb`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.2) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.6) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -69,9 +69,12 @@
 
 启动 Agent 和默认回复作者按作品记录。桌面与 320、390 px Chrome 验证中英文提交按钮与活动宿主对应，实际 CLI 回归覆盖旧作品和显式署名。[验收 #131](https://github.com/yusixian/anjian/pull/131) · [中文说明](https://anjian.cosine.ren/zh/docs/updates/#0111) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0111)
 
+## v0.11.2 进程识别
+
+macOS 活动监视器实测显示案间 Hub 和反馈监听器的名字、版本。Linux 保留 Hub 的实例参数，Node 22 容器验证启动、复用、异常恢复和手动停止。[验收 #133](https://github.com/yusixian/anjian/pull/133) · [中文说明](https://anjian.cosine.ren/zh/docs/updates/#0112) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0112)
+
 ## 待验证能力
 
-- 启动器、Hub 和监听器在系统进程列表显示案间名称和版本，并保留 Linux 启停的精确实例校验。[实现 #130](https://github.com/yusixian/anjian/issues/130)
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 
 - 把反馈自动投递给已经运行的普通 Antigravity 交互会话。已验证由案间启动的流式会话接收反馈、普通会话主动读取批注，以及 Pi 会话的投递和回执。普通 Antigravity 会话的外部投递仍待找到公开接口并完成两路会话隔离验证。[宿主证据和缺口 #52](https://github.com/yusixian/anjian/issues/52)

@@ -20,6 +20,28 @@ Tag `v<版本>` 是指向此 SHA 的轻量 tag。相同版本、相同 SHA 的�
 
 创建 Release 只证明 GitHub 记录，**不代表生产部署成功**。发布输出明确记录部署未验证。首轮真实发布的 PR、SHA、CI、Release、部署与线上验证由维护者接续记录。
 
+## macOS 磁盘镜像验收 / macOS disk image validation
+
+现有 macOS 打包 PR 会在 Apple 芯片和 Intel 的原生 runner 上构建 DMG，从只读挂载路径验证 CLI、内置指南、HTML 预览及 Hub 启停。常规 GitHub Release 继续发布双架构 tar.gz。候选 DMG 内的 Node 采用 Hardened Runtime 和临时签名。
+
+The macOS packaging PR checks build a DMG on native Apple Silicon and Intel runners, then verify the CLI, embedded guide, HTML preview, and Hub from a read-only mount. The standard GitHub Release publishes the two tar.gz archives. The test DMG uses an ad hoc signed Node runtime with Hardened Runtime enabled.
+
+要生成正式候选，请用同一架构的官方 Node 构建干净提交，配置案间的 Developer ID Application 和本机 Notary Keychain profile，再执行以下两条命令。
+
+To create a distribution candidate, build the clean commit with the official Node runtime for the target architecture. Configure Anjian's Developer ID Application identity and a local Notary Keychain profile before running these commands.
+
+```sh
+sha=$(git rev-parse HEAD)
+arch=$(node -p process.arch)
+image=$(node scripts/release/package-macos.mjs "$release_output" "$sha" "$arch" \
+  --dmg --identity "$anjian_signing_identity" --notary-profile "$anjian_notary_profile")
+node scripts/release/smoke-macos-package.mjs "$image" "$sha" "$arch" --notarized
+```
+
+打包器在 Apple 接受公证并验证票据后生成候选镜像及其 SHA-256 文件。发布前，在干净的目标 Mac 上从浏览器下载，核对 Gatekeeper，并从挂载的镜像在终端运行 CLI。
+
+The packager writes the candidate image and its SHA-256 checksum after Apple accepts notarization and the stapled ticket verifies. Before distribution, download the candidate in a browser on a clean target Mac, check Gatekeeper, and run the mounted CLI from Terminal. [Apple packaging guide](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution) · [Apple notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+
 ## 构建身份与自动部署
 
 所有本地入口从同一个构建函数读取产品版本、Git SHA、工作树状态以及 Changelog 中精确版本的双语说明。应用状态面板分别显示当前界面与服务器身份，说明属于界面本构建；CLI 的 `version --json` 显示 CLI 自己的身份，旧 `--version` 保持纯版本号输出。源码导出没有身份时显示 unknown；脏构建明确显示本地改动，不声称是正式版本。
