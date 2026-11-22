@@ -65,7 +65,7 @@ export function NativeFeedback<T>({
     latestLocate.current = locate;
   }, [locate]);
   const pending = useRef<AbortController | null>(null);
-  const [opened, setOpened] = useState(false);
+  const [visibility, setVisibility] = useState<'initial' | 'open' | 'closed'>('initial');
   const [error, setError] = useState('');
   const [target, setTarget] = useState('');
   const focusThread = useCallback(
@@ -107,7 +107,7 @@ export function NativeFeedback<T>({
     <Context
       value={{
         open: () => {
-          setOpened(true);
+          setVisibility('open');
           setError('');
           dialog.current?.showModal();
         },
@@ -119,7 +119,10 @@ export function NativeFeedback<T>({
         aria-label={t('feedback.title')}
         className="native-feedback-dialog"
         ref={dialog}
-        onClose={() => pending.current?.abort()}
+        onClose={() => {
+          setVisibility('closed');
+          pending.current?.abort();
+        }}
       >
         <button
           aria-label={t('common.close')}
@@ -134,9 +137,13 @@ export function NativeFeedback<T>({
             {t(error)}
           </p>
         )}
-        {opened && (
+        {visibility !== 'initial' && (
           <FeedbackProvider createApi={feedbackApi}>
-            <FeedbackPanel artifact={artifact} onOpenThread={openThread} />
+            <FeedbackPanel
+              artifact={artifact}
+              polling={visibility === 'open'}
+              onOpenThread={openThread}
+            />
           </FeedbackProvider>
         )}
       </dialog>

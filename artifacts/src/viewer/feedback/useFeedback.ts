@@ -13,7 +13,7 @@ import {
 } from './api';
 import { useFeedbackApi } from './FeedbackProvider';
 
-export function useFeedback(artifact: string) {
+export function useFeedback(artifact: string, polling = true) {
   const api = useFeedbackApi(artifact);
   const [connections, setConnections] = useState<FeedbackConnection[]>([]);
   const [tasks, setTasks] = useState<FeedbackTask[]>([]);
@@ -100,15 +100,18 @@ export function useFeedback(artifact: string) {
   }, [api, saveIntent]);
   useEffect(() => {
     alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!polling) return;
     void refresh();
     const timer = setInterval(() => {
       if (!lock.current) void refresh();
     }, 5000);
-    return () => {
-      alive.current = false;
-      clearInterval(timer);
-    };
-  }, [refresh]);
+    return () => clearInterval(timer);
+  }, [polling, refresh]);
   const run = async (action: () => Promise<void>) => {
     if (lock.current) return;
     lock.current = true;
