@@ -248,7 +248,7 @@ test('removes a branch subscription and acknowledges only its own persisted noti
 test('Pi receipts leave inherited host subscriptions alone while ordinary explicit receipts still register', async (t) => {
   const root = await mkdtemp(resolve(tmpdir(), 'anjian-pi-launcher-'));
   t.after(() => rm(root, { force: true, recursive: true }));
-  for (const file of ['anjian.cjs', 'comment-subscriptions.cjs', 'process-label.cjs'])
+  for (const file of ['anjian.cjs', 'comment-subscriptions.cjs'])
     await copyFile(resolve(repoRoot, 'skills/artifacts/app', file), resolve(root, file));
   await writeFile(resolve(root, 'cli.cjs'), '');
   const codex = '12345678-1111-4444-a111-abcdefabcdef';

@@ -12,7 +12,6 @@ function copyLauncher() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-launcher-'));
   temp.push(dir);
   fs.copyFileSync(path.resolve(__dirname, '../../skills/artifacts/app/anjian.cjs'), path.join(dir, 'anjian.cjs'));
-  fs.copyFileSync(path.resolve(__dirname, '../../skills/artifacts/app/process-label.cjs'), path.join(dir, 'process-label.cjs'));
   const env = { ...process.env, CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '', PATH: '' };
   return { dir, run: () => spawnSync(process.execPath, [path.join(dir, 'anjian.cjs'), '--version'], { env, encoding: 'utf8' }) };
 }
