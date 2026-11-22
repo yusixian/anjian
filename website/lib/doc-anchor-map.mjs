@@ -16,6 +16,7 @@ export const docAnchorMap = {
     skills: { zh: '读取内置-skill', en: 'read-the-built-in-skill' },
     entry: { zh: '配置项目入口', en: 'configure-a-project-entry-point' },
     feedback: { zh: '一轮反馈怎么处理', en: 'process-a-round-of-feedback' },
+    copilot: { zh: 'github-copilot-cli', en: 'github-copilot-cli' },
     events: { zh: '事件与自动处理', en: 'events-and-automation' },
     localQuestion: {
       zh: '把文档答案发给本地-agent',
