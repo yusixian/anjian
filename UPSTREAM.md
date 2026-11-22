@@ -6,6 +6,10 @@
 
 ## 当前对照版本
 
+2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871325f3f892858a482bc7dafd2665ff64f9`）。相对 `v1.102.1` 新增 1 个公开提交，累计审计 176 个提交。公开差异只更新版本清单。发布说明披露白板和幻灯片的长讨论可在卡片内滚动，打开时显示最新消息。案间已在桌面和 390 px Chrome 复现长讨论超出视口，按 [#100](https://github.com/yusixian/anjian/issues/100) 独立实现。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.1...v1.102.2)
+
+### v1.102.1 的能力差异
+
 2026-11-22 核对 Ryugi 正式版 `v1.102.1`（`608491634da2f02cd9241364302b803268298f28`）。相对 `v1.102.0` 新增 3 个公开提交，累计审计 175 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.1) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.0...v1.102.1)
 
 - 上游发布说明披露恢复或切换分支时保留人工批注。公开增量缺少 Viewer 实现。案间对正在运行的评论存储复现了恢复后丢弃新出现的人工批注，已登记 [#98](https://github.com/yusixian/anjian/issues/98)，需要独立实现可信恢复。

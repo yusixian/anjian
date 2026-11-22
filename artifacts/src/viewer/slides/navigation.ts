@@ -42,7 +42,7 @@ export function useSlideKeys(
         event.ctrlKey ||
         event.shiftKey ||
         element?.closest?.(
-          'input, textarea, select, [contenteditable="true"], [role="dialog"], [popover]',
+          'input, textarea, select, [contenteditable="true"], [role="dialog"], [popover], .sd-comments',
         ) ||
         target?.document.querySelector('dialog[open], [aria-modal="true"]')
       )
