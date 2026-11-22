@@ -7,7 +7,8 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
-const isLoopback = (host) => host === 'localhost' || host === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(host);
+const isLoopback = (host) =>
+  host === 'localhost' || host === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(host);
 const ARTIFACT = /^(?:artboard|document|slides|storyboard|whiteboard)\/[a-z0-9][a-z0-9-]*$/;
 const hubProjectId = (dir) => createHash('sha256').update(dir).digest('hex').slice(0, 32);
 
@@ -31,10 +32,13 @@ function endpoint(home) {
       local.password ||
       local.search ||
       local.hash
-    ) return null;
+    )
+      return null;
     const key = fs.readFileSync(path.join(home, 'key'), 'utf8').trim();
     if (!/^[a-f0-9]{48}$/.test(key)) return null;
-    const credential = createHash('sha256').update('anjian-comment-events:' + key).digest('hex');
+    const credential = createHash('sha256')
+      .update('anjian-comment-events:' + key)
+      .digest('hex');
     return { info, credential, url: new URL('/api/local/comment-events', local) };
   } catch {
     return null;
@@ -51,9 +55,9 @@ function running(pid) {
   }
 }
 
-function createLocalCommentEvents(wake, env = process.env) {
+function createLocalCommentEvents(wake, env = process.env, entry) {
   const home = env.ANJIAN_SERVER_HOME || path.join(os.homedir(), '.anjian', 'server');
-  const launcher = path.join(__dirname, 'anjian.cjs');
+  const launcher = entry || path.join(__dirname, 'anjian.cjs');
   let projects = new Map();
   let changes = new Map();
   let reconcile = false;
@@ -67,7 +71,7 @@ function createLocalCommentEvents(wake, env = process.env) {
 
   function restore() {
     // The CLI coordinates startup across watchers through its existing lock.
-    if (closed || restarting || !fs.existsSync(path.join(__dirname, 'cli.cjs'))) return;
+    if (closed || restarting || !fs.existsSync(entry || path.join(__dirname, 'cli.cjs'))) return;
     if (fs.existsSync(path.join(home, 'server-stopped'))) return;
     const hub = endpoint(home);
     if (!hub) return;
@@ -76,16 +80,31 @@ function createLocalCommentEvents(wake, env = process.env) {
     const project = projects.values().next().value?.dir;
     if (!project) return;
     const host = url.hostname === '[::1]' ? '::1' : url.hostname;
-    const child = spawn(process.execPath, [
-      launcher, 'start', '--json', '--no-open', '--background', '--project-dir', project,
-      '--host', host, '--port', url.port || '80',
-      ...(typeof info.urlHost === 'string' ? ['--url-host', info.urlHost] : []),
-    ], {
-      env: { ...env, CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '' },
-      stdio: 'ignore',
-    });
+    const child = spawn(
+      process.execPath,
+      [
+        launcher,
+        'start',
+        '--json',
+        '--no-open',
+        '--background',
+        '--project-dir',
+        project,
+        '--host',
+        host,
+        '--port',
+        url.port || '80',
+        ...(typeof info.urlHost === 'string' ? ['--url-host', info.urlHost] : []),
+      ],
+      {
+        env: { ...env, CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '' },
+        stdio: 'ignore',
+      },
+    );
     restarting = child;
-    const clear = () => { restarting = undefined; };
+    const clear = () => {
+      restarting = undefined;
+    };
     child.once('error', clear);
     child.once('exit', clear);
     child.unref();
@@ -93,10 +112,13 @@ function createLocalCommentEvents(wake, env = process.env) {
 
   function reconnect() {
     if (closed || !projects.size || retry) return;
-    retry = setTimeout(() => {
-      retry = undefined;
-      connect();
-    }, Math.min(15000, 750 * 2 ** Math.min(failures++, 5)));
+    retry = setTimeout(
+      () => {
+        retry = undefined;
+        connect();
+      },
+      Math.min(15000, 750 * 2 ** Math.min(failures++, 5)),
+    );
     retry.unref();
   }
 
@@ -146,14 +168,23 @@ function createLocalCommentEvents(wake, env = process.env) {
         let changed = false;
         for (const line of lines) {
           let event;
-          try { event = JSON.parse(line); } catch { continue; }
+          try {
+            event = JSON.parse(line);
+          } catch {
+            continue;
+          }
           if (event?.ready === true) {
             connected = true;
             failures = 0;
             reconcile = changed = true;
-          } else if (connected && typeof event?.artifact === 'string' && ARTIFACT.test(event.artifact)) {
+          } else if (
+            connected &&
+            typeof event?.artifact === 'string' &&
+            ARTIFACT.test(event.artifact)
+          ) {
             const source = projects.get(event.project);
-            if (!source || (!source.artifacts.has('*') && !source.artifacts.has(event.artifact))) continue;
+            if (!source || (!source.artifacts.has('*') && !source.artifacts.has(event.artifact)))
+              continue;
             const artifacts = changes.get(source.dir) ?? new Set();
             artifacts.add(event.artifact);
             changes.set(source.dir, artifacts);
@@ -173,7 +204,11 @@ function createLocalCommentEvents(wake, env = process.env) {
       for (const [dir, artifacts] of sources) {
         if (!artifacts.size) continue;
         const known = [...projects.values()].find((source) => source.dir === dir);
-        if (!known || known.artifacts.size !== artifacts.size || [...artifacts].some((a) => !known.artifacts.has(a))) {
+        if (
+          !known ||
+          known.artifacts.size !== artifacts.size ||
+          [...artifacts].some((a) => !known.artifacts.has(a))
+        ) {
           projects.set(hubProjectId(canonical(dir)), { dir, artifacts: new Set(artifacts) });
           reconcile = true;
         }

@@ -40,23 +40,32 @@ function main() {
   const args = process.argv.slice(2);
   const end = args.indexOf('--');
   const flags = end === -1 ? args : args.slice(0, end);
+  const separateReceipt = /^(?!(?:codex|claude):)[a-z][a-z0-9-]*:/;
   const localSessionReceipt =
     args[0] === 'comment' &&
-    args[1] === 'list' &&
-    flags.some(
-      (arg, index) =>
-        /^--session=(?:pi|agy):/.test(arg) ||
-        (arg === '--session' && /^(?:pi|agy):/.test(flags[index + 1] || '')),
+    (args[1] === 'list' || args[1] === 'read') &&
+    flags.some((arg, index) =>
+      separateReceipt.test(
+        arg.startsWith('--session=')
+          ? arg.slice(10)
+          : arg === '--session'
+            ? flags[index + 1] || ''
+            : '',
+      ),
     );
   const readOnly =
     args[0] === 'skills' ||
+    args[0] === 'feedback-host' ||
     flags.includes('--help') ||
     flags.includes('-h') ||
     args[0] === '--version' ||
     args[0] === '-v' ||
     (args[0] === 'remote' && args[1] === 'status') ||
     localSessionReceipt;
-  const watch = !readOnly && (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID);
+  const watch =
+    !readOnly &&
+    !process.env.ANJIAN_FEEDBACK_SESSION &&
+    (process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID);
   const explicitStart =
     watch &&
     args[0] === 'start' &&

@@ -53,6 +53,7 @@ const MARKERS: [string, (env: Env) => boolean][] = [
 ];
 
 export const AGENT_MARKERS = [
+  'ANJIAN_FEEDBACK_NAME',
   'AI_AGENT',
   'AGENT',
   'OMPCODE',
@@ -82,7 +83,22 @@ export const AGENT_MARKERS = [
 const declaredName = (value: string | undefined) =>
   value?.trim().split(/[@_]/)[0]?.toLowerCase() || undefined;
 
+export function feedbackDisplayName(value: string | undefined): string | undefined {
+  const name = value?.trim();
+  if (!name || name.length > 100) return undefined;
+  if (
+    Array.from(name).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
+  )
+    return undefined;
+  return name;
+}
+
 export function detectAgent(env: Env): string | undefined {
+  const feedbackName = feedbackDisplayName(env.ANJIAN_FEEDBACK_NAME);
+  if (feedbackName) return feedbackName;
   if (env.CLAUDE_CODE_IS_COWORK) return NAMES.cowork;
   const declared = declaredName(env.AI_AGENT);
   if (declared) return NAMES[declared] ?? declared;
