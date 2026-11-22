@@ -6,6 +6,15 @@
 
 ## 当前对照版本
 
+2026-11-23 核对 Ryugi 正式版 `v1.102.7`（`21e39ba0182c0589a109cab053b5b949044d8e86`）。相对 `v1.102.6` 新增 4 个公开提交，累计审计 186 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.7) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.6...v1.102.7)
+
+- `600ba95` 更新官方云的设备码登录指引。案间沿用自己的设备授权和项目绑定流程。[设备授权](https://anjian.cosine.ren/zh/docs/remote-cli/)
+- 公开的 daemon 工作流新增 Linux x64 和 arm64 制品。发布说明列出 systemd 用户服务、电源与进程状态及防休眠；公开树未包含实现。案间已有 Linux Hub 启停和容器部署，常驻服务及主机状态按 [#139](https://github.com/yusixian/anjian/issues/139) 独立实现。
+- `fd5c166` 使 Ryugi README 字标跟随 GitHub 主题。案间 README 使用文本标题，文档站已有主题适配的品牌图。
+- `21e39ba` 更新发布清单。该批新增上游内容不在 MIT 保留条款覆盖范围内。本次更新仅记录公开行为与独立实现事项。[授权说明](https://github.com/Innei/ryugi/blob/v1.102.7/LICENSE)
+
+### v1.102.6 的能力差异
+
 2026-11-22 核对 Ryugi 正式版 `v1.102.6`（`de9f13d4fd98bed85132d0bd5de76e2b82daa4c6`）。相对上一正式版 `v1.102.4` 新增 2 个公开提交，累计审计 182 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.6) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.4...v1.102.6)
 
 - `8ad6bd6` 为启动器、钩子和监听器添加品牌进程名与版本。案间尚未设置这些标签。按 [#130](https://github.com/yusixian/anjian/issues/130) 独立实现并在 Linux 验证既有 Hub 启停与进程身份识别。该增量在上游 MIT 保留条款覆盖范围之外。[授权说明](https://github.com/Innei/ryugi/blob/v1.102.6/LICENSE)
