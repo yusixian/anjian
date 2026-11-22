@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-23 核对 Ryugi 正式版 `v1.102.8`（`7179340`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.2`（`3c361eb`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.2) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.8) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-23 核对 Ryugi 正式版 `v1.102.9`（`0e5f035`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.2`（`3c361eb`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.2) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.9) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
