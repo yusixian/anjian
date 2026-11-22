@@ -34,7 +34,7 @@ export const docAnchorMap = {
     documents: { zh: '把文档变成评审入口', en: 'document-decisions-and-verification' },
     feedback: { zh: '把反馈交给正在工作的-agent', en: 'send-feedback-to-an-agent' },
     packages: { zh: 'macos-安装包', en: 'macos-installation' },
-    candidates: { zh: '另两项独立候选', en: 'other-candidates' },
+    candidates: { zh: '手机样机和引用分享', en: 'phone-mockups-and-reference-sharing' },
   },
   'first-artifact': {
     agent: { zh: '用-agent-创建', en: 'create-with-an-agent' },

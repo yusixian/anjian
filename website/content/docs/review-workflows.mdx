@@ -5,7 +5,7 @@ description: 从白板、幻灯片和分镜开始，完成一轮文档评审与 
 
 ## 先看版本
 
-撰写本指南时，正式发行版为 **v0.4.0**。[正式更新记录](/docs/updates)随发行版更新。以下主流程来自[同步候选 #81](https://github.com/yusixian/anjian/pull/81)，属于 v0.5.0 发布草案，需要运行包含该 PR 的案间构建。源码构建步骤见[本机安装与启动](/docs/local)。
+以下流程需要运行包含本轮同步改动的案间构建。[正式更新记录](/docs/updates)随发行版更新。自托管实例和本机 CLI 分别升级，源码构建步骤见[本机安装与启动](/docs/local)。
 
 ## 白板
 
@@ -25,7 +25,7 @@ description: 从白板、幻灯片和分镜开始，完成一轮文档评审与 
 2. 点选片段，在「属性」里调整时间线起点、素材入点和时长。保存新片段后，可以给它添加批注。
 3. 点「生成成片」或「保存并生成成片」，在「成片预览」确认画面和声音，再点「下载 MP4」。
 
-分镜由运行案间服务的机器渲染。本机源码和 macOS 安装包需要该机器提供 `ffmpeg` 和 `ffprobe`。候选 Docker 镜像已经内置这两个工具。可将下载的 MP4 发给别人。
+分镜由运行案间服务的机器渲染。本机源码和 macOS 安装包需要该机器提供 `ffmpeg` 和 `ffprobe`。案间的自托管 Docker 镜像已内置这两个工具。可将下载的 MP4 发给别人。
 
 ## 把文档变成评审入口
 
@@ -55,11 +55,9 @@ anjian start --project-dir "$project" --artifact html/demo --json
 
 ## macOS 安装包
 
-Apple 芯片和 Intel 安装包已经通过候选测试。正式下载以[案间 Releases](https://github.com/yusixian/anjian/releases) 为准。正式发布提供制品后，Apple 芯片选择 `darwin-arm64`，Intel 选择 `darwin-x64`。下载对应的 `.tar.gz.sha256` 文件，在解压前运行 `shasum -a 256 -c <校验文件>`。现在想体验主流程，可先从候选源码构建。
+Apple 芯片和 Intel 安装包已经通过候选测试。正式下载以[案间 Releases](https://github.com/yusixian/anjian/releases) 为准。正式发布提供制品后，Apple 芯片选择 `darwin-arm64`，Intel 选择 `darwin-x64`。下载对应的 `.tar.gz.sha256` 文件，在解压前运行 `shasum -a 256 -c <校验文件>`。也可以从源码构建案间。
 
-## 另两项独立候选
-
-下面的入口需要各自 PR 的构建。
+## 手机样机和引用分享
 
 - **手机样机 [#84](https://github.com/yusixian/anjian/pull/84)。** 让 Agent 用 `anjian start --mockup --json --project-dir "$project" --artifact artboard/phone-review` 启动。Agent 读取返回的 `mockupGuide`，按同一手机尺寸和安全区制作多套方案，再把画板链接给你比较和批注。也可以运行 `anjian skills get artifacts --reference phone-mockups.md` 单独读取指南。
 - **连同引用快照分享 [#85](https://github.com/yusixian/anjian/pull/85)。** 打开评审文档的「分享」，在「引用的作品」勾选允许访客打开的同项目作品，再点「创建公开链接」或「更新分享」。子文档里的下一层引用显示为标签。撤销主文档链接会同时关闭这次发布的引用快照；作品以前单独发布的链接各自管理。详见[公开分享](/docs/sharing)。

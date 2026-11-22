@@ -28,8 +28,8 @@ export function releasePage(releases, language) {
     ? 'Release records do not indicate which version your server or local CLI is running.'
     : '发布记录不代表你的服务器或本机 CLI 已升级到相应版本。';
   const guide = english
-    ? '[Try the new workflows](/docs/review-workflows) for steps and candidate availability.'
-    : '[查看新功能上手指南](/docs/review-workflows)，了解操作步骤与候选版本。';
+    ? '[Try the new workflows](/docs/review-workflows) for steps and supported workflows.'
+    : '[查看新功能上手指南](/docs/review-workflows)，了解功能入口与操作步骤。';
   const sections = releases.map((release) => {
     const other = english ? 'zh' : 'en';
     const content = release[language] || release[other] || release.original;
