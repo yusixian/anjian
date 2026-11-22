@@ -1,16 +1,23 @@
 import './whiteboard.css';
 
 import { MessageSquare, Save } from 'lucide-react';
-import { lazy, Suspense, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 
+import { WHITEBOARD_DEFAULT_PAGE, type WhiteboardPage as Sheet } from '../../shared/whiteboard';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { ShareButton } from '../components/ShareButton';
 import { useTranslation } from '../i18n';
-import { useWhiteboard, type WhiteboardCommentAction } from './useWhiteboard';
-import { useWhiteboardFrame } from './useWhiteboardFrame';
+import {
+  createWhiteboardDrafts,
+  useWhiteboard,
+  type WhiteboardCommentAction,
+  type WhiteboardDrafts,
+} from './useWhiteboard';
+import { useWhiteboardLocation } from './useWhiteboardLocation';
 import type { WhiteboardCanvasHandle } from './WhiteboardCanvas';
 import { WhiteboardComments } from './WhiteboardComments';
 import { WhiteboardFrames } from './WhiteboardFrames';
+import { WhiteboardPagePicker } from './WhiteboardPagePicker';
 
 const Canvas = lazy(() =>
   import('../document/shims')
@@ -18,21 +25,55 @@ const Canvas = lazy(() =>
     .then(({ WhiteboardCanvas }) => ({ default: WhiteboardCanvas })),
 );
 
-function WhiteboardPage({ id }: { id: string }) {
+function WhiteboardPage({
+  id,
+  page,
+  frame,
+  drafts,
+  pages,
+  onFrame,
+  onPage,
+  onPages,
+  commentsOpen,
+  toggleComments,
+}: {
+  id: string;
+  page: string;
+  frame: string | null;
+  drafts: WhiteboardDrafts;
+  pages: Sheet[];
+  onFrame: (id: string | null) => void;
+  onPage: (id: string) => void;
+  onPages: (pages: Sheet[]) => void;
+  commentsOpen: boolean;
+  toggleComments: () => void;
+}) {
   const { t } = useTranslation();
-  const { busy, changed, conflict, dirty, failure, generation, load, postComment, save, view } =
-    useWhiteboard(id);
-  const [commentsOpen, setCommentsOpen] = useState(
-    () => window.matchMedia('(min-width: 760px)').matches,
-  );
+  const {
+    busy,
+    changed,
+    conflict,
+    dirty,
+    failure,
+    generation,
+    load,
+    postComment,
+    save,
+    savePage,
+    view,
+  } = useWhiteboard(id, page, drafts);
   const [selection, setSelection] = useState<{ generation: number; ids: string[] }>({
     generation: 0,
     ids: [],
   });
   const canvasRef = useRef<WhiteboardCanvasHandle>(null);
-  const [frame, setFrame] = useWhiteboardFrame();
   const selected = selection.generation === generation ? selection.ids : [];
   const status = dirty ? t('whiteboard.unsaved') : t('whiteboard.saved');
+  const currentPages = view?.pages;
+
+  useEffect(() => {
+    if (currentPages) onPages(currentPages);
+  }, [currentPages, onPages]);
 
   const addComment = async (action: WhiteboardCommentAction) => {
     if (action.op === 'create' && dirty && !(await save())) return false;
@@ -55,7 +96,7 @@ function WhiteboardPage({ id }: { id: string }) {
               aria-controls="whiteboard-comments"
               aria-expanded={commentsOpen}
               type="button"
-              onClick={() => setCommentsOpen(!commentsOpen)}
+              onClick={toggleComments}
             >
               <MessageSquare aria-hidden="true" size={15} />
               {t('chrome.comments')}
@@ -64,7 +105,29 @@ function WhiteboardPage({ id }: { id: string }) {
           </div>
         )}
       </header>
-      {view && <WhiteboardFrames frame={frame} scene={view.scene} onFrame={setFrame} />}
+      {(view || pages.length > 0 || failure === 'loadFailed') && (
+        <div className="anjian-whiteboard-navigation">
+          <WhiteboardPagePicker
+            disabled={busy}
+            drafts={drafts.pages}
+            page={page}
+            pages={currentPages ?? pages}
+            onPage={onPage}
+            onSave={
+              view
+                ? async (title, rename) => {
+                    const result = await savePage(title, rename);
+                    if (!result) return false;
+                    onPages(result.pages);
+                    if (!rename) onPage(result.page);
+                    return true;
+                  }
+                : undefined
+            }
+          />
+          {view && <WhiteboardFrames frame={frame} scene={view.scene} onFrame={onFrame} />}
+        </div>
+      )}
       {conflict && (
         <div className="anjian-whiteboard-notice" role="alert">
           <span>{t('whiteboard.conflict')}</span>
@@ -118,10 +181,15 @@ function WhiteboardPage({ id }: { id: string }) {
           {commentsOpen && (
             <WhiteboardComments
               busy={busy}
-              comments={view.comments}
               locate={(ids) => canvasRef.current?.focusElements(ids) ?? false}
               post={addComment}
               selected={selected}
+              comments={{
+                ...view.comments,
+                threads: view.comments.threads.filter(
+                  (thread) => (thread.anchor.page ?? WHITEBOARD_DEFAULT_PAGE) === page,
+                ),
+              }}
             />
           )}
         </div>
@@ -136,10 +204,43 @@ function WhiteboardPage({ id }: { id: string }) {
   );
 }
 
+function WhiteboardArtifact({ id }: { id: string }) {
+  const { page, frame, navigate } = useWhiteboardLocation();
+  const [drafts] = useState(createWhiteboardDrafts);
+  const [pages, setPages] = useState<Sheet[]>([]);
+  const [commentsOpen, setCommentsOpen] = useState(
+    () => window.matchMedia('(min-width: 760px)').matches,
+  );
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (drafts.pages.size > 0) event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [drafts]);
+
+  return (
+    <WhiteboardPage
+      commentsOpen={commentsOpen}
+      drafts={drafts}
+      frame={frame}
+      id={id}
+      key={page}
+      page={page}
+      pages={pages}
+      toggleComments={() => setCommentsOpen((open) => !open)}
+      onFrame={(next) => navigate(page, next)}
+      onPage={(next) => navigate(next, null)}
+      onPages={setPages}
+    />
+  );
+}
+
 export function WhiteboardLayout({ id }: { id: string }) {
   return (
     <LibraryNavigation>
-      <WhiteboardPage id={id} key={id} />
+      <WhiteboardArtifact id={id} key={id} />
     </LibraryNavigation>
   );
 }

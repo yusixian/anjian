@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { ArtifactType } from '../shared/types';
-import { MAX_WHITEBOARD_SCENE_BYTES, parseWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
+import { MAX_WHITEBOARD_SCENE_BYTES, MAX_WHITEBOARD_SOURCE_BYTES, WHITEBOARD_PAGES_FILE, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
+import { declaredWhiteboardPageFiles, isWhiteboardSourceFile, whiteboardSourceProblem } from '../shared/whiteboard-source';
 import { CliError, projectPaths } from './paths';
 import { remoteGuide } from './skills';
 
@@ -40,6 +41,9 @@ const PRIMARY_FILES: Record<ArtifactType, string> = {
 };
 const MAX_FILES = 1000;
 const MAX_BYTES = 32 * 1024 * 1024;
+const utf8 = new TextDecoder('utf-8', { fatal: true });
+const sourceLimit = (type: ArtifactType) =>
+  type === 'whiteboard' ? MAX_WHITEBOARD_SOURCE_BYTES : MAX_BYTES;
 // eslint-disable-next-line no-control-regex -- Remote filenames must reject C0 controls and DEL as well as path separators.
 const NAME = /^[^\\/\u0000-\u001F\u007F]+$/;
 
@@ -303,7 +307,7 @@ function validName(name: string, type: ArtifactType): boolean {
       name === 'canvas.json' ||
       ((parts[0] === 'pages' || parts[0] === 'assets') && parts.length >= 2)
     );
-  if (type === 'whiteboard') return name === PRIMARY_FILES.whiteboard;
+  if (type === 'whiteboard') return isWhiteboardSourceFile(name);
   return name === 'index.html' || parts.length >= 1;
 }
 function artifactDir(projectDir: string, artifact: string) {
@@ -330,7 +334,7 @@ export function validateFiles(
   if (!KEY.test(artifact) || !files || typeof files !== 'object' || Array.isArray(files))
     throw new CliError('Invalid artifact manifest');
   const type = artifact.split('/')[0] as ArtifactType;
-  const maxBytes = type === 'whiteboard' ? MAX_WHITEBOARD_SCENE_BYTES : MAX_BYTES;
+  const maxBytes = sourceLimit(type);
   const entries = Object.entries(files);
   if (entries.length > MAX_FILES) throw new CliError('Artifact contains too many files');
   let bytes = 0;
@@ -340,27 +344,39 @@ export function validateFiles(
       !validName(name, type) ||
       names.has(name.toLowerCase()) ||
       typeof encoded !== 'string' ||
-      !/^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i.test(encoded)
+      encoded.length % 4 !== 0
     )
       throw new CliError(`Invalid artifact file: ${name}`);
     names.add(name.toLowerCase());
-    bytes += Buffer.byteLength(encoded, 'base64');
-    if (bytes > maxBytes)
-      throw new CliError(`Artifact exceeds the ${maxBytes / (1024 * 1024)} MiB transfer limit`);
+    const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+    if (/[^A-Z0-9+/]/i.test(encoded.slice(0, encoded.length - padding)))
+      throw new CliError(`Invalid artifact file: ${name}`);
+    const size = encoded.length / 4 * 3 - padding;
+    if (type === 'whiteboard' && size > MAX_WHITEBOARD_SCENE_BYTES)
+      throw new CliError(`${name} exceeds the 16 MiB whiteboard file limit`);
+    bytes += size;
+    if (bytes > maxBytes) throw new CliError('Artifact exceeds the 32 MiB transfer limit');
   }
   const required = PRIMARY_FILES[type];
   if (entries.length && !Object.hasOwn(files, required))
     throw new CliError(`Artifact needs ${required}`);
   if (type === 'whiteboard' && entries.length && validateWhiteboard) {
-    let scene: unknown;
-    try {
-      scene = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(files[required]!, 'base64')));
-    } catch {
-      throw new CliError(`${required} must be valid UTF-8 JSON`);
-    }
-    if (!parseWhiteboardScene(scene)) throw new CliError(`${required} is not a valid Excalidraw scene`);
+    const problem = whiteboardSourceProblem(names, (name) =>
+      utf8.decode(Buffer.from(files[name]!, 'base64')),
+    );
+    if (problem) throw new CliError(problem);
   }
 }
+function readWhiteboardManifest(dir: string) {
+  const file = path.join(dir, WHITEBOARD_PAGES_FILE);
+  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+  if (!stat) return undefined;
+  if (!stat.isFile()) throw new CliError(`Expected a whiteboard source file: ${WHITEBOARD_PAGES_FILE}`);
+  if (stat.size > MAX_WHITEBOARD_SCENE_BYTES)
+    throw new CliError(`${WHITEBOARD_PAGES_FILE} exceeds the 16 MiB whiteboard file limit`);
+  return fs.readFileSync(file);
+}
+
 export function localFiles(projectDir: string, artifact: string): Record<string, string> {
   const dir = artifactDir(projectDir, artifact);
   checkDirectory(dir, dir);
@@ -368,12 +384,25 @@ export function localFiles(projectDir: string, artifact: string): Record<string,
   if (!fs.statSync(dir).isDirectory()) throw new CliError('Artifact path is not a directory');
   const files: Record<string, string> = Object.create(null);
   const type = artifact.split('/')[0] as ArtifactType;
+  const manifest = type === 'whiteboard' ? readWhiteboardManifest(dir) : undefined;
+  const declared = type === 'whiteboard' ? declaredWhiteboardPageFiles(manifest) : null;
+  const maxBytes = sourceLimit(type);
   let count = 0,
     bytes = 0;
   const visit = (relative: string) => {
     const absolute = path.join(dir, relative);
     for (const entry of fs.readdirSync(absolute, { withFileTypes: true })) {
       const name = relative ? `${relative}/${entry.name}` : entry.name;
+      if (type === 'whiteboard') {
+        const lower = name.toLowerCase();
+        if (lower !== name && (lower === 'pages' || isWhiteboardSourceFile(lower)))
+          throw new CliError(`Invalid whiteboard path: ${name}`);
+        if (name === 'pages') {
+          if (!entry.isDirectory()) throw new CliError('Expected a whiteboard pages directory');
+          visit(name);
+          continue;
+        }
+      }
       if (type !== 'whiteboard' && entry.isDirectory() && ['assets', 'pages'].includes(name)) {
         visit(name);
         continue;
@@ -381,15 +410,21 @@ export function localFiles(projectDir: string, artifact: string): Record<string,
       if (!validName(name, type)) continue;
       if (entry.isSymbolicLink()) throw new CliError(`Refusing symlink: ${name}`);
       if (entry.isDirectory()) {
+        if (type === 'whiteboard') throw new CliError(`Expected a whiteboard source file: ${name}`);
         visit(name);
         continue;
       }
       if (!entry.isFile()) throw new CliError(`Refusing non-file: ${name}`);
+      if (declared && name.startsWith('pages/') && !declared.has(name)) continue;
       const file = path.join(dir, name);
-      if (type === 'whiteboard' && fs.statSync(file).size > MAX_WHITEBOARD_SCENE_BYTES)
-        throw new CliError('Whiteboard scene exceeds the allowed transfer size');
-      const data = fs.readFileSync(file);
-      if (++count > MAX_FILES || (bytes += data.length) > MAX_BYTES)
+      if (type === 'whiteboard') {
+        const size = fs.statSync(file).size;
+        if (size > MAX_WHITEBOARD_SCENE_BYTES)
+          throw new CliError(`${name} exceeds the 16 MiB whiteboard file limit`);
+        if (size > maxBytes - bytes) throw new CliError('Artifact exceeds the 32 MiB transfer limit');
+      }
+      const data = name === WHITEBOARD_PAGES_FILE && manifest ? manifest : fs.readFileSync(file);
+      if (++count > MAX_FILES || (bytes += data.length) > maxBytes)
         throw new CliError('Artifact exceeds transfer limit');
       files[name] = data.toString('base64');
     }
@@ -443,6 +478,13 @@ export function applyLocalFiles(
       filesHash(localFiles(projectDir, artifact)) !== expectedLocalHash
     )
       throw new CliError(`${artifact} changed locally during transfer; no files were replaced`);
+    if (artifact.startsWith('whiteboard/')) {
+      for (const relative of Object.keys(files)) {
+        if (!Object.hasOwn(before, relative) &&
+            fs.lstatSync(path.join(dir, relative), { throwIfNoEntry: false }))
+          throw new CliError(`Unlisted whiteboard file already exists: ${relative}`);
+      }
+    }
     committed = true;
     for (const relative of Object.keys(before)) {
       if (!Object.hasOwn(files, relative)) fs.unlinkSync(path.join(dir, relative));

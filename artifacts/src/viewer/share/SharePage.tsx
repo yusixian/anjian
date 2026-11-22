@@ -4,7 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 
 import { ANJIAN_MARK_VIEWBOX, anjianMarkBody } from '../../shared/brand';
 import type { ArtifactType, CanvasLayout, CanvasSpec } from '../../shared/types';
-import type { WhiteboardScene } from '../../shared/whiteboard';
+import { WHITEBOARD_DEFAULT_PAGE, type WhiteboardPage, type WhiteboardScene } from '../../shared/whiteboard';
 
 const ArtboardView = lazy(() =>
   import('../layouts/ArtboardView').then(({ ArtboardView }) => ({ default: ArtboardView })),
@@ -24,6 +24,9 @@ interface SharePayload {
   contentBase: string;
   expiresAt: number | null;
   layout?: CanvasLayout | null;
+  page?: string;
+  pageMissing?: boolean;
+  pages?: WhiteboardPage[];
   publishedAt: number;
   revision?: string;
   scene?: WhiteboardScene;
@@ -77,6 +80,7 @@ export function SharePage() {
   const lang = /^en(?:-|$)/i.test(navigator.language) ? 'en' : 'zh';
   const copy = texts[lang];
   const [data, setData] = useState<SharePayload | null>(null);
+  const [page, setPage] = useState(() => new URL(location.href).searchParams.get('page'));
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable' | 'offline'>('loading');
   const seq = useRef(0);
   const hasData = useRef(false);
@@ -90,7 +94,9 @@ export function SharePage() {
       const id = ++seq.current;
       if (!background) setState('loading');
       try {
-        const response = await fetch(`${location.origin}${base}/data`, {
+        const endpoint = new URL(`${base}/data`, location.origin);
+        if (page) endpoint.searchParams.set('page', page);
+        const response = await fetch(endpoint.href, {
           cache: 'no-store',
           credentials: 'omit',
         });
@@ -118,8 +124,21 @@ export function SharePage() {
         if (id === seq.current) setState(hasData.current ? 'offline' : 'unavailable');
       }
     },
-    [base],
+    [base, page],
   );
+  useEffect(() => {
+    const follow = () => setPage(new URL(location.href).searchParams.get('page'));
+    addEventListener('popstate', follow);
+    return () => removeEventListener('popstate', follow);
+  }, []);
+  function goToPage(id: string) {
+    const url = new URL(location.href);
+    if (id === WHITEBOARD_DEFAULT_PAGE) url.searchParams.delete('page');
+    else url.searchParams.set('page', id);
+    url.searchParams.delete('frame');
+    if (url.href !== location.href) history.pushState(history.state, '', url);
+    setPage(url.searchParams.get('page'));
+  }
   useEffect(() => {
     void load();
     const timer = setInterval(() => {
@@ -220,7 +239,14 @@ export function SharePage() {
             ) : data.type === 'whiteboard' && data.scene ? (
               <Suspense fallback={<div className="share-message">{copy.loading}</div>}>
                 <div className="share-artboard">
-                  <PublicWhiteboard key={data.contentBase} scene={data.scene} />
+                  <PublicWhiteboard
+                    key={`${data.contentBase}:${data.page ?? WHITEBOARD_DEFAULT_PAGE}`}
+                    page={data.page ?? WHITEBOARD_DEFAULT_PAGE}
+                    pageMissing={data.pageMissing}
+                    pages={data.pages ?? []}
+                    scene={data.scene}
+                    onPage={goToPage}
+                  />
                 </div>
               </Suspense>
             ) : data.type === 'html' ? (

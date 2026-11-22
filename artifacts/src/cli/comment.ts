@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 import { detectAgent } from '../server/agent';
+import { isWhiteboardPageId, type WhiteboardAnchor } from '../shared/whiteboard';
 import type { CommandSpec } from './command';
 import { CliError, invocation } from './paths';
 import { serverClient } from './server';
@@ -18,6 +19,7 @@ export interface CommentOptions {
   clear?: boolean;
   elements?: string;
   group?: string;
+  page?: string;
   projectDir: string;
   quote?: string;
   round?: string;
@@ -63,6 +65,8 @@ function requestOf(
   action: CommentAction,
   type: string,
 ): Record<string, unknown> {
+  if (options.page !== undefined && (type !== 'whiteboard' || action !== 'add'))
+    throw new CliError('--page is supported when adding a whiteboard comment');
   if (action === 'list') return { op: 'list', all: !!options.all };
   if ((action === 'choose' || action === 'submit') && type !== 'artboard')
     throw new CliError(`comment ${action} works on artboards only`);
@@ -92,7 +96,9 @@ function requestOf(
     const elementIds = options.elements?.split(',').map((id) => id.trim());
     if (!elementIds?.length || elementIds.some((id) => !id))
       throw new CliError('comment add on a whiteboard needs --elements <id1,id2>');
-    return { op: 'add', elementIds, text: messageText(options) };
+    if (options.page !== undefined && !isWhiteboardPageId(options.page))
+      throw new CliError('--page must be a whiteboard page ID');
+    return { op: 'add', elementIds, page: options.page, text: messageText(options) };
   }
   if (action === 'add') {
     if (!options.block) throw new CliError('comment add needs --block <blockId>');
@@ -181,7 +187,8 @@ interface ListedBoardAnchor {
 }
 
 interface ListedThread {
-  anchor: { blockId: string; blockIds?: string[]; quote: string } | { elementIds: string[] } | ListedBoardAnchor;
+  anchor:
+    { blockId: string; blockIds?: string[]; quote: string } | WhiteboardAnchor | ListedBoardAnchor;
   changes?: string[];
   files?: Record<string, string>;
   id: string;
@@ -246,7 +253,10 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
 
 function anchorLines(thread: ListedThread): string[] {
   const anchor = thread.anchor;
-  if ('elementIds' in anchor) return [`  on elements ${anchor.elementIds.join(', ')}`];
+  if ('elementIds' in anchor)
+    return [
+      `  on elements ${anchor.elementIds.join(', ')}${anchor.page ? ` on page ${anchor.page}` : ''}`,
+    ];
   if ('blockId' in anchor) {
     const ids = anchor.blockIds ?? [anchor.blockId];
     return [
@@ -328,7 +338,7 @@ export const commentCommand: CommandSpec = {
     'list    --artifact <document|artboard|whiteboard>/<id> [--all]',
     'add     --artifact document/<id> --block <blockId> [--quote <text>] [--text <text>]',
     'add     --artifact artboard/<id> --board <boardId> [--x <px> --y <px>] [--text <text>]',
-    'add     --artifact whiteboard/<id> --elements <id1,id2> [--text <text>]',
+    'add     --artifact whiteboard/<id> --elements <id1,id2> [--page <id>] [--text <text>]',
     'reply   --artifact <document|artboard|whiteboard>/<id> --thread <threadId> [--text <text>]',
     'resolve --artifact <document|artboard|whiteboard>/<id> --thread <threadId>',
     'choose  --artifact artboard/<id> --group <groupId> (--board <boardId> | --clear)',
@@ -337,10 +347,15 @@ export const commentCommand: CommandSpec = {
   details:
     'list prints what changed since you last listed. Without --text, add and reply read the message from stdin.',
   options: {
-    artifact: { type: 'string', value: '<type>/<id>', help: 'The document, artboard, or whiteboard' },
+    artifact: {
+      type: 'string',
+      value: '<type>/<id>',
+      help: 'The document, artboard, or whiteboard',
+    },
     all: { type: 'boolean', help: 'list: every thread, not only what changed' },
     block: { type: 'string', value: '<blockId>', help: 'add: the document block to comment on' },
     elements: { type: 'string', value: '<id1,id2>', help: 'add: selected whiteboard element IDs' },
+    page: { type: 'string', value: '<pageId>', help: 'add: whiteboard page ID (defaults to main)' },
     quote: {
       type: 'string',
       value: '<text>',
@@ -364,6 +379,8 @@ export const commentCommand: CommandSpec = {
         action: positionals[0],
         artifact: values.artifact as string | undefined,
         all: values.all as boolean | undefined,
+        elements: values.elements as string | undefined,
+        page: values.page as string | undefined,
         block: values.block as string | undefined,
         quote: values.quote as string | undefined,
         thread: values.thread as string | undefined,

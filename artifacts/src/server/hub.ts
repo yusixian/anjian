@@ -1332,7 +1332,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (!mounted) send(res, 404, 'Not found');
       else if (
         req.method === 'POST' &&
-        /^\/api\/(?:(?:agent\/)?(?:document|artboard|whiteboard)\/[^/]+\/comments|document\/[^/]+\/update|whiteboard\/[^/]+)$/.test(
+        /^\/api\/(?:(?:agent\/)?(?:document|artboard|whiteboard)\/[^/]+\/comments|document\/[^/]+\/update|whiteboard\/[^/]+(?:\/pages)?)$/.test(
           pathname,
         )
       ) {

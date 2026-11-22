@@ -11,30 +11,96 @@ export type WhiteboardCommentAction =
   | { op: 'reply'; threadId: string; text: string }
   | { op: 'status'; threadId: string; status: 'open' | 'resolved' };
 
-type Failure = 'loadFailed' | 'saveFailed' | 'commentFailed';
+type Failure = 'loadFailed' | 'saveFailed' | 'commentFailed' | 'pageSaveFailed';
+
+interface SceneEdit {
+  key: string;
+  scene: WhiteboardScene;
+}
+
+interface PageDraft {
+  baseline: string;
+  edit: SceneEdit;
+  revision: string;
+}
+
+interface SaveReceipt {
+  before: string;
+  revision: string;
+  submitted: string;
+}
+
+export function createWhiteboardDrafts() {
+  const pages = new Map<string, PageDraft>();
+  const listeners = new Map<string, (receipt: SaveReceipt) => void>();
+  const receipts = new Map<string, SaveReceipt>();
+  const pending = new Map<string, SceneEdit>();
+  return {
+    pages,
+    pending,
+    listen(page: string, listener: (receipt: SaveReceipt) => void) {
+      listeners.set(page, listener);
+      const receipt = receipts.get(page);
+      if (receipt) listener(receipt);
+      return () => {
+        if (listeners.get(page) === listener) listeners.delete(page);
+      };
+    },
+    confirm(page: string, receipt: SaveReceipt) {
+      receipts.set(page, receipt);
+      const draft = pages.get(page);
+      if (draft?.revision === receipt.before) {
+        if (draft.edit.key === receipt.submitted) pages.delete(page);
+        else pages.set(page, { ...draft, baseline: receipt.submitted, revision: receipt.revision });
+      }
+      listeners.get(page)?.(receipt);
+    },
+  };
+}
+
+export type WhiteboardDrafts = ReturnType<typeof createWhiteboardDrafts>;
 
 const POLL_MS = 3000;
 
-export function useWhiteboard(id: string) {
+export function useWhiteboard(id: string, page: string, drafts: WhiteboardDrafts) {
   const endpoint = `/api/whiteboard/${encodeURIComponent(id)}`;
+  const query = `?${new URLSearchParams({ page })}`;
+  const sceneEndpoint = `${endpoint}${query}`;
+  const initialDraft = drafts.pages.get(page);
   const viewRef = useRef<WhiteboardSnapshot | null>(null);
-  const draft = useRef<{ scene: WhiteboardScene; key: string } | null>(null);
-  const baseline = useRef<string | null>(null);
+  const draftRef = useRef<SceneEdit | null>(initialDraft?.edit ?? null);
+  const baselineRef = useRef<string | null>(initialDraft?.baseline ?? null);
+  const revisionRef = useRef<string | null>(initialDraft?.revision ?? null);
+  const latestRemoteRevision = useRef<string | null>(null);
   const sequence = useRef(0);
   const pendingLoad = useRef<AbortController | null>(null);
   const etag = useRef<string | null>(null);
   const writing = useRef(false);
   const [view, setView] = useState<WhiteboardSnapshot | null>(null);
   const [generation, setGeneration] = useState(0);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(() => initialDraft !== undefined);
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
 
   const show = useCallback((next: WhiteboardSnapshot) => {
+    revisionRef.current = next.revision;
     viewRef.current = next;
     setView(next);
   }, []);
+
+  const trackDraft = useCallback(() => {
+    const edit = draftRef.current;
+    const baseline = baselineRef.current;
+    const revision = revisionRef.current;
+    const sending = drafts.pending.get(page);
+    const changed =
+      !!edit && (edit.key !== baseline || (sending !== undefined && sending.key !== edit.key));
+    if (changed && baseline !== null && revision !== null)
+      drafts.pages.set(page, { edit, baseline, revision });
+    else drafts.pages.delete(page);
+    setDirty(changed);
+  }, [drafts, page]);
 
   const load = useCallback(
     async ({ discard = false, report = false }: { discard?: boolean; report?: boolean } = {}) => {
@@ -45,7 +111,7 @@ export function useWhiteboard(id: string) {
       const request = ++sequence.current;
       try {
         const headers = etag.current && !discard ? { 'If-None-Match': etag.current } : undefined;
-        const response = await fetch(endpoint, {
+        const response = await fetch(sceneEndpoint, {
           cache: 'no-store',
           headers,
           signal: controller.signal,
@@ -59,15 +125,22 @@ export function useWhiteboard(id: string) {
         if (request !== sequence.current) return;
         const current = viewRef.current;
         etag.current = response.headers.get('ETag');
-        const locallyEdited = draft.current !== null && draft.current.key !== baseline.current;
-        if (current && locallyEdited && !discard) {
-          show({ ...next, scene: current.scene, title: current.title, revision: current.revision });
-          setConflict(current.revision !== next.revision);
+        latestRemoteRevision.current = next.revision;
+        const draft = draftRef.current;
+        const revision = revisionRef.current;
+        const sending = drafts.pending.get(page);
+        const locallyEdited =
+          draft &&
+          (draft.key !== baselineRef.current ||
+            (sending !== undefined && sending.key !== draft.key));
+        if (locallyEdited && revision !== null && !discard) {
+          show({ ...next, scene: current?.scene ?? draft.scene, revision });
+          setConflict(revision !== next.revision);
         } else {
           if (discard || current?.revision !== next.revision) {
-            draft.current = null;
-            baseline.current = null;
-            setDirty(false);
+            draftRef.current = null;
+            baselineRef.current = null;
+            trackDraft();
             setGeneration((value) => value + 1);
           }
           show(
@@ -84,7 +157,7 @@ export function useWhiteboard(id: string) {
         if (pendingLoad.current === controller) pendingLoad.current = null;
       }
     },
-    [endpoint, show],
+    [drafts, page, sceneEndpoint, show, trackDraft],
   );
 
   useEffect(() => {
@@ -103,28 +176,49 @@ export function useWhiteboard(id: string) {
     };
   }, [load]);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  useEffect(
+    () =>
+      drafts.listen(page, (receipt) => {
+        if (revisionRef.current !== receipt.before) return;
+        const current = viewRef.current;
+        const remoteRevision = writing.current ? receipt.revision : latestRemoteRevision.current;
+        const edit = draftRef.current;
+        const needsRebase = edit && (edit.key !== baselineRef.current || drafts.pending.has(page));
+        if (needsRebase) {
+          revisionRef.current = receipt.revision;
+          baselineRef.current = receipt.submitted;
+          latestRemoteRevision.current = remoteRevision;
+          if (current) show({ ...current, revision: receipt.revision });
+          trackDraft();
+          setConflict(
+            edit.key !== receipt.submitted &&
+              remoteRevision !== null &&
+              remoteRevision !== receipt.before &&
+              remoteRevision !== receipt.revision,
+          );
+        }
+        etag.current = null;
+        if (!writing.current) void load({ report: true });
+      }),
+    [drafts, load, page, show, trackDraft],
+  );
 
-  const changed = useCallback((scene: WhiteboardScene, key: string) => {
-    baseline.current ??= key;
-    draft.current = { scene, key };
-    setDirty(key !== baseline.current);
-  }, []);
+  const changed = useCallback(
+    (scene: WhiteboardScene, key: string) => {
+      baselineRef.current ??= key;
+      draftRef.current = { scene, key };
+      trackDraft();
+    },
+    [trackDraft],
+  );
 
-  async function write(
+  async function write<T>(
     path: string,
     body: unknown,
-    apply: (value: unknown) => void,
+    apply: (value: T, active: boolean) => void,
     failed: Failure,
-  ) {
-    if (writing.current) return false;
+  ): Promise<T | null> {
+    if (writing.current) return null;
     writing.current = true;
     const request = ++sequence.current;
     pendingLoad.current?.abort();
@@ -139,51 +233,81 @@ export function useWhiteboard(id: string) {
       });
       if (response.status === 409 && failed === 'saveFailed') {
         if (request === sequence.current) setConflict(true);
-        return false;
+        return null;
       }
       if (!response.ok) throw new Error(String(response.status));
-      const value: unknown = await response.json();
-      if (request !== sequence.current) return false;
-      etag.current = null;
-      apply(value);
-      return true;
+      const value = (await response.json()) as T;
+      const active = request === sequence.current;
+      if (active) etag.current = null;
+      apply(value, active);
+      return active ? value : null;
     } catch {
       if (request === sequence.current) setFailure(failed);
-      return false;
+      return null;
     } finally {
       writing.current = false;
       if (request === sequence.current) setBusy(false);
     }
   }
 
-  function save() {
+  async function save() {
     const current = viewRef.current;
-    const edit = draft.current;
-    if (!edit || !current) return Promise.resolve(false);
-    return write(
-      endpoint,
+    const edit = draftRef.current;
+    if (writing.current || drafts.pending.has(page) || !edit || !current) return false;
+    drafts.pending.set(page, edit);
+    const saved = await write<WhiteboardSnapshot>(
+      sceneEndpoint,
       { scene: edit.scene, revision: current.revision },
-      (value) => {
-        show(value as WhiteboardSnapshot);
-        baseline.current = edit.key;
-        setDirty(draft.current?.key !== edit.key);
-        setConflict(false);
+      (value, active) => {
+        drafts.confirm(page, {
+          before: current.revision,
+          revision: value.revision,
+          submitted: edit.key,
+        });
+        if (active) show(value);
       },
       'saveFailed',
     );
+    if (drafts.pending.get(page) === edit) drafts.pending.delete(page);
+    return saved !== null;
   }
 
-  function postComment(action: WhiteboardCommentAction) {
-    return write(
+  async function postComment(action: WhiteboardCommentAction) {
+    const saved = await write<WhiteboardComments>(
       `${endpoint}/comments`,
-      action,
-      (value) => {
+      action.op === 'create' ? { ...action, page } : action,
+      (value, active) => {
         const current = viewRef.current;
-        if (current) show({ ...current, comments: value as WhiteboardComments });
+        if (active && current) show({ ...current, comments: value });
       },
       'commentFailed',
     );
+    return saved !== null;
   }
 
-  return { busy, changed, conflict, dirty, failure, generation, load, postComment, save, view };
+  function savePage(title: string, rename: boolean) {
+    return write<WhiteboardSnapshot>(
+      `${endpoint}/pages`,
+      rename ? { page, title } : { title },
+      (value, active) => {
+        const current = viewRef.current;
+        if (active && rename && current) show({ ...current, pages: value.pages });
+      },
+      'pageSaveFailed',
+    );
+  }
+
+  return {
+    busy,
+    changed,
+    conflict,
+    dirty,
+    failure,
+    generation,
+    load,
+    postComment,
+    save,
+    savePage,
+    view,
+  };
 }

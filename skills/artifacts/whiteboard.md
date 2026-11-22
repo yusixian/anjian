@@ -13,16 +13,29 @@ The source is `.anjian/artifacts/whiteboard/<id>/scene.excalidraw`, a native Exc
 }
 ```
 
-Read the latest file before editing, and reread it just before saving. Apply your changes to the latest version so that the human's edits to other shapes survive. If both of you changed the same shape, reconcile it before saving. Give each new element a unique ID. Keep media inside the native `files` map. For a self-hosted project, pull before editing and use the remote push command so the revision check can protect a newer update.
+Read the latest file before editing, and reread it just before saving. Apply your changes to the latest version so that the human's edits to other shapes survive. If both of you changed the same shape, reconcile it before saving. Give each new element an ID unique within its page. Keep media inside the native `files` map. For a self-hosted project, pull before editing and use the remote push command so the revision check can protect a newer update.
 
-To see a human's targets, read `anchor.elementIds` from the CLI output and match them to `elements[*].id`. If an ID was deleted, mention it in the reply instead of guessing another target. Reply to the thread through the CLI. Browser selection opens the same elements when the human revisits the discussion.
+To see a human's targets, read `anchor.page` and `anchor.elementIds` from the CLI output. An omitted page means `main`. Match the IDs to `elements[*].id` on that page. If an ID was deleted, mention it in the reply instead of guessing another target. Reply to the thread through the CLI. Set `project` to the project directory and `thread` to the returned thread ID.
 
 ```bash
-anjian comment list --json --project-dir whiteboard/launch-sequence < project > --artifact
-anjian comment reply --json --project-dir whiteboard/launch-sequence --thread "Updated the selected elements." < project > --artifact < thread-id > --text
+anjian comment list --json --project-dir "$project" --artifact whiteboard/launch-sequence
+anjian comment reply --json --project-dir "$project" --artifact whiteboard/launch-sequence --thread "$thread" --text "Updated the selected elements."
 ```
 
-Use `comment add --elements <id1,id2>` to create a new element discussion. The server owns `comments.json` and `.state/`. A public share is a read-only scene snapshot and omits review threads.
+Use `comment add --elements <id1,id2>` to create an element discussion, with `--page <id>` on an extra page. The server owns `comments.json` and `.state/`. A public share is a read-only snapshot and omits review threads.
+
+## Work with pages
+
+The default page is always `main` and stays in `scene.excalidraw`. Additional pages are listed in `pages.json` and stored as native scenes at `pages/<id>.excalidraw`. Preserve page IDs when renaming titles. Read the manifest before editing and write a new scene file before listing it in the manifest.
+
+```json
+{
+  "pages": [{ "id": "review", "title": "Review" }],
+  "version": 1
+}
+```
+
+To share a page, use `?page=review` on the canonical whiteboard link. Add `&frame=<encoded-frame-id>` to reach its frame. If two pages contain the same element ID, the page in the link or comment determines the target. An anonymous link can open only a page already in the published snapshot. If a page must stay unpublished, share its private link with authorized readers.
 
 ## Link to a frame
 

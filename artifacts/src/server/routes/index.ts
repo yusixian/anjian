@@ -16,6 +16,7 @@ import { libraryRoute, shellRoute, viewerFileRoute } from './viewer';
 import {
   whiteboardAgentCommentRoute,
   whiteboardCommentRoute,
+  whiteboardPagesRoute,
   whiteboardSceneRoute,
 } from './whiteboard';
 
@@ -35,6 +36,7 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   documentStateRoute,
   documentWriteRoute,
   whiteboardSceneRoute,
+  whiteboardPagesRoute,
   whiteboardCommentRoute,
   whiteboardAgentCommentRoute,
   artifactApiRoute,

@@ -258,6 +258,7 @@ async function push(dir: string, artifact: string | undefined, emit: Emit) {
     const { binding } = bindingFor(dir);
     const local = localFiles(dir, artifact);
     if (!Object.keys(local).length) throw new CliError(`No local source files for ${artifact}`);
+    if (artifact.startsWith('whiteboard/')) validateFiles(artifact, local);
     const previous = binding.revisions[artifact];
     if (!previous) {
       const remote = await remoteSnapshot(dir, artifact);

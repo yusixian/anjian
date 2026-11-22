@@ -47,6 +47,9 @@
 .anjian-whiteboard-frames button,
 .anjian-whiteboard-frames input,
 .anjian-whiteboard-frames select,
+.anjian-whiteboard-pages button,
+.anjian-whiteboard-pages input,
+.anjian-whiteboard-pages select,
 .anjian-whiteboard-comments button,
 .anjian-whiteboard-notice button {
   display: inline-flex;
@@ -66,12 +69,14 @@
 
 .anjian-whiteboard-actions > button:is(:hover, [aria-expanded='true']),
 .anjian-whiteboard-frames button:hover,
+.anjian-whiteboard-pages button:hover,
 .anjian-whiteboard-comments button:hover,
 .anjian-whiteboard-notice button:hover {
   background: var(--lobe-color-fill-tertiary);
 }
 
 .anjian-whiteboard-actions > button:disabled,
+.anjian-whiteboard-pages button:disabled,
 .anjian-whiteboard-comments button:disabled,
 .anjian-whiteboard-notice button:disabled {
   opacity: 0.55;
@@ -86,6 +91,8 @@
   min-height: 0;
 }
 
+.anjian-whiteboard-navigation,
+.anjian-whiteboard-pages,
 .anjian-whiteboard-frames {
   display: flex;
   flex-wrap: wrap;
@@ -98,6 +105,13 @@
   font: 12px/1.5 var(--lobe-font-family);
 }
 
+.anjian-whiteboard-navigation > :is(.anjian-whiteboard-pages, .anjian-whiteboard-frames) {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.anjian-whiteboard-pages label,
 .anjian-whiteboard-frames label {
   display: flex;
   align-items: center;
@@ -105,9 +119,24 @@
   gap: 8px;
 }
 
+.anjian-whiteboard-pages select,
 .anjian-whiteboard-frames select {
   min-width: 0;
   max-width: min(50vw, 320px);
+}
+
+.anjian-whiteboard-pages form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
+.anjian-whiteboard-pages input {
+  min-width: 0;
+  max-width: min(55vw, 240px);
+  cursor: text;
 }
 
 .anjian-whiteboard-frames input {
@@ -234,9 +263,15 @@
     border-top: 1px solid var(--lobe-color-border-secondary);
   }
   .anjian-whiteboard-actions > button,
+  .anjian-whiteboard-pages button,
+  .anjian-whiteboard-pages input,
+  .anjian-whiteboard-pages select,
   .anjian-whiteboard-comments button,
   .anjian-whiteboard-notice button {
     min-height: 44px;
+  }
+  .anjian-whiteboard-pages input {
+    font-size: 16px;
   }
   .anjian-whiteboard-compose textarea {
     font-size: 16px;

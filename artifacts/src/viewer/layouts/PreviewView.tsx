@@ -28,6 +28,7 @@ const none = new Set<string>();
 
 export interface PreviewPayload extends Partial<CanvasPayload> {
   contentBase: string;
+  pageMissing?: boolean;
   revision?: string;
   scene?: WhiteboardScene;
   state?: SerializedEditorState;
@@ -86,7 +87,7 @@ export function PreviewView({
           <Suspense fallback={message(t('preview.loading'))}>
             <WhiteboardPreview
               readOnly
-              frameId={requestedFrame(new URL(location.href))}
+              frameId={data.pageMissing ? null : requestedFrame(new URL(location.href))}
               key={data.revision}
               scene={data.scene}
             />

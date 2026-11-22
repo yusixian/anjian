@@ -1,7 +1,12 @@
 import { expect, test } from 'vitest';
 
 import { emptyWhiteboardScene } from '../src/shared/whiteboard';
-import { frameLink, requestedFrame, whiteboardFrames } from '../src/viewer/whiteboard/frames';
+import {
+  frameLink,
+  requestedFrame,
+  requestedPage,
+  whiteboardFrames,
+} from '../src/viewer/whiteboard/frames';
 
 test('keeps only live native frames in their scene order', () => {
   const frames = whiteboardFrames({
@@ -14,6 +19,18 @@ test('keeps only live native frames in their scene order', () => {
     ],
   });
   expect(frames.map(({ id }) => id)).toEqual(['start', 'finish']);
+});
+
+test('a frame link retains its page and treats the legacy root as main', () => {
+  const url = new URL('https://app.example/whiteboard/board?page=review&frame=old&key=private');
+  const link = new URL(frameLink(url, 'new'));
+  expect([...link.searchParams.entries()]).toEqual([
+    ['page', 'review'],
+    ['frame', 'new'],
+  ]);
+  expect(requestedPage(link)).toBe('review');
+  expect(requestedPage(new URL('https://app.example/whiteboard/board'))).toBe('main');
+  expect(requestedPage(new URL('https://app.example/whiteboard/board?page=../main'))).toBe('main');
 });
 
 test('copies an encoded frame target without access keys or unrelated URL state', () => {

@@ -152,6 +152,31 @@ test('whiteboard creation is project-scoped and public shares expose only a read
   expect((await req(`${new URL(publicData.contentBase).pathname}scene.excalidraw`, {}, true)).status).toBe(404);
 });
 
+test('a whiteboard share exposes only pages in the published snapshot', async () => {
+  const { project, root, req, owner, action } = await setup();
+  const board = path.join(root, 'whiteboard/pages-demo');
+  const scene = (id: string) => JSON.stringify({ type: 'excalidraw', version: 2, elements: [{ id, type: 'frame' }] });
+  fs.mkdirSync(path.join(board, 'pages'), { recursive: true });
+  fs.writeFileSync(path.join(board, 'scene.excalidraw'), scene('main-frame'));
+  const manifest = path.join(board, 'pages.json');
+  fs.writeFileSync(manifest, JSON.stringify({ version: 1, pages: [{ id: 'review', title: 'Review' }] }));
+  fs.writeFileSync(path.join(board, 'pages/review.excalidraw'), scene('review-frame'));
+  const published = await action('publish', { type: 'whiteboard', id: 'pages-demo', project });
+  expect(published.status).toBe(200);
+  const url = new URL((await published.json()).share.url).pathname;
+  const review = await (await req(`${url}/data?page=review`)).json();
+  expect(review).toMatchObject({ page: 'review', pageMissing: false, scene: { elements: [{ id: 'review-frame' }] } });
+  expect(review.pages.map(({ id }: { id: string }) => id)).toEqual(['main', 'review']);
+  fs.writeFileSync(manifest, JSON.stringify({ version: 1, pages: [{ id: 'review', title: 'Review' }, { id: 'draft', title: 'Draft' }] }));
+  fs.writeFileSync(path.join(board, 'pages/draft.excalidraw'), scene('unpublished-frame'));
+  const hidden = await (await req(`${url}/data?page=draft`)).json();
+  expect(hidden).toMatchObject({ page: 'main', pageMissing: true, scene: { elements: [{ id: 'main-frame' }] } });
+  expect(JSON.stringify(hidden)).not.toContain('unpublished-frame');
+  expect((await req('/api/whiteboard/pages-demo?page=draft')).status).toBe(403);
+  const preview = await (await req('/api/preview/whiteboard/pages-demo?page=draft', { headers: owner })).json();
+  expect(preview).toMatchObject({ page: 'draft', pageMissing: false, scene: { elements: [{ id: 'unpublished-frame' }] } });
+});
+
 test('private capability paths preserve relative resources without reopening legacy content access', async () => {
   const { req, owner, root, h, project } = await setup();
   const response = await req('/api/artifacts/html/demo', { headers: owner });

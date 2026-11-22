@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { computeLayout } from '../shared/geometry';
 import type { CanvasSpec } from '../shared/types';
-import { parseWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
+import { parseWhiteboardPages, parseWhiteboardScene, WHITEBOARD_DEFAULT_PAGE, WHITEBOARD_PAGES_FILE, whiteboardPageFile } from '../shared/whiteboard';
 import { parseDocument } from './document-codec';
 import { mimeOf, send } from './http';
 import { injectRuntime } from './inject';
@@ -32,7 +32,7 @@ const relativeFile = (value: string) => value.length > 0 && !/[\\\x00-\x1f\x7f]/
   value.split('/').every((part) => part.length > 0 && !part.startsWith('.'));
 
 /** Projection never returns disk paths, credentials, comments or editor history. */
-function payload(options: Options, record: ShareRecord) {
+function payload(options: Options, record: ShareRecord, requestedPage: string | null) {
   const result = { type: record.type, title: record.title, publishedAt: record.publishedAt,
     expiresAt: record.expiresAt, contentBase: fileBase(options, record) };
   if (record.type === 'document') {
@@ -41,7 +41,14 @@ function payload(options: Options, record: ShareRecord) {
     return { ...result, state: parseDocument(fs.readFileSync(file, 'utf8')) };
   }
   if (record.type === 'whiteboard') {
-    const file = options.store.file(record, WHITEBOARD_SCENE_FILE);
+    const manifest = options.store.file(record, WHITEBOARD_PAGES_FILE);
+    const extra = manifest ? parseWhiteboardPages(JSON.parse(fs.readFileSync(manifest, 'utf8'))) : [];
+    if (!extra) throw new Error('Invalid whiteboard pages');
+    const pages = [{ id: WHITEBOARD_DEFAULT_PAGE, title: 'Main' }, ...extra];
+    const requested = requestedPage ?? WHITEBOARD_DEFAULT_PAGE;
+    const pageMissing = !pages.some(({ id }) => id === requested);
+    const page = pageMissing ? WHITEBOARD_DEFAULT_PAGE : requested;
+    const file = options.store.file(record, whiteboardPageFile(page));
     if (!file) throw new Error('Missing whiteboard');
     const scene = parseWhiteboardScene(JSON.parse(fs.readFileSync(file, 'utf8')));
     if (!scene) throw new Error('Invalid whiteboard');
@@ -49,6 +56,9 @@ function payload(options: Options, record: ShareRecord) {
     const fileIds = new Set(elements.map((element) => element.fileId));
     return {
       ...result,
+      page,
+      pages,
+      pageMissing,
       scene: {
         type: scene.type,
         version: scene.version,
@@ -120,7 +130,7 @@ export function createPublicShare(options: Options) {
         return true;
       }
       if (!preview && rest === 'data') {
-        const json = JSON.stringify(payload(options, record));
+        const json = JSON.stringify(payload(options, record, url.searchParams.get('page')));
         if (!allowed(record.token, req.method === 'HEAD' ? 0 : Buffer.byteLength(json))) { throttled(); return true; }
         send(res, 200, req.method === 'HEAD' ? '' : json, { ...baseHeaders, 'Content-Type': 'application/json; charset=utf-8' }); return true;
       }
