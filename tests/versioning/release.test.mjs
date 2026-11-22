@@ -50,6 +50,20 @@ test('notes select only the exact version and require both languages in new chan
   assert.throws(() => parseNotes(note.replace('English change', ''), true), /Missing en/);
   assert.throws(() => parseNotes('中文', true), /requires/);
 });
+test('released notes retain language headings at the same level as the version', (t) => {
+  const directory = fixture(t);
+  const titled = note.replaceAll('#### ', '## ');
+  const older = note.replace('中文变化', '旧版本').replace('English change', 'Older release');
+  fs.writeFileSync(
+    path.join(directory, 'CHANGELOG.md'),
+    ['# Changelog', '## 0.5.0', titled, '## Details', note, '## 0.4.0', older].join('\n\n'),
+  );
+  assert.deepEqual(currentNotes(directory, '0.5.0'), {
+    zh: '中文变化\n\n中文变化',
+    en: 'English change\n\nEnglish change',
+  });
+  assert.deepEqual(currentNotes(directory, '0.4.0'), { zh: '旧版本', en: 'Older release' });
+});
 test('build identity distinguishes clean, dirty, source export and unknown', (t) => {
   const directory = fixture(t);
   const git = (args) =>

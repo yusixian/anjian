@@ -10,7 +10,9 @@ export function parseNotes(text, strict = false) {
   ];
   for (const match of blocks) {
     for (const [index, language] of ['zh', 'en'].entries()) {
-      const value = match[index + 1].replaceAll(/^\s*#### (中文|English)\s*$/gm, '').trim();
+      const value = match[index + 1]
+        .replaceAll(/^[ \t]*#{1,6}[ \t]+(?:中文|English)[ \t]*\r?$/gm, '')
+        .trim();
       if (strict && !value) throw new Error(`Missing ${language} release notes`);
       if (value) notes[language].push(value.replaceAll(/^ {2}/gm, ''));
     }
@@ -26,7 +28,10 @@ export function parseNotes(text, strict = false) {
 export function currentNotes(root, version) {
   const file = path.join(root, 'CHANGELOG.md');
   if (!fs.existsSync(file)) return { zh: '', en: '' };
-  const sections = fs.readFileSync(file, 'utf8').split(/^## /m).slice(1);
+  const sections = fs
+    .readFileSync(file, 'utf8')
+    .split(/^## (?=\d+\.\d+\.\d+[ \t]*\r?$)/m)
+    .slice(1);
   const section = sections.find((part) => part.split('\n')[0].trim() === version);
   if (!section) return { zh: '', en: '' };
   return parseNotes(section);
