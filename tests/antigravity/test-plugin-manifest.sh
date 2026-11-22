@@ -94,24 +94,22 @@ for stray in ["plugin.json", "hooks.json", "rules"]:
 PY
 
 if command -v agy > /dev/null 2>&1; then
-  output="$(agy plugin validate "$REPO_ROOT" 2>&1)" \
+  output="$(agy plugin validate --json "$REPO_ROOT")" \
     || {
       echo "$output" >&2
       echo "FAIL: agy plugin validate failed" >&2
       exit 1
     }
-  grep -q '\[ok\]' <<< "$output" \
-    || {
-      echo "$output" >&2
-      echo "FAIL: agy plugin validate did not report [ok]" >&2
-      exit 1
-    }
-  grep -qE 'skills +: [0-9]+ processed' <<< "$output" \
-    || {
-      echo "$output" >&2
-      echo "FAIL: agy found no skills" >&2
-      exit 1
-    }
+  python3 -c '
+import json
+import sys
+
+result = json.load(sys.stdin)
+if result["name"] != "anjian" or result["components"]["skills"] < 1:
+    raise SystemExit("FAIL: agy did not validate Anjian with skills")
+if any(finding["severity"] == "error" for finding in result["findings"]):
+    raise SystemExit("FAIL: agy reported plugin validation errors")
+' <<< "$output"
 else
   echo "SKIP: agy not on PATH; not running agy plugin validate"
 fi

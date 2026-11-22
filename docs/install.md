@@ -58,3 +58,20 @@ CLI：node /绝对路径/anjian/skills/artifacts/app/anjian.cjs
 Agent 自行发现入口并完成接入命令；仅服务器未知或项目选择确有歧义时询问。用户在浏览器批准账号可授予的所需全部项目；当前协议只有设备名称与项目列表，没有 `--scope all` 或权限级别参数。已有有效绑定不为扩权而撤销重绑。
 
 已有远程作品使用「读取批注 → pull → 编辑 → push → check → 回复」。冲突、本地未同步改动和浏览器授权处理见 [Agent 远程操作参考](../skills/artifacts/remote.md)。本地模式仍使用文件写入和本地服务器。后台通知钩子是额外集成，需在宿主中单独验证。服务器部署不会更新本机 CLI；修改 Skill 后须重新构建并交付客户端产物。
+
+### Antigravity CLI
+
+先按本文构建案间，再用本地源码目录安装插件。在作品项目里启动 `agy`，请 Agent 读取已安装的案间 `artifacts` Skill，再打开指定作品。
+
+```bash
+agy plugin install /绝对路径/anjian
+agy plugin list --json
+```
+
+列表中的 `anjian` 应为启用状态，且包含 `artifacts`。重新构建案间后，重新安装插件以更新 Antigravity 持有的副本。也可以在作品项目的 `AGENTS.md` 中配置前面的源码 CLI 入口。
+
+要处理网页批注，可以在 Antigravity 中主动请求读取指定作品的未读批注，或从终端用下面的命令核对。后台反馈自动唤醒由 [#52](https://github.com/yusixian/anjian/issues/52) 跟踪。
+
+```bash
+node /绝对路径/anjian/skills/artifacts/app/anjian.cjs comment list --json --project-dir /绝对路径/作品项目 --artifact document/plan
+```
