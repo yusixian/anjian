@@ -71,7 +71,24 @@ export interface FeedbackQuestionContext {
   definition: DocumentQuestion;
 }
 
+export interface DesignDecision {
+  documentId: string;
+  revision: string;
+  question: DocumentQuestion;
+  choice: string;
+  by: { id: string; login?: string };
+  at: number;
+}
+
+export interface DesignApproval {
+  currentAssetsRevision?: string;
+  currentRevision: string | null;
+  decision?: DesignDecision;
+  state: 'pending' | 'approved' | 'changes_requested' | 'needs_review';
+}
+
 export interface FeedbackQuestionInput {
+  approval?: DesignApproval;
   answer?: string;
   definition: DocumentQuestion;
   id: string;

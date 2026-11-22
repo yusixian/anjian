@@ -14,6 +14,8 @@ import { useOptionalFeedbackApi } from '../feedback/FeedbackProvider';
 interface QuestionStore {
   connections: FeedbackConnection[];
   failed: boolean;
+  getAssetsRevision: () => string | undefined;
+  getViewVersion: () => string | null;
   items: QuestionItem[];
   mutate: (mutation: QuestionMutation) => Promise<void>;
   refresh: () => Promise<void>;
@@ -24,9 +26,13 @@ const Context = createContext<QuestionStore | null>(null);
 export function DocumentQuestions({
   artifact,
   children,
+  getAssetsRevision,
+  getViewVersion,
 }: {
   artifact: string | null;
   children: ReactNode;
+  getAssetsRevision: () => string | undefined;
+  getViewVersion: () => string | null;
 }) {
   const api = useOptionalFeedbackApi(artifact);
   const [count, setCount] = useState(0);
@@ -72,7 +78,13 @@ export function DocumentQuestions({
     setFailed(false);
   };
   return (
-    <Context value={api ? { items, connections, failed, register, refresh, mutate } : null}>
+    <Context
+      value={
+        api
+          ? { items, connections, failed, getAssetsRevision, getViewVersion, register, refresh, mutate }
+          : null
+      }
+    >
       {children}
     </Context>
   );

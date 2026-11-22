@@ -937,6 +937,13 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     projects: remoteProjects,
     mount: mountOf,
     upload: writeQuota,
+    resolveDocument: (dir, documentId) =>
+      index
+        .list()
+        .find(
+          (entry) =>
+            entry.project === dir && entry.type === 'document' && entry.address === documentId,
+        )?.id,
     browserProject: (req, artifact) => {
       if (
         (req.method !== 'GET' && !req.headers.origin) ||
@@ -948,7 +955,28 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       const found = index.find(type, id);
       if (!found || !projectAccess.authorized(req, found.project) || !available(found.project))
         return null;
-      return { id: projectId(found.project), dir: found.project, artifact: `${type}/${found.id}` };
+      const principal = projectAccess.principal(req, new URL(req.url ?? '/', origin));
+      if (!principal) return null;
+      const login =
+        principal.role === 'member'
+          ? members.list().members.find((member) => member.id === principal.id)?.login
+          : undefined;
+      const documentId =
+        type === 'document'
+          ? (index
+              .list(1000)
+              .find(
+                (entry) =>
+                  entry.project === found.project && entry.type === type && entry.id === found.id,
+              )?.address ?? undefined)
+          : undefined;
+      return {
+        id: projectId(found.project),
+        dir: found.project,
+        artifact: `${type}/${found.id}`,
+        documentId,
+        actor: { id: principal.id, ...(login ? { login } : {}) },
+      };
     },
   });
   const remoteApi = createRemoteApi({

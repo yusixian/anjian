@@ -584,6 +584,19 @@
     "waitingCanvas": "等待画布内容…"
   },
   "question": {
+    "approvalOwner": "作品所有者",
+    "approvalAssetsChanged": "附件已更新，请重新打开文档后再审核。",
+    "reopenDocument": "重新打开文档",
+    "recordApproval": "记录决定",
+    "approvalRecorded": "{{reviewer}} 于 {{time}} 选择了“{{choice}}”",
+    "approvalChanged": "文档或问题已更新，请核对后重新选择。",
+    "approvalFailed": "无法确认决定是否已记录，请核对状态后重试。",
+    "approvalState": {
+      "pending": "待审核",
+      "approved": "当前版本已通过",
+      "changes_requested": "当前版本需要修改",
+      "needs_review": "上次决定后文档已更新，请审核当前版本。"
+    },
     "recommended": "推荐",
     "placeholder": "写下你的回答…",
     "previous": "此回答对应修改前的问题。",

@@ -47,3 +47,20 @@ anjian verify-report --input report.json --output .anjian/artifacts/document/rev
 将第一条命令生成的 XML 保存到规范文档。第二条命令给出精确的 `revision`，可用于验收报告。保留规范 JSON 和原始证据文件，避免修改过去的报告输入。更改规则时另存一份规范文件，保留规则 ID，并在新版的 `previous` 字段记录上一版摘要。
 
 在验收报告输入中增加 `designSpec`，字段包括相对于报告 JSON 的 `file`、规范的 `revision`，以及规范文档的稳定地址 `target`。在每条检查或人工验收项增加 `rules` 数组，填写相应规则 ID。报告会标明未覆盖的规则。人工验收项通过画板链接展示当前状态。
+
+## 确认设计批准
+
+在文档中用 `<ask approve="ship">` 标记批准题，`approve` 的值对应允许实施的选项 ID。其他选项会记录为需要修改。请明确选择并提交，案间会记录该决定对应的文档修订和批准人。
+
+```xml
+<ask key="implementation" prompt="是否批准实施这版设计？"
+     options='[{"id":"ship","label":"批准实施"},{"id":"revise","label":"需要修改"}]'
+     approve="ship" />
+```
+
+```bash
+anjian approval --artifact "document/$DOCUMENT_ID" --json
+anjian approval --artifact "document/$DOCUMENT_ID" --require implementation --json
+```
+
+将浏览器文档地址的最后一段设为 `DOCUMENT_ID`。第一条命令显示当前修订和决定历史。实施前用第二条命令核对指定题目，只有当前修订获批才会返回退出码 0。自托管项目可将返回的修订同 `remote pull` 返回的修订核对。文档或随附资源变更后，需要对新修订重新作出决定。附件发生变化时，先在浏览器重新打开文档，确认加载的是新版附件。

@@ -6,12 +6,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
+import { LoroDoc } from 'loro-crdt';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageUsage } from '../src/server/storage/usage';
+import { approvalViewKey } from '../src/shared/approval-view';
 import { tempRoot } from './helpers';
 
 const MASTER = 'm'.repeat(48);
@@ -1450,4 +1452,149 @@ test('a round committed before a dropped HTTP response replays the original inte
   expect(retry.body.task.id).toBe(before[0].id);
   expect((await f.request(`${f.remote}/feedback/tasks`)).body.tasks).toHaveLength(1);
   expect(retry.body.task.roundContext.groups[0].choice).toBe('b');
+});
+
+test('records explicit browser decisions for the visible revision and gives the scoped Agent a read-only implementation check', async () => {
+  const question =
+    '<ask key="implementation" prompt="Implement this revision?" options=\'[{"id":"ship","label":"Approve"},{"id":"revise","label":"Request changes"}]\' approve="ship"/>';
+  const f = await ready(`<doc><p blockId="intro">draft</p>${question}</doc>`);
+  const documentId = 'Z'.repeat(21);
+  const directory = path.join(f.fx.alpha, '.anjian/artifacts/document/plan');
+  fs.writeFileSync(path.join(directory, '.artifact-id'), documentId);
+  const route = `approvals/${documentId}`;
+  const getItem = async () => (await f.browser('questions')).body.items[0];
+  await vi.waitFor(async () => {
+    expect((await f.call(route)).status).toBe(200);
+    expect((await getItem()).approval?.currentRevision).toMatch(/^sha256:/);
+  });
+  const versionOfView = async () => {
+    const response = await f.fx.request(`/api/document/plan/state?key=${MASTER}`);
+    expect(response.status).toBe(200);
+    const { snapshot, approvalAssetsRevision } = await response.json();
+    const loro = new LoroDoc();
+    try {
+      loro.import(Buffer.from(snapshot, 'base64'));
+      return {
+        viewVersion: approvalViewKey(loro.frontiers()),
+        assetsRevision: approvalAssetsRevision,
+      };
+    } finally {
+      loro.free();
+    }
+  };
+  const item = await getItem();
+  const request = {
+    action: 'decide',
+    id: item.id,
+    version: item.version,
+    answer: 'ship',
+    revision: item.approval.currentRevision,
+    ...(await versionOfView()),
+    by: { id: 'forged' },
+  };
+  expect((await f.call(route, request)).status).toBe(405);
+  expect(
+    (await f.fx.request('/api/document/plan/feedback/questions', {
+      method: 'POST',
+      headers: { ...f.login.headers, Origin: f.fx.origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })).status,
+  ).toBe(404);
+  expect(
+    (
+      await f.fx.request(`/api/remote/projects/${f.fx.id(f.fx.beta)}/feedback/${route}`, {
+        headers: f.login.headers,
+      })
+    ).status,
+  ).toBe(404);
+  expect((await f.browser('questions', { ...request, action: 'draft' })).status).toBe(400);
+  expect((await f.browser('questions', { ...request, answer: '' })).status).toBe(400);
+  expect((await f.browser('questions', { ...request, viewVersion: '[]' })).status).toBe(409);
+  const first = await f.browser('questions', request);
+  expect(first.status, JSON.stringify(first.body)).toBe(200);
+  expect(first.body.item.approval).toMatchObject({
+    state: 'approved',
+    decision: { documentId, revision: request.revision, choice: 'ship', by: { id: 'owner' } },
+  });
+  expect((await f.browser('questions', request)).status).toBe(200);
+  expect((await f.call(route)).body.decisions).toHaveLength(1);
+
+  const local = path.join(f.fx.home, 'approval-cli-project');
+  const client = path.join(f.fx.home, 'approval-client');
+  fs.mkdirSync(local);
+  fs.mkdirSync(client);
+  fs.writeFileSync(
+    path.join(client, 'connections.json'),
+    JSON.stringify({
+      servers: {
+        [f.fx.origin]: {
+          token: f.login.token,
+          deviceId: 'fixture',
+          deviceName: 'Fixture',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+      bindings: { [local]: { origin: f.fx.origin, projectId: f.project, revisions: {} } },
+    }),
+    { mode: 0o600 },
+  );
+  const cli = () =>
+    promisify(execFile)(
+      process.execPath,
+      [
+        path.resolve('dist/cli.cjs'),
+        'approval',
+        '--artifact',
+        `document/${documentId}`,
+        '--require',
+        'implementation',
+        '--project-dir',
+        local,
+        '--json',
+      ],
+      { env: { ...process.env, ANJIAN_CLIENT_HOME: client } },
+    );
+  expect(JSON.parse((await cli()).stdout)).toMatchObject({ currentRevision: request.revision });
+
+  fs.mkdirSync(path.join(directory, 'assets'));
+  fs.writeFileSync(path.join(directory, 'assets', 'annotation.txt'), 'new revision evidence');
+  const latestView = await versionOfView();
+  expect(latestView.viewVersion).toBe(request.viewVersion);
+  expect(latestView.assetsRevision).not.toBe(request.assetsRevision);
+  expect((await f.browser('questions', request)).body.code).toBe('approval_view_changed');
+  await expect(cli()).rejects.toMatchObject({
+    code: 1,
+    stdout: expect.stringContaining('needs_review'),
+  });
+  const updated = await getItem();
+  expect(updated.approval).toMatchObject({
+    state: 'needs_review',
+    decision: { revision: request.revision },
+  });
+  expect(updated.approval.currentRevision).not.toBe(request.revision);
+  expect(
+    (
+      await f.browser('questions', {
+        ...request,
+        revision: updated.approval.currentRevision,
+      })
+    ).body.code,
+  ).toBe('approval_view_changed');
+  const revised = await f.browser('questions', {
+    ...request,
+    revision: updated.approval.currentRevision,
+    answer: 'revise',
+    ...latestView,
+  });
+  expect(revised.status, JSON.stringify(revised.body)).toBe(200);
+  expect(revised.body.item.approval.state).toBe('changes_requested');
+  await f.fx.restart();
+  await vi.waitFor(async () => {
+    const final = await f.call(route);
+    expect(final.body.items[0].state).toBe('changes_requested');
+    expect(final.body.decisions.map(({ choice }: { choice: string }) => choice)).toEqual([
+      'ship',
+      'revise',
+    ]);
+  });
 });

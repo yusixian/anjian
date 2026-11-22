@@ -124,6 +124,8 @@ registry.registerReader('ask', (el) => {
       throw new Error('<ask> options must be a JSON array');
     }
   }
+  const approve = el.getAttribute('approve');
+  if (approve !== null) definition.approve = approve;
   const recommended = el.getAttribute('recommended');
   if (recommended !== null) definition.recommended = recommended;
   validateDocumentQuestion(definition);
@@ -147,6 +149,7 @@ registry.registerWriter('question', (node) => {
       key: definition.id,
       prompt: definition.prompt,
       ...(definition.options ? { options: JSON.stringify(definition.options) } : {}),
+      ...(definition.approve ? { approve: definition.approve } : {}),
       ...(definition.recommended ? { recommended: definition.recommended } : {}),
     },
     selfClosing: true,

@@ -1,14 +1,20 @@
 import type http from 'node:http';
 
 import type { BoardThread } from '../../shared/board-comments';
-import type { FeedbackClaim } from '../../shared/feedback';
-import { ARTIFACT_LOCATOR_SOURCE } from '../../shared/ids';
+import type { DocumentQuestion } from '../../shared/document-questions';
+import type { DesignDecision, FeedbackClaim } from '../../shared/feedback';
+import { ARTIFACT_LOCATOR_SOURCE, isArtifactAddress } from '../../shared/ids';
 import type { MountedProject } from '../app';
 import { ArtifactTrashError, assertArtifactNotTrashed } from '../artifact-trash';
 import { DocumentRejected } from '../document-codec';
 import { sendJson } from '../http';
 import { withProjectMutation } from '../project-mutations';
-import { readRemoteArtifact, RemoteTransferError } from '../remote-transfer';
+import {
+  readDocumentApprovalRevisions,
+  readRemoteArtifact,
+  RemoteTransferError,
+} from '../remote-transfer';
+import { approvalFor, recordDesignDecision } from './approvals';
 import { feedbackSelection } from './comments';
 import {
   questionItems,
@@ -38,16 +44,19 @@ import {
 } from './tasks';
 
 type Project = { id: string; dir: string };
+type BrowserProject = Project & {
+  actor?: DesignDecision['by'];
+  artifact: string;
+  documentId?: string;
+};
 interface Options {
   authenticate: (req: http.IncomingMessage) => { id: string; projects: string[] } | null;
-  browserProject: (
-    req: http.IncomingMessage,
-    artifact: string,
-  ) => (Project & { artifact: string }) | null;
+  browserProject: (req: http.IncomingMessage, artifact: string) => BrowserProject | null;
   deviceAuthorized: (id: string, project: string) => boolean;
   home: string;
   mount: (dir: string) => Promise<MountedProject>;
   projects: () => Project[];
+  resolveDocument?: (dir: string, documentId: string) => string | undefined;
   upload: <T>(
     project: string,
     work: (prepare: () => Promise<(delta: number) => void>) => Promise<T>,
@@ -92,7 +101,8 @@ export function createFeedbackApi(options: Options) {
         : options.browserProject(req, requestedArtifact!);
       if (!project) feedbackError('not_found', undefined, 404);
       const target = project!;
-      const artifact = browser ? (project as Project & { artifact: string }).artifact : undefined;
+      const browserProject = browser ? (project as BrowserProject) : undefined;
+      const artifact = browserProject?.artifact;
       const authorize = () => {
         if (remote) {
           const current = options.authenticate(req);
@@ -142,6 +152,48 @@ export function createFeedbackApi(options: Options) {
             visibleConnections.some((c) => c.id === t.connectionId) &&
             (!artifact || t.artifact === artifact),
         );
+        if (parts[0] === 'approvals') {
+          if (req.method !== 'GET') return feedbackError('method_not_allowed', undefined, 405);
+          const documentId = remote ? parts[1] : browserProject?.documentId;
+          if (
+            !documentId ||
+            !isArtifactAddress(documentId) ||
+            (remote ? parts.length !== 2 : parts.length !== 1 || !artifact?.startsWith('document/'))
+          )
+            return feedbackError('artifact_not_found', undefined, 404);
+          const id = remote
+            ? options.resolveDocument?.(target.dir, documentId)
+            : artifact!.slice(9);
+          if (!id) return feedbackError('artifact_not_found', undefined, 404);
+          assertArtifactNotTrashed(target.dir, 'document', id);
+          const mounted = await options.mount(target.dir);
+          const read = await mounted.feedbackQuestions(id);
+          const view = await mounted.documentApprovalView?.(id);
+          authorize();
+          if (!read) return feedbackError('artifact_not_found', undefined, 404);
+          const currentRevision = view?.()
+            ? (readDocumentApprovalRevisions(target.dir, id)?.revision ?? null)
+            : null;
+          let definitions: DocumentQuestion[] = [];
+          try {
+            definitions = read();
+          } catch (error) {
+            if (!(error instanceof DocumentRejected)) throw error;
+          }
+          return {
+            documentId,
+            currentRevision,
+            items: definitions
+              .filter((question) => question.approve)
+              .map((question) => ({
+                question,
+                ...approvalFor(data, documentId, question, currentRevision),
+              })),
+            decisions: (data.decisions ?? []).filter(
+              (decision) => decision.documentId === documentId,
+            ),
+          };
+        }
         if (suffix === 'questions' && artifact?.startsWith('document/')) {
           const id = artifact.slice('document/'.length);
           assertArtifactNotTrashed(target.dir, 'document', id);
@@ -159,9 +211,37 @@ export function createFeedbackApi(options: Options) {
               throw error;
             }
           };
+          const documentId = browserProject?.documentId;
+          const questions = definitions();
+          const approvalView =
+            documentId && questions.some((item) => item.approve)
+              ? await mounted.documentApprovalView?.(id)
+              : null;
+          authorize();
+          const currentView = () => {
+            const view = approvalView?.();
+            const revisions = view ? readDocumentApprovalRevisions(target.dir, id) : null;
+            return {
+              view,
+              revision: revisions?.revision ?? null,
+              assetsRevision: revisions?.assetsRevision,
+            };
+          };
+          const items = ({ revision, assetsRevision }: ReturnType<typeof currentView>) =>
+            questionItems(data, artifact, definitions()).map((item) =>
+              item.definition.approve && documentId
+                ? {
+                    ...item,
+                    approval: {
+                      ...approvalFor(data, documentId, item.definition, revision),
+                      ...(assetsRevision ? { currentAssetsRevision: assetsRevision } : {}),
+                    },
+                  }
+                : item,
+            );
           if (req.method === 'GET') {
             return {
-              items: questionItems(data, artifact, definitions()),
+              items: items(currentView()),
               connections: visibleConnections.map((c) => ({
                 ...publicConnection(c),
                 authorized: options.deviceAuthorized(c.deviceId, target.id),
@@ -172,6 +252,62 @@ export function createFeedbackApi(options: Options) {
           const version = text(body.version, 'version');
           const getItem = () =>
             questionItems(data, artifact, definitions()).find((item) => item.id === questionId);
+          const definition = questions.find((question) => question.id === questionId);
+          if (body.action === 'decide' || definition?.approve) {
+            if (
+              body.action !== 'decide' ||
+              !definition?.approve ||
+              !documentId ||
+              !browserProject?.actor
+            )
+              return feedbackError('invalid_approval_action', undefined, 400);
+            const choice = text(body.answer, 'answer', 64);
+            if (!definition.options?.some((option) => option.id === choice))
+              return feedbackError('invalid_question_answer', undefined, 400);
+            const item = getItem();
+            const expectedView = text(body.viewVersion, 'viewVersion', 128 * 1024);
+            const expectedRevision = text(body.revision, 'revision', 71);
+            const expectedAssets = text(body.assetsRevision, 'assetsRevision', 71);
+            const { view, revision, assetsRevision } = currentView();
+            if (
+              !item ||
+              item.version !== version ||
+              !view ||
+              view !== expectedView ||
+              !revision ||
+              revision !== expectedRevision ||
+              assetsRevision !== expectedAssets
+            )
+              return feedbackError('approval_view_changed');
+            const actor = browserProject.actor;
+            const checkApproval = () => {
+              authorize();
+              const current = options.browserProject(req, requestedArtifact!);
+              if (current?.documentId !== documentId || current.actor?.id !== actor.id)
+                return feedbackError('approval_view_changed');
+              const next = currentView();
+              if (
+                next.view !== view ||
+                next.revision !== revision ||
+                getItem()?.version !== version
+              )
+                return feedbackError('approval_view_changed');
+            };
+            const changed = recordDesignDecision(data, {
+              documentId,
+              revision,
+              question: definition,
+              choice,
+              by: actor,
+              at: Date.now(),
+            });
+            checkWrite = checkApproval;
+            if (changed) await save();
+            else checkApproval();
+            return {
+              item: items({ view, revision, assetsRevision }).find((row) => row.id === questionId),
+            };
+          }
           if (body.action === 'withdraw') {
             const item = getItem();
             if (!item || item.version !== version) return feedbackError('feedback_changed');

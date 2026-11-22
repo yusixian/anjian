@@ -37,17 +37,37 @@ const styles = stylex.create({
   hint: { color: cssVar.colorTextSecondary, fontSize: 13 },
 });
 
+type AnswerMutation = Exclude<QuestionMutation, { action: 'decide' }>;
+
 export function DocumentQuestionCard({ definition }: { definition: DocumentQuestion }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const store = useDocumentQuestions();
   const group = useId();
   const snapshot = store?.items.find((entry) => entry.id === definition.id);
   const item = snapshot && sameDocumentQuestion(definition, snapshot.definition) ? snapshot : null;
   const [edit, setEdit] = useState<{ value: string; version: string } | null>(null);
+  const [pick, setPick] = useState<{
+    assetsRevision: string;
+    choice: string;
+    revision: string;
+    version: string;
+    viewVersion: string;
+  } | null>(null);
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const intent = useRef<QuestionMutation | null>(null);
+  const intent = useRef<AnswerMutation | null>(null);
+  const isApproval = definition.approve !== undefined;
+  const approval = item?.approval;
+  const decision = approval?.decision;
+  const currentRevision = approval?.currentRevision;
+  const loadedAssetsRevision = store?.getAssetsRevision();
+  const assetsMatch =
+    !!loadedAssetsRevision && loadedAssetsRevision === approval?.currentAssetsRevision;
+  const canDecide = !!currentRevision && assetsMatch && !busy;
+  const pickedOption = assetsMatch
+    ? definition.options?.find((option) => option.id === pick?.choice)
+    : undefined;
   const previous = item?.previousDefinition;
   const previousAnswer = previous?.options?.find((option) => option.id === item?.answer)?.label;
   const value = edit?.value ?? (previous ? '' : item?.answer) ?? '';
@@ -68,11 +88,66 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
     intent.current = null;
     setNotice('');
   }
-  async function act(action: QuestionMutation['action']) {
+  function chooseApproval(choice: string) {
+    const assetsRevision = store?.getAssetsRevision();
+    const viewVersion = store?.getViewVersion();
+    if (
+      !item ||
+      !viewVersion ||
+      !currentRevision ||
+      busy ||
+      !assetsRevision ||
+      assetsRevision !== approval?.currentAssetsRevision
+    ) {
+      return;
+    }
+    setPick({ assetsRevision, choice, revision: currentRevision, version: item.version, viewVersion });
+    setNotice('');
+  }
+  async function decide() {
+    if (!store || !item || !canDecide || !pick || !pickedOption) return;
+    if (
+      pick.assetsRevision !== store.getAssetsRevision() ||
+      pick.assetsRevision !== approval?.currentAssetsRevision ||
+      pick.revision !== currentRevision ||
+      pick.version !== item.version ||
+      pick.viewVersion !== store.getViewVersion()
+    ) {
+      setPick(null);
+      setNotice('question.approvalChanged');
+      await store.refresh();
+      return;
+    }
+    setBusy(true);
+    setNotice('');
+    try {
+      await store.mutate({
+        id: definition.id,
+        action: 'decide',
+        answer: pick.choice,
+        assetsRevision: pick.assetsRevision,
+        revision: pick.revision,
+        version: pick.version,
+        viewVersion: pick.viewVersion,
+      });
+      setPick(null);
+    } catch (error) {
+      if (error instanceof FeedbackError && error.status === 409) {
+        setPick(null);
+        setNotice('question.approvalChanged');
+      } else {
+        setNotice('question.approvalFailed');
+      }
+      await store.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function act(action: AnswerMutation['action']) {
     if (!store || !item || busy || (conflict && action !== 'withdraw')) return;
     setBusy(true);
     setNotice('');
-    const request: QuestionMutation = { id: definition.id, version: item.version, action };
+    const request: AnswerMutation = { id: definition.id, version: item.version, action };
     if (action !== 'withdraw') request.answer = value;
     if (action === 'submit') {
       request.connectionId = connectionId;
@@ -118,12 +193,12 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
             <label key={option.id} {...stylex.props(styles.option)}>
               {store && (
                 <input
-                  checked={option.id === value}
-                  disabled={!item || locked || busy}
+                  checked={option.id === (isApproval ? pickedOption?.id : value)}
+                  disabled={isApproval ? !canDecide : !item || locked || busy}
                   name={group}
                   type="radio"
                   value={option.id}
-                  onChange={() => change(option.id)}
+                  onChange={() => (isApproval ? chooseApproval(option.id) : change(option.id))}
                 />
               )}
               <span>{option.label}</span>
@@ -134,7 +209,44 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
           ))}
         </div>
       )}
-      {store && (
+      {store && isApproval && (
+        <>
+          <div role="status" {...stylex.props(styles.hint)}>
+            {approval && <div>{t(`question.approvalState.${approval.state}`)}</div>}
+            {decision && (
+              <div>
+                {t('question.approvalRecorded', {
+                  choice: decision.question.options?.find((option) => option.id === decision.choice)
+                    ?.label ?? decision.choice,
+                  reviewer:
+                    decision.by.login ??
+                    (decision.by.id === 'owner' ? t('question.approvalOwner') : decision.by.id),
+                  time: new Date(decision.at).toLocaleString(i18n.language),
+                })}
+              </div>
+            )}
+          </div>
+          {currentRevision && !assetsMatch && (
+            <div role="status" {...stylex.props(feedback.row)}>
+              {t('question.approvalAssetsChanged')}
+              <button type="button" {...button} onClick={() => window.location.reload()}>
+                {t('question.reopenDocument')}
+              </button>
+            </div>
+          )}
+          <div>
+            <button
+              type="button"
+              {...stylex.props(feedback.button, feedback.primary)}
+              disabled={!canDecide || !pickedOption}
+              onClick={() => void decide()}
+            >
+              {t('question.recordApproval')}
+            </button>
+          </div>
+        </>
+      )}
+      {store && !isApproval && (
         <>
           {!definition.options && (
             <textarea
@@ -240,6 +352,10 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
               </button>
             </div>
           )}
+        </>
+      )}
+      {store && (
+        <>
           {snapshot && !item && <span role="status">{t('question.syncing')}</span>}
           {notice && <span role="status">{t(notice)}</span>}
           {store.failed && (
