@@ -4,6 +4,7 @@ import { type FormEvent, useId, useState } from 'react';
 import type { Thread } from '../../shared/comments';
 import type { WhiteboardAnchor, WhiteboardComments as Comments } from '../../shared/whiteboard';
 import { ThreadMessages } from '../comments/ThreadView';
+import { useNativeThreadFocus } from '../feedback/NativeFeedback';
 import { useTranslation } from '../i18n';
 import type { WhiteboardCommentAction } from './useWhiteboard';
 
@@ -46,19 +47,27 @@ function WhiteboardThread({
   locate,
   post,
   thread,
+  missing,
 }: {
   busy: boolean;
   locate: (ids: string[]) => boolean;
   post: (action: WhiteboardCommentAction) => Promise<boolean>;
   thread: Thread<WhiteboardAnchor>;
+  missing: boolean;
 }) {
   const { t } = useTranslation();
+  const focusThread = useNativeThreadFocus();
   const [anchorMissing, setAnchorMissing] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const resolved = thread.status === 'resolved';
   const ids = thread.anchor.elementIds;
   return (
-    <article className="anjian-whiteboard-thread">
+    <article
+      className="anjian-whiteboard-thread"
+      data-thread={thread.id}
+      ref={focusThread}
+      tabIndex={-1}
+    >
       <div className="anjian-whiteboard-thread-bar">
         <button type="button" onClick={() => setAnchorMissing(!locate(ids))}>
           <Crosshair aria-hidden="true" size={15} />
@@ -66,7 +75,7 @@ function WhiteboardThread({
         </button>
         {resolved && <span>{t('common.resolved')}</span>}
       </div>
-      {anchorMissing && <p role="status">{t('whiteboard.anchorMissing')}</p>}
+      {(missing || anchorMissing) && <p role="status">{t('whiteboard.anchorMissing')}</p>}
       <ThreadMessages thread={thread} />
       <div className="anjian-whiteboard-thread-bar">
         {!resolved && (
@@ -114,12 +123,14 @@ export function WhiteboardComments({
   locate,
   post,
   selected,
+  missingThread,
 }: {
   busy: boolean;
   comments: Comments;
   locate: (ids: string[]) => boolean;
   post: (action: WhiteboardCommentAction) => Promise<boolean>;
   selected: string[];
+  missingThread: string | null;
 }) {
   const { t } = useTranslation();
   const [anchor, setAnchor] = useState<string[] | null>(null);
@@ -166,6 +177,7 @@ export function WhiteboardComments({
             busy={busy}
             key={thread.id}
             locate={locate}
+            missing={missingThread === thread.id}
             post={post}
             thread={thread}
           />

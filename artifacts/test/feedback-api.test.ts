@@ -8,10 +8,12 @@ import { promisify } from 'node:util';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
+import { feedbackStore } from '../src/server/feedback/store';
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageUsage } from '../src/server/storage/usage';
+import { emptyWhiteboardScene, whiteboardPageFile } from '../src/shared/whiteboard';
 import { tempRoot } from './helpers';
 
 const MASTER = 'm'.repeat(48);
@@ -130,6 +132,7 @@ async function fixture() {
 }
 
 const encode = (text: string) => Buffer.from(text).toString('base64');
+const encodeJson = (value: unknown) => encode(JSON.stringify(value));
 
 async function ready() {
   const fx = await fixture();
@@ -215,8 +218,13 @@ async function ready() {
   };
 }
 
-test('real hub persists a batch across restart, claims once, returns revision/reply, and accepts only by browser action', async () => {
+test('real hub restores a legacy batch across restart, claims once, returns revision/reply, and accepts only by browser action', async () => {
   const f = await ready();
+  const store = feedbackStore(f.fx.home, f.project);
+  const saved = store.load();
+  expect(saved.tasks[0]).toHaveProperty('artifactAddress');
+  delete saved.tasks[0]!.artifactAddress;
+  store.save(saved, () => undefined);
   await f.fx.restart();
   expect((await f.call('tasks')).body.tasks[0].id).toBe(f.task.id);
   const claimInput = {
@@ -619,92 +627,349 @@ test('feedback metadata is charged to storage quotas and oversized HTTP metadata
   createStorageSettings(f.fx.home).setSharedLimit(1024 * 1024 * 1024);
 });
 
-test('artboard task uploads pages and replies to the original thread without resolving it', async () => {
-  const fx = await fixture();
-  const login = await fx.login();
-  const project = fx.id(fx.alpha);
-  const files = {
-    'canvas.json': encode(
-      JSON.stringify({
-        version: 1,
-        pages: [{ id: 'main', name: 'Main' }],
-        boards: {
-          demo: { page: 'main', file: 'pages/main/demo.html', x: 0, y: 0, w: 640, h: 400 },
-        },
-      }),
-    ),
-    'pages/main/demo.html': encode('<html><body>before</body></html>'),
-  };
-  const request = async (route: string, body?: unknown, browser = false, method = 'POST') => {
-    const claiming = /\/(?:claim|recover)$/.test(route);
-    if (claiming && body) body = { ...body, token: 'b'.repeat(64) };
-    const response = await fx.request(route + (browser ? `?key=${MASTER}` : ''), {
-      method: body === undefined ? 'GET' : method,
-      headers: {
-        ...(browser ? { Origin: fx.origin } : login.headers),
-        'Content-Type': 'application/json',
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    const json = await response.json();
-    expect(response.status, JSON.stringify(json)).toBe(200);
-    if (claiming) {
-      expect(json.task).not.toHaveProperty('token');
-      json.task.token = 'b'.repeat(64);
-    }
-    return json;
-  };
-  const base = `/api/remote/projects/${project}/feedback`;
-  await request(
-    `/api/remote/projects/${project}/artifacts/artboard/demo`,
-    { baseRevision: null, files },
-    false,
-    'PUT',
-  );
-  await request(
-    '/api/artboard/demo/comments',
-    { op: 'create', anchor: { page: 'main', board: 'demo', x: 10, y: 10 }, text: 'Change page' },
-    true,
-  );
-  const connection = (
-    await request(`${base}/connections`, {
-      host: 'lody',
-      session: 'session',
-      displayName: 'Board',
-      artifacts: ['artboard/demo'],
-      requestId: 'connect',
-    })
-  ).connection;
-  const input = await request('/api/artboard/demo/feedback/input', undefined, true);
-  const task = (
-    await request(
-      '/api/artboard/demo/feedback/submit',
-      { connectionId: connection.id, submissionKey: 'submit', selection: input.selection },
-      true,
-    )
-  ).task;
-  const claim = (
-    await request(`${base}/tasks/${task.id}/claim`, {
-      connectionId: connection.id,
-      generation: 1,
-      claimant: 'session',
-      requestId: 'claim',
-    })
-  ).task;
-  const result = await request(`${base}/tasks/${task.id}/result`, {
-    ...claim,
-    operationId: 'result',
-    upload: {
-      baseRevision: claim.inputRevision,
-      files: { ...files, 'pages/main/demo.html': encode('<html><body>after</body></html>') },
+const boardPage = 'pages/main/demo.html';
+const boardFiles = {
+  'canvas.json': encodeJson({
+    version: 1,
+    pages: [{ id: 'main', name: 'Main' }],
+    boards: { demo: { page: 'main', file: boardPage, x: 0, y: 0, w: 640, h: 400 } },
+  }),
+  [boardPage]: encode('<html><body>before</body></html>'),
+};
+
+const shape = { id: 'shared-shape-id', type: 'rectangle', x: 20, y: 40, width: 100, height: 80 };
+const mainScene = { ...emptyWhiteboardScene(), elements: [shape] };
+const reviewScene = { ...emptyWhiteboardScene(), elements: [{ ...shape, x: 200 }] };
+const reviewPage = whiteboardPageFile('review');
+const whiteboardFiles = {
+  'scene.excalidraw': encodeJson(mainScene),
+  'pages.json': encodeJson({ version: 1, pages: [{ id: 'review', title: 'Review' }] }),
+  [reviewPage]: encodeJson(reviewScene),
+};
+
+const opening = { id: 'opening', title: 'Opening', body: 'Start here', notes: 'Private opener' };
+const details = { id: 'details', title: 'Details', body: 'More context', notes: 'Private details' };
+const deck = { version: 1, title: 'Review', slides: [opening, details] };
+
+const storyboardAsset = 'assets/frame.png';
+const revisedFrame = 'assets/revised-frame.png';
+const framePng =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/YwAAAABJRU5ErkJggg==';
+const still = {
+  id: 'still',
+  asset: storyboardAsset,
+  startMs: 0,
+  trimMs: 0,
+  durationMs: 1000,
+};
+const mainTrack = { id: 'main', kind: 'video', name: 'Main', clips: [still] };
+const overlayTrack = { id: 'overlay', kind: 'video', name: 'Overlay', clips: [] };
+const storyboard = { version: 1, title: 'Review', tracks: [mainTrack, overlayTrack] };
+const storyboardFiles = {
+  'timeline.json': encodeJson(storyboard),
+  [storyboardAsset]: framePng,
+};
+
+interface FeedbackCase {
+  anchor: Record<string, unknown>;
+  files: Record<string, string>;
+  revisedFiles: Record<string, string>;
+  sourceFile: string;
+  type: string;
+}
+
+const feedbackCases: FeedbackCase[] = [
+  {
+    type: 'artboard',
+    anchor: { page: 'main', board: 'demo', x: 10, y: 10 },
+    files: boardFiles,
+    revisedFiles: { ...boardFiles, [boardPage]: encode('<html><body>after</body></html>') },
+    sourceFile: 'canvas.json',
+  },
+  {
+    type: 'whiteboard',
+    anchor: { page: 'review', elementIds: [shape.id] },
+    files: whiteboardFiles,
+    revisedFiles: {
+      ...whiteboardFiles,
+      [reviewPage]: encodeJson({ ...reviewScene, elements: [{ ...shape, x: 300 }] }),
     },
-    replies: [{ threadId: input.selection[0].threadId, text: 'Page changed' }],
-  });
-  expect(result.task.state).toBe('awaiting_review');
-  const comments = (await request('/api/artboard/demo/feedback/input', undefined, true)).threads;
-  expect(comments[0].messages).toHaveLength(2);
-  expect(comments[0].status).toBe('open');
-});
+    sourceFile: reviewPage,
+  },
+  {
+    type: 'slides',
+    anchor: { slideId: details.id },
+    files: { 'deck.json': encodeJson(deck) },
+    revisedFiles: {
+      'deck.json': encodeJson({
+        ...deck,
+        slides: [
+          { ...details, body: 'Revised details', notes: 'Private revised details' },
+          opening,
+        ],
+      }),
+    },
+    sourceFile: 'deck.json',
+  },
+  {
+    type: 'storyboard',
+    anchor: { clipId: still.id },
+    files: storyboardFiles,
+    revisedFiles: {
+      ...storyboardFiles,
+      [revisedFrame]: framePng,
+      'timeline.json': encodeJson({
+        ...storyboard,
+        tracks: [
+          { ...mainTrack, clips: [] },
+          { ...overlayTrack, clips: [{ ...still, asset: revisedFrame, startMs: 500 }] },
+        ],
+      }),
+    },
+    sourceFile: 'timeline.json',
+  },
+];
+
+test.each(feedbackCases)(
+  'real hub completes $type feedback using its saved anchor and revision',
+  async ({ type, anchor, files, revisedFiles, sourceFile }) => {
+    const fx = await fixture();
+    const login = await fx.login();
+    const project = fx.id(fx.alpha);
+    const artifact = `${type}/feedback-demo`;
+    const remote = `/api/remote/projects/${project}`;
+    const artifactRoute = `${remote}/artifacts/${artifact}`;
+    const feedbackRoute = `${remote}/feedback`;
+    const request = async (route: string, init: RequestInit, status = 200) => {
+      const response = await fx.request(route, init);
+      const body = await response.text();
+      expect(response.status, body).toBe(status);
+      return JSON.parse(body);
+    };
+    const remoteRequest = (
+      route: string,
+      body?: unknown,
+      { method = 'POST', status = 200, headers = login.headers } = {},
+    ) =>
+      request(
+        route,
+        body === undefined
+          ? { headers }
+          : {
+              method,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            },
+        status,
+      );
+    const put = (baseRevision: string | null, files: Record<string, string>) =>
+      remoteRequest(artifactRoute, { baseRevision, files }, { method: 'PUT' });
+
+    const initial = await put(null, files);
+    expect(initial.files).toEqual(files);
+    const viewer = new URL(initial.url);
+    expect(viewer.pathname).toMatch(new RegExp(`^/${type}/[A-Za-z0-9]{21}$`));
+    expect(viewer.searchParams.has('key')).toBe(false);
+    const browserRoute = `/api${viewer.pathname}`;
+    const browser = (route: string, body?: unknown) =>
+      request(
+        `${route}?key=${MASTER}`,
+        body === undefined
+          ? { headers: { 'Sec-Fetch-Site': 'same-origin' } }
+          : {
+              method: 'POST',
+              headers: { 'Origin': fx.origin, 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            },
+      );
+
+    const humanText = 'Private request for a revision';
+    const replyText = 'The requested revision is ready';
+    const localFile = path.join(fx.alpha, '.anjian/artifacts', artifact, 'local-notes.txt');
+    fs.writeFileSync(localFile, 'Local working notes stay private.');
+    const commentsRoute =
+      type === 'artboard' ? `/api/${artifact}/comments` : `${browserRoute}/comments`;
+    await browser(commentsRoute, {
+      op: 'create',
+      ...(type === 'artboard' ? { anchor } : anchor),
+      text: humanText,
+    });
+    const { connection } = await remoteRequest(`${feedbackRoute}/connections`, {
+      host: 'lody',
+      session: 'fixture-session',
+      displayName: 'Fixture',
+      artifacts: [artifact],
+      requestId: 'connect',
+    });
+    expect(connection.artifacts).toEqual([artifact]);
+
+    const inputRoute = `${browserRoute}/feedback/input`;
+    const input = await browser(inputRoute);
+    expect(input).toMatchObject({ artifact, revision: initial.revision });
+    expect(input.threads).toHaveLength(1);
+    const [original] = input.threads;
+    expect(original.anchor).toMatchObject(anchor);
+    expect(input.selection).toMatchObject([{ threadId: original.id }]);
+    expect((await fx.request(inputRoute)).status).toBe(404);
+
+    const { task } = await browser(`${browserRoute}/feedback/submit`, {
+      connectionId: connection.id,
+      submissionKey: 'submit',
+      selection: input.selection,
+    });
+    expect(task).toMatchObject({ artifact, state: 'queued', inputRevision: initial.revision });
+    const taskRoute = `${feedbackRoute}/tasks/${task.id}`;
+    const token = 'b'.repeat(64);
+    const claimInput = {
+      connectionId: connection.id,
+      generation: connection.generation,
+      claimant: 'fixture-session',
+      requestId: 'claim',
+      token,
+    };
+    const { task: claimed } = await remoteRequest(`${taskRoute}/claim`, claimInput);
+    expect(claimed).toMatchObject({
+      id: task.id,
+      artifact,
+      state: 'running',
+      inputRevision: initial.revision,
+      threads: input.threads,
+    });
+    expect(JSON.stringify(claimed)).not.toContain(token);
+    const otherDevice = await fx.login();
+    await remoteRequest(taskRoute, undefined, { headers: otherDevice.headers, status: 404 });
+
+    const result = {
+      attempt: claimed.attempt,
+      connectionId: connection.id,
+      generation: claimed.generation,
+      token,
+      operationId: 'result',
+      upload: { baseRevision: claimed.inputRevision, files: revisedFiles },
+      replies: [{ threadId: original.id, text: replyText }],
+    };
+    const resultRoute = `${taskRoute}/result`;
+    if (type === 'whiteboard') {
+      const identityFile = path.join(path.dirname(localFile), '.artifact-id');
+      const originalIdentity = fs.readFileSync(identityFile, 'utf8');
+      const replacementId = 'ReplacementIdentity01';
+      fs.writeFileSync(identityFile, `${replacementId}\n`);
+      await fx.restart();
+      expect((await remoteRequest(resultRoute, result, { status: 409 })).code).toBe(
+        'artifact_identity_changed',
+      );
+      const replacementRoute = `/api/whiteboard/${replacementId}/feedback`;
+      const blocked = {
+        id: task.id,
+        state: 'running',
+        claimable: false,
+        recoverable: false,
+        blockedReason: 'artifact_identity_changed',
+      };
+      expect((await remoteRequest(`${feedbackRoute}/tasks`)).tasks).toMatchObject([blocked]);
+      expect((await remoteRequest(taskRoute)).task).toMatchObject({
+        ...blocked,
+        threads: input.threads,
+      });
+
+      expect((await browser(`${replacementRoute}/tasks`)).tasks).toEqual([]);
+      const replacementInput = await browser(`${replacementRoute}/input`);
+      expect(replacementInput.revision).toBe(initial.revision);
+      expect(replacementInput.selection).toEqual(input.selection);
+      const { task: replacement } = await browser(`${replacementRoute}/submit`, {
+        connectionId: connection.id,
+        submissionKey: 'submit-replacement',
+        selection: replacementInput.selection,
+      });
+      expect(replacement.id).not.toBe(task.id);
+      expect(replacement).toMatchObject({ artifact, state: 'queued', claimable: true });
+      const { tasks: pending } = await remoteRequest(`${feedbackRoute}/tasks`);
+      expect(pending).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining(blocked),
+          expect.objectContaining({ id: replacement.id, claimable: true }),
+        ]),
+      );
+      const replacementClaim = await remoteRequest(
+        `${feedbackRoute}/tasks/${replacement.id}/claim`,
+        { ...claimInput, requestId: 'claim-replacement', token: 'c'.repeat(64) },
+      );
+      expect(replacementClaim.task).toMatchObject({ id: replacement.id, state: 'running' });
+      await browser(`${replacementRoute}/tasks/${replacement.id}/cancel`, {});
+      fs.writeFileSync(identityFile, originalIdentity);
+      await fx.restart();
+    }
+    const concurrentFiles = {
+      ...files,
+      [sourceFile]: encode(`${Buffer.from(files[sourceFile]!, 'base64').toString('utf8')}\n`),
+    };
+    const concurrent = await put(initial.revision, concurrentFiles);
+    expect(concurrent.revision).not.toBe(initial.revision);
+    expect((await remoteRequest(resultRoute, result, { status: 409 })).code).toBe(
+      'revision_conflict',
+    );
+    expect(await remoteRequest(artifactRoute)).toEqual(concurrent);
+    expect((await browser(inputRoute)).threads).toEqual(input.threads);
+    expect(await put(concurrent.revision, files)).toEqual(initial);
+
+    const { task: completed } = await remoteRequest(resultRoute, result);
+    expect(completed.state).toBe('awaiting_review');
+    expect(completed.outputRevision).not.toBe(claimed.inputRevision);
+    await fx.restart();
+    expect((await remoteRequest(resultRoute, result)).task).toEqual(completed);
+    expect(
+      (
+        await remoteRequest(
+          resultRoute,
+          { ...result, replies: [{ threadId: original.id, text: 'Different reply' }] },
+          { status: 409 },
+        )
+      ).code,
+    ).toBe('idempotency_conflict');
+
+    expect(await remoteRequest(artifactRoute)).toEqual({
+      files: revisedFiles,
+      revision: completed.outputRevision,
+      url: initial.url,
+    });
+    expect(fs.readFileSync(localFile, 'utf8')).toBe('Local working notes stay private.');
+    const browserTaskRoute = `${browserRoute}/feedback/tasks/${task.id}`;
+    expect((await browser(browserTaskRoute)).task).toMatchObject({
+      artifact,
+      state: 'awaiting_review',
+      outputRevision: completed.outputRevision,
+    });
+    await remoteRequest(`${taskRoute}/accept`, {}, { status: 404 });
+    expect((await browser(`${browserTaskRoute}/accept`, {})).task.state).toBe('accepted');
+    const reviewed = await browser(inputRoute);
+    expect(reviewed).toMatchObject({ artifact, revision: completed.outputRevision });
+    expect(reviewed.threads).toHaveLength(1);
+    const [updated] = reviewed.threads;
+    expect(updated).toMatchObject({ id: original.id, status: 'open' });
+    expect(updated.anchor).toEqual(original.anchor);
+    expect(updated.messages).toMatchObject([
+      original.messages[0],
+      { author: 'agent', text: replyText },
+    ]);
+
+    if (type === 'slides') {
+      const { share } = await browser('/api/hub/share', {
+        project: fx.alpha,
+        id: 'feedback-demo',
+        type,
+        action: 'publish',
+      });
+      const publicRoute = new URL(share.url).pathname;
+      const published = await request(`${publicRoute}/data`, {});
+      expect(published.deck.slides).toEqual([
+        { id: details.id, body: 'Revised details', title: details.title },
+        { id: opening.id, body: opening.body, title: opening.title },
+      ]);
+      expect(JSON.stringify(published)).not.toContain(humanText);
+      expect(JSON.stringify(published)).not.toContain(replyText);
+    }
+  },
+);
 
 test('explicit same-device rebind preserves the task and fences the previous session and claim', async () => {
   const f = await ready();
@@ -1263,6 +1528,43 @@ test('round submission replays after changed input, rejects a second key, and pe
   });
   expect(next.status).toBe(200);
   expect(next.body.task.id).not.toBe(first.body.task.id);
+});
+
+test('a replacement artboard can submit the same round while the original task is running', async () => {
+  const f = await roundFixture();
+  const [{ id, version }] = (await f.input()).rounds;
+  const submission = {
+    connectionId: f.connection.id,
+    submissionKey: 'original-round',
+    round: { id, version },
+  };
+  const first = await f.submit(submission);
+  expect(first.status, JSON.stringify(first.body)).toBe(200);
+  const claim = await f.request(`${f.remote}/feedback/tasks/${first.body.task.id}/claim`, {
+    connectionId: f.connection.id,
+    generation: f.connection.generation,
+    claimant: 'round-session',
+    requestId: 'claim',
+    token: 'a'.repeat(64),
+  });
+  expect(claim.status, JSON.stringify(claim.body)).toBe(200);
+
+  const identityFile = path.join(path.dirname(f.commentsFile), '.artifact-id');
+  const replacementId = 'ReplacementIdentity01';
+  fs.writeFileSync(identityFile, `${replacementId}\n`);
+  await f.fx.restart();
+  const replacementRoute = `/api/artboard/${replacementId}/feedback`;
+  const input = await f.request(`${replacementRoute}/input`, undefined, true);
+  expect(input.status, JSON.stringify(input.body)).toBe(200);
+  expect(input.body.rounds).toMatchObject([{ id, version, state: 'open' }]);
+  const second = await f.request(
+    `${replacementRoute}/submit`,
+    { ...submission, submissionKey: 'replacement-round' },
+    true,
+  );
+  expect(second.status, JSON.stringify(second.body)).toBe(200);
+  expect(second.body.task.id).not.toBe(first.body.task.id);
+  expect(second.body.task).toMatchObject({ roundId: id, state: 'queued', claimable: true });
 });
 
 test('round version includes new related comments and canvas recommendations; paused rounds queue without fallback', async () => {

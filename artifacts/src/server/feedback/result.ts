@@ -10,6 +10,7 @@ import {
   remoteUploadRevision,
   writeRemoteArtifact,
 } from '../remote-transfer';
+import { requireFeedbackArtifact } from './artifact';
 import { feedbackError, hash } from './store';
 import { text } from './tasks';
 
@@ -51,7 +52,7 @@ export async function applyResult(options: {
   )
     feedbackError('invalid_result', undefined, 400);
   const payloadHash = hash({ upload, replies });
-  const [type, id] = task.artifact.split('/') as ['document' | 'artboard', string];
+  const { type, id } = requireFeedbackArtifact(task.artifact);
   if (!mounted.feedbackComments || !mounted.feedbackReply)
     feedbackError('feedback_unavailable', undefined, 503);
   guard();
@@ -108,9 +109,9 @@ export async function applyResult(options: {
       upload,
       admission,
       prepared,
-      type === 'artboard'
-        ? (directory) => mounted.prepareArtifactUpload(type, id, directory)
-        : undefined,
+      type === 'document' || type === 'whiteboard'
+        ? undefined
+        : (directory) => mounted.prepareArtifactUpload(type, id, directory),
     );
     current = readRemoteArtifact(project, task.artifact).revision;
     if (current !== operation.expectedRevision) feedbackError('result_reconciliation_required');

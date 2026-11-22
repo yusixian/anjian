@@ -11,14 +11,15 @@ import { useFeedback } from './useFeedback';
 export interface FeedbackPanelProps {
   artifact: string;
   onOpenThread?: (id: string) => void;
+  polling?: boolean;
 }
 
 export function FeedbackPanel(props: FeedbackPanelProps) {
   return useFeedbackEnabled() ? <ConnectedFeedbackPanel {...props} /> : null;
 }
-function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) {
+function ConnectedFeedbackPanel({ artifact, onOpenThread, polling }: FeedbackPanelProps) {
   const { t } = useTranslation();
-  const feedback = useFeedback(artifact);
+  const feedback = useFeedback(artifact, polling);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [copyState, setCopyState] = useState<'copied' | 'copyFailed' | null>(null);
   const eligible = feedback.input ? selectableInput(feedback.input) : [];
@@ -28,7 +29,7 @@ function ConnectedFeedbackPanel({ artifact, onOpenThread }: FeedbackPanelProps) 
   const history = tasks.filter((task) => task.state === 'accepted' || task.state === 'cancelled');
   const active = tasks.filter((task) => task.state !== 'accepted' && task.state !== 'cancelled');
   const connectionGuide = t('feedback.connectionGuide', {
-    artifact,
+    artifact: feedback.input?.artifact ?? artifact,
     origin: window.location.origin,
   });
   const openThread = (id: string) => {

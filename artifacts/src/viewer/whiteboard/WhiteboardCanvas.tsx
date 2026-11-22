@@ -7,7 +7,7 @@ import type {
   ExcalidrawInitialDataState,
   ExcalidrawProps,
 } from '@excalidraw/excalidraw/types';
-import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { type Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 import type { WhiteboardScene } from '../../shared/whiteboard';
 import { useTranslation } from '../i18n';
@@ -30,6 +30,8 @@ export function WhiteboardCanvas({
   readOnly = false,
   frameId = null,
   canvasRef,
+  focusRequest,
+  onFocused,
   onSceneChange,
   onSelectionChange,
 }: {
@@ -37,6 +39,8 @@ export function WhiteboardCanvas({
   readOnly?: boolean;
   frameId?: string | null;
   canvasRef?: Ref<WhiteboardCanvasHandle>;
+  focusRequest?: string[];
+  onFocused?: (found: boolean) => void;
   onSceneChange?: (scene: WhiteboardScene, contentKey: string) => void;
   onSelectionChange?: (ids: string[]) => void;
 }) {
@@ -65,27 +69,29 @@ export function WhiteboardCanvas({
     return () => cancelAnimationFrame(animation);
   }, [frameId, ready]);
 
-  useImperativeHandle(
-    canvasRef,
-    () => ({
-      focusElements(ids) {
-        const current = apiRef.current;
-        if (!current) return false;
-        const wanted = new Set(ids);
-        const elements = current.getSceneElements().filter((element) => wanted.has(element.id));
-        if (!elements.length) return false;
-        current.updateScene({
-          appState: {
-            selectedElementIds: Object.fromEntries(elements.map(({ id }) => [id, true])),
-          },
-          captureUpdate: CaptureUpdateAction.NEVER,
-        });
-        current.scrollToContent(elements, { fitToViewport: true, viewportZoomFactor: 0.6 });
-        return true;
+  const focusElements = useCallback((ids: string[]) => {
+    const current = apiRef.current;
+    if (!current) return false;
+    const wanted = new Set(ids);
+    const elements = current
+      .getSceneElements()
+      .filter((element) => !element.isDeleted && wanted.has(element.id));
+    if (!elements.length) return false;
+    current.updateScene({
+      appState: {
+        selectedElementIds: Object.fromEntries(elements.map(({ id }) => [id, true])),
       },
-    }),
-    [],
-  );
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    current.scrollToContent(elements, { fitToViewport: true, viewportZoomFactor: 0.6 });
+    return true;
+  }, []);
+  useImperativeHandle(canvasRef, () => ({ focusElements }), [focusElements]);
+  useEffect(() => {
+    if (!ready || !focusRequest) return;
+    const frame = requestAnimationFrame(() => onFocused?.(focusElements(focusRequest)));
+    return () => cancelAnimationFrame(frame);
+  }, [ready, focusRequest, onFocused, focusElements]);
 
   const changed: CanvasChange = (elements, appState, files) => {
     if (!ready && !appState.isLoading) setReady(true);

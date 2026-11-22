@@ -14,7 +14,7 @@ import {
   type StoryboardTrack,
 } from '../../shared/storyboard';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
-import { parseRoute } from '../lib/route';
+import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
 import { useStoryboardCopy } from './copy';
 import { Inspector } from './Inspector';
 import { MediaBin } from './MediaBin';
@@ -30,10 +30,12 @@ import {
 import { useStoryboardDraft } from './useStoryboardDraft';
 
 function Workbench({
+  id,
   url,
   initial,
   readOnly,
 }: {
+  id: string;
   url: string;
   initial: StoryboardSnapshot;
   readOnly: boolean;
@@ -45,6 +47,7 @@ function Workbench({
   const [selection, setSelection] = useState<Selection | null>(
     first ? { trackId: first.id, clipId: first.clips[0]?.id } : null,
   );
+  const [comments, setComments] = useState(false);
   const [imported, setImported] = useState<StoryboardAsset[]>([]);
   const [source, setSource] = useState<string | undefined>(
     first?.clips[0]?.asset ?? base.assets[0]?.path,
@@ -192,7 +195,7 @@ function Workbench({
       onDuration={(path, ms) => durationsRef.current.set(path, ms)}
     />
   );
-  return (
+  const editor = (
     <main
       className={'sb-root' + (readOnly ? ' sb-readonly' : '')}
       onKeyDown={(event) => {
@@ -223,6 +226,7 @@ function Workbench({
         )}
         {!readOnly && (
           <div className="sb-toolbar-actions">
+            <NativeFeedbackButton />
             <span className="sb-save-state" role="status">
               {!draft.dirty && <Check size={14} />}{' '}
               {draft.busy ? c.saving : draft.dirty ? c.dirty : c.saved}
@@ -279,7 +283,9 @@ function Workbench({
             base={base}
             changeTrack={(name) => selectedTrack && updateTrack({ ...selectedTrack, name })}
             clip={selectedClip}
+            comments={comments}
             moveTrack={moveTrack}
+            setComments={setComments}
             track={selectedTrack}
             tracks={board.tracks}
             transfer={transfer}
@@ -339,18 +345,39 @@ function Workbench({
       )}
     </main>
   );
+  if (readOnly) return editor;
+  return (
+    <NativeFeedback<StoryboardSnapshot>
+      id={id}
+      type="storyboard"
+      locate={(snapshot, threadId) => {
+        const clipId = snapshot.comments.threads.find((thread) => thread.id === threadId)?.anchor
+          .clipId;
+        const current = draft.dirty || draft.busy ? board : snapshot.storyboard;
+        const track = current.tracks.find((item) => item.clips.some((clip) => clip.id === clipId));
+        const clip = track?.clips.find((item) => item.id === clipId);
+        if (
+          !track ||
+          !clip ||
+          !snapshot.storyboard.tracks.some((item) => item.clips.some((item) => item.id === clipId))
+        )
+          return false;
+        if (!draft.dirty && !draft.busy) draft.adoptSnapshot(snapshot);
+        setSelection({ trackId: track.id, clipId: clip.id });
+        setSource(clip.asset);
+        setSourceVersion((version) => version + 1);
+        setComments(true);
+        return true;
+      }}
+    >
+      {editor}
+    </NativeFeedback>
+  );
 }
 
 function Load({ id, readOnly }: { id: string; readOnly: boolean }) {
   const c = useStoryboardCopy();
-  // Project-local slugs may repeat. The canonical address also scopes the tab's draft and render cache.
-  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-  const route = canonical && parseRoute(new URL(canonical.href).pathname);
-  const address =
-    route && (route.kind === 'artifact' || route.kind === 'preview') && route.type === 'storyboard'
-      ? route.id
-      : id;
-  const url = '/api/storyboard/' + encodeURIComponent(address);
+  const url = '/api/storyboard/' + encodeURIComponent(id);
   const [initial, setInitial] = useState<StoryboardSnapshot>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -369,7 +396,7 @@ function Load({ id, readOnly }: { id: string; readOnly: boolean }) {
     void load();
     return () => abort.abort();
   }, [url, attempt]);
-  if (initial) return <Workbench initial={initial} readOnly={readOnly} url={url} />;
+  if (initial) return <Workbench id={id} initial={initial} readOnly={readOnly} url={url} />;
   return (
     <main className="sb-root sb-loading">
       <LibraryLink />

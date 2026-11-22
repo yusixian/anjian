@@ -4,6 +4,7 @@ import type { ThreadOp } from '../../shared/comments';
 import type { SlideDeckSnapshot } from '../../shared/slides';
 import { ThreadView } from '../comments/ThreadView';
 import { Composer } from '../document/Composer';
+import { useNativeThreadFocus } from '../feedback/NativeFeedback';
 import { useSlidesCopy } from './copy';
 
 type CommentsState = Pick<SlideDeckSnapshot, 'comments' | 'commentsWarning' | 'listening'>;
@@ -21,6 +22,7 @@ export function SlideComments({
   exists: boolean;
 }) {
   const c = useSlidesCopy();
+  const focusThread = useNativeThreadFocus();
   const [state, setState] = useState(initial);
   const [failed, setFailed] = useState(false);
   const sequenceRef = useRef(0);
@@ -82,7 +84,13 @@ export function SlideComments({
       {failed && <p role="alert">{c.commentFailed}</p>}
       {!threads.length && <p className="sd-muted">{c.emptyComments}</p>}
       {threads.map((thread) => (
-        <div className="sd-thread" key={thread.id}>
+        <div
+          className="sd-thread"
+          data-thread={thread.id}
+          key={thread.id}
+          ref={focusThread}
+          tabIndex={-1}
+        >
           <ThreadView
             label={thread.status === 'resolved' ? c.resolved : c.comments}
             thread={thread}

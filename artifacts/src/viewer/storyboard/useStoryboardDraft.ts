@@ -108,6 +108,13 @@ export function useStoryboardDraft(url: string, initial: StoryboardSnapshot, rea
     }
   }
 
+  function adoptSnapshot(data: StoryboardSnapshot) {
+    setBase(data);
+    setBoard(data.storyboard);
+    setDraftRevision(data.revision);
+    setConflict(false);
+  }
+
   async function reload() {
     if (lockRef.current || !window.confirm(c.discard)) return;
     lockRef.current = true;
@@ -117,10 +124,7 @@ export function useStoryboardDraft(url: string, initial: StoryboardSnapshot, rea
       const response = await fetch(url, { cache: 'no-store' });
       if (!response.ok) throw new Error(response.statusText);
       const data: StoryboardSnapshot = await response.json();
-      setBase(data);
-      setBoard(data.storyboard);
-      setDraftRevision(data.revision);
-      setConflict(false);
+      adoptSnapshot(data);
     } catch {
       setError(c.loadFailed);
     } finally {
@@ -142,6 +146,7 @@ export function useStoryboardDraft(url: string, initial: StoryboardSnapshot, rea
     base,
     save,
     reload,
+    adoptSnapshot,
     exportDraft,
     conflict,
     dirty,

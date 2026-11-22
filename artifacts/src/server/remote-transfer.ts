@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { mintArtifactId } from '../shared/ids';
+import { isArtifactAddress, mintArtifactId } from '../shared/ids';
 import { MAX_SLIDE_DECK_BYTES, parseSlideDeck, SLIDE_DECK_FILE } from '../shared/slides';
 import {
   MAX_STORYBOARD_ASSET_BYTES,
@@ -15,8 +15,17 @@ import {
 } from '../shared/storyboard';
 import type { ArtifactType } from '../shared/types';
 import { structuralWarnings } from '../shared/validate';
-import { MAX_WHITEBOARD_SCENE_BYTES, MAX_WHITEBOARD_SOURCE_BYTES, WHITEBOARD_PAGES_FILE, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
-import { declaredWhiteboardPageFiles, isWhiteboardSourceFile, whiteboardSourceProblem } from '../shared/whiteboard-source';
+import {
+  MAX_WHITEBOARD_SCENE_BYTES,
+  MAX_WHITEBOARD_SOURCE_BYTES,
+  WHITEBOARD_PAGES_FILE,
+  WHITEBOARD_SCENE_FILE,
+} from '../shared/whiteboard';
+import {
+  declaredWhiteboardPageFiles,
+  isWhiteboardSourceFile,
+  whiteboardSourceProblem,
+} from '../shared/whiteboard-source';
 import { parseDocument } from './document-codec';
 
 const ARTIFACT = /^(document|artboard|html|slides|storyboard|whiteboard)\/([a-z0-9][a-z0-9-]*)$/;
@@ -62,7 +71,10 @@ const unsafe = (message: string) => new RemoteTransferError(409, 'unsafe_artifac
 
 function artifactParts(artifact: string) {
   const match = ARTIFACT.exec(artifact);
-  if (!match) throw invalid('artifact must be document/<id>, artboard/<id>, html/<id>, slides/<id>, storyboard/<id> or whiteboard/<id>');
+  if (!match)
+    throw invalid(
+      'artifact must be document/<id>, artboard/<id>, html/<id>, slides/<id>, storyboard/<id> or whiteboard/<id>',
+    );
   return { type: match[1] as ArtifactType, id: match[2]! };
 }
 
@@ -110,7 +122,8 @@ function checkSourceSize(type: ArtifactType, name: string, size: number, remaini
   if (type === 'slides' && size > MAX_SLIDE_DECK_BYTES)
     throw tooLarge(`${SLIDE_DECK_FILE} exceeds 2 MiB`);
   if (type === 'storyboard') {
-    const limit = name === STORYBOARD_FILE ? MAX_STORYBOARD_TIMELINE_BYTES : MAX_STORYBOARD_ASSET_BYTES;
+    const limit =
+      name === STORYBOARD_FILE ? MAX_STORYBOARD_TIMELINE_BYTES : MAX_STORYBOARD_ASSET_BYTES;
     if (size > limit) throw tooLarge(`${name} exceeds the storyboard file limit`);
   }
 }
@@ -179,8 +192,11 @@ function collect(dir: string, type: ArtifactType) {
         throw unsafe(`unsafe entry: ${entry.name}`);
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       const lower = relative.toLowerCase();
-      if (type === 'whiteboard' && lower !== relative &&
-          (lower === 'pages' || isWhiteboardSourceFile(lower)))
+      if (
+        type === 'whiteboard' &&
+        lower !== relative &&
+        (lower === 'pages' || isWhiteboardSourceFile(lower))
+      )
         throw unsafe(`invalid whiteboard path: ${relative}`);
       if (entry.isDirectory()) {
         if ((type === 'slides' || type === 'storyboard') && managed(type, relative))
@@ -202,7 +218,8 @@ function collect(dir: string, type: ArtifactType) {
       const file = path.join(current, entry.name);
       const stat = fs.statSync(file);
       checkSourceSize(type, relative, stat.size, maxBytes - total);
-      const data = relative === WHITEBOARD_PAGES_FILE && manifest ? manifest : fs.readFileSync(file);
+      const data =
+        relative === WHITEBOARD_PAGES_FILE && manifest ? manifest : fs.readFileSync(file);
       checkSourceSize(type, relative, data.length, maxBytes - total);
       total += data.length;
       files.set(relative, data);
@@ -236,6 +253,35 @@ function snapshot(files: Map<string, Buffer>, revision: string | null): RemoteAr
   };
 }
 
+export function readRemoteArtifactAddress(projectDir: string, artifact: string): string | null {
+  const { dir } = pathsFor(projectDir, artifact);
+  const file = path.join(dir, '.artifact-id');
+  let fd: number;
+  try {
+    fd = fs.openSync(
+      file,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === 'ENOENT') return null;
+    if (code === 'ELOOP') throw unsafe('unsafe artifact identity');
+    throw error;
+  }
+  try {
+    const info = fs.fstatSync(fd);
+    if (!info.isFile() || info.size > 64) throw unsafe('invalid artifact identity');
+    const buffer = Buffer.alloc(65);
+    const length = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    const address = buffer.toString('utf8', 0, length).trim();
+    if (length !== info.size || !isArtifactAddress(address))
+      throw unsafe('invalid artifact identity');
+    return address;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export function readRemoteArtifact(projectDir: string, artifact: string): RemoteArtifactSnapshot {
   const { dir, type } = pathsFor(projectDir, artifact);
   if (!fs.existsSync(dir)) return { revision: null, files: {} };
@@ -262,7 +308,8 @@ function validateSlideDeck(source: Buffer) {
   } catch {
     throw invalid(`${SLIDE_DECK_FILE} must contain valid UTF-8 JSON`);
   }
-  if (!parseSlideDeck(value)) throw invalid(`${SLIDE_DECK_FILE} does not match the slide deck schema`);
+  if (!parseSlideDeck(value))
+    throw invalid(`${SLIDE_DECK_FILE} does not match the slide deck schema`);
 }
 
 function validateStoryboard(source: Buffer, files: ReadonlyMap<string, Buffer>) {
@@ -297,8 +344,7 @@ function decodeManifest(type: ArtifactType, incoming: unknown) {
     if (typeof value !== 'string') throw invalid(`invalid base64 content: ${name}`);
     const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
     const estimatedBytes = Math.floor(value.length / 4) * 3 - padding;
-    if (value.length > Math.ceil(maxBytes / 3) * 4)
-      throw tooLarge('artifact exceeds 32 MiB');
+    if (value.length > Math.ceil(maxBytes / 3) * 4) throw tooLarge('artifact exceeds 32 MiB');
     checkSourceSize(type, name, estimatedBytes, maxBytes - total);
     if (value.length % 4 !== 0 || !/^[A-Z0-9+/]*$/i.test(value.slice(0, -padding || undefined)))
       throw invalid(`invalid base64 content: ${name}`);

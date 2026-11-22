@@ -4,6 +4,7 @@ import type { ThreadOp } from '../../shared/comments';
 import type { StoryboardSnapshot } from '../../shared/storyboard';
 import { ThreadView } from '../comments/ThreadView';
 import { Composer } from '../document/Composer';
+import { useNativeThreadFocus } from '../feedback/NativeFeedback';
 import { useStoryboardCopy } from './copy';
 
 type CommentsState = Pick<StoryboardSnapshot, 'comments' | 'commentsWarning' | 'listening'>;
@@ -20,6 +21,7 @@ export function ClipComments({
   saved: boolean;
 }) {
   const c = useStoryboardCopy();
+  const focusThread = useNativeThreadFocus();
   const [state, setState] = useState(initial);
   const [error, setError] = useState(false);
   const writingRef = useRef(false);
@@ -79,19 +81,20 @@ export function ClipComments({
       {error && <p role="alert">{c.commentFailed}</p>}
       {!threads.length && <p>{c.noComments}</p>}
       {threads.map((thread) => (
-        <ThreadView
-          key={thread.id}
-          label={thread.status === 'resolved' ? c.resolved : c.comments}
-          thread={thread}
-          actions={{
-            edit: (threadId, messageId, text) =>
-              void send({ op: 'edit', threadId, messageId, text }),
-            remove: (threadId, messageId) => void send({ op: 'delete', threadId, messageId }),
-            reply: (threadId, text) => send({ op: 'reply', threadId, text }),
-            reopen: (threadId) => void send({ op: 'reopen', threadId }),
-            resolve: (threadId) => void send({ op: 'resolve', threadId }),
-          }}
-        />
+        <div data-thread={thread.id} key={thread.id} ref={focusThread} tabIndex={-1}>
+          <ThreadView
+            label={thread.status === 'resolved' ? c.resolved : c.comments}
+            thread={thread}
+            actions={{
+              edit: (threadId, messageId, text) =>
+                void send({ op: 'edit', threadId, messageId, text }),
+              remove: (threadId, messageId) => void send({ op: 'delete', threadId, messageId }),
+              reply: (threadId, text) => send({ op: 'reply', threadId, text }),
+              reopen: (threadId) => void send({ op: 'reopen', threadId }),
+              resolve: (threadId) => void send({ op: 'resolve', threadId }),
+            }}
+          />
+        </div>
       ))}
       {saved ? (
         <Composer

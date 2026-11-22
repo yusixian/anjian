@@ -44,7 +44,7 @@ export function useSlideKeys(
         element?.closest?.(
           'input, textarea, select, [contenteditable="true"], [role="dialog"], [popover]',
         ) ||
-        target?.document.querySelector('[aria-modal="true"]')
+        target?.document.querySelector('dialog[open], [aria-modal="true"]')
       )
         return;
       const directions: Record<string, number> = {

@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, SlidersHorizontal, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import {
   MAX_STORYBOARD_DURATION_MS,
@@ -52,6 +52,8 @@ function TimeField({
 
 export function Inspector({
   assetName,
+  comments,
+  setComments,
   tracks,
   track,
   clip,
@@ -65,6 +67,8 @@ export function Inspector({
   removeClip,
   transfer,
 }: {
+  comments: boolean;
+  setComments: (open: boolean) => void;
   tracks: StoryboardTrack[];
   assetName: (path: string) => string;
   track?: StoryboardTrack;
@@ -80,7 +84,6 @@ export function Inspector({
   transfer: (id: string) => void;
 }) {
   const c = useStoryboardCopy();
-  const [comments, setComments] = useState(false);
   const ordered = chronological(track?.clips ?? []);
   const i = ordered.findIndex((item) => item.id === clip?.id);
   const trackIndex = tracks.findIndex((item) => item.id === track?.id);

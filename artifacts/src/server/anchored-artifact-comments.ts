@@ -217,11 +217,16 @@ function createAnchoredStore<A>(dir: string, stateDir: string, options: Anchored
       prepareWrite();
       return store.apply(op, admit);
     },
-    applyAgent(op: AnchoredAgentOp<A>, name?: string, admit?: CommentAdmission) {
+    applyAgent(
+      op: AnchoredAgentOp<A>,
+      name?: string,
+      admit?: CommentAdmission,
+      messageId?: string,
+    ) {
       if (op.op === 'add') options.assertAnchor(dir, anchors.read(op)!);
       else validateThread(op.threadId);
       prepareWrite();
-      return store.applyAgent(op, name, admit);
+      return store.applyAgent(op, name, admit, messageId);
     },
     list(agent: string, all: boolean, admit?: CommentAdmission) {
       store.sync();

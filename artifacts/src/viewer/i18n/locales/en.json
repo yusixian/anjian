@@ -252,6 +252,7 @@
     "railComments": "Comments {{count}}"
   },
   "feedback": {
+    "targetMissing": "The original comment or its target no longer exists.",
     "title": "Agent feedback",
     "manage": "Manage connection",
     "refresh": "Refresh",
@@ -697,6 +698,10 @@
     "actionUnconfirmed": "Sharing status has been refreshed. Check the link and status before continuing.",
     "actionUnknown": "The result is not confirmed. Retry loading before you publish or turn off sharing again."
   },
+  "slideLibrary": {
+    "create": "New slide deck",
+    "createFailed": "Could not create the slide deck. Try again."
+  },
   "storage": {
     "migration": {
       "active": "Active",
@@ -822,6 +827,10 @@
       "cacheHelp": "Shared allocations are not disk capacity. S3 caches and retained originals still use local space. S3 capacity is not estimated here."
     }
   },
+  "storyboardLibrary": {
+    "create": "New storyboard",
+    "createFailed": "Could not create the storyboard. Try again."
+  },
   "time": {
     "justNow": "just now",
     "notRecorded": "Time not recorded",
@@ -830,14 +839,6 @@
     "seconds": "{{count}}s",
     "minutes": "{{count}} min",
     "hours": "{{count}} h"
-  },
-  "slideLibrary": {
-    "create": "New slide deck",
-    "createFailed": "Could not create the slide deck. Try again."
-  },
-  "storyboardLibrary": {
-    "create": "New storyboard",
-    "createFailed": "Could not create the storyboard. Try again."
   },
   "type": {
     "storyboard": "Storyboard",
