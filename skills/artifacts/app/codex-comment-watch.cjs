@@ -12,6 +12,7 @@ const {
   subscriptionSources,
   UUID,
 } = require('./comment-subscriptions.cjs');
+const { createLocalQuestionDispatch } = require('./local-question-dispatch.cjs');
 const { createSelectionDispatch } = require('./selection-dispatch.cjs');
 
 function readJson(file) {
@@ -196,6 +197,8 @@ function watch(ctx, input) {
   const session = `codex:${ctx.session}`;
   const poll = createProjectPoll('Codex', session);
   const selections = createSelectionDispatch('codex', ctx.session);
+  const questions = createLocalQuestionDispatch('codex', ctx.session);
+  let questionSources = new Map();
   const pending = new Map();
   const controller = new AbortController();
   let running = false;
@@ -209,6 +212,7 @@ function watch(ctx, input) {
   const stop = () => {
     clearInterval(timer);
     controller.abort();
+    questions.close(questionSources);
     if (readJson(ctx.file)?.token === state.token) fs.rmSync(ctx.file, { force: true });
     process.exit(0);
   };
@@ -222,6 +226,8 @@ function watch(ctx, input) {
       }
     }
     beatSources(ctx.project, 'codex', ctx.session, sources);
+    questionSources = sources;
+    questions.update(sources);
     if (running || Date.now() < nextAttempt) return;
     let delivery;
     for (const item of pending) {
@@ -243,16 +249,27 @@ function watch(ctx, input) {
       break;
     }
     const selection = !delivery && selections(sources);
-    if (!selection && !delivery) return;
-    const event = selection?.event ?? delivery[1].event;
     running = true;
     try {
-      const message = selection ? event.instruction : commentMessage(event);
+      const question = !selection && !delivery && (await questions.next(sources));
+      if (!selection && !delivery && !question) return;
+      const event = selection?.event ?? delivery?.[1].event;
+      const message = question
+        ? question.message
+        : selection
+          ? event.instruction
+          : commentMessage(event);
       const { receipt, warning } = await queueMessage(ctx, remote, message, controller.signal);
-      if (selection) selection.acknowledge();
+      if (question) await question.acknowledge();
+      else if (selection) selection.acknowledge();
       else pending.delete(delivery[0]);
       failures = 0;
-      update({ artifact: event.artifact, receipt, warning, queuedAt: new Date().toISOString() });
+      update({
+        artifact: question ? question.artifact : event.artifact,
+        receipt,
+        warning,
+        queuedAt: new Date().toISOString(),
+      });
     } catch (error) {
       nextAttempt = Date.now() + Math.min(30000, 1000 * 2 ** failures++);
       update({ lastError: String(error.message).slice(0, 800) });

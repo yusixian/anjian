@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { LoroDoc } from 'loro-crdt';
 import { afterEach, expect, test, vi } from 'vitest';
 
+import { artifactPath } from '../src/server/artifact-address';
 import { feedbackStore } from '../src/server/feedback/store';
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
@@ -16,7 +17,7 @@ import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageUsage } from '../src/server/storage/usage';
 import { approvalViewKey } from '../src/shared/approval-view';
 import { emptyWhiteboardScene, whiteboardPageFile } from '../src/shared/whiteboard';
-import { tempRoot } from './helpers';
+import { tempRoot, writeDocument } from './helpers';
 
 const MASTER = 'm'.repeat(48);
 const cleanups: (() => Promise<void>)[] = [];
@@ -36,13 +37,18 @@ async function reservePort(): Promise<number> {
   return port;
 }
 
-async function fixture() {
+async function fixture(localDocument?: string) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-remote-api-')));
   const home = path.join(root, 'server');
   const alpha = path.join(root, 'alpha');
   const beta = path.join(root, 'beta');
   for (const project of [alpha, beta])
     fs.mkdirSync(path.join(project, '.anjian', 'artifacts'), { recursive: true });
+  if (localDocument) {
+    const localArtifacts = path.join(alpha, '.anjian', 'artifacts');
+    writeDocument(localArtifacts, 'plan', { 'doc.xml': localDocument });
+    artifactPath(localArtifacts, 'document', 'plan');
+  }
   const temp = tempRoot();
   const port = await reservePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -52,7 +58,7 @@ async function fixture() {
     const hub = await startHub({
       host: '127.0.0.1',
       urlHost: '127.0.0.1',
-      publicOrigin: origin,
+      ...(!localDocument ? { publicOrigin: origin } : {}),
       ports: [port],
       boardPorts: [0],
       viewerDir: temp.viewer,
@@ -219,6 +225,150 @@ async function ready(source = '<doc><p blockId="intro">draft</p></doc>') {
     snapshot,
   };
 }
+
+test('local document questions accept only a fresh exact-project recipient and persist withdrawal', async () => {
+  const f = await fixture('<doc><ask key="notes" prompt="What else?"/></doc>');
+  const info = JSON.parse(
+    fs.readFileSync(path.join(f.alpha, '.anjian/artifacts/.state/server-info'), 'utf8'),
+  );
+  expect(info.localQuestionProject).toBe(f.id(f.alpha));
+  expect(new URL(info.localUrl).origin).toBe(f.origin);
+  const endpoint = '/api/document/plan/feedback/questions';
+  const browser = async (body?: unknown, origin = f.origin) => {
+    const response = await f.request(endpoint, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'Origin': origin, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return { status: response.status, body: await response.json() };
+  };
+  const chosen = crypto.randomUUID();
+  const token = crypto.randomBytes(32).toString('hex');
+  const proof = crypto.createHash('sha256').update(token).digest('hex');
+  const beat = (project: string, artifact: string, session: string, timestamp = Date.now()) => {
+    const dir = path.join(
+      project,
+      '.anjian/artifacts/.state/codex-comment-watch/questions',
+      artifact,
+    );
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, session + '.alive'), timestamp + ' ' + proof);
+  };
+  beat(f.alpha, 'document/plan', chosen);
+  beat(f.alpha, 'document/plan', crypto.randomUUID(), Date.now() - 60_000);
+  beat(f.alpha, 'document/other', crypto.randomUUID());
+  beat(f.beta, 'document/plan', crypto.randomUUID());
+  const listing = await browser();
+  expect(listing.status, JSON.stringify(listing.body)).toBe(200);
+  expect(listing.body.localRecipients).toEqual([
+    { host: 'codex', id: expect.stringMatching(/^[\w-]{43}$/), label: chosen.slice(-6) },
+  ]);
+  expect(JSON.stringify(listing.body)).not.toContain(chosen);
+  const initial = listing.body.items[0];
+  const request = {
+    action: 'submit',
+    id: initial.id,
+    version: initial.version,
+    answer: 'Keep the current wording.',
+    localRecipient: listing.body.localRecipients[0].id,
+    submissionKey: 'local-answer',
+  };
+  expect((await browser(request, 'null')).status).toBe(404);
+  expect((await browser({ ...request, connectionId: 'mixed' })).status).toBe(400);
+  beat(f.alpha, 'document/plan', chosen, Date.now() - 60_000);
+  expect((await browser(request)).body.code).toBe('recipient_unavailable');
+  beat(f.alpha, 'document/plan', chosen);
+  const submitted = await browser(request);
+  expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
+  expect(submitted.body.item.localSubmission.state).toBe('queued');
+  await f.restart();
+  expect((await browser(request)).body.item).toEqual(submitted.body.item);
+  const withdrawn = await browser({
+    action: 'withdraw',
+    id: initial.id,
+    version: submitted.body.item.version,
+  });
+  expect(withdrawn.body.item.answer).toBe(request.answer);
+  expect(withdrawn.body.item.localSubmission).toBeUndefined();
+
+  beat(f.alpha, 'document/plan', chosen);
+  const next = await browser({
+    ...request,
+    version: withdrawn.body.item.version,
+    submissionKey: 'next',
+  });
+  const outbox = `/api/local/projects/${f.id(f.alpha)}/document/plan/questions/${request.localRecipient}`;
+  const poll = (route = outbox, authorization = token, origin?: string) =>
+    f.request(route, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + authorization, ...(origin ? { Origin: origin } : {}) },
+    });
+  expect((await poll(outbox, 'a'.repeat(64))).status).toBe(404);
+  expect((await poll(outbox, token, f.origin)).status).toBe(404);
+  expect((await poll(outbox.replace('/plan/', '/other/'))).status).toBe(404);
+  const response = await poll();
+  expect(response.status).toBe(200);
+  const delivery = (await response.json()).delivery;
+  expect(delivery).toMatchObject({ id: next.body.item.localSubmission.id, answer: request.answer });
+  expect(
+    (await browser({ action: 'withdraw', id: initial.id, version: next.body.item.version })).status,
+  ).toBe(409);
+  expect((await poll(outbox + '/' + delivery.id)).status).toBe(200);
+  expect((await poll(outbox + '/' + delivery.id)).status).toBe(200);
+  expect(await (await poll()).json()).toEqual({ delivery: null });
+  expect((await browser()).body.items[0].localSubmission).toMatchObject({
+    state: 'delivered',
+    withdrawable: false,
+  });
+});
+
+test('a document revision changed after submission cancels the queued local answer', async () => {
+  const definition = '<ask key="notes" prompt="What else?"/>';
+  const f = await fixture(`<doc><p>Original</p>${definition}</doc>`);
+  const artifact = 'document/plan';
+  const file = path.join(f.alpha, '.anjian/artifacts', artifact, 'doc.xml');
+  const session = crypto.randomUUID();
+  const token = crypto.randomBytes(32).toString('hex');
+  const proof = crypto.createHash('sha256').update(token).digest('hex');
+  const dir = path.join(f.alpha, '.anjian/artifacts/.state/pi-comment-watch/questions', artifact);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, session + '.alive'), Date.now() + ' ' + proof);
+
+  const browser = (body?: object) =>
+    f.request(
+      `/api/${artifact}/feedback/questions`,
+      body
+        ? {
+            method: 'POST',
+            headers: { 'Origin': f.origin, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+        : undefined,
+    );
+  const listing = await (await browser()).json();
+  const answer = 'Remember this answer.';
+  expect(
+    (
+      await browser({
+        action: 'submit',
+        id: 'notes',
+        version: listing.items[0].version,
+        answer,
+        localRecipient: listing.localRecipients[0].id,
+        submissionKey: 'stale-source',
+      })
+    ).status,
+  ).toBe(200);
+  fs.writeFileSync(file, `<doc><p>Revised</p>${definition}</doc>`);
+  const endpoint = `/api/local/projects/${f.id(f.alpha)}/${artifact}/questions/${listing.localRecipients[0].id}`;
+  const poll = await f.request(endpoint, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(await poll.json()).toEqual({ delivery: null });
+  expect((await (await browser()).json()).items[0]).toMatchObject({ answer });
+  expect((await (await browser()).json()).items[0]).not.toHaveProperty('localSubmission');
+});
 
 test('document question drafts persist and only explicit submission reaches the connected Agent', async () => {
   const f = await ready(

@@ -23,11 +23,15 @@ import {
   requireFeedbackArtifact,
 } from './artifact';
 import { feedbackSelection } from './comments';
+import { localQuestionRecipients } from './local-question-recipients';
 import {
   questionItems,
+  replayLocalQuestion,
   replayQuestionSubmission,
   saveQuestionDraft,
+  submitLocalQuestion,
   submitQuestion,
+  withdrawLocalQuestion,
   withdrawQuestion,
 } from './questions';
 import { applyQuestionReply, applyResult } from './result';
@@ -61,6 +65,7 @@ interface Options {
   browserProject: (req: http.IncomingMessage, artifact: string) => BrowserProject | null;
   deviceAuthorized: (id: string, project: string) => boolean;
   home: string;
+  loopback?: boolean;
   mount: (dir: string) => Promise<MountedProject>;
   projects: () => Project[];
   resolveDocument: (dir: string, documentId: string) => string | undefined;
@@ -310,6 +315,9 @@ export function createFeedbackApi(options: Options) {
           if (req.method === 'GET') {
             return {
               items: items(currentView()),
+              ...(options.loopback
+                ? { localRecipients: localQuestionRecipients(target.dir, artifact) }
+                : {}),
               connections: visibleConnections.map((c) => ({
                 ...publicConnection(c),
                 authorized: options.deviceAuthorized(c.deviceId, target.id),
@@ -383,6 +391,9 @@ export function createFeedbackApi(options: Options) {
             if (item.task) {
               withdrawQuestion(taskOf(data, item.task.id), Date.now());
               await save();
+            } else if (item.localSubmission) {
+              withdrawLocalQuestion(data, artifact, address, item.localSubmission.id);
+              await save();
             }
             return { item: getItem() };
           }
@@ -406,6 +417,42 @@ export function createFeedbackApi(options: Options) {
           }
           if (body.action !== 'submit')
             return feedbackError('invalid_question_action', undefined, 400);
+          const prepareQuestion = async (checkTarget: () => void) => {
+            const admit = await prepare!();
+            checkTarget();
+            await mounted.settleDocument(id, undefined, (delta) => {
+              checkTarget();
+              admit(delta);
+            });
+            checkTarget();
+            const source = definitions();
+            const checkSource = checkDefinition(source);
+            const revision = readRemoteArtifact(target.dir, artifact).revision;
+            if (!revision) return feedbackError('artifact_not_found', undefined, 404);
+            checkWrite = () => {
+              checkTarget();
+              checkSource();
+            };
+            return { source, revision };
+          };
+          if (body.localRecipient !== undefined) {
+            if (!options.loopback || body.connectionId !== undefined)
+              return feedbackError('invalid_question_target', undefined, 400);
+            const recipient = text(body.localRecipient, 'localRecipient', 43);
+            const key = text(body.submissionKey, 'submissionKey');
+            const localTarget = { artifact, address, recipient };
+            if (replayLocalQuestion(data, localTarget, key, input)) return { item: getItem() };
+            const checkRecipient = () => {
+              checkQuestionIdentity();
+              if (!localQuestionRecipients(target.dir, artifact).some(({ id }) => id === recipient))
+                feedbackError('recipient_unavailable');
+            };
+            checkRecipient();
+            const { source, revision } = await prepareQuestion(checkRecipient);
+            submitLocalQuestion(data, localTarget, key, input, source, revision);
+            await save();
+            return { item: getItem() };
+          }
           const connection = connectionOf(data, text(body.connectionId, 'connectionId'));
           const checkDevice = () => {
             checkQuestionIdentity();
@@ -423,17 +470,7 @@ export function createFeedbackApi(options: Options) {
                 questionItems(data, artifact, [prior.questionContext.definition], address)[0],
             };
           if (!connection.enabled) return feedbackError('connection_unavailable');
-          const admit = await prepare!();
-          checkDevice();
-          await mounted.settleDocument(id, undefined, (delta) => {
-            checkDevice();
-            admit(delta);
-          });
-          checkDevice();
-          const source = definitions();
-          const checkSource = checkDefinition(source);
-          const revision = readRemoteArtifact(target.dir, artifact).revision;
-          if (!revision) return feedbackError('artifact_not_found', undefined, 404);
+          const { source, revision } = await prepareQuestion(checkDevice);
           submitQuestion(
             data,
             connection,
@@ -445,10 +482,6 @@ export function createFeedbackApi(options: Options) {
             Date.now(),
             address,
           );
-          checkWrite = () => {
-            checkDevice();
-            checkSource();
-          };
           await save();
           return { item: getItem() };
         }

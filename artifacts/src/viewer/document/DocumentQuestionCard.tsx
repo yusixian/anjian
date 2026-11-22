@@ -37,6 +37,8 @@ const styles = stylex.create({
   hint: { color: cssVar.colorTextSecondary, fontSize: 13 },
 });
 
+const localHostNames = { agy: 'Antigravity', codex: 'Codex', pi: 'Pi' };
+
 type AnswerMutation = Exclude<QuestionMutation, { action: 'decide' }>;
 
 export function DocumentQuestionCard({ definition }: { definition: DocumentQuestion }) {
@@ -74,11 +76,25 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
   const dirty = edit !== null;
   const conflict = dirty && item && edit.version !== item.version;
   const task = item?.task;
-  const locked = !!task && task.state !== 'cancelled';
-  const connections = store?.connections.filter((c) => c.enabled && c.authorized) ?? [];
-  const connectionId =
-    connections.find((c) => c.id === target)?.id ??
-    (connections.length === 1 ? (connections[0]?.id ?? '') : '');
+  const localSubmission = item?.localSubmission;
+  const locked = !!localSubmission || (!!task && task.state !== 'cancelled');
+  const destinations = [
+    ...(store?.localRecipients ?? []).map(({ host, id, label }) => ({
+      key: `local:${id}`,
+      name: t('question.localSession', { host: localHostNames[host], label }),
+      recipient: { localRecipient: id },
+    })),
+    ...(store?.connections ?? [])
+      .filter((c) => c.enabled && c.authorized)
+      .map((c) => ({
+        key: `lody:${c.id}`,
+        name: c.displayName,
+        recipient: { connectionId: c.id },
+      })),
+  ];
+  const destination =
+    destinations.find((item) => item.key === target) ??
+    (!target && destinations.length === 1 ? destinations[0] : undefined);
   const valid = definition.options
     ? definition.options.some((o) => o.id === value)
     : !!value.trim();
@@ -101,7 +117,13 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
     ) {
       return;
     }
-    setPick({ assetsRevision, choice, revision: currentRevision, version: item.version, viewVersion });
+    setPick({
+      assetsRevision,
+      choice,
+      revision: currentRevision,
+      version: item.version,
+      viewVersion,
+    });
     setNotice('');
   }
   async function decide() {
@@ -144,18 +166,26 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
     }
   }
   async function act(action: AnswerMutation['action']) {
-    if (!store || !item || busy || (conflict && action !== 'withdraw')) return;
+    if (
+      !store ||
+      !item ||
+      busy ||
+      (action === 'submit' && !destination) ||
+      (conflict && action !== 'withdraw')
+    )
+      return;
     setBusy(true);
     setNotice('');
     const request: AnswerMutation = { id: definition.id, version: item.version, action };
     if (action !== 'withdraw') request.answer = value;
-    if (action === 'submit') {
-      request.connectionId = connectionId;
+    if (action === 'submit' && destination) {
+      Object.assign(request, destination.recipient);
       const last = intent.current;
       request.submissionKey =
         last &&
         last.answer === value &&
-        last.connectionId === connectionId &&
+        last.connectionId === request.connectionId &&
+        last.localRecipient === request.localRecipient &&
         last.version === item.version
           ? last.submissionKey
           : nanoid();
@@ -168,9 +198,11 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
       setNotice(action === 'draft' ? 'question.saved' : '');
     } catch (error) {
       setNotice(
-        error instanceof FeedbackError && error.status === 409
-          ? 'question.changed'
-          : 'question.failed',
+        error instanceof FeedbackError && error.code === 'recipient_unavailable'
+          ? 'question.recipientUnavailable'
+          : error instanceof FeedbackError && error.status === 409
+            ? 'question.changed'
+            : 'question.failed',
       );
       await store.refresh();
     } finally {
@@ -216,8 +248,9 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
             {decision && (
               <div>
                 {t('question.approvalRecorded', {
-                  choice: decision.question.options?.find((option) => option.id === decision.choice)
-                    ?.label ?? decision.choice,
+                  choice:
+                    decision.question.options?.find((option) => option.id === decision.choice)
+                      ?.label ?? decision.choice,
                   reviewer:
                     decision.by.login ??
                     (decision.by.id === 'owner' ? t('question.approvalOwner') : decision.by.id),
@@ -266,6 +299,17 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
               <div>{previousAnswer ?? item?.answer}</div>
             </div>
           )}
+          {localSubmission && (
+            <div role="status">
+              <strong>
+                {t(
+                  localSubmission.state === 'delivered'
+                    ? 'question.localDelivered'
+                    : 'question.localQueued',
+                )}
+              </strong>
+            </div>
+          )}
           {task && (
             <div role="status">
               <strong>{t('feedback.states.' + task.state)}</strong>
@@ -300,17 +344,17 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
           )}
           {!locked && (
             <>
-              {connections.length > 1 && (
+              {(destinations.length > 1 || (destinations.length === 1 && !destination)) && (
                 <select
                   {...stylex.props(feedback.select)}
                   aria-label={t('question.target')}
-                  value={connectionId}
+                  value={destination?.key ?? ''}
                   onChange={(e) => setTarget(e.target.value)}
                 >
                   <option value="">{t('question.target')}</option>
-                  {connections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.displayName}
+                  {destinations.map(({ key, name }) => (
+                    <option key={key} value={key}>
+                      {name}
                     </option>
                   ))}
                 </select>
@@ -327,20 +371,20 @@ export function DocumentQuestionCard({ definition }: { definition: DocumentQuest
                 <button
                   type="button"
                   {...stylex.props(feedback.button, feedback.primary)}
-                  disabled={!item || !valid || busy || !!conflict || !connectionId}
+                  disabled={!item || !valid || busy || !!conflict || !destination}
                   onClick={() => void act('submit')}
                 >
                   {t('question.submit', {
-                    agent: connections.find((c) => c.id === connectionId)?.displayName ?? 'Agent',
+                    agent: destination?.name ?? 'Agent',
                   })}
                 </button>
               </div>
-              {item && !connections.length && (
+              {item && !destinations.length && (
                 <small {...stylex.props(styles.hint)}>{t('question.noAgent')}</small>
               )}
             </>
           )}
-          {task?.withdrawable && (
+          {(task?.withdrawable || localSubmission?.withdrawable) && (
             <div>
               <button
                 type="button"

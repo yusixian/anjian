@@ -73,12 +73,12 @@ export interface FeedbackQuestionContext {
 }
 
 export interface DesignDecision {
-  documentId: string;
-  revision: string;
-  question: DocumentQuestion;
-  choice: string;
-  by: { id: string; login?: string };
   at: number;
+  by: { id: string; login?: string };
+  choice: string;
+  documentId: string;
+  question: DocumentQuestion;
+  revision: string;
 }
 
 export interface DesignApproval {
@@ -89,10 +89,11 @@ export interface DesignApproval {
 }
 
 export interface FeedbackQuestionInput {
-  approval?: DesignApproval;
   answer?: string;
+  approval?: DesignApproval;
   definition: DocumentQuestion;
   id: string;
+  localSubmission?: { id: string; state: 'queued' | 'delivered'; withdrawable: boolean };
   previousDefinition?: DocumentQuestion;
   task?: {
     id: string;

@@ -2,7 +2,9 @@
 
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
+const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
@@ -548,4 +550,78 @@ test('HTML selection sends use the subscribed Codex session, retry, and acknowle
     assert.ok(!message.includes(previewText));
   }
   assert.ok(ignored.every(({ marker }) => !fs.existsSync(marker)));
+});
+
+test('local document answers wake the chosen Codex session and retry only a failed acknowledgment', async (t) => {
+  const f = fixture(t);
+  const artifactRoot = path.join(f.project, '.anjian/artifacts');
+  const state = path.join(artifactRoot, '.state');
+  fs.mkdirSync(state, { recursive: true });
+  const projectId = 'a'.repeat(32);
+  const target = createHash('sha256')
+    .update(JSON.stringify(['codex', id]))
+    .digest('base64url');
+  const targetPath = `/api/local/projects/${projectId}/document/plan/questions/${target}`;
+  const deliveryId = randomUUID();
+  const delivery = {
+    id: deliveryId,
+    artifact: 'document/plan',
+    revision: 'sha256:' + 'a'.repeat(64),
+    definition: { id: 'direction', prompt: 'Which direction?' },
+    answer: 'Keep the summary concise.',
+  };
+  let acknowledgments = 0;
+  let pollsBeforeAcknowledgment = 0;
+  let authMatches = false;
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === targetPath + '/' + deliveryId) {
+      acknowledgments++;
+      if (acknowledgments === 1) res.statusCode = 503;
+      res.end('{}');
+      return;
+    }
+    if (req.url === targetPath) {
+      if (acknowledgments < 2) pollsBeforeAcknowledgment++;
+      const heartbeat = path.join(
+        state,
+        'codex-comment-watch/questions/document/plan',
+        id + '.alive',
+      );
+      const token = req.headers.authorization?.replace(/^Bearer /, '') ?? '';
+      authMatches = fs
+        .readFileSync(heartbeat, 'utf8')
+        .endsWith(' ' + createHash('sha256').update(token).digest('hex'));
+      res.end(JSON.stringify({ delivery: acknowledgments < 2 ? delivery : null }));
+      return;
+    }
+    res.end(JSON.stringify({ delivery: null }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  fs.writeFileSync(
+    path.join(state, 'server-info'),
+    JSON.stringify({
+      root: artifactRoot,
+      localQuestionProject: projectId,
+      localUrl: `http://127.0.0.1:${server.address().port}/`,
+    }),
+  );
+  f.open('document/plan', id);
+  f.open('document/plan', inherited);
+  f.start({}, false);
+  f.start({ session_id: inherited }, false);
+  await until(() => acknowledgments === 2, 'expected acknowledgment retry');
+  assert.ok(authMatches);
+  assert.equal(pollsBeforeAcknowledgment, 1, 'retry the receipt before fetching another offer');
+  const queue = f.read();
+  assert.equal(queue.length, 1);
+  assert.equal(queue[0][queue[0].indexOf('--thread') + 1], id);
+  const message = queue[0][queue[0].indexOf('--message') + 1];
+  assert.match(message, /question "direction" in document\/plan/);
+  assert.match(message, /Keep the summary concise/);
+  assert.match(message, /Document revision: sha256:/);
 });

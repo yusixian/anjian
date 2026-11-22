@@ -6,6 +6,7 @@ import { type DocumentQuestion, validateDocumentQuestion } from '../../shared/do
 import {
   type DesignDecision,
   type FeedbackConnection,
+  type FeedbackQuestionContext,
   type FeedbackTask,
   MAX_QUESTION_ANSWER_LENGTH,
 } from '../../shared/feedback';
@@ -15,6 +16,7 @@ import { RemoteTransferError } from '../remote-transfer';
 export interface FeedbackData {
   connections: FeedbackConnection[];
   decisions?: DesignDecision[];
+  localQuestions?: LocalQuestionSubmission[];
   questionDrafts?: QuestionDraft[];
   tasks: FeedbackTask[];
   version: 1;
@@ -26,6 +28,19 @@ export interface QuestionDraft {
   definition: DocumentQuestion;
   version: string;
 }
+export interface LocalQuestionSubmission {
+  artifact: string;
+  artifactAddress: string;
+  id: string;
+  input: FeedbackQuestionContext;
+  offer?: { until: number; proof: string };
+  recipient: string;
+  revision: string;
+  state: 'queued' | 'delivered' | 'cancelled';
+  submissionHash: string;
+  submissionKey: string;
+}
+
 export const feedbackError = (code: string, message = code, status = 409): never => {
   throw new RemoteTransferError(status, code, message);
 };
@@ -123,6 +138,51 @@ function validQuestionDrafts(drafts: QuestionDraft[] | undefined): boolean {
   return true;
 }
 
+function validLocalQuestions(rows: LocalQuestionSubmission[] | undefined): boolean {
+  if (rows === undefined) return true;
+  if (!Array.isArray(rows)) return false;
+  const ids = new Set<string>();
+  const keys = new Set<string>();
+  const active = new Set<string>();
+  for (const row of rows) {
+    if (
+      !row ||
+      !isDocument(row.artifact) ||
+      typeof row.artifactAddress !== 'string' ||
+      !isArtifactAddress(row.artifactAddress) ||
+      (row.offer !== undefined &&
+        (!row.offer ||
+          !Number.isSafeInteger(row.offer.until) ||
+          !/^[a-f0-9]{64}$/.test(row.offer.proof))) ||
+      typeof row.id !== 'string' ||
+      !row.id ||
+      ids.has(row.id) ||
+      !row.input ||
+      !validDefinition(row.input.definition) ||
+      row.input.definition.approve !== undefined ||
+      !validAnswer(row.input.answer, row.input.definition) ||
+      typeof row.recipient !== 'string' ||
+      !/^[\w-]{43}$/.test(row.recipient) ||
+      typeof row.revision !== 'string' ||
+      !/^sha256:[a-f0-9]{64}$/.test(row.revision) ||
+      (row.state !== 'queued' && row.state !== 'delivered' && row.state !== 'cancelled') ||
+      typeof row.submissionHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(row.submissionHash) ||
+      typeof row.submissionKey !== 'string' ||
+      !row.submissionKey ||
+      keys.has(row.submissionKey)
+    )
+      return false;
+    ids.add(row.id);
+    keys.add(row.submissionKey);
+    if (row.state === 'cancelled') continue;
+    const question = JSON.stringify([row.artifactAddress, row.input.definition.id]);
+    if (active.has(question)) return false;
+    active.add(question);
+  }
+  return true;
+}
+
 function validQuestionTask(task: FeedbackTask): boolean {
   const { questionId, questionContext, questionResult } = task;
   if (questionId === undefined)
@@ -159,6 +219,7 @@ function validate(value: unknown): asserts value is FeedbackData {
     !Array.isArray(data.connections) ||
     !Array.isArray(data.tasks) ||
     !validQuestionDrafts(data.questionDrafts) ||
+    !validLocalQuestions(data.localQuestions) ||
     !validDecisions(data.decisions) ||
     !data.connections.every(
       (c) =>
