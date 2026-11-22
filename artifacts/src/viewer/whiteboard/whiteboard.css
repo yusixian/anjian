@@ -259,6 +259,8 @@
     grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
   }
   .anjian-whiteboard-comments {
+    container-type: size;
+    --anjian-comment-history-size: min(16rem, 24dvh, max(5rem, calc(100cqh - 9rem)));
     border-inline-start: 0;
     border-top: 1px solid var(--lobe-color-border-secondary);
   }

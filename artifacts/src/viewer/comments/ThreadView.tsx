@@ -43,7 +43,7 @@ const styles = stylex.create({
   },
   body: { paddingBlock: 10, paddingInline: 14 },
   history: {
-    maxBlockSize: 'min(16rem, 24dvh)',
+    maxBlockSize: 'var(--anjian-comment-history-size, min(16rem, 24dvh))',
     overflowY: 'auto',
     overscrollBehaviorY: 'contain',
   },
