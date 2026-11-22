@@ -147,13 +147,13 @@ export function createServerContext(options: ServerOptions) {
   const keyOk = (key: string | null) => loopback || (key !== null && safeEqual(key, token));
   const agentOk = (req: http.IncomingMessage, key: string | null) =>
     loopback ? req.headers.origin === undefined : key !== null && safeEqual(key, token);
-  const runtimeWarnings = new Map<string, string[]>();
+  const runtimeWarnings = new Map<string, { messages: string[]; initialSignature?: string }>();
   const ranVersions = new Map<string, number>();
   const dynamicBlocks = createDynamicBlocks({ maxErrors: MAX_RUNTIME_WARNINGS });
   const runtimeOf = (ref: ArtifactRef, dir: string) =>
     ref.type === 'document'
       ? [...documents.warnings(ref.id), ...dynamicBlocks.state(ref.id, dir).warnings]
-      : (runtimeWarnings.get(`${ref.type}/${ref.id}`) ?? []);
+      : (runtimeWarnings.get(`${ref.type}/${ref.id}`)?.messages ?? []);
   const contentPrefix = `/c/${contentToken}/`;
 
   const clients = new Set<Duplex>();
@@ -366,12 +366,12 @@ export function createServerContext(options: ServerOptions) {
     if (type === 'html') {
       const html = readHtml(stagedDir, id);
       const key = `${type}/${id}`;
-      const runtime = [...(runtimeWarnings.get(key) ?? [])];
+      const runtime = [...(runtimeWarnings.get(key)?.messages ?? [])];
       const ran = ranVersions.get(key);
       payload = { ...html, warnings: [...html.warnings, ...runtime.map((message) => `runtime: ${message}`)] };
       extra = { ran: ran === html.version };
       validateRuntime = () => {
-        if (JSON.stringify(runtimeWarnings.get(key) ?? []) !== JSON.stringify(runtime) || ranVersions.get(key) !== ran)
+        if (JSON.stringify(runtimeWarnings.get(key)?.messages ?? []) !== JSON.stringify(runtime) || ranVersions.get(key) !== ran)
           throw new Error('HTML runtime state changed during upload');
       };
     } else if (type === 'slides' || type === 'storyboard') {

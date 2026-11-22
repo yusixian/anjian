@@ -33,6 +33,7 @@ async function start(
     runtime?: string;
     fetch?: typeof fetch;
     host?: string;
+    debounceMs?: number;
   } = {},
 ) {
   const temp = tempRoot();
@@ -46,6 +47,7 @@ async function start(
     host: overrides.host ?? '0.0.0.0',
     urlHost: 'localhost',
     fetch: overrides.fetch,
+    debounceMs: overrides.debounceMs,
   });
   running.push(server);
   return { server, root, viewer };
@@ -1005,9 +1007,9 @@ describe('html runtime', () => {
   });
 
   test('a runtime error from the viewer becomes a warning for that artifact', async () => {
-    const { server, root } = await start();
-    writeHtml(root, 'tuner', { 'index.html': '<p>x</p>' });
+    const { server, root } = await start({ debounceMs: 500 });
     const ws = await openWs(server.port, { Cookie: cookie(server), Origin: origin(server) });
+    writeHtml(root, 'tuner', { 'index.html': '<p>x</p>' });
     sendWsText(
       ws.socket!,
       runtimeError('html/tuner', 'ReferenceError: slider is not defined (index.html:12)'),
@@ -1017,6 +1019,9 @@ describe('html runtime', () => {
       () =>
         fs.existsSync(file) &&
         readJson(file).warnings.some((w: string) => w.includes('slider is not defined')),
+    );
+    await waitFor(() =>
+      ws.messages.some((message) => message.includes('"html/tuner"') && message.includes('index.html')),
     );
     const payload = await api(server, '/api/artifacts/html/tuner');
     expect(payload.warnings.some((w: string) => w.startsWith('runtime: ReferenceError'))).toBe(
