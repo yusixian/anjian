@@ -3,8 +3,8 @@ import * as stylex from '@stylexjs/stylex';
 import { lazy, type ReactNode, Suspense, useEffect } from 'react';
 import { useLocation } from 'wouter';
 
-import { t } from './i18n';
 import { useBrowserSession } from './hooks/useBrowserSession';
+import { t } from './i18n';
 import { startEmbedChild } from './lib/embed-bridge';
 import { canonicalPath, parseRoute } from './lib/route';
 
@@ -23,6 +23,9 @@ const DocumentLayout = lazy(() =>
 );
 const HtmlLayout = lazy(() =>
   import('./layouts/HtmlLayout').then(({ HtmlLayout }) => ({ default: HtmlLayout })),
+);
+const WhiteboardLayout = lazy(() =>
+  import('./whiteboard/WhiteboardLayout').then(({ WhiteboardLayout }) => ({ default: WhiteboardLayout })),
 );
 const PreviewLayout = lazy(() =>
   import('./layouts/PreviewLayout').then(({ PreviewLayout }) => ({ default: PreviewLayout })),
@@ -76,6 +79,7 @@ function RouteView() {
   if (route.kind === 'embed') return <Embedded id={id} type={route.type} />;
   if (route.type === 'html') return local(<HtmlLayout id={id} />);
   if (route.type === 'document') return local(<DocumentLayout id={id} />);
+  if (route.type === 'whiteboard') return local(<WhiteboardLayout id={id} />);
   return local(<ArtboardLayout id={id} />);
 }
 

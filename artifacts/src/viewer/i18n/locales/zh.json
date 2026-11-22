@@ -818,7 +818,8 @@
     "all": "全部",
     "artboard": "画板",
     "document": "文档",
-    "html": "HTML"
+    "html": "HTML",
+    "whiteboard": "白板"
   },
   "verdict": {
     "passed": "已通过",
@@ -845,5 +846,26 @@
     "speed": "倍速",
     "loop": "循环",
     "expand": "放大"
+  },
+  "whiteboard": {
+    "anchorMissing": "这条批注指向的元素已不在白板上。",
+    "canvas": "白板画布",
+    "commentFailed": "批注未能保存，请重试。",
+    "commentsWarning": "无法读取批注，请检查项目中的批注文件。",
+    "conflict": "白板有更新版本。你的未保存改动仍在当前画布上。",
+    "create": "新建白板",
+    "createFailed": "未能创建白板。",
+    "discardConfirm": "放弃未保存的改动，加载白板的最新版本吗？",
+    "loadFailed": "无法加载白板。",
+    "locate_other": "定位 {{count}} 个元素",
+    "noComments": "还没有批注。",
+    "reload": "加载最新版本",
+    "reply": "回复",
+    "save": "保存",
+    "saveFailed": "改动未能保存，请重试。",
+    "saved": "已保存",
+    "selected_other": "批注 {{count}} 个元素",
+    "selectToComment": "选中元素后添加批注",
+    "unsaved": "未保存"
   }
 }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { CanvasPayload } from '../shared/types';
 import type { ArtifactRef } from './artifacts';
 import { parseDocument } from './document-codec';
+import { readWhiteboardScene } from './whiteboard';
 
 export function previewPayload(
   ref: ArtifactRef,
@@ -20,5 +21,9 @@ export function previewPayload(
       title,
       state: parseDocument(fs.readFileSync(path.join(dir, 'doc.xml'), 'utf8')),
     };
+  if (ref.type === 'whiteboard') {
+    const { scene, revision } = readWhiteboardScene(dir);
+    return { scene, revision };
+  }
   return { title };
 }

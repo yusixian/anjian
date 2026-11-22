@@ -3,6 +3,7 @@ import type { SerializedEditorState } from 'lexical';
 import { lazy, Suspense, useEffect, useState } from 'react';
 
 import type { ArtifactType, CanvasPayload } from '../../shared/types';
+import type { WhiteboardScene } from '../../shared/whiteboard';
 import { CanvasErrorBoundary } from '../components/CanvasErrorBoundary';
 import { useTranslation } from '../i18n';
 import { culledBoards } from '../lib/cull';
@@ -15,12 +16,19 @@ const DocumentPreview = lazy(() =>
 const CanvasPreview = lazy(() =>
   import('../components/Canvas').then(({ Canvas }) => ({ default: Canvas })),
 );
+const WhiteboardPreview = lazy(() =>
+  import('../document/shims')
+    .then(() => import('../whiteboard/WhiteboardCanvas'))
+    .then(({ WhiteboardCanvas }) => ({ default: WhiteboardCanvas })),
+);
 const noRef = () => () => {};
 const noLoad = () => {};
 const none = new Set<string>();
 
 export interface PreviewPayload extends Partial<CanvasPayload> {
   contentBase: string;
+  revision?: string;
+  scene?: WhiteboardScene;
   state?: SerializedEditorState;
   title: string;
 }
@@ -69,6 +77,17 @@ export function PreviewView({
     ) : (
       message(t('preview.waitingDocument'))
     );
+  }
+  if (type === 'whiteboard') {
+    return data.scene ? (
+      <div {...stylex.props(styles.canvas)}>
+        <CanvasErrorBoundary resetKey={data.scene}>
+          <Suspense fallback={message(t('preview.loading'))}>
+            <WhiteboardPreview key={data.revision} readOnly scene={data.scene} />
+          </Suspense>
+        </CanvasErrorBoundary>
+      </div>
+    ) : message(t('preview.unavailable'));
   }
   const canvas = data.canvas;
   const page = canvas?.activePage ?? canvas?.pages[0]?.id;

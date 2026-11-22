@@ -120,6 +120,38 @@ test('artboard/document data projection omits private state and rejects unknown 
   }
 });
 
+test('whiteboard creation is project-scoped and public shares expose only a read-only scene', async () => {
+  const { project, root, req, owner, action } = await setup();
+  const create = (target: string, headers: Record<string, string>) => req('/api/hub/whiteboards', {
+    method: 'POST', headers, body: JSON.stringify({ project: target, title: 'Onboarding' }),
+  });
+  expect((await create(project, { ...owner, Origin: 'https://unrelated.example' })).status).toBe(403);
+  expect((await create(temp(), owner)).status).toBe(404);
+  const response = await create(project, owner);
+  expect(response.status).toBe(201);
+  const { id, url } = await response.json();
+  expect(url).toMatch(/^\/whiteboard\/[a-z\d]{21}$/i);
+  const list = await (await req('/api/hub/artifacts', { headers: owner })).json();
+  expect(list.artifacts).toContainEqual(expect.objectContaining({ id, url, type: 'whiteboard', title: 'Onboarding' }));
+  const dir = path.join(root, 'whiteboard', id);
+  const source = path.join(dir, 'scene.excalidraw');
+  fs.writeFileSync(source, JSON.stringify({
+    type: 'excalidraw', version: 2, appState: { name: 'Onboarding', collaborators: 'private' },
+    elements: [{ id: 'box', type: 'rectangle' }, { id: 'discarded', type: 'ellipse', isDeleted: true }],
+  }));
+  fs.writeFileSync(path.join(dir, 'comments.json'), 'PRIVATE WHITEBOARD COMMENTS');
+  const published = await action('publish', { type: 'whiteboard', id });
+  expect(published.status).toBe(200);
+  const link = new URL((await published.json()).share.url).pathname;
+  fs.writeFileSync(source, JSON.stringify({ type: 'excalidraw', version: 2, elements: [] }));
+  const publicData = await (await req(`${link}/data`)).json();
+  expect(publicData.scene.elements).toEqual([{ id: 'box', type: 'rectangle' }]);
+  expect(JSON.stringify(publicData)).not.toContain('private');
+  expect(JSON.stringify(publicData)).not.toContain('PRIVATE WHITEBOARD COMMENTS');
+  expect((await req(`${link}/data`, { method: 'POST' })).status).toBe(405);
+  expect((await req(`${new URL(publicData.contentBase).pathname}scene.excalidraw`, {}, true)).status).toBe(404);
+});
+
 test('private capability paths preserve relative resources without reopening legacy content access', async () => {
   const { req, owner, root, h, project } = await setup();
   const response = await req('/api/artifacts/html/demo', { headers: owner });

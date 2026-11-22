@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import type { ArtifactType } from '../shared/types';
+import { MAX_WHITEBOARD_SCENE_BYTES, parseWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
 import { CliError, projectPaths } from './paths';
 import { remoteGuide } from './skills';
 
@@ -29,7 +31,13 @@ export interface RemoteArtifact {
   url?: string;
 }
 const EMPTY = (): RemoteConfig => ({ servers: {}, bindings: {} });
-const KEY = /^(?:document|artboard|html)\/[a-z0-9][a-z0-9-]*$/;
+const KEY = /^(?:document|artboard|html|whiteboard)\/[a-z0-9][a-z0-9-]*$/;
+const PRIMARY_FILES: Record<ArtifactType, string> = {
+  artboard: 'canvas.json',
+  document: 'doc.xml',
+  html: 'index.html',
+  whiteboard: WHITEBOARD_SCENE_FILE,
+};
 const MAX_FILES = 1000;
 const MAX_BYTES = 32 * 1024 * 1024;
 // eslint-disable-next-line no-control-regex -- Remote filenames must reject C0 controls and DEL as well as path separators.
@@ -275,10 +283,10 @@ export async function authenticatedRequest(
 }
 export function artifactRoute(binding: RemoteBinding, artifact: string) {
   if (!KEY.test(artifact))
-    throw new CliError('--artifact must be document/<id>, artboard/<id> or html/<id>');
+    throw new CliError('--artifact must be document/<id>, artboard/<id>, html/<id> or whiteboard/<id>');
   return `/api/remote/projects/${encodeURIComponent(binding.projectId)}/artifacts/${artifact}`;
 }
-function validName(name: string, type: string): boolean {
+function validName(name: string, type: ArtifactType): boolean {
   const parts = name.split('/');
   if (
     !parts.every(
@@ -295,6 +303,7 @@ function validName(name: string, type: string): boolean {
       name === 'canvas.json' ||
       ((parts[0] === 'pages' || parts[0] === 'assets') && parts.length >= 2)
     );
+  if (type === 'whiteboard') return name === PRIMARY_FILES.whiteboard;
   return name === 'index.html' || parts.length >= 1;
 }
 function artifactDir(projectDir: string, artifact: string) {
@@ -313,10 +322,15 @@ function checkDirectory(root: string, candidate: string) {
       throw new CliError('Refusing symlink in artifact path');
   }
 }
-export function validateFiles(artifact: string, files: Record<string, string>) {
+export function validateFiles(
+  artifact: string,
+  files: Record<string, string>,
+  { validateWhiteboard = true } = {},
+) {
   if (!KEY.test(artifact) || !files || typeof files !== 'object' || Array.isArray(files))
     throw new CliError('Invalid artifact manifest');
-  const type = artifact.split('/')[0]!;
+  const type = artifact.split('/')[0] as ArtifactType;
+  const maxBytes = type === 'whiteboard' ? MAX_WHITEBOARD_SCENE_BYTES : MAX_BYTES;
   const entries = Object.entries(files);
   if (entries.length > MAX_FILES) throw new CliError('Artifact contains too many files');
   let bytes = 0;
@@ -331,12 +345,21 @@ export function validateFiles(artifact: string, files: Record<string, string>) {
       throw new CliError(`Invalid artifact file: ${name}`);
     names.add(name.toLowerCase());
     bytes += Buffer.byteLength(encoded, 'base64');
-    if (bytes > MAX_BYTES) throw new CliError('Artifact exceeds the 32 MiB transfer limit');
+    if (bytes > maxBytes)
+      throw new CliError(`Artifact exceeds the ${maxBytes / (1024 * 1024)} MiB transfer limit`);
   }
-  const required =
-    type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
+  const required = PRIMARY_FILES[type];
   if (entries.length && !Object.hasOwn(files, required))
     throw new CliError(`Artifact needs ${required}`);
+  if (type === 'whiteboard' && entries.length && validateWhiteboard) {
+    let scene: unknown;
+    try {
+      scene = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(files[required]!, 'base64')));
+    } catch {
+      throw new CliError(`${required} must be valid UTF-8 JSON`);
+    }
+    if (!parseWhiteboardScene(scene)) throw new CliError(`${required} is not a valid Excalidraw scene`);
+  }
 }
 export function localFiles(projectDir: string, artifact: string): Record<string, string> {
   const dir = artifactDir(projectDir, artifact);
@@ -344,31 +367,36 @@ export function localFiles(projectDir: string, artifact: string): Record<string,
   if (!fs.existsSync(dir)) return {};
   if (!fs.statSync(dir).isDirectory()) throw new CliError('Artifact path is not a directory');
   const files: Record<string, string> = Object.create(null);
+  const type = artifact.split('/')[0] as ArtifactType;
   let count = 0,
     bytes = 0;
   const visit = (relative: string) => {
     const absolute = path.join(dir, relative);
     for (const entry of fs.readdirSync(absolute, { withFileTypes: true })) {
       const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory() && ['assets', 'pages'].includes(name)) {
+      if (type !== 'whiteboard' && entry.isDirectory() && ['assets', 'pages'].includes(name)) {
         visit(name);
         continue;
       }
-      if (!validName(name, artifact.split('/')[0]!)) continue;
+      if (!validName(name, type)) continue;
       if (entry.isSymbolicLink()) throw new CliError(`Refusing symlink: ${name}`);
       if (entry.isDirectory()) {
         visit(name);
         continue;
       }
       if (!entry.isFile()) throw new CliError(`Refusing non-file: ${name}`);
-      const data = fs.readFileSync(path.join(dir, name));
+      const file = path.join(dir, name);
+      if (type === 'whiteboard' && fs.statSync(file).size > MAX_WHITEBOARD_SCENE_BYTES)
+        throw new CliError('Whiteboard scene exceeds the allowed transfer size');
+      const data = fs.readFileSync(file);
       if (++count > MAX_FILES || (bytes += data.length) > MAX_BYTES)
         throw new CliError('Artifact exceeds transfer limit');
       files[name] = data.toString('base64');
     }
   };
   visit('');
-  validateFiles(artifact, files);
+  // Keep malformed local scenes readable so an explicit pull backup can preserve them.
+  validateFiles(artifact, files, { validateWhiteboard: false });
   return files;
 }
 export function filesHash(files: Record<string, string>): string {

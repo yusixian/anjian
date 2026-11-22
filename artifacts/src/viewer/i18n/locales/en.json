@@ -835,7 +835,8 @@
     "all": "All",
     "artboard": "Artboard",
     "document": "Document",
-    "html": "HTML"
+    "html": "HTML",
+    "whiteboard": "Whiteboard"
   },
   "verdict": {
     "passed": "Passed",
@@ -863,5 +864,28 @@
     "speed": "Speed",
     "loop": "Loop",
     "expand": "Expand"
+  },
+  "whiteboard": {
+    "anchorMissing": "The commented elements are no longer on this whiteboard.",
+    "canvas": "Whiteboard canvas",
+    "commentFailed": "The comment could not be saved. Try again.",
+    "commentsWarning": "Comments could not be read. Check the project's comments file.",
+    "conflict": "A newer version is available. Your unsaved changes are still here.",
+    "create": "New whiteboard",
+    "createFailed": "Could not create the whiteboard.",
+    "discardConfirm": "Discard your unsaved changes and load the latest whiteboard?",
+    "loadFailed": "The whiteboard could not be loaded.",
+    "locate_one": "Locate {{count}} element",
+    "locate_other": "Locate {{count}} elements",
+    "noComments": "No comments yet.",
+    "reload": "Reload latest version",
+    "reply": "Reply",
+    "save": "Save",
+    "saveFailed": "Changes could not be saved. Try again.",
+    "saved": "Saved",
+    "selected_one": "Comment on {{count}} element",
+    "selected_other": "Comment on {{count}} elements",
+    "selectToComment": "Select elements to comment",
+    "unsaved": "Unsaved changes"
   }
 }

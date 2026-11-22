@@ -78,6 +78,6 @@ export function projectPaths(dir: string): ProjectPaths {
 // The skill runs the CLI through its launcher, so `anjian` is not on its PATH.
 export const invocation = () => process.env.ANJIAN_ARTIFACTS_COMMAND || 'anjian';
 
-export const ARTIFACT_PATTERN = /^(artboard|document|html)\/[a-z0-9][a-z0-9-]*$/;
+export const ARTIFACT_PATTERN = /^(artboard|document|html|whiteboard)\/[a-z0-9][a-z0-9-]*$/;
 export const ARTIFACT_ERROR =
-  '--artifact must be <type>/<id>: type artboard, document or html, id of lowercase letters, digits and hyphens';
+  '--artifact must be <type>/<id>: type artboard, document, html or whiteboard, id of lowercase letters, digits and hyphens';

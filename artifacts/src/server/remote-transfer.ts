@@ -3,10 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { mintArtifactId } from '../shared/ids';
+import type { ArtifactType } from '../shared/types';
 import { structuralWarnings } from '../shared/validate';
+import { MAX_WHITEBOARD_SCENE_BYTES, parseWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
 import { parseDocument } from './document-codec';
 
-const ARTIFACT = /^(document|artboard|html)\/([a-z0-9][a-z0-9-]*)$/;
+const ARTIFACT = /^(document|artboard|html|whiteboard)\/([a-z0-9][a-z0-9-]*)$/;
+const PRIMARY_FILES = {
+  artboard: 'canvas.json',
+  document: 'doc.xml',
+  html: 'index.html',
+  whiteboard: WHITEBOARD_SCENE_FILE,
+} as const;
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_FILES = 1_000;
 const MAX_PATH_BYTES = 512;
@@ -41,8 +49,8 @@ const unsafe = (message: string) => new RemoteTransferError(409, 'unsafe_artifac
 
 function artifactParts(artifact: string) {
   const match = ARTIFACT.exec(artifact);
-  if (!match) throw invalid('artifact must be document/<id>, artboard/<id> or html/<id>');
-  return { type: match[1] as 'document' | 'artboard' | 'html', id: match[2]! };
+  if (!match) throw invalid('artifact must be document/<id>, artboard/<id>, html/<id> or whiteboard/<id>');
+  return { type: match[1] as ArtifactType, id: match[2]! };
 }
 
 function validRelative(file: string) {
@@ -66,13 +74,14 @@ function validRelative(file: string) {
   );
 }
 
-function managed(type: 'document' | 'artboard' | 'html', file: string) {
+function managed(type: ArtifactType, file: string) {
   if (!validRelative(file)) return false;
   const lower = file.toLowerCase();
   if (lower === 'comments.json') return false;
   if (type === 'document') return file === 'doc.xml' || file.startsWith('assets/');
   if (type === 'artboard')
     return file === 'canvas.json' || file.startsWith('pages/') || file.startsWith('assets/');
+  if (type === 'whiteboard') return file === PRIMARY_FILES.whiteboard;
   return true;
 }
 
@@ -111,8 +120,9 @@ function assertTreeSafe(dir: string, depth = 0) {
   }
 }
 
-function collect(dir: string, type: 'document' | 'artboard' | 'html') {
+function collect(dir: string, type: ArtifactType) {
   const files = new Map<string, Buffer>();
+  const maxBytes = type === 'whiteboard' ? MAX_WHITEBOARD_SCENE_BYTES : MAX_BYTES;
   let total = 0;
   let entries = 0;
   const folded = new Set<string>();
@@ -134,10 +144,10 @@ function collect(dir: string, type: 'document' | 'artboard' | 'html') {
       folded.add(lower);
       const file = path.join(current, entry.name);
       const stat = fs.statSync(file);
-      if (stat.size > MAX_BYTES - total) throw tooLarge('artifact exceeds 32 MiB');
+      if (stat.size > maxBytes - total) throw tooLarge(`artifact exceeds ${maxBytes / (1024 * 1024)} MiB`);
       const data = fs.readFileSync(file);
       total += data.length;
-      if (total > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB');
+      if (total > maxBytes) throw tooLarge(`artifact exceeds ${maxBytes / (1024 * 1024)} MiB`);
       files.set(relative, data);
     }
   };
@@ -175,18 +185,18 @@ export function readRemoteArtifact(projectDir: string, artifact: string): Remote
   const files = collect(dir, type);
   // Mounting can create metadata before the first source file is uploaded.
   if (files.size === 0) return { revision: null, files: {} };
-  const primary =
-    type === 'document' ? 'doc.xml' : type === 'artboard' ? 'canvas.json' : 'index.html';
+  const primary = PRIMARY_FILES[type];
   if (!files.has(primary)) throw unsafe(`artifact is missing ${primary}`);
   return snapshot(files, digest(files));
 }
 
-function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknown) {
+function decodeManifest(type: ArtifactType, incoming: unknown) {
   if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming))
     throw invalid('files must be a path-to-base64 object');
   const entries = Object.entries(incoming as Record<string, unknown>);
   if (entries.length > MAX_FILES) throw tooLarge('artifact has too many source files');
   const folded = new Set<string>();
+  const maxBytes = type === 'whiteboard' ? MAX_WHITEBOARD_SCENE_BYTES : MAX_BYTES;
   let total = 0;
   const files = new Map<string, Buffer>();
   for (const [name, value] of entries) {
@@ -197,17 +207,17 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
     if (typeof value !== 'string') throw invalid(`invalid base64 content: ${name}`);
     const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
     const estimatedBytes = Math.floor(value.length / 4) * 3 - padding;
-    if (estimatedBytes > MAX_BYTES - total || value.length > Math.ceil(MAX_BYTES / 3) * 4)
-      throw tooLarge('artifact exceeds 32 MiB');
+    if (estimatedBytes > maxBytes - total || value.length > Math.ceil(maxBytes / 3) * 4)
+      throw tooLarge(`artifact exceeds ${maxBytes / (1024 * 1024)} MiB`);
     if (value.length % 4 !== 0 || !/^[A-Z0-9+/]*$/i.test(value.slice(0, -padding || undefined)))
       throw invalid(`invalid base64 content: ${name}`);
     const data = Buffer.from(value, 'base64');
     if (data.toString('base64') !== value) throw invalid(`noncanonical base64 content: ${name}`);
     total += data.length;
-    if (total > MAX_BYTES) throw tooLarge('artifact exceeds 32 MiB');
+    if (total > maxBytes) throw tooLarge(`artifact exceeds ${maxBytes / (1024 * 1024)} MiB`);
     files.set(name, data);
   }
-  const required = { document: 'doc.xml', artboard: 'canvas.json', html: 'index.html' }[type];
+  const required = PRIMARY_FILES[type];
   if (!files.has(required)) throw invalid(`${required} is required`);
   let primary: string;
   try {
@@ -239,6 +249,15 @@ function decodeManifest(type: 'document' | 'artboard' | 'html', incoming: unknow
     }
   }
   if (type === 'html' && !primary.trim()) throw invalid('index.html must not be empty');
+  if (type === 'whiteboard') {
+    let scene: unknown;
+    try {
+      scene = JSON.parse(primary);
+    } catch {
+      throw invalid(`${required} is not valid JSON`);
+    }
+    if (!parseWhiteboardScene(scene)) throw invalid(`${required} is not a valid Excalidraw scene`);
+  }
   return files;
 }
 
@@ -273,7 +292,7 @@ function copyPreservingState(source: string, target: string) {
   fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: true });
 }
 
-function removeManaged(dir: string, type: 'document' | 'artboard' | 'html', prefix = '') {
+function removeManaged(dir: string, type: ArtifactType, prefix = '') {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
     const file = path.join(dir, entry.name);

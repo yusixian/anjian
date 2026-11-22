@@ -72,6 +72,44 @@ describe('remote artifact transfer', () => {
     })).toThrowError(expect.objectContaining({ status: 400 }));
   });
 
+  test('transfers only the whiteboard scene and preserves feedback across revision-checked updates', () => {
+    const root = project();
+    const artifact = 'whiteboard/diagram';
+    const scene = (color: string) => ({
+      'scene.excalidraw': encode(JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: color },
+      })),
+    });
+    expect(readRemoteArtifact(root, artifact)).toEqual({ revision: null, files: {} });
+    const first = write(root, artifact, null, scene('#ffffff'));
+    const dir = path.join(root, '.anjian/artifacts', artifact);
+    fs.writeFileSync(path.join(dir, 'comments.json'), 'human feedback');
+    fs.writeFileSync(path.join(dir, 'preview.svg'), 'local note');
+    expect(readRemoteArtifact(root, artifact)).toEqual(first);
+
+    for (const files of [
+      { ...scene('#fcfcfc'), 'comments.json': encode('{}') },
+      { ...scene('#fcfcfc'), 'assets/external.png': encode('contents') },
+      { 'scene.excalidraw': encode('{"type":"not-excalidraw"}') },
+    ]) {
+      expect(() => write(root, artifact, first.revision, files)).toThrowError(
+        expect.objectContaining({ status: 400 }),
+      );
+      expect(readRemoteArtifact(root, artifact)).toEqual(first);
+    }
+    const second = write(root, artifact, first.revision, scene('#f4f4f4'));
+    expect(second.revision).not.toBe(first.revision);
+    expect(() => write(root, artifact, first.revision, scene('#f3f3f3'))).toThrowError(
+      expect.objectContaining({ status: 409, code: 'revision_conflict' }),
+    );
+    expect(readRemoteArtifact(root, artifact)).toEqual(second);
+    expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('human feedback');
+    expect(fs.readFileSync(path.join(dir, 'preview.svg'), 'utf8')).toBe('local note');
+  });
+
   test('rejects unsafe paths, duplicate case, invalid payloads and oversized input without changing files', () => {
     const root = project();
     const original = write(root, 'html/preview', null, { 'index.html': encode('<html>safe</html>') });

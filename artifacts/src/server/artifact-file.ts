@@ -9,6 +9,7 @@ const RESOLVE = {
   artboard: resolveBoardFile,
   document: resolveDocumentAsset,
   html: resolveHtmlFile,
+  whiteboard: () => null,
 };
 
 export const isArtifactPage = (type: ArtifactType, relative: string) =>

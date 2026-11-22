@@ -16,6 +16,7 @@ export interface CommentOptions {
   block?: string;
   board?: string;
   clear?: boolean;
+  elements?: string;
   group?: string;
   projectDir: string;
   quote?: string;
@@ -27,7 +28,7 @@ export interface CommentOptions {
   y?: string;
 }
 
-const ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
+const ARTIFACT = /^(?:document|artboard|whiteboard)\/[a-z0-9][a-z0-9-]*$/;
 const WRITTEN = {
   add: 'comment-added',
   reply: 'comment-replied',
@@ -87,6 +88,12 @@ function requestOf(
       text: messageText(options),
     };
   }
+  if (action === 'add' && type === 'whiteboard') {
+    const elementIds = options.elements?.split(',').map((id) => id.trim());
+    if (!elementIds?.length || elementIds.some((id) => !id))
+      throw new CliError('comment add on a whiteboard needs --elements <id1,id2>');
+    return { op: 'add', elementIds, text: messageText(options) };
+  }
   if (action === 'add') {
     if (!options.block) throw new CliError('comment add needs --block <blockId>');
     return {
@@ -107,7 +114,7 @@ export async function comment(options: CommentOptions, emit: Emit): Promise<numb
   if (!action)
     throw new CliError('comment needs an action: list, add, reply, resolve, choose or submit');
   if (!options.artifact || !ARTIFACT.test(options.artifact))
-    throw new CliError('--artifact must be document/<id> or artboard/<id>');
+    throw new CliError('--artifact must be document/<id>, artboard/<id>, or whiteboard/<id>');
   const [type, id] = options.artifact.split('/') as [string, string];
   const request = requestOf(options, action, type);
   const server = serverClient(options.projectDir);
@@ -174,7 +181,7 @@ interface ListedBoardAnchor {
 }
 
 interface ListedThread {
-  anchor: { blockId: string; blockIds?: string[]; quote: string } | ListedBoardAnchor;
+  anchor: { blockId: string; blockIds?: string[]; quote: string } | { elementIds: string[] } | ListedBoardAnchor;
   changes?: string[];
   files?: Record<string, string>;
   id: string;
@@ -239,6 +246,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
 
 function anchorLines(thread: ListedThread): string[] {
   const anchor = thread.anchor;
+  if ('elementIds' in anchor) return [`  on elements ${anchor.elementIds.join(', ')}`];
   if ('blockId' in anchor) {
     const ids = anchor.blockIds ?? [anchor.blockId];
     return [
@@ -315,22 +323,24 @@ export function commentText(value: Record<string, unknown>): string | null {
 
 export const commentCommand: CommandSpec = {
   name: 'comment',
-  summary: 'Read and answer comments on a document or artboard (needs a running server)',
+  summary: 'Read and answer comments on a document, artboard, or whiteboard',
   usage: [
-    'list    --artifact <document|artboard>/<id> [--all]',
+    'list    --artifact <document|artboard|whiteboard>/<id> [--all]',
     'add     --artifact document/<id> --block <blockId> [--quote <text>] [--text <text>]',
     'add     --artifact artboard/<id> --board <boardId> [--x <px> --y <px>] [--text <text>]',
-    'reply   --artifact <document|artboard>/<id> --thread <threadId> [--text <text>]',
-    'resolve --artifact <document|artboard>/<id> --thread <threadId>',
+    'add     --artifact whiteboard/<id> --elements <id1,id2> [--text <text>]',
+    'reply   --artifact <document|artboard|whiteboard>/<id> --thread <threadId> [--text <text>]',
+    'resolve --artifact <document|artboard|whiteboard>/<id> --thread <threadId>',
     'choose  --artifact artboard/<id> --group <groupId> (--board <boardId> | --clear)',
     'submit  --artifact artboard/<id> --round <roundId> [--withdraw]',
   ],
   details:
     'list prints what changed since you last listed. Without --text, add and reply read the message from stdin.',
   options: {
-    artifact: { type: 'string', value: '<type>/<id>', help: 'The document or artboard' },
+    artifact: { type: 'string', value: '<type>/<id>', help: 'The document, artboard, or whiteboard' },
     all: { type: 'boolean', help: 'list: every thread, not only what changed' },
     block: { type: 'string', value: '<blockId>', help: 'add: the document block to comment on' },
+    elements: { type: 'string', value: '<id1,id2>', help: 'add: selected whiteboard element IDs' },
     quote: {
       type: 'string',
       value: '<text>',

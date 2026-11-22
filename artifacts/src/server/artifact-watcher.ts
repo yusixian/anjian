@@ -56,10 +56,12 @@ export function watchArtifacts(ctx: ServerContext) {
           if (signatures.get(key) === artifactSignature(dir, ref.type)) continue;
           runtimeWarnings.delete(key);
           const payload = ctx.refreshState(ref, dir);
-          const frame = textFrame(
-            JSON.stringify({ type: 'change', artifact: key, files: changed } satisfies ServerMessage),
-          );
-          for (const socket of clients) socket.write(frame);
+          const message = { type: 'change', artifact: key, files: changed } satisfies ServerMessage;
+          if (ref.type === 'whiteboard') ctx.broadcast(message);
+          else {
+            const frame = textFrame(JSON.stringify(message));
+            for (const socket of clients) socket.write(frame);
+          }
           ctx.changeListeners.forEach((listener) => listener(ref, payload, changed));
         }
         ctx.touch();

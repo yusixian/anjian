@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 
 import { ANJIAN_MARK_VIEWBOX,anjianMarkBody } from '../../shared/brand';
 import type { ArtifactType, CanvasLayout, CanvasSpec } from '../../shared/types';
+import type { WhiteboardScene } from '../../shared/whiteboard';
 
 const ArtboardView = lazy(() =>
   import('../layouts/ArtboardView').then(({ ArtboardView }) => ({ default: ArtboardView })),
@@ -11,6 +12,11 @@ const ArtboardView = lazy(() =>
 
 const PublicDocument = lazy(() =>
   import('./PublicDocument').then(({ PublicDocument }) => ({ default: PublicDocument })),
+);
+const PublicWhiteboard = lazy(() =>
+  import('../document/shims')
+    .then(() => import('../whiteboard/WhiteboardCanvas'))
+    .then(({ WhiteboardCanvas }) => ({ default: WhiteboardCanvas })),
 );
 
 interface SharePayload {
@@ -20,6 +26,7 @@ interface SharePayload {
   layout?: CanvasLayout | null;
   publishedAt: number;
   revision?: string;
+  scene?: WhiteboardScene;
   state?: SerializedEditorState;
   title: string;
   type: ArtifactType;
@@ -99,7 +106,7 @@ export function SharePage() {
         const next = (await response.json()) as SharePayload;
         if (id !== seq.current) return;
         if (
-          !['artboard', 'document', 'html'].includes(next.type) ||
+          !['artboard', 'document', 'html', 'whiteboard'].includes(next.type) ||
           typeof next.title !== 'string' ||
           typeof next.contentBase !== 'string'
         )
@@ -134,7 +141,7 @@ export function SharePage() {
   }, [copy, data, lang]);
   const date = (stamp: number) => new Date(stamp).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US');
   return (
-    <div className={`share-page${data?.type === 'artboard' ? ' share-workbench' : ''}`}>
+    <div className={`share-page${data?.type === 'artboard' || data?.type === 'whiteboard' ? ' share-workbench' : ''}`}>
       <header className="share-header">
         <span className="share-brand">
           <svg
@@ -206,6 +213,12 @@ export function SharePage() {
                     versions={data.versions ?? {}}
                     warnings={[]}
                   />
+                </div>
+              </Suspense>
+            ) : data.type === 'whiteboard' && data.scene ? (
+              <Suspense fallback={<div className="share-message">{copy.loading}</div>}>
+                <div className="share-artboard">
+                  <PublicWhiteboard key={data.contentBase} readOnly scene={data.scene} />
                 </div>
               </Suspense>
             ) : data.type === 'html' ? (

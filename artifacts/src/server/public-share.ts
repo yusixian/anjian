@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { computeLayout } from '../shared/geometry';
 import type { CanvasSpec } from '../shared/types';
+import { parseWhiteboardScene, WHITEBOARD_SCENE_FILE } from '../shared/whiteboard';
 import { parseDocument } from './document-codec';
 import { mimeOf, send } from './http';
 import { injectRuntime } from './inject';
@@ -38,6 +39,24 @@ function payload(options: Options, record: ShareRecord) {
     const file = options.store.file(record, 'doc.xml');
     if (!file) throw new Error('Missing document');
     return { ...result, state: parseDocument(fs.readFileSync(file, 'utf8')) };
+  }
+  if (record.type === 'whiteboard') {
+    const file = options.store.file(record, WHITEBOARD_SCENE_FILE);
+    if (!file) throw new Error('Missing whiteboard');
+    const scene = parseWhiteboardScene(JSON.parse(fs.readFileSync(file, 'utf8')));
+    if (!scene) throw new Error('Invalid whiteboard');
+    const elements = scene.elements.filter((element) => !element.isDeleted);
+    const fileIds = new Set(elements.map((element) => element.fileId));
+    return {
+      ...result,
+      scene: {
+        type: scene.type,
+        version: scene.version,
+        elements,
+        appState: { viewBackgroundColor: scene.appState?.viewBackgroundColor },
+        files: Object.fromEntries(Object.entries(scene.files ?? {}).filter(([id]) => fileIds.has(id))),
+      },
+    };
   }
   if (record.type === 'artboard') {
     const file = options.store.file(record, 'canvas.json');
@@ -107,7 +126,8 @@ export function createPublicShare(options: Options) {
       }
       let file: string | null = null;
       let csp = pageCsp;
-      if (!preview && /^app\/[\w.-]+\.(?:js|css|woff2?|ttf|otf|svg|png|ico)$/.test(rest)) {
+      if (!preview && (rest === 'app/excalidraw-fonts-notices.txt' || /^app\/[\w.-]+\.(?:js|css|woff2?|ttf|otf|svg|png|ico)$/.test(rest) ||
+        /^app\/fonts\/[\w-]+\/\w[\w.-]*\.woff2$/.test(rest))) {
         const name = rest.slice(4);
         if (!name.startsWith('.')) file = path.join(options.viewerDir, name);
       } else if (preview && rest.startsWith(`r/${revisionOf(record)}/files/`)) {

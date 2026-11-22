@@ -31,6 +31,11 @@ const run = async (name: string, values: Record<string, string | boolean | undef
   return out;
 };
 const doc = (text: string) => ({ 'doc.xml': Buffer.from(`<doc><p>${text}</p></doc>`).toString('base64') });
+const whiteboard = (color: string) => ({
+  'scene.excalidraw': Buffer.from(JSON.stringify({
+    type: 'excalidraw', version: 2, elements: [], appState: { viewBackgroundColor: color },
+  })).toString('base64'),
+});
 
 function fixtureServer() {
   let files: Record<string, string> = {};
@@ -50,7 +55,8 @@ function fixtureServer() {
     }
     if (url.pathname === '/api/remote/projects/p1/agent/document/demo/comments') { send(200, { threads: [] }); return; }
     if (url.pathname === '/api/remote/projects/p1/events') { send(200, { cursor: '1', events: [{ id: '1', artifact: 'document/demo', type: 'comment', data: { text: 'hello' } }] }); return; }
-    if (url.pathname === '/api/remote/projects/p1/artifacts/document/demo') {
+    const artifactMatch = /^\/api\/remote\/projects\/p1\/artifacts\/(document|whiteboard)\/demo$/.exec(url.pathname);
+    if (artifactMatch) {
       if (req.method === 'GET') { send(200, { revision, files }); return; }
       const chunks: Buffer[] = [];
       req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -58,7 +64,7 @@ function fixtureServer() {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { baseRevision: string | null; files: Record<string, string> };
         if (body.baseRevision !== revision) { send(409, { error: 'revision_conflict' }); return; }
         files = body.files; revision = `r${++nextRevision}`;
-        send(200, { revision, files, url: 'http://127.0.0.1/document/demo' });
+        send(200, { revision, files, url: `http://127.0.0.1/${artifactMatch[1]}/demo` });
       });
       return;
     }
@@ -141,6 +147,32 @@ describe('remote CLI', () => {
       applyLocalFiles(project, 'document/demo', doc('edited'));
       api.mutate(doc('other remote edit'));
       await expect(run('push', { artifact: 'document/demo' })).rejects.toThrow('changed remotely');
+    } finally { await api.close(); }
+  });
+
+  test('pushes and pulls whiteboards while preserving local feedback and recoverable scenes', async () => {
+    const api = fixtureServer();
+    const origin = await api.origin();
+    const artifact = 'whiteboard/demo';
+    try {
+      updateConfig((config) => { config.servers[origin] = { token: 'secret-token', expiresAt: Date.now() + 60_000, deviceId: 'd1', deviceName: 'Laptop' }; });
+      await run('link', { server: origin });
+      applyLocalFiles(project, artifact, whiteboard('#ffffff'));
+      const dir = path.join(project, '.anjian/artifacts', artifact);
+      fs.writeFileSync(path.join(dir, 'comments.json'), 'local feedback');
+      expect((await run('push', { artifact }))[0]).toMatchObject({ artifact, revision: 'r1' });
+      expect(readConfig().bindings[project]!.revisions[artifact]!.local).toBe(filesHash(whiteboard('#ffffff')));
+      api.mutate(whiteboard('#f2f2f2'));
+      fs.writeFileSync(path.join(dir, 'scene.excalidraw'), '{unfinished');
+      await expect(run('pull', { artifact })).rejects.toThrow('refusing to overwrite');
+      const [result] = await run('pull', { artifact, 'backup-local': true });
+      const backup = JSON.parse(fs.readFileSync(result!.backup as string, 'utf8'));
+      expect(Buffer.from(backup.files['scene.excalidraw'], 'base64').toString()).toBe('{unfinished');
+      expect(localFiles(project, artifact)).toEqual(whiteboard('#f2f2f2'));
+      expect(fs.readFileSync(path.join(dir, 'comments.json'), 'utf8')).toBe('local feedback');
+      api.mutate({ 'scene.excalidraw': Buffer.from('{}').toString('base64') });
+      await expect(run('pull', { artifact })).rejects.toThrow('Remote returned an invalid artifact snapshot');
+      expect(localFiles(project, artifact)).toEqual(whiteboard('#f2f2f2'));
     } finally { await api.close(); }
   });
 

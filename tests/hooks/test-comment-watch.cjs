@@ -39,16 +39,18 @@ function watch(project, key) {
   return require(watcher).createCommentWatch(project, key);
 }
 
-test('new document and artboard comments produce actionable notifications without consuming them', (t) => {
+test('new document, artboard and whiteboard comments notify without consuming them', (t) => {
   const f = fixture(t);
   const poll = watch(f.project);
   assert.deepEqual(poll(), []);
   f.save('document/plan', [thread()]);
   f.save('artboard/settings', [{ ...thread(), anchor: { page: 'p', board: 'a', x: 1, y: 2 } }]);
+  f.save('whiteboard/flow', [{ ...thread(), anchor: { elementIds: ['shape-a', 'shape-b'] } }]);
   const events = poll();
   assert.deepEqual(events.map((event) => event.artifact).sort(), [
     'artboard/settings',
     'document/plan',
+    'whiteboard/flow',
   ]);
   for (const event of events) {
     assert.equal(event.unread, 1);

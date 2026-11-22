@@ -13,6 +13,11 @@ import { documentStateRoute, documentWriteRoute } from './documents';
 import { clientSocketRoute } from './sockets';
 import type { HttpRoute, UpgradeRoute } from './table';
 import { libraryRoute, shellRoute, viewerFileRoute } from './viewer';
+import {
+  whiteboardAgentCommentRoute,
+  whiteboardCommentRoute,
+  whiteboardSceneRoute,
+} from './whiteboard';
 
 // Order matters: earlier routes shadow later ones.
 export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
@@ -29,6 +34,9 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   boardCommentsRoute,
   documentStateRoute,
   documentWriteRoute,
+  whiteboardSceneRoute,
+  whiteboardCommentRoute,
+  whiteboardAgentCommentRoute,
   artifactApiRoute,
   libraryRoute,
   shellRoute,
