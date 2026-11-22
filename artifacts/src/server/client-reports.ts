@@ -1,11 +1,11 @@
-import { socketAuthorized } from './socket-access';
 import type { Duplex } from 'node:stream';
 
 import type { ServerMessage } from '../shared/types';
-import { artifactKeyOf, resolveArtifactDir } from './artifacts';
+import { artifactKeyOf, artifactSignature, resolveArtifactDir } from './artifacts';
 import type { ServerContext } from './context';
 import { readHtml } from './html';
 import { MAX_RUNTIME_WARNINGS } from './limits';
+import { socketAuthorized } from './socket-access';
 import { textFrame } from './ws';
 
 const MAX_RUNTIME_MESSAGE = 2048;
@@ -56,9 +56,13 @@ export function acceptReport(
   }
   if (type !== 'runtime-error' || typeof detail !== 'string') return;
   if (detail.length === 0 || detail.length > MAX_RUNTIME_MESSAGE) return;
-  const list = runtimeWarnings.get(artifact) ?? [];
+  const current = runtimeWarnings.get(artifact);
+  const initialSignature =
+    current?.initialSignature ??
+    (ctx.signatures.has(artifact) ? undefined : artifactSignature(dir, ref.type));
+  const list = current?.messages ?? [];
   if (list.includes(detail) || list.length >= MAX_RUNTIME_WARNINGS) return;
-  runtimeWarnings.set(artifact, [...list, detail]);
+  runtimeWarnings.set(artifact, { messages: [...list, detail], initialSignature });
   ctx.writeState(ref, dir);
   const frame = textFrame(
     JSON.stringify({ type: 'change', artifact, files: [] } satisfies ServerMessage),

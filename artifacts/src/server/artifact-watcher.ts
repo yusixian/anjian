@@ -43,6 +43,7 @@ export function watchArtifacts(ctx: ServerContext) {
           const dir = resolveArtifactDir(root, ref.type, ref.id);
           if (!dir) {
             signatures.delete(key);
+            runtimeWarnings.delete(key);
             const frame = textFrame(
               JSON.stringify({
                 type: 'change',
@@ -72,8 +73,11 @@ export function watchArtifacts(ctx: ServerContext) {
               boardComments.sync(ref.id, admit);
               boardComments.boardsChanged(ref.id, admit);
             });
-          if (signatures.get(key) === artifactSignature(dir, ref.type)) continue;
-          runtimeWarnings.delete(key);
+          const signature = artifactSignature(dir, ref.type);
+          if (signatures.get(key) === signature) continue;
+          const reported = runtimeWarnings.get(key);
+          if (reported?.initialSignature === signature) delete reported.initialSignature;
+          else runtimeWarnings.delete(key);
           const payload = ctx.refreshState(ref, dir);
           const message = { type: 'change', artifact: key, files: changed } satisfies ServerMessage;
           if (ref.type === 'whiteboard') ctx.broadcast(message);
