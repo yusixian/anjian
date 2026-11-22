@@ -13,22 +13,29 @@ import {
 
 class InvalidArtifactId extends Error {}
 
-function artifactId(dir: string): string {
-  const file = path.join(dir, '.artifact-id');
+function readArtifactId(file: string): string | undefined {
   let id: string;
   try {
     id = fs.readFileSync(file, 'utf8').trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    id = mintArtifactId();
-    try {
-      fs.writeFileSync(file, `${id}\n`, { flag: 'wx' });
-    } catch (writeError) {
-      if ((writeError as NodeJS.ErrnoException).code !== 'EEXIST') throw writeError;
-      return artifactId(dir);
-    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
   }
   if (!isArtifactAddress(id)) throw new InvalidArtifactId(`Invalid artifact ID in ${file}`);
+  return id;
+}
+
+function artifactId(dir: string): string {
+  const file = path.join(dir, '.artifact-id');
+  const existing = readArtifactId(file);
+  if (existing) return existing;
+  const id = mintArtifactId();
+  try {
+    fs.writeFileSync(file, `${id}\n`, { flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    return artifactId(dir);
+  }
   return id;
 }
 
@@ -40,12 +47,20 @@ export function artifactPath(root: string, type: ArtifactType, slug: string): st
   return `/${type}/${artifactId(dir)}`;
 }
 
-export function resolveArtifactAddress(root: string, type: ArtifactType, address: string) {
+export function resolveArtifactAddress(
+  root: string,
+  type: ArtifactType,
+  address: string,
+  { mintMissing = true } = {},
+) {
   let invalidSlug: InvalidArtifactId | undefined;
   const matches = listArtifacts(root).artifacts.filter((entry) => {
     if (entry.type !== type) return false;
     try {
-      return artifactId(entry.dir) === address;
+      const id = mintMissing
+        ? artifactId(entry.dir)
+        : readArtifactId(path.join(entry.dir, '.artifact-id'));
+      return id === address;
     } catch (error) {
       if (!(error instanceof InvalidArtifactId)) throw error;
       if (entry.id === address) invalidSlug = error;

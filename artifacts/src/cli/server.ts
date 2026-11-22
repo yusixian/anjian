@@ -1,7 +1,12 @@
 import { machinePaths, readProjects } from '../server/machine';
+import { ARTIFACT_LOCATOR_SOURCE } from '../shared/ids';
 import { CliError, invocation, projectPaths } from './paths';
 import { readText } from './process';
 import { bindingFor, readConfig, request } from './remote-core';
+
+const AGENT_ROUTE = new RegExp(
+  `^/api/agent/(document|artboard)/(${ARTIFACT_LOCATOR_SOURCE})/(comments|check|changes|review)$`,
+);
 
 export const notRunning = (project: string) =>
   `No artifacts server is running for this project. Start it with \`${invocation()} start --project-dir ${project}\`, then run this again.`;
@@ -50,10 +55,7 @@ export function serverClient(projectDir: string) {
           );
           return { status: result.status, json: result.json };
         }
-        const match =
-          /^\/api\/agent\/(document|artboard)\/([a-z0-9][a-z0-9-]*)\/(comments|check|changes|review)$/.exec(
-            route,
-          );
+        const match = AGENT_ROUTE.exec(route);
         if (!match) throw new CliError('This command cannot use the remote agent API');
         const remoteRoute = `/api/remote/projects/${encodeURIComponent(binding.projectId)}/agent/${match[1]}/${match[2]}/${match[3]}`;
         const result = await request(binding.origin, remoteRoute, {

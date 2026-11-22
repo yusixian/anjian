@@ -1,4 +1,5 @@
-import { resolveArtifactDir } from '../artifacts';
+import { ARTIFACT_LOCATOR_SOURCE } from '../../shared/ids';
+import { resolveArtifactAddress } from '../artifact-address';
 import type { ServerContext } from '../context';
 import { documentChanges } from '../document-changes';
 import { sendJson } from '../http';
@@ -21,7 +22,9 @@ function changesQuery(value: unknown) {
 }
 
 export const reviewEvidenceRoute: HttpRoute<ServerContext> = {
-  path: /^\/api\/agent\/(document|artboard)\/([a-z0-9][a-z0-9-]*)\/(changes|review)$/,
+  path: new RegExp(
+    `^/api/agent/(document|artboard)/(${ARTIFACT_LOCATOR_SOURCE})/(changes|review)$`,
+  ),
   methods: ['POST'],
   auth: 'agent',
   async handle(req, res, ctx, { match }) {
@@ -29,14 +32,14 @@ export const reviewEvidenceRoute: HttpRoute<ServerContext> = {
     const id = match[2]!;
     const action = match[3];
     const artifact = `${type}/${id}`;
-    const dir = resolveArtifactDir(ctx.root, type, id);
-    if (!dir) {
+    const target = resolveArtifactAddress(ctx.root, type, id, { mintMissing: false });
+    if (!target) {
       sendJson(res, 404, { error: `${artifact} not found` });
       return;
     }
     try {
       if (action === 'review') {
-        sendJson(res, 200, reviewSummary(dir, type, id, ctx.recordings.evidenceHash));
+        sendJson(res, 200, reviewSummary(target.dir, type, id, ctx.recordings.evidenceHash));
         return;
       }
       if (type !== 'document') {
@@ -50,7 +53,7 @@ export const reviewEvidenceRoute: HttpRoute<ServerContext> = {
         });
         return;
       }
-      const snapshot = await ctx.documents.historySnapshot(id);
+      const snapshot = await ctx.documents.historySnapshot(target.id);
       if (!snapshot) {
         throw new RemoteTransferError(
           409,

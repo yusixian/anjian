@@ -1,9 +1,10 @@
 import type { ReviewSummary } from '../server/review-summary';
+import { ARTIFACT_LOCATOR_SOURCE } from '../shared/ids';
 import type { CommandSpec } from './command';
 import { CliError, invocation } from './paths';
 import { serverClient } from './server';
 
-const ARTIFACT = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
+const ARTIFACT = new RegExp(`^(?:document|artboard)/${ARTIFACT_LOCATOR_SOURCE}$`);
 
 export function reviewText(value: Record<string, unknown>): string | null {
   if (value.type !== 'review') return null;

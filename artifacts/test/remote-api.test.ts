@@ -6,12 +6,12 @@ import path from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
+import type { PreparedRemoteDocument } from '../src/server/document-session';
+import * as documentSession from '../src/server/document-session';
 import { type Hub, startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
 import { createStorageSettings } from '../src/server/storage/settings';
 import { createStorageUsage } from '../src/server/storage/usage';
-import * as documentSession from '../src/server/document-session';
-import type { PreparedRemoteDocument } from '../src/server/document-session';
 import { tempRoot } from './helpers';
 
 const MASTER = 'm'.repeat(48);
@@ -121,8 +121,10 @@ test('a scoped device transfers its project with revision checks but cannot cont
   const second = await put(project, created.revision, '<doc><p>newer</p></doc>');
   expect(second.status, await second.clone().text()).toBe(200);
   expect((await put(project, created.revision, '<doc><p>stale</p></doc>')).status).toBe(409);
-  const review = (projectId: string) =>
-    fx.request(`/api/remote/projects/${projectId}/agent/document/plan/review`, {
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  fs.writeFileSync(path.join(fx.alpha, '.anjian/artifacts/document/plan/.artifact-id'), address + '\n');
+  const review = (projectId: string, id = 'plan') =>
+    fx.request(`/api/remote/projects/${projectId}/agent/document/${id}/review`, {
       method: 'POST', headers,
     });
   expect((await review(other)).status).toBe(404);
@@ -130,8 +132,8 @@ test('a scoped device transfers its project with revision checks but cannot cont
   expect(reviewed.status).toBe(200);
   expect(await reviewed.json()).toMatchObject({ type: 'review', artifact: 'document/plan', empty: true });
 
-  const versions = (projectId: string) =>
-    fx.request(`/api/remote/projects/${projectId}/agent/document/plan/changes`, {
+  const versions = (projectId: string, id = 'plan') =>
+    fx.request(`/api/remote/projects/${projectId}/agent/document/${id}/changes`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ versions: true }),
@@ -140,6 +142,10 @@ test('a scoped device transfers its project with revision checks but cannot cont
   const listed = await versions(project);
   expect(listed.status).toBe(200);
   expect(await listed.json()).toMatchObject({ type: 'document-changes', latest: expect.any(String) });
+  expect((await review(other, address)).status).toBe(404);
+  expect((await review(project, address)).status).toBe(200);
+  expect((await versions(other, address)).status).toBe(404);
+  expect((await versions(project, address)).status).toBe(200);
 
   const fetched = await fx.request(`/api/remote/projects/${project}/artifacts/document/plan`, { headers });
   expect(fetched.status).toBe(200);

@@ -1,28 +1,31 @@
 import type http from 'node:http';
-import { withRequestStorageAdmission } from './storage/request-admission';
 
+import { ARTIFACT_LOCATOR_SOURCE } from '../shared/ids';
 import type { ArtifactType } from '../shared/types';
 import type { MountedProject } from './app';
+import { ArtifactTrashError, assertArtifactNotTrashed } from './artifact-trash';
 import { sendJson } from './http';
 import { withProjectMutation } from './project-mutations';
-import { ArtifactTrashError, assertArtifactNotTrashed } from './artifact-trash';
+import { type createRemoteEvents,RemoteCursorError } from './remote-events';
 import { setRemoteDevice } from './remote-identity';
-import { RemoteCursorError, type createRemoteEvents } from './remote-events';
 import { decodeDocumentUpload, readRemoteArtifact, RemoteTransferError, writeRemoteArtifact } from './remote-transfer';
+import { withRequestStorageAdmission } from './storage/request-admission';
 
 interface Device { id: string; name: string; projects: string[] }
-interface Project { id: string; name: string; dir: string }
+interface Project { dir: string; id: string; name: string; }
 interface Options {
   authenticate: (req: http.IncomingMessage) => Device | null;
-  projects: () => Project[];
-  mount: (dir: string) => Promise<MountedProject>;
   events: ReturnType<typeof createRemoteEvents>;
+  mount: (dir: string) => Promise<MountedProject>;
+  projects: () => Project[];
   token: string;
   upload?: <T>(project: string, work: (prepare: () => Promise<(deltaBytes: number) => void>) => Promise<T>) => Promise<T>;
 }
 const MAX_BODY = 46 * 1024 * 1024;
 const ARTIFACT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/artifacts\/(document|artboard|html)\/([a-z0-9][a-z0-9-]*)$/;
-const AGENT_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/agent\/(document|artboard|html)\/([a-z0-9][a-z0-9-]*)\/(comments|check|changes|review)$/;
+const AGENT_ROUTE = new RegExp(
+  `^/api/remote/projects/([a-f0-9]{32})/agent/(document|artboard|html)/(${ARTIFACT_LOCATOR_SOURCE})/(comments|check|changes|review)$`,
+);
 const EVENTS_ROUTE = /^\/api\/remote\/projects\/([a-f0-9]{32})\/events$/;
 
 async function readBody(req: http.IncomingMessage) {

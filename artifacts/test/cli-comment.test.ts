@@ -548,6 +548,17 @@ test('reads document changes and saved review evidence without consuming comment
   expect(review.code).toBe(0);
   expect(review.out).toMatchObject({ type: 'review', threads: [{ id: 'review', messages: [{ id: 'initial' }] }] });
   expect((await run(['review', ...doc(dir)])).out).toEqual(review.out);
+  const address = 'AbCdEfGhIjKlMnOpQrStU';
+  fs.writeFileSync(path.join(root, 'document', 'relay', '.artifact-id'), address + '\n');
+  const addressed = ['--project-dir', dir, '--artifact', 'document/' + address];
+  expect((await run(['changes', ...addressed, '--versions'])).out).toMatchObject({
+    type: 'document-changes',
+    latest,
+  });
+  expect((await run(['review', ...addressed])).out).toEqual({
+    ...review.out,
+    artifact: 'document/' + address,
+  });
   expect(fs.readFileSync(source, 'utf8')).toBe(original);
   expect(fs.readFileSync(commentFile, 'utf8')).toBe(saved);
   expect(fs.readFileSync(snapshotFile)).toEqual(Buffer.from(snapshot));

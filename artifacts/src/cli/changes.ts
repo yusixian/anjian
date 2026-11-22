@@ -1,7 +1,10 @@
 import type { documentChanges } from '../server/document-changes';
+import { ARTIFACT_LOCATOR_SOURCE } from '../shared/ids';
 import type { CommandSpec } from './command';
 import { CliError, invocation } from './paths';
 import { serverClient } from './server';
+
+const ARTIFACT = new RegExp(`^document/${ARTIFACT_LOCATOR_SOURCE}$`);
 
 type Changes = Awaited<ReturnType<typeof documentChanges>>;
 
@@ -54,7 +57,7 @@ export const changesCommand: CommandSpec = {
   },
   async run({ values, projectDir }, emit) {
     const { artifact, versions, from, to } = values;
-    if (typeof artifact !== 'string' || !/^document\/[a-z0-9][a-z0-9-]*$/.test(artifact))
+    if (typeof artifact !== 'string' || !ARTIFACT.test(artifact))
       throw new CliError('--artifact must be document/<id>');
     if (versions ? from !== undefined || to !== undefined : !from)
       throw new CliError('Use --versions or specify --from with optional --to.');
