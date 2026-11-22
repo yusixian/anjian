@@ -61,25 +61,25 @@ function createLocalCommentEvents(wake, env = process.env) {
   let closed = false;
   let request;
   let retry;
-  let previousHub;
   let restarting;
   let failures = 0;
   let lastFullScan = 0;
 
   function restore() {
-    // Only recover a Hub this watcher has used. The CLI coordinates startup
-    // across watchers through its existing lock and retains the usual settings.
-    if (closed || !previousHub || restarting || !fs.existsSync(path.join(__dirname, 'cli.cjs'))) return;
+    // The CLI coordinates startup across watchers through its existing lock.
+    if (closed || restarting || !fs.existsSync(path.join(__dirname, 'cli.cjs'))) return;
     if (fs.existsSync(path.join(home, 'server-stopped'))) return;
-    const { info, url } = previousHub;
-    const current = endpoint(home);
-    if (running(current?.info.pid ?? info.pid)) return;
+    const hub = endpoint(home);
+    if (!hub) return;
+    const { info, url } = hub;
+    if (running(info.pid)) return;
     const project = projects.values().next().value?.dir;
     if (!project) return;
     const host = url.hostname === '[::1]' ? '::1' : url.hostname;
     const child = spawn(process.execPath, [
       launcher, 'start', '--json', '--no-open', '--background', '--project-dir', project,
       '--host', host, '--port', url.port || '80',
+      ...(typeof info.urlHost === 'string' ? ['--url-host', info.urlHost] : []),
     ], {
       env: { ...env, CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '' },
       stdio: 'ignore',
@@ -104,7 +104,6 @@ function createLocalCommentEvents(wake, env = process.env) {
     if (closed || request || retry || !projects.size) return;
     const target = endpoint(home);
     if (!target) {
-      restore();
       reconnect();
       return;
     }
@@ -150,7 +149,6 @@ function createLocalCommentEvents(wake, env = process.env) {
           try { event = JSON.parse(line); } catch { continue; }
           if (event?.ready === true) {
             connected = true;
-            previousHub = target;
             failures = 0;
             reconcile = changed = true;
           } else if (connected && typeof event?.artifact === 'string' && ARTIFACT.test(event.artifact)) {
