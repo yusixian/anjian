@@ -1,0 +1,21 @@
+name: Check Ryugi release
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare the latest stable release with the audited baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api repos/Innei/ryugi/releases/latest | node scripts/check-ryugi-release.mjs

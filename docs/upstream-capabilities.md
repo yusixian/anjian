@@ -55,6 +55,8 @@
 
 ## 后续同步
 
+[Check Ryugi release](https://github.com/yusixian/anjian/actions/workflows/check-ryugi-release.yml) 每天核对 GitHub 的最新正式版与 `UPSTREAM.md` 的已审计版本，也可手动运行。版本有变化时，从运行摘要打开差异。
+
 查询 Ryugi 最新正式发行版并固定 tag 和提交。只审查上次记录之后的增量，结合公开文档核对行为。将相同任务映射到已有证据或 Issue。每次在来源记录写明新增范围及授权判断，更新对应能力的验收或 Issue，避免重复开单。案间独有的中文默认、本地存储、成员权限、自托管、公开只读分享和 Lody 闭环进入相关改动的回归范围。每批用户可见改动通过中英 Changeset 进入案间的发布说明。
 
 应用源码在上游分叉后迁出。案间保留 MIT 与 AGPL-3.0-only 授权结构，并单独核对拟移植材料。官方云、订阅和自动下载官方包属于上游产品边界。[上游授权说明](https://github.com/Innei/ryugi/blob/v1.101.1/LICENSE)
