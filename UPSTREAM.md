@@ -6,6 +6,14 @@
 
 ## 当前对照版本
 
+2026-11-22 核对 Ryugi 正式版 `v1.102.3`（`a9fe0fb1e953777458734160c2d3a8885ecc018a`）。相对 `v1.102.2` 新增 3 个公开提交，累计审计 179 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.3) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.2...v1.102.3)
+
+- `385b86f` 将本地评论从宿主定时读取改为 Hub 推送。案间由 [#125](https://github.com/yusixian/anjian/issues/125) 独立实现事件订阅和重启恢复。Codex 已有基于 App Server 的唤醒路径，实际空闲会话纳入该项验收。普通 Antigravity 会话的外部投递继续由 [#52](https://github.com/yusixian/anjian/issues/52) 跟踪。
+- `8c683fc` 为 macOS daemon 加上 Developer ID 签名与公证。案间双架构 CLI 安装包已有解压和安装测试，发布者验证与 Gatekeeper 验收由 [#124](https://github.com/yusixian/anjian/issues/124) 跟踪。发行说明中的 daemon 版本配套和 Claude 文件夹信任属于 Ryugi daemon 工作流。
+- `a9fe0fb` 更新发布清单。上游两个功能提交新增的代码在该版本 MIT 保留条款覆盖范围之外，案间依据公开行为独立实现。[授权说明](https://github.com/Innei/ryugi/blob/v1.102.3/LICENSE)
+
+### v1.102.2 的能力差异
+
 2026-11-22 核对 Ryugi 正式版 `v1.102.2`（`3cc8871325f3f892858a482bc7dafd2665ff64f9`）。相对 `v1.102.1` 新增 1 个公开提交，累计审计 176 个提交。公开差异只更新版本清单。发布说明披露白板和幻灯片的长讨论可在卡片内滚动，打开时显示最新消息。案间按 [#100](https://github.com/yusixian/anjian/issues/100) 独立实现。桌面和 390 px Chrome 验证通过，已随 [v0.7.1](https://github.com/yusixian/anjian/releases/tag/v0.7.1) 发布。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.1...v1.102.2)
 
 ### v1.102.1 的能力差异
