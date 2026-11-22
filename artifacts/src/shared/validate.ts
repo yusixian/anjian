@@ -18,6 +18,8 @@ export function structuralWarnings(raw: unknown): string[] {
   if (raw.groups !== undefined && !isObject(raw.groups))
     warnings.push('"groups" must be an object');
   if (raw.notes !== undefined && !isObject(raw.notes)) warnings.push('"notes" must be an object');
+  if (raw.connections !== undefined && !isObject(raw.connections))
+    warnings.push('"connections" must be an object');
   if (raw.focus !== undefined && (!isObject(raw.focus) || typeof raw.focus.target !== 'string')) {
     warnings.push('"focus" must be { "target": <id>, "at": <time> }');
   }
@@ -70,6 +72,17 @@ export function structuralWarnings(raw: unknown): string[] {
     }
   }
   if (warnings.length > 0) return warnings;
+
+  for (const [id, connection] of Object.entries((raw.connections ?? {}) as Record<string, unknown>)) {
+    if (
+      !isObject(connection) ||
+      typeof connection.from !== 'string' ||
+      typeof connection.to !== 'string' ||
+      typeof connection.label !== 'string' ||
+      !connection.label.trim()
+    )
+      warnings.push(`connection "${id}" needs board IDs "from", "to" and a non-empty "label"`);
+  }
 
   (raw.pages as unknown[]).forEach((page, index) => {
     if (!isObject(page) || typeof page.id !== 'string' || typeof page.name !== 'string') {
@@ -169,6 +182,16 @@ export function validateCanvas(
       if (a.page === b.page && intersects(a, b))
         warnings.push(`boards "${ia}" and "${ib}" overlap`);
     }
+  }
+
+  for (const [id, { from, to }] of Object.entries(canvas.connections ?? {})) {
+    const start = Object.hasOwn(canvas.boards, from) ? canvas.boards[from] : undefined;
+    const end = Object.hasOwn(canvas.boards, to) ? canvas.boards[to] : undefined;
+    if (!start) warnings.push(`connection "${id}" references unknown source board "${from}"`);
+    if (!end) warnings.push(`connection "${id}" references unknown destination board "${to}"`);
+    if (start && end && start.page !== end.page)
+      warnings.push(`connection "${id}" must link boards on the same page`);
+    if (start && from === to) warnings.push(`connection "${id}" must link two different boards`);
   }
 
   const frames: [string, ReturnType<typeof groupFrame>][] = [];

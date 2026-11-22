@@ -58,6 +58,12 @@ export interface NoteSpec {
   y: number;
 }
 
+export interface ConnectionSpec {
+  from: string;
+  label: string;
+  to: string;
+}
+
 export interface FocusSpec {
   at: string;
   target: string;
@@ -67,6 +73,7 @@ export interface CanvasSpec {
   activePage?: string;
   boards: Record<string, BoardSpec>;
   building?: boolean;
+  connections?: Record<string, ConnectionSpec>;
   focus?: FocusSpec;
   groups?: Record<string, GroupSpec>;
   notes?: Record<string, NoteSpec>;

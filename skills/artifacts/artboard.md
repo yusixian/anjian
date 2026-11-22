@@ -125,6 +125,12 @@ comments.json in the artboard directory is the server's; never write it.
   something your human partner passes or rejects (see Verify groups);
   `"choose": true` with `"recommend": "<board id>"` turns it into a question
   they answer by picking a board (see Choice groups).
+- `connections`: optional object keyed by a stable connection ID. Use
+  `"continue": { "from": "sign-in", "to": "dashboard", "label": "Continue" }`.
+  Add it under `connections` in `canvas.json`. Both IDs must be different
+  existing boards on the same page. The arrow points to `to` and follows the
+  boards when their coordinates change. Keep labels short and allow room
+  between the boards. Run `check` to catch missing or cross-page targets.
 - `notes`: `kind` is `title` or `sticky`; `x`/`y` is the top-left corner.
   - `title`: bold text, `size` px (default 96), one line tall (about
     1.15 × `size`). Without `w` it stays on one line; with `w` it wraps.

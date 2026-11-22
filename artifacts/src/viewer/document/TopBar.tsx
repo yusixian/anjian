@@ -117,6 +117,7 @@ export function TopBar({
         <RailSwitch
           available={history.available}
           comments={openComments}
+          compact={compact}
           open={history.open}
           onComments={history.close}
           onHistory={history.toggle}

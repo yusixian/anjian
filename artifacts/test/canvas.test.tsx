@@ -70,6 +70,24 @@ async function render(props: Props = {}) {
   return document.body;
 }
 
+test('a flow connection follows board geometry and omits off-page destinations', async () => {
+  const connections = {
+    next: { from: 'a', to: 'b', label: 'Continue' },
+    absent: { from: 'a', to: 'elsewhere', label: 'Missing' },
+  };
+  const body = await render({ connections });
+  const connection = () => body.querySelector('[data-connection="next"]');
+  const line = () => connection()?.querySelector('line');
+  expect(connection()?.textContent).toBe('Continue');
+  expect(line()?.getAttribute('x1')).toBe('640');
+  expect(line()?.getAttribute('x2')).toBe('1000');
+  expect(line()?.getAttribute('marker-end')).toMatch(/^url\(#/);
+  expect(body.querySelector('[data-connection="absent"]')).toBeNull();
+
+  await render({ boards: [boards[0]!, ['b', { ...boards[1]![1], x: 1260 }]], connections });
+  expect(line()?.getAttribute('x2')).toBe('1260');
+});
+
 function animationClock(reduced = false) {
   let now = 0,
     nextId = 0;
