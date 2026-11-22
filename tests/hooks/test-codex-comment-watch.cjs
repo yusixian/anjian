@@ -571,6 +571,7 @@ test('local document answers wake the chosen Codex session and retry only a fail
     answer: 'Keep the summary concise.',
   };
   let acknowledgments = 0;
+  let pollsBeforeAcknowledgment = 0;
   let authMatches = false;
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -581,6 +582,7 @@ test('local document answers wake the chosen Codex session and retry only a fail
       return;
     }
     if (req.url === targetPath) {
+      if (acknowledgments < 2) pollsBeforeAcknowledgment++;
       const heartbeat = path.join(
         state,
         'codex-comment-watch/questions/document/plan',
@@ -614,6 +616,7 @@ test('local document answers wake the chosen Codex session and retry only a fail
   f.start({ session_id: inherited }, false);
   await until(() => acknowledgments === 2, 'expected acknowledgment retry');
   assert.ok(authMatches);
+  assert.equal(pollsBeforeAcknowledgment, 1, 'retry the receipt before fetching another offer');
   const queue = f.read();
   assert.equal(queue.length, 1);
   assert.equal(queue[0][queue[0].indexOf('--thread') + 1], id);

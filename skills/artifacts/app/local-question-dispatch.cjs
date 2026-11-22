@@ -32,7 +32,7 @@ function createLocalQuestionDispatch(host, session) {
   const token = randomBytes(32).toString('hex');
   const recipient = hash(JSON.stringify([host, session]), 'base64url');
   const proof = hash(token);
-  const delivered = new Set();
+  const receipts = new Map();
   const stateDir = (project) => path.join(project, '.anjian', 'artifacts', '.state');
   const heartbeat = (project, artifact) =>
     path.join(
@@ -96,15 +96,22 @@ function createLocalQuestionDispatch(host, session) {
     }
   }
 
-  async function post(url) {
-    const response = await fetch(url, {
+  const post = (url) =>
+    fetch(url, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token },
       redirect: 'error',
       signal: AbortSignal.timeout(1500),
     });
-    if (!response.ok) return null;
-    return response.json();
+
+  async function acknowledge(url, id) {
+    receipts.set(url, id);
+    try {
+      const response = await post(url + '/' + id);
+      if (response.ok || response.status === 409) receipts.delete(url);
+    } catch {
+      // Retry the receipt before polling this document again.
+    }
   }
 
   async function next(sources) {
@@ -115,7 +122,14 @@ function createLocalQuestionDispatch(host, session) {
     });
     for (const { url, artifact } of targets) {
       try {
-        const { delivery } = (await post(url)) ?? {};
+        const previous = receipts.get(url);
+        if (previous) {
+          await acknowledge(url, previous);
+          continue;
+        }
+        const response = await post(url);
+        if (!response.ok) continue;
+        const { delivery } = await response.json();
         if (
           !delivery ||
           delivery.artifact !== artifact ||
@@ -126,25 +140,15 @@ function createLocalQuestionDispatch(host, session) {
           typeof delivery.answer !== 'string'
         )
           continue;
-        async function acknowledge() {
-          delivered.add(delivery.id);
-          try {
-            if (await post(url + '/' + delivery.id)) delivered.delete(delivery.id);
-          } catch {
-            // A later offer retries the acknowledgment without sending the message again.
-          }
-        }
-        if (delivered.has(delivery.id)) {
-          await acknowledge();
-          continue;
-        }
-        return { artifact, message: formatMessage(delivery), acknowledge };
+        return {
+          artifact,
+          message: formatMessage(delivery),
+          acknowledge: () => acknowledge(url, delivery.id),
+        };
       } catch {
         // A local Hub may be restarting. Keep polling while the session is subscribed.
       }
     }
-    // If an acknowledgment succeeded but its response was lost, retain only the recent IDs.
-    if (delivered.size > 200) delivered.delete(delivered.values().next().value);
   }
 
   return { close, next, update };
