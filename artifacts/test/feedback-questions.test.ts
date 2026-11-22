@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
+import { questionAnswerCommand } from '../src/cli/question-answer';
+import { artifactPath } from '../src/server/artifact-address';
 import {
   questionItems,
   replayQuestionSubmission,
@@ -15,6 +18,8 @@ import {
 } from '../src/server/feedback/questions';
 import { feedbackStore, hash } from '../src/server/feedback/store';
 import { claim, connect, fence } from '../src/server/feedback/tasks';
+import { machinePaths, registerProject } from '../src/server/machine';
+import { readRemoteArtifact, readRemoteArtifactAddress } from '../src/server/remote-transfer';
 import type { DocumentQuestion } from '../src/shared/document-questions';
 
 const artifact = 'document/demo';
@@ -31,6 +36,7 @@ const choice: DocumentQuestion = {
 const homes: string[] = [];
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true });
 });
 
@@ -332,4 +338,79 @@ test('local delivery and Lody share one versioned submission while withdrawal pr
     submitLocalQuestion(reloaded, target, 'another', { ...draft, answer: 'b' }, [choice], revision),
   ).toThrow('question_already_submitted');
   expect(questionItems(reloaded, artifact, [choice], target.address)[0]?.task?.id).toBe(lody.id);
+});
+
+test('reads one local answer by delivery reference and keeps the feedback file unchanged', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-question-answer-')));
+  homes.push(root);
+  const home = path.join(root, 'server');
+  const project = path.join(root, 'worktree');
+  const other = path.join(root, 'other');
+  const source = '<doc><p>Original</p></doc>';
+  for (const dir of [project, other]) {
+    const artifacts = path.join(dir, '.anjian/artifacts');
+    artifactPath(artifacts, 'document', 'demo');
+    fs.writeFileSync(path.join(artifacts, artifact, 'doc.xml'), source);
+  }
+  vi.stubEnv('ANJIAN_SERVER_HOME', home);
+  const paths = machinePaths();
+  for (const dir of [project, other]) registerProject(paths.projects, dir);
+  const projectId = createHash('sha256').update(project).digest('hex').slice(0, 32);
+  const store = feedbackStore(home, projectId);
+  const data = store.load();
+  const address = readRemoteArtifactAddress(project, artifact)!;
+  const revision = readRemoteArtifact(project, artifact).revision!;
+  const { version } = questionItems(data, artifact, [open], address)[0]!;
+  const recipient = 'r'.repeat(43);
+  const answer = 'Keep the introduction.';
+  const row = submitLocalQuestion(
+    data,
+    { artifact, address, recipient },
+    'reference',
+    { id: open.id, version, answer },
+    [open],
+    revision,
+  );
+  store.save(data, () => {});
+  const output = vi.fn();
+  const read = (projectDir: string, destination = recipient) =>
+    questionAnswerCommand.run(
+      {
+        projectDir,
+        positionals: [],
+        values: { artifact, recipient: destination, submission: row.id },
+      },
+      output,
+    );
+  const before = fs.readFileSync(path.join(home, 'feedback', projectId + '.json'), 'utf8');
+  expect(read(project)).toBe(0);
+  const artifactRoot = path.join(project, '.anjian/artifacts');
+  fs.mkdirSync(path.join(artifactRoot, '.state'));
+  fs.writeFileSync(
+    path.join(artifactRoot, '.state/server-info'),
+    JSON.stringify({
+      root: artifactRoot,
+      localQuestionProject: projectId,
+      localQuestionHome: home,
+    }),
+  );
+  vi.stubEnv('ANJIAN_SERVER_HOME', path.join(root, 'different-hub'));
+  expect(read(project)).toBe(0);
+  vi.stubEnv('ANJIAN_SERVER_HOME', home);
+  expect(output).toHaveBeenCalledWith({
+    type: 'local-document-question-answer',
+    artifact,
+    id: row.id,
+    revision,
+    definition: open,
+    answer,
+  });
+  expect(() => read(other)).toThrow('No matching local answer');
+  expect(() => read(project, 'd'.repeat(43))).toThrow('No matching local answer');
+  expect(fs.readFileSync(path.join(home, 'feedback', projectId + '.json'), 'utf8')).toBe(before);
+  fs.writeFileSync(
+    path.join(project, '.anjian/artifacts', artifact, 'doc.xml'),
+    '<doc><p>Revised</p></doc>',
+  );
+  expect(() => read(project)).toThrow('The document changed after submission');
 });

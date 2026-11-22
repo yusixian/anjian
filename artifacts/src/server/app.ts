@@ -247,6 +247,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     publicOrigin: options.publicOrigin,
     boardOrigin: options.boardOrigin,
     root,
+    localQuestionHome: mount?.localQuestionHome,
     localQuestionProject: mount?.localQuestionProject,
   });
 

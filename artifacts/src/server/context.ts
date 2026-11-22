@@ -60,6 +60,7 @@ export interface MountSettings {
   boardPort: number;
   contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   github?: ReturnType<typeof createGitHubAuth>;
+  localQuestionHome?: string;
   localQuestionProject?: string;
   port: number;
   recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
