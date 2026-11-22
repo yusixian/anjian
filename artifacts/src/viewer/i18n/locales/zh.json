@@ -125,6 +125,7 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "comments": {
+    "history": "批注历史",
     "readByAgent": "Agent 已读",
     "waitingYou": "等你回复",
     "waitingAgent": "等 {{agent}}",

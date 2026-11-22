@@ -76,7 +76,7 @@ function WhiteboardThread({
         {resolved && <span>{t('common.resolved')}</span>}
       </div>
       {(missing || anchorMissing) && <p role="status">{t('whiteboard.anchorMissing')}</p>}
-      <ThreadMessages thread={thread} />
+      <ThreadMessages scrollHistory thread={thread} />
       <div className="anjian-whiteboard-thread-bar">
         {!resolved && (
           <button

@@ -250,7 +250,16 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
                 <button
                   aria-pressed={detail === 'comments'}
                   type="button"
-                  onClick={() => setDetail('comments')}
+                  onClick={(event) => {
+                    if (detail === 'comments') return;
+                    const panel = event.currentTarget.closest('.sd-detail');
+                    setDetail('comments');
+                    requestAnimationFrame(() => {
+                      panel
+                        ?.querySelector('.sd-thread, .sd-comments form')
+                        ?.scrollIntoView({ block: 'nearest' });
+                    });
+                  }}
                 >
                   <MessageSquare aria-hidden="true" size={16} />
                   {c.comments}

@@ -92,6 +92,7 @@ export function SlideComments({
           tabIndex={-1}
         >
           <ThreadView
+            scrollHistory
             label={thread.status === 'resolved' ? c.resolved : c.comments}
             thread={thread}
             actions={{

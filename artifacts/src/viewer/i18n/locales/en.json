@@ -130,6 +130,7 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "comments": {
+    "history": "Comment history",
     "readByAgent": "Read by Agent",
     "waitingYou": "Waiting on you",
     "waitingAgent": "Waiting on {{agent}}",

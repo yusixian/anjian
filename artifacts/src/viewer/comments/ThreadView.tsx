@@ -1,7 +1,7 @@
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 import { Check, RotateCcw, X } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 
 import { type Message, type Thread, waitingOn } from '../../shared/comments';
 import { authorOf } from '../document/author';
@@ -42,6 +42,11 @@ const styles = stylex.create({
     color: cssVar.colorTextTertiary,
   },
   body: { paddingBlock: 10, paddingInline: 14 },
+  history: {
+    maxBlockSize: 'var(--anjian-comment-history-size, min(16rem, 24dvh))',
+    overflowY: 'auto',
+    overscrollBehaviorY: 'contain',
+  },
   message: { marginTop: { 'default': 12, ':first-child': 0 } },
   who: {
     display: 'flex',
@@ -168,12 +173,38 @@ export function WaitingText({
 export function ThreadMessages({
   thread,
   actions,
+  scrollHistory = false,
 }: {
   thread: Thread<unknown>;
   actions?: ThreadActions;
+  scrollHistory?: boolean;
 }) {
+  const { t } = useTranslation();
+  const history = useRef<HTMLDivElement>(null);
+  const atLatest = useRef(true);
+  const latestId = thread.messages.at(-1)?.id;
+
+  useLayoutEffect(() => {
+    const element = history.current;
+    if (scrollHistory && element && atLatest.current) element.scrollTop = element.scrollHeight;
+  }, [scrollHistory, latestId]);
+
   return (
-    <div {...stylex.props(styles.body)}>
+    <div
+      aria-label={scrollHistory ? t('comments.history') : undefined}
+      ref={history}
+      role={scrollHistory ? 'region' : undefined}
+      tabIndex={scrollHistory ? 0 : undefined}
+      onScroll={
+        scrollHistory
+          ? (event) => {
+              const { clientHeight, scrollHeight, scrollTop } = event.currentTarget;
+              atLatest.current = scrollHeight - clientHeight - scrollTop <= 2;
+            }
+          : undefined
+      }
+      {...stylex.props(styles.body, scrollHistory && styles.history)}
+    >
       {thread.messages.map((message) => (
         <MessageView
           key={message.id}
@@ -191,10 +222,11 @@ interface Props {
   agent?: string;
   label: ReactNode;
   onClose?: () => void;
+  scrollHistory?: boolean;
   thread: Thread<unknown>;
 }
 
-export function ThreadView({ thread, label, actions, agent, onClose }: Props) {
+export function ThreadView({ thread, label, actions, agent, onClose, scrollHistory }: Props) {
   const { t } = useTranslation();
   const resolved = thread.status === 'resolved';
   return (
@@ -234,7 +266,7 @@ export function ThreadView({ thread, label, actions, agent, onClose }: Props) {
           </button>
         ) : null}
       </div>
-      <ThreadMessages actions={actions} thread={thread} />
+      <ThreadMessages actions={actions} scrollHistory={scrollHistory} thread={thread} />
       {actions && !resolved ? (
         <Composer
           placeholder={t('common.reply')}
