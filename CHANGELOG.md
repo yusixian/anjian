@@ -1,5 +1,36 @@
 # anjian-workflow
 
+## 0.7.0
+
+### Minor Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+验收报告支持一句结果摘要和常规检查汇总。相同构建及环境的结果可归在一起，命令与原始输出可按需展开。原始证据缺失或内容有变时，报告提示复核。
+
+<!-- anjian:en -->
+
+#### English
+
+Verification reports can show one-line observations and a summary of routine checks. Results from the same build and environment appear together, with commands and raw output available in a disclosure. When the evidence changes or disappears, the report asks for a fresh review.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+验收报告可单列待确认的决定、理由和影响，并将同一画板的验收组汇总成一条状态，点击可回到画板。规格工作单保留到验收完成或分支合入。
+
+<!-- anjian:en -->
+
+#### English
+
+Verification reports can list decisions that need your input, with their reasons and impact. They can also summarize review groups in one link per artboard. Spec workspaces stay available through verification or until the branch lands.
+
+<!-- anjian:end -->
+
 ## 0.6.1
 
 ### Patch Changes
