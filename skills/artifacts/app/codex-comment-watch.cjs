@@ -12,6 +12,7 @@ const {
   subscriptionSources,
   UUID,
 } = require('./comment-subscriptions.cjs');
+const { createSelectionDispatch } = require('./selection-dispatch.cjs');
 
 function readJson(file) {
   try {
@@ -121,14 +122,17 @@ function claim(ctx) {
   return null;
 }
 
-function queueComment(ctx, remote, event, signal) {
+function commentMessage(event) {
   const skill = path.join(__dirname, '..', 'SKILL.md');
   const guide = path.join(__dirname, '..', `${event.artifact.split('/')[0]}.md`);
   const what =
     event.type === 'anjian-choices'
       ? `Anjian choices for round ${event.round} on ${event.artifact} were ${event.withdrawn ? 'withdrawn' : 'submitted'}.`
       : 'Anjian review comments changed.';
-  const message = `${what} Local skill: ${JSON.stringify(skill)}; guide: ${JSON.stringify(guide)}. ${event.instruction}\nRun: ${event.command}`;
+  return `${what} Local skill: ${JSON.stringify(skill)}; guide: ${JSON.stringify(guide)}. ${event.instruction}\nRun: ${event.command}`;
+}
+
+function queueMessage(ctx, remote, message, signal) {
   const args = [
     'queue',
     '--remote',
@@ -187,6 +191,7 @@ function watch(ctx, input) {
   fs.writeFileSync(ctx.file, JSON.stringify(state), { mode: 0o600 });
   const session = `codex:${ctx.session}`;
   const poll = createProjectPoll('Codex', session);
+  const selections = createSelectionDispatch('codex', ctx.session);
   const pending = new Map();
   const controller = new AbortController();
   let running = false;
@@ -213,7 +218,7 @@ function watch(ctx, input) {
       }
     }
     beatSources(ctx.project, 'codex', ctx.session, sources);
-    if (running || !pending.size || Date.now() < nextAttempt) return;
+    if (running || Date.now() < nextAttempt) return;
     let delivery;
     for (const item of pending) {
       const [key, { project, event }] = item;
@@ -233,12 +238,15 @@ function watch(ctx, input) {
       delivery = item;
       break;
     }
-    if (!delivery) return;
-    const [key, { event }] = delivery;
+    const selection = !delivery && selections(sources);
+    if (!selection && !delivery) return;
+    const event = selection?.event ?? delivery[1].event;
     running = true;
     try {
-      const { receipt, warning } = await queueComment(ctx, remote, event, controller.signal);
-      pending.delete(key);
+      const message = selection ? event.instruction : commentMessage(event);
+      const { receipt, warning } = await queueMessage(ctx, remote, message, controller.signal);
+      if (selection) selection.acknowledge();
+      else pending.delete(delivery[0]);
       failures = 0;
       update({ artifact: event.artifact, receipt, warning, queuedAt: new Date().toISOString() });
     } catch (error) {

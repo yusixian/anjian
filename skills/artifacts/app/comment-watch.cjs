@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { unreadReceiptCount, unreadThreadCount } = require('./comment-threads.cjs');
 const { beatSources, sessionOf, subscriptionSources } = require('./comment-subscriptions.cjs');
+const { createSelectionDispatch } = require('./selection-dispatch.cjs');
 
 const cursorKey = (env) => (env.CLAUDE_CODE_IS_COWORK ? 'Claude Cowork' : 'Claude Code');
 
@@ -174,15 +175,25 @@ function main() {
   const project = process.argv[2] || process.cwd();
   // Without a session ID (older Claude Code) there is nothing to route by, so every artifact counts.
   const session = sessionOf('claude');
-  const write = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+  const write = (event, done) => process.stdout.write(`${JSON.stringify(event)}\n`, done);
   const poll = session
     ? createProjectPoll(undefined, `claude:${session}`)
     : createCommentWatch(project);
+  const selections = session && createSelectionDispatch('claude', session);
+  let sendingSelection = false;
   const emit = () => {
     if (session) {
       const sources = subscriptionSources(project, 'claude', session);
       beatSources(project, 'claude', session, sources);
       for (const { event } of poll(sources)) write(event);
+      if (sendingSelection) return;
+      const selection = selections(sources);
+      if (!selection) return;
+      sendingSelection = true;
+      write(selection.event, (error) => {
+        if (!error) selection.acknowledge();
+        sendingSelection = false;
+      });
     } else {
       for (const event of poll()) write(event);
     }

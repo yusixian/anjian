@@ -578,6 +578,16 @@
     "nextBoard": "下一张"
   },
   "preview": {
+    "selectionSend": "发送选区",
+    "selectionRecipient": "选择 Agent",
+    "selectionDelivery": {
+      "queued": "等待 Agent 接收",
+      "delivered": "已发送给 Agent",
+      "expired": "发送已过期。请重新选择文字。",
+      "stale": "请重新选择要发送的文字。",
+      "failed": "选区发送失败，请重试。",
+      "noRecipient": "从 Agent 会话打开此预览后，即可发送选区。"
+    },
     "unavailable": "预览暂不可用",
     "loading": "正在加载预览…",
     "waitingPage": "等待页面内容…",
