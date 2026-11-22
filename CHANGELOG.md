@@ -1,5 +1,39 @@
 # anjian-workflow
 
+## 0.8.0
+
+### Minor Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+画板支持在同一页的板块之间添加带标签的方向箭头。可以让 Agent 串起多个界面，并标注跳转动作或条件。
+
+<!-- anjian:en -->
+
+#### English
+
+Artboards can show labeled arrows between boards on the same page. Ask an Agent to connect screens and label each transition or condition.
+
+<!-- anjian:end -->
+
+### Patch Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+窄屏文档工具栏用紧凑按钮显示评论和历史，让批注恢复和分享保持可见。
+
+<!-- anjian:en -->
+
+#### English
+
+The narrow document toolbar uses compact Comments and History buttons to keep Recover comments and Share in view.
+
+<!-- anjian:end -->
+
 ## 0.7.4
 
 ### Patch Changes
