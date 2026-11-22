@@ -704,6 +704,18 @@
     "access": "访问权限",
     "contents": "分享内容",
     "snapshotHelp": "发布此作品的完整快照及资源；不包含批注、编辑历史、其他作品或项目列表。修改后需要手动更新分享。",
+    "documentSnapshotHelp": "发布此文档及其资源的完整快照。快照不含批注、编辑历史或项目列表。修改后需要手动更新分享。",
+    "references": "引用的作品",
+    "referencesHelp": "选择允许访客打开的引用作品。更新分享时，本次选择会替换上次分享的引用作品。",
+    "referenceReasons": {
+      "unavailable": "此作品暂不可用。",
+      "unsupported": "文档分享暂不支持包含此类型的作品。",
+      "cycle": "此引用指向当前正在分享的文档。"
+    },
+    "wholeArtboard": "勾选后将分享整个画板，包括所有页面和对象。",
+    "nestedReferences": "访客可打开此文档，但无法通过其中的引用继续打开其他作品。",
+    "referencesTruncated": "这里只列出前 24 项引用。",
+    "referencesChanged": "引用已变化。请核对列表并重新选择要分享的作品。",
     "validFor": "链接有效期",
     "oneDay": "1 天",
     "sevenDays": "7 天",

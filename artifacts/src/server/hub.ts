@@ -1226,6 +1226,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     authorized: authenticated,
     readBody,
     publish: writeQuota,
+    referenceTargets: (req, project) =>
+      projectAccess.authorized(req, project) ? artifactList(new Set([project])).artifacts : [],
     resolve: (req, input) => {
       if (
         typeof input.type !== 'string' || input.type === 'storyboard' ||

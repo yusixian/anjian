@@ -439,3 +439,126 @@ test('one project keeps native editors, source formats, and share modes distinct
     ]),
   );
 });
+
+test('publishes only selected reference snapshots and invalidates them with the parent', async () => {
+  const { h, home, project, root, req, owner, action } = await setup();
+  const docAddress = 'a'.repeat(21);
+  const selectedAddress = 'b'.repeat(21);
+  const unselectedAddress = 'c'.repeat(21);
+  const nestedAddress = 'd'.repeat(21);
+  const otherAddress = 'e'.repeat(21);
+  function artifact(base: string, relative: string, address: string, source: string) {
+    const dir = path.join(base, relative);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '.artifact-id'), address + '\n');
+    fs.writeFileSync(path.join(dir, relative.startsWith('html/') ? 'index.html' : 'doc.xml'), source);
+  }
+  artifact(root, 'html/demo', selectedAddress, '<html><head></head><body>Selected version</body></html>');
+  artifact(root, 'html/omit', unselectedAddress, '<html>Not selected</html>');
+  artifact(root, 'html/' + selectedAddress, 'g'.repeat(21), '<html>Conflicting slug</html>');
+  artifact(root, 'document/nested', nestedAddress,
+    `<doc><h1>Related notes</h1><ref type="document" target="${docAddress}" label="Cycle back" /></doc>`);
+  artifact(root, 'document/review', docAddress, `<doc><h1>Review</h1>
+    <ref type="html" target="${selectedAddress}" label="Selected demo" />
+    <ref type="html" target="${unselectedAddress}" label="Unselected demo" />
+    <ref type="document" target="${nestedAddress}" label="Related notes" />
+    <ref type="document" target="${docAddress}" label="Self" />
+    <ref type="html" target="${otherAddress}" label="Other project" />
+    <ref type="storyboard" target="${'f'.repeat(21)}" label="Storyboard" /></doc>`);
+  const other = temp();
+  artifact(path.join(other, '.anjian/artifacts'), 'html/other', otherAddress, '<html>Other project</html>');
+  await h.register(other);
+
+  const getPreview = async () => {
+    const result = await action('preview', { type: 'document', id: 'review' });
+    expect(result.status).toBe(200);
+    return (await result.json()).referencePreview;
+  };
+  const parentAction = (name: string, extra = {}) => action(name, { type: 'document', id: 'review', ...extra });
+  const selectionOf = (preview: any, labels: string[]) => ({
+    revision: preview.revision,
+    choices: preview.choices.filter((choice: any) => labels.includes(choice.label))
+      .map(({ key, revision }: any) => ({ key, revision })),
+  });
+  const unauthorized = await req('/api/hub/share', {
+    method: 'POST', headers: { ...owner, Origin: 'https://other.example' },
+    body: JSON.stringify({ project, type: 'document', id: 'review', action: 'preview' }),
+  });
+  expect(unauthorized.status).toBe(403);
+  const preview = await getPreview();
+  expect(preview.choices).toMatchObject([
+    { label: 'Selected demo', revision: expect.any(String) },
+    { label: 'Unselected demo', revision: expect.any(String) },
+    { label: 'Related notes', revision: expect.any(String), nested: true },
+    { label: 'Self', reason: 'cycle' },
+    { label: 'Other project', reason: 'unavailable' },
+    { label: 'Storyboard', reason: 'unsupported' },
+  ]);
+  expect(JSON.stringify(preview)).not.toContain(project);
+  const standalone = await action('publish');
+  expect(standalone.status).toBe(200);
+  const standaloneLink = new URL((await standalone.json()).share.url).pathname;
+
+  const publish = await parentAction('publish', {
+    referenceSelection: selectionOf(preview, ['Selected demo', 'Related notes']),
+  });
+  expect(publish.status).toBe(200);
+  const parent = new URL((await publish.json()).share.url).pathname;
+  const publicData = async (pathname: string) => {
+    const result = await req(pathname + '/data');
+    expect(result.status).toBe(200);
+    return result.json();
+  };
+  const main = await publicData(parent);
+  const raw = JSON.stringify(main);
+  for (const address of [selectedAddress, unselectedAddress, nestedAddress, docAddress, otherAddress])
+    expect(raw).not.toContain(address);
+  const links = main.state.root.children.filter((node: any) => node.type === 'public-artifact-reference');
+  expect(links.map(({ label }: any) => label)).toContain('Unselected demo');
+  expect(links.find(({ label }: any) => label === 'Unselected demo')).not.toHaveProperty('token');
+  const child = '/s/' + links.find(({ label }: any) => label === 'Selected demo').token;
+  const notes = '/s/' + links.find(({ label }: any) => label === 'Related notes').token;
+  const nested = await publicData(notes);
+  expect(nested.state.root.children.find(({ label }: any) => label === 'Cycle back')).not.toHaveProperty('token');
+  const assets = new URL((await publicData(child)).contentBase).pathname;
+  const snapshots = path.join(home, 'shares/snapshots');
+  const previous = fs.readdirSync(snapshots).sort();
+  const quota = createStorageSettings(home);
+  quota.setSharedLimit(0);
+  const rejected = await parentAction('publish', {
+    referenceSelection: selectionOf(preview, ['Selected demo', 'Related notes']),
+  });
+  expect(rejected.status).toBe(413);
+  expect(fs.readdirSync(snapshots).sort()).toEqual(previous);
+  expect(await (await req(assets + 'index.html', {}, true)).text()).toContain('Selected version');
+  quota.setSharedLimit(100 * 1024 * 1024);
+
+  expect((await action('revoke')).status).toBe(200);
+  expect((await req(standaloneLink)).status).toBe(404);
+  expect((await req(child)).status).toBe(200);
+  fs.renameSync(path.join(root, 'html/demo'), path.join(root, 'html/renamed'));
+  artifact(root, 'html/renamed', selectedAddress, '<html><head></head><body>Edited draft</body></html>');
+  const stale = await parentAction('publish', { referenceSelection: selectionOf(preview, ['Selected demo']) });
+  expect(stale.status).toBe(409);
+  expect(await (await req(assets + 'index.html', {}, true)).text()).toContain('Selected version');
+  expect((await req(assets + 'index.html')).status).toBe(404);
+  const changedPreview = await getPreview();
+  expect((await req(child)).status).toBe(200);
+
+  const rotated = await parentAction('rotate');
+  expect(rotated.status).toBe(200);
+  const newParent = new URL((await rotated.json()).share.url).pathname;
+  expect((await req(parent)).status).toBe(404);
+  expect((await req(child)).status).toBe(404);
+  expect((await req(assets + 'index.html', {}, true)).status).toBe(404);
+  const currentData = await publicData(newParent);
+  const currentChild = '/s/' + currentData.state.root.children.find(({ label }: any) => label === 'Selected demo').token;
+  expect((await req(currentChild)).status).toBe(200);
+  const documentOnly = await parentAction('publish', { referenceSelection: selectionOf(changedPreview, []) });
+  expect(documentOnly.status).toBe(200);
+  expect((await req(currentChild)).status).toBe(404);
+  expect((await publicData(newParent)).state.root.children.find(({ label }: any) => label === 'Selected demo'))
+    .not.toHaveProperty('token');
+  expect((await parentAction('revoke')).status).toBe(200);
+  expect((await req(newParent)).status).toBe(404);
+});
