@@ -72,7 +72,6 @@
 ## 待验证能力
 
 - 启动器、Hub 和监听器在系统进程列表显示案间名称和版本，并保留 Linux 启停的精确实例校验。[实现 #130](https://github.com/yusixian/anjian/issues/130)
-- 按作品保留启动 Agent 和默认回复署名，避免不同宿主互相覆盖。[实现 #127](https://github.com/yusixian/anjian/issues/127)
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 
 - 把反馈自动投递给已经运行的普通 Antigravity 交互会话。已验证由案间启动的流式会话接收反馈、普通会话主动读取批注，以及 Pi 会话的投递和回执。普通 Antigravity 会话的外部投递仍待找到公开接口并完成两路会话隔离验证。[宿主证据和缺口 #52](https://github.com/yusixian/anjian/issues/52)
