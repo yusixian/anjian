@@ -110,6 +110,7 @@ function serveShell(
         url: canonical,
         icon: ref ? typeFaviconHref(ref.type) : undefined,
         artifactId: resolved?.id,
+        referrerPolicy: ref ? 'same-origin' : undefined,
       });
       send(res, 200, html, {
         ...headers,

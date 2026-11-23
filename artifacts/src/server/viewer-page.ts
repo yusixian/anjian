@@ -17,11 +17,13 @@ export function viewerPage(
     locale?: Locale;
     icon?: string;
     artifactId?: string;
+    referrerPolicy?: 'same-origin';
   },
 ): string {
   const locale = page.locale ?? 'en';
   const values: Record<string, string> = {
     'robots': 'noindex, nofollow',
+    'referrer': page.referrerPolicy ?? 'no-referrer',
     'og:locale': locale === 'zh' ? 'zh_CN' : 'en_US',
     'description': page.description,
     'og:title': page.title,
