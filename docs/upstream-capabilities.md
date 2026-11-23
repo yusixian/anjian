@@ -96,18 +96,25 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 通过合成 OAuth 服务走实际邀请和登录。受邀成员在自己的项目里编辑四类私有作品，另一成员的读写被拒绝，暂停成员后原会话立即失效。并发编辑报告时两处改动合并并持久化，白板会提示版本冲突并保护已保存内容。正式 v0.18.0 macOS arm64 安装包能读取新版生成的 JSON 报告。[完整验收 #177](https://github.com/yusixian/anjian/issues/177)
 
+正式 v0.18.0 和 v0.18.2 的 macOS arm64 包双向验证了 CLI 与 Hub 的配对、绑定、文档拉取和上传，以及批注写入和读取。另用 Chrome 保留旧版文档页，往返切换 Hub 版本。页面重新连接后可继续编辑，窄屏新页面可读回。[CLI 验收 #165](https://github.com/yusixian/anjian/issues/165#issuecomment-7114715292) · [浏览器验收 #177](https://github.com/yusixian/anjian/issues/177#issuecomment-7114786138)
+
 ## 作品库与 JSON 证据
 
 - 作品库保持打开时，两项目各连续创建八份作品，桌面与 390 像素触摸视口每批各刷新一次。空闲 20.5 秒无列表请求，断线时仍能回退刷新。[实现 #183](https://github.com/yusixian/anjian/pull/183) · [测量 #180](https://github.com/yusixian/anjian/issues/180)
 - 在验收报告里展开「原始输出」，可阅读通过摘要校验的完整 JSON，先用数据表预览筛查内容。桌面和 390 像素触摸视口均验收表格、语法高亮和原文。[实现 #184](https://github.com/yusixian/anjian/pull/184) · [中英文指南](../website/content/docs/review-workflows.mdx)
 
+## 画板预览编辑与报告重跑
+
+- 检查器删除只影响当前预览。真实 Claude Code 可在下一轮读到原始文件和元素路径。按钩子给出的路径修改原稿后，两个 Chrome 会话均看到保存结果，相邻元素仍在。[Claude Code 验收 #156](https://github.com/yusixian/anjian/pull/156) · [源文件验收 #153](https://github.com/yusixian/anjian/issues/153#issuecomment-7115510035)
+- 同一画板里的卡片和便签可由两个会话同时调整，双方实时看到更新。同一对象的较晚保存若基于旧坐标，会显示冲突并采用已保存的位置。三种工具都可从预览内用鼠标中键拖动平移。[Chrome 验收 #153](https://github.com/yusixian/anjian/issues/153#issuecomment-7115385124) · [中文指南](https://anjian.cosine.ren/zh/docs/artboards/) · [English guide](https://anjian.cosine.ren/en/docs/artboards/)
+- v0.18.3 支持自托管站点所有者重跑显式登记的检查，也能用「刷新报告」同步正文、引用和运行历史并保留草稿。桌面和触摸视口已实测。旧 Hub 拒绝重跑时，新面板给出核对配置和升级的提示。恢复报告配置后可刷新面板继续运行。[报告验收 #152](https://github.com/yusixian/anjian/issues/152) · [兼容提示 #191](https://github.com/yusixian/anjian/pull/191) · [中文指南](https://anjian.cosine.ren/zh/docs/documents/) · [English guide](https://anjian.cosine.ren/en/docs/documents/)
+
 ## 待验证能力
 
-- [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及独立客户端实际遇到协议不兼容时的行为。
-- [#153](https://github.com/yusixian/anjian/issues/153) 画板预览删除回传与多人编辑。
+- [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
+- [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互。
 - [#154](https://github.com/yusixian/anjian/issues/154) DeepSeek Harness 安装与定向批注。
-- [#152](https://github.com/yusixian/anjian/issues/152) 自托管或远程访问时的报告重跑、授权与统一刷新。
 - Linux 主机电源、进程和临时防休眠。v0.18.1 已修复启动期间停止 systemd 用户服务会误报失败的问题。[#139](https://github.com/yusixian/anjian/issues/139)
 
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
