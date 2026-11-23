@@ -8,6 +8,7 @@ export const docAnchorMap = {
   },
   'local': {
     install: { zh: '安装与启动', en: 'install-and-start' },
+    systemd: { zh: 'linux-用户服务', en: 'linux-user-service' },
     state: { zh: '作品和服务状态', en: 'artifacts-and-service-state' },
     devices: { zh: '让其他设备打开', en: 'open-from-another-device' },
     update: { zh: '更新案间', en: 'update-anjian' },

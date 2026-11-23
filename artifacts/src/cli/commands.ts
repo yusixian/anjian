@@ -8,6 +8,7 @@ import { feedbackHostCommand } from './feedback-host';
 import { questionAnswerCommand } from './question-answer';
 import { remoteCommands } from './remote-commands';
 import { reviewCommand } from './review';
+import { serviceCommand } from './service';
 import { skillsCommand } from './skills';
 import { startCommand } from './start';
 import { stopCommand } from './stop';
@@ -19,6 +20,7 @@ export const COMMANDS: CommandSpec[] = [
   skillsCommand,
   startCommand,
   stopCommand,
+  serviceCommand,
   checkCommand,
   designSpecCommand,
   verifyReportCommand,

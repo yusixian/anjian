@@ -75,6 +75,10 @@ jobs:
           ffmpeg -version
           ffprobe -version
       - run: pnpm test --maxWorkers 4
+      - name: Verify Linux systemd user service
+        working-directory: .
+        timeout-minutes: 5
+        run: bash tests/systemd/user-service.sh
   website:
     runs-on: ubuntu-latest
     defaults:

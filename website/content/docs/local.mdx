@@ -40,6 +40,18 @@ node dist/cli.cjs start \
 </Step>
 </Steps>
 
+## Linux 用户服务
+
+在使用 systemd 的 Linux 桌面或终端上，从源码构建后，可以让当前用户的 systemd 在登录时启动本机 Hub。安装和启动分开执行。若此前手工启动了同一个 Hub，先在合适的时候用 `anjian stop` 停止它。
+
+```bash
+node dist/cli.cjs service install --project-dir /绝对路径/作品项目
+node dist/cli.cjs service start
+node dist/cli.cjs service status --json
+```
+
+再执行 `node dist/cli.cjs start --project-dir /绝对路径/作品项目 --no-open` 可查看已运行 Hub 的链接。Hub 异常退出时，systemd 会尝试重启。要停止服务，执行 `service stop`；要停止并取消登录启动，执行 `service uninstall`。两者都保留作品及本机 Hub 状态。更换项目或移动案间安装目录时，先卸载原单元再重新安装。容器部署仍沿用[自托管指南](/docs/self-hosting)。
+
 ## 作品和服务状态
 
 作品位于项目的 `.anjian/artifacts/`；服务状态默认在 `~/.anjian/server/`。退出前台进程不会删除作品。下次使用同一个项目目录启动即可继续。

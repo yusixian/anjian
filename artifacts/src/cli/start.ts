@@ -30,6 +30,7 @@ declare const CLI_VERSION: string | undefined;
 export interface StartOptions {
   artifact?: string;
   background: boolean;
+  exclusive?: boolean;
   foreground: boolean;
   host: string;
   mockup?: boolean;
@@ -281,6 +282,12 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
   };
   try {
     const running = runningPid(machine);
+    if (options.exclusive && running)
+      throw new CliError(
+        'Anjian Hub is already running; stop it before starting the user service',
+        {},
+        78,
+      );
     let info = readInfo(machine);
     if (running && !info) {
       for (let waited = 0; waited < SETTLE_MS && alive(running) && !info; waited += 100) {
@@ -430,6 +437,7 @@ export const startCommand: CommandSpec = {
     'no-open': { type: 'boolean', help: 'Do not open a browser' },
     'foreground': { type: 'boolean', help: 'Run the server in this process until Ctrl+C' },
     'no-daemon': { type: 'boolean' },
+    'exclusive': { type: 'boolean', help: 'Fail if an existing Hub owns the state directory' },
     'background': {
       type: 'boolean',
       help: 'Detach the server even where it would run in the foreground',
@@ -440,6 +448,7 @@ export const startCommand: CommandSpec = {
     start(
       {
         projectDir,
+        exclusive: !!values.exclusive,
         artifact: values.artifact as string | undefined,
         host: (values.host as string | undefined) ?? '127.0.0.1',
         urlHost: (values['url-host'] as string | undefined) ?? process.env.ARTIFACTS_URL_HOST,
