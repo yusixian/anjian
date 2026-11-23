@@ -41,6 +41,18 @@ Open the complete URL printed in the terminal. Do not invent a port or drop the 
 </Step>
 </Steps>
 
+## Linux user service
+
+After building from source on Linux with systemd, use your own user manager to start the local Hub at login. Install the service and start it separately. If you started the same Hub manually, use `anjian stop` when it is safe to stop it.
+
+```bash
+node dist/cli.cjs service install --project-dir /absolute/path/to/artifact-project
+node dist/cli.cjs service start
+node dist/cli.cjs service status --json
+```
+
+Run `node dist/cli.cjs start --project-dir /absolute/path/to/artifact-project --no-open` to print the running Hub's link. Systemd retries after an unexpected Hub exit. Use `service stop` to stop the service, or `service uninstall` to stop it and remove login startup. Both preserve artifacts and local Hub state. Uninstall the unit before changing the project or moving the Anjian installation, then install it again. For containers, follow the [self-hosting guide](/docs/self-hosting).
+
 ## Artifacts and service state
 
 Artifacts live in the project's `.anjian/artifacts/`; service state defaults to `~/.anjian/server/`. Exiting the foreground process does not delete artifacts. Start with the same project directory next time to continue.
