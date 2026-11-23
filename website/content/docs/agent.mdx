@@ -77,6 +77,27 @@ anjian start --project-dir "$PWD" --no-open --foreground
 anjian comment list --project-dir "$PWD" --artifact document/plan --json
 ```
 
+## DeepSeek Harness
+
+先构建案间，并准备 DeepSeek Harness `0.2.2-rc.5` 或兼容版本。用官方 `dsh` 命令向现有 profile 安装案间插件。下方以 `web` 为例。
+
+```bash
+ANJIAN_SOURCE="/绝对路径/anjian"
+dsh plugin --profile web add "file:$ANJIAN_SOURCE/integrations/deepseek"
+```
+
+在实际作品项目根目录安装完整的案间 Skill。启动 DSH 时让插件使用构建好的案间。
+
+```bash
+mkdir -p .dsh/skills/artifacts
+cp -R "$ANJIAN_SOURCE/skills/artifacts/." .dsh/skills/artifacts/
+ANJIAN_DSH_APP="$ANJIAN_SOURCE/skills/artifacts/app" dsh --profile web
+```
+
+在案间本机 Hub 打开文档或画板，并在希望接收反馈的 DSH 会话输入 `/anjian watch document/plan`。提交浏览器批注后，该会话会收到通知和读取命令。可用 `/artifacts` 打开案间 Skill。通知发出后批注仍为未读，读取才会推进该会话的回执。
+
+用 `/anjian status` 查看订阅，用 `/anjian unwatch document/plan` 停止订阅。会话结束或切换工作目录后需要重新订阅。
+
 ## 自定义 Agent 宿主
 
 让本机 Hub 把文档批注和画板反馈交给你指定的程序。先启动案间，在你的本机配置目录写一个 JSON 文件。以下示例将收到的事件打印到终端。把 `command` 的第一个元素换成可执行文件的绝对路径，再按需替换后续参数。

@@ -18,6 +18,7 @@ export const docAnchorMap = {
     entry: { zh: '配置项目入口', en: 'configure-a-project-entry-point' },
     feedback: { zh: '一轮反馈怎么处理', en: 'process-a-round-of-feedback' },
     copilot: { zh: 'github-copilot-cli', en: 'github-copilot-cli' },
+    deepseek: { zh: 'deepseek-harness', en: 'deepseek-harness' },
     customHost: { zh: '自定义-agent-宿主', en: 'custom-agent-hosts' },
     events: { zh: '事件与自动处理', en: 'events-and-automation' },
     localQuestion: {

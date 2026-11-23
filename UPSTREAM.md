@@ -39,6 +39,7 @@
 - **画布和评审**。记录预览平移、删除和撤回、把删除位置交给 Agent、白板缩放点阵及幻灯片结构广播。验收报告涉及脚本重跑和新的页头、抽屉。按两个工作流验收。[#153](https://github.com/yusixian/anjian/issues/153) · [#152](https://github.com/yusixian/anjian/issues/152)
 - **运行和发布**。上游把 Hook 改为签名的原生程序，并调整 daemon 发布缓存、源码身份、优先级和信任对话时序。案间按作品反馈、会话控制和可信制品轨迹验收任务。Linux 自产制品与 macOS 公证继续由 [#139](https://github.com/yusixian/anjian/issues/139) 和 [#124](https://github.com/yusixian/anjian/issues/124) 跟踪。官方云登录、更新及首次调用下载上游二进制不接入案间。
 - **来源与授权**。Ryugi License 1.1 更新了内部使用条件，Exhibit B 保留特定早期 MIT 材料。本轮采用正式发布说明和公开差异做行为审计，新增实现按案间架构独立完成。[Ryugi License 1.1](https://github.com/Innei/ryugi/blob/v1.105.8/LICENSE)
+- **DeepSeek Harness 实现来源**。Ryugi v1.103.3 的 `.dsh` 集成沿用 Ryugi License 1.1。案间以 DeepSeek 公布的原生命令和 Agent 接口接入自身批注监听。[Ryugi v1.103.3 授权](https://github.com/Innei/ryugi/blob/v1.103.3/LICENSE) · [DeepSeek Agent 接口](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/agent/README.md) · [验收 #154](https://github.com/yusixian/anjian/issues/154)
 
 ### v1.102.9 的能力差异
 
