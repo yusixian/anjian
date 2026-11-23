@@ -94,6 +94,41 @@ test('overwritten or removed bytes no longer support the recorded result', async
   expect(missing.xml).toContain('Evidence missing. Review required.');
 });
 
+test('previews verified JSON source rows and retains the highlighted raw evidence', async () => {
+  const report = await createReport();
+  const rows = Array.from({ length: 26 }, (_, index) => ({
+    scenario: `case-${index}`,
+    status: index === 0 ? '<ready & recorded>\u0001' : 'ready',
+  }));
+  const raw = JSON.stringify(rows, null, 2);
+  fs.writeFileSync(path.join(dir, 'output.json'), raw);
+  const { sha256 } = await run({ digest: 'output.json' });
+  report.checks[0] = {
+    ...report.checks[0]!,
+    output: 'output.json',
+    sha256,
+  };
+  fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(report));
+  const generated = await run({ input: 'report.json', lang: 'en' });
+  const xml = generated.xml as string;
+  const table = xml.match(/<table>.*?<\/table>/s)?.[0];
+  expect(xml).toContain('Source data preview');
+  expect(table).toContain('<th>scenario</th><th>status</th>');
+  expect(table).toContain('&lt;ready &amp; recorded&gt;\\u0001');
+  expect(table).not.toContain('case-25');
+  const parsed = parseDocument(xml);
+  const roundTrip = serializeDocument(parsed);
+  expect(roundTrip).toContain('<table>');
+  expect(roundTrip).toContain('lang="json"');
+  expect(JSON.stringify(parsed)).toContain(JSON.stringify(raw).slice(1, -1));
+
+  fs.writeFileSync(path.join(dir, 'output.json'), '{"changed":true}');
+  const changed = await run({ input: 'report.json', lang: 'en' });
+  expect(changed.xml).not.toContain('<table>');
+  expect(changed.xml).not.toContain('lang="json"');
+  expect(changed.xml).not.toContain('case-25');
+});
+
 test('a rejected manifest leaves an existing output document untouched', async () => {
   const report = await createReport();
   report.checks[0]!.output = '../previous.txt';

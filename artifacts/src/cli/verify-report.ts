@@ -15,6 +15,60 @@ const escape = (value: string) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 const paragraph = (value: string) => `<p>${escape(value)}</p>`;
+const PREVIEW_ROWS = 25;
+const PREVIEW_COLUMNS = 12;
+const PREVIEW_CELL_LENGTH = 200;
+
+function rawOutput(bytes: Buffer, file: string) {
+  const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  let language = 'text';
+  let table = '';
+  if (path.extname(file).toLowerCase() === '.json') {
+    try {
+      const value: unknown = JSON.parse(text.replace(/^\uFEFF/, ''));
+      language = 'json';
+      const entries: unknown[] = Array.isArray(value) ? value : [value];
+      const preview = entries.slice(0, PREVIEW_ROWS);
+      if (
+        preview.length &&
+        preview.every(
+          (row): row is Record<string, unknown> =>
+            !!row && typeof row === 'object' && !Array.isArray(row),
+        )
+      ) {
+        const columns = Array.from(new Set(preview.flatMap(Object.keys))).slice(0, PREVIEW_COLUMNS);
+        const cell = (value: unknown) => {
+          const content = typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+          const preview = content
+            .slice(0, PREVIEW_CELL_LENGTH)
+            .replaceAll(
+              /[\p{Cc}\uFFFE\uFFFF]/gu,
+              (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+            );
+          return escape(preview + (content.length > PREVIEW_CELL_LENGTH ? '…' : ''));
+        };
+        if (columns.length) {
+          const header = columns.map((column) => `<th>${cell(column)}</th>`).join('');
+          const body = preview
+            .map(
+              (row) =>
+                `<tr>${columns
+                  .map(
+                    (column) =>
+                      `<td>${cell(Object.hasOwn(row, column) ? row[column] : undefined)}</td>`,
+                  )
+                  .join('')}</tr>`,
+            )
+            .join('');
+          table = `<table><tr>${header}</tr>${body}</table>`;
+        }
+      }
+    } catch {
+      // A malformed JSON capture remains available as literal output.
+    }
+  }
+  return { table, code: `<codeblock lang="${language}">${escape(text)}</codeblock>` };
+}
 
 function record(value: unknown, name: string) {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -187,12 +241,13 @@ function renderReport(source: string, lang: string) {
       ...(status === 'stale' ? [paragraph(`${tr('当前摘要', 'Current digest')} ${actual}`)] : []),
       ...ruleParagraph(rules),
     ];
-    const raw =
-      bytes && actual === expected
-        ? `<codeblock lang="text">${escape(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes))}</codeblock>`
-        : '';
+    const raw = bytes && actual === expected ? rawOutput(bytes, output) : null;
     const details = (label: string, content: string) =>
       `<details summary="${label}">${content}</details>`;
+    const rawDetails = raw ? details(tr('原始输出', 'Raw output'), raw.code) : '';
+    const sourceData = raw?.table
+      ? [paragraph(tr('来源数据预览', 'Source data preview')), raw.table, rawDetails]
+      : [];
     return {
       status,
       title,
@@ -205,10 +260,12 @@ function renderReport(source: string, lang: string) {
           ? [
               details(
                 tr('查看证据', 'View evidence'),
-                [...metadata, raw].filter(Boolean).join('\n'),
+                [...metadata, ...(sourceData.length ? sourceData : [raw?.code ?? ''])]
+                  .filter(Boolean)
+                  .join('\n'),
               ),
             ]
-          : [...metadata, raw ? details(tr('原始输出', 'Raw output'), raw) : '']),
+          : [...metadata, ...(sourceData.length ? sourceData : [rawDetails])]),
       ]
         .filter(Boolean)
         .join('\n'),

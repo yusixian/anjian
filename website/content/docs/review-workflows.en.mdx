@@ -40,7 +40,7 @@ A document reference to an artboard choice group shows the submitted option. Ope
 - **Link the work.** Ask the Agent to add a `<ref>` for a related artifact. An artboard reference can open a specific group or board and display the current verdict of a verification group. Readers need access to the destination.
 - **Review the evidence.** Ask the Agent to generate a verification report with `verify-report` and open the resulting document. It can include check output, the build and environment, human verdicts on an artboard, and unchecked items. When the report pins a design specification, you can trace each reported check to the version of the rule it tested. The Agent can use `changes` to inspect retained document revisions and `review` to inspect saved review comments and evidence. [Documents](/docs/documents)
 
-An observation in the report gives you the result in one line. Expand **View evidence** for the command, capture time, and raw output. If the report asks for review, have the Agent regenerate it from current evidence.
+An observation in the report gives you the result in one line. Expand **View evidence** for the command, capture time, and raw output. If a check's `output` points to a `.json` file containing an object or a list of objects, scan the source data preview and open **Raw output** for the complete syntax-highlighted JSON. If the report asks for review, have the Agent regenerate it from current evidence.
 
 The report can also list decisions that need your input, with the reason and impact of each choice. Ask the Agent to summarize artboard review groups when you want one status line per artboard and a link back to its evidence.
 
