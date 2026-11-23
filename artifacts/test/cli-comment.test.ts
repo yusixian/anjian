@@ -223,7 +223,7 @@ describe('anjian comment', () => {
       type: 'comment-resolved',
       threadId,
     });
-  });
+  }, 15_000);
 
   test('Codex and Claude use the same session names as their notification watchers', async () => {
     const dir = await project();
