@@ -1,7 +1,7 @@
 import './slides.css';
 
 import { ArrowDown, ArrowUp, MessageSquare, NotebookPen, Play, Plus, Save } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { mintArtifactId } from '../../shared/ids';
 import {
@@ -9,19 +9,31 @@ import {
   MAX_SLIDE_TITLE,
   MAX_SLIDES,
   type Slide,
+  SLIDE_DECK_FILE,
   type SlideDeckSnapshot,
 } from '../../shared/slides';
 import { CommentRecovery } from '../comments/CommentRecovery';
 import { LibraryLink, LibraryNavigation } from '../components/LibraryNavigation';
 import { ShareButton } from '../components/ShareButton';
 import { NativeFeedback, NativeFeedbackButton } from '../feedback/NativeFeedback';
+import { useArtifactSocket } from '../hooks/useArtifactSocket';
 import { Audience } from './Audience';
 import { useSlidesCopy } from './copy';
 import { useSlideKeys, useSlidePage } from './navigation';
 import { SlideComments } from './SlideComments';
 import { Pagination, SlidePaper, Tool } from './SlideView';
 
-function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapshot; url: string }) {
+function Workbench({
+  id,
+  sourceId,
+  initial,
+  url,
+}: {
+  id: string;
+  sourceId: string;
+  initial: SlideDeckSnapshot;
+  url: string;
+}) {
   const c = useSlidesCopy();
   const [base, setBase] = useState(initial);
   const [deck, setDeck] = useState(initial.deck);
@@ -30,12 +42,50 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
   const [detail, setDetail] = useState<'notes' | 'comments'>('notes');
   const [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState<'conflict' | 'saveFailed' | ''>('');
+  const [refresh, setRefresh] = useState(0);
   const { index, select } = useSlidePage(deck);
   const slide = deck.slides[index]!;
   const dirty = deck !== base.deck;
   const presentButtonRef = useRef<HTMLSpanElement>(null);
   const writingRef = useRef(false);
   const latestDeckRef = useRef(deck);
+  const refreshDeck = () => setRefresh((current) => current + 1);
+  useArtifactSocket((message) => {
+    if (
+      message.type === 'change' &&
+      message.artifact === `slides/${sourceId}` &&
+      (message.files.length === 0 || message.files.includes(SLIDE_DECK_FILE))
+    )
+      refreshDeck();
+  }, refreshDeck);
+
+  const receiveDeck = useEffectEvent((snapshot: SlideDeckSnapshot) => {
+    if (writingRef.current || snapshot.revision === base.revision) return;
+    if (dirty) {
+      setIssue('conflict');
+      return;
+    }
+    setBase(snapshot);
+    setDeck(snapshot.deck);
+    setIssue('');
+  });
+  useEffect(() => {
+    if (!refresh || busy) return;
+    const abort = new AbortController();
+    async function update() {
+      try {
+        const res = await fetch(url, { cache: 'no-store', signal: abort.signal });
+        if (!res.ok) return;
+        const snapshot: SlideDeckSnapshot = await res.json();
+        if (!abort.signal.aborted) receiveDeck(snapshot);
+      } catch {
+        // The next change or reconnect will retry the refresh.
+      }
+    }
+    void update();
+    return () => abort.abort();
+  }, [busy, refresh, url]);
+
   useEffect(() => {
     latestDeckRef.current = deck;
   }, [deck]);
@@ -323,7 +373,7 @@ function Workbench({ id, initial, url }: { id: string; initial: SlideDeckSnapsho
   );
 }
 
-function LoadDeck({ id }: { id: string }) {
+function LoadDeck({ id, sourceId }: { id: string; sourceId: string }) {
   const c = useSlidesCopy();
   const url = '/api/slides/' + encodeURIComponent(id);
   const [data, setData] = useState<SlideDeckSnapshot | null>(null);
@@ -345,7 +395,7 @@ function LoadDeck({ id }: { id: string }) {
     void load();
     return () => abort.abort();
   }, [url, attempt]);
-  if (data) return <Workbench id={id} initial={data} url={url} />;
+  if (data) return <Workbench id={id} initial={data} sourceId={sourceId} url={url} />;
   return (
     <main className="sd-root sd-loading">
       <LibraryLink />
@@ -358,10 +408,10 @@ function LoadDeck({ id }: { id: string }) {
     </main>
   );
 }
-export function SlidesLayout({ id }: { id: string }) {
+export function SlidesLayout({ id, sourceId }: { id: string; sourceId: string }) {
   return (
     <LibraryNavigation>
-      <LoadDeck id={id} key={id} />
+      <LoadDeck id={id} key={id} sourceId={sourceId} />
     </LibraryNavigation>
   );
 }

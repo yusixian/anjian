@@ -90,7 +90,8 @@ function RouteView() {
     return <StoryboardLayout id={nativeId} key={nativeId} readOnly={route.kind === 'preview'} />;
   if (route.kind === 'preview') return <PreviewLayout id={id} type={route.type} />;
   if (route.kind === 'embed') return <Embedded id={id} type={route.type} />;
-  if (route.type === 'slides') return local(<SlidesLayout id={nativeId} key={nativeId} />);
+  if (route.type === 'slides')
+    return local(<SlidesLayout id={nativeId} key={nativeId} sourceId={id} />);
   if (route.type === 'html') return local(<HtmlLayout id={id} />);
   if (route.type === 'document') return local(<DocumentLayout id={id} />);
   if (route.type === 'whiteboard') return local(<WhiteboardLayout id={nativeId} />);
