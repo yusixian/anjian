@@ -1,11 +1,12 @@
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 import { ArrowUpRight } from 'lucide-react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, use, useContext, useEffect, useState } from 'react';
 
 import type { ArtifactReference } from '../../shared/artifact-reference';
 import { TypeIcon } from '../components/TypeIcon';
 import { useTranslation } from '../i18n';
+import { DynamicHostContext } from './DynamicBlock';
 
 export type ArtifactReferenceResolver = (
   reference: ArtifactReference,
@@ -95,6 +96,7 @@ function readResult(
 
 export function ArtifactReferenceCard({ reference }: { reference: ArtifactReference }) {
   const resolve = useContext(LiveReferenceContext);
+  const channel = use(DynamicHostContext)?.channel;
   const { t } = useTranslation();
   const { type, target, focus, label } = reference;
   const query = focus ? '?' + new URLSearchParams([[focus.kind, focus.id]]) : '';
@@ -135,12 +137,16 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
     void load();
     window.addEventListener('focus', load);
     window.addEventListener('pageshow', load);
+    const unsubscribe = channel?.subscribe((event) => {
+      if (event.type === 'refresh') void load();
+    });
     return () => {
       controller.abort();
       window.removeEventListener('focus', load);
       window.removeEventListener('pageshow', load);
+      unsubscribe?.();
     };
-  }, [resolve, endpoint, path, kind, id, type, target, groupsKey]);
+  }, [resolve, endpoint, path, kind, id, type, target, groupsKey, channel]);
 
   const resolved = resolve && state?.endpoint === endpoint ? state.result : null;
   const loading = resolve && state?.endpoint !== endpoint;

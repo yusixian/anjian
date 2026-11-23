@@ -11,7 +11,7 @@ vi.mock('../src/viewer/hooks/useSandboxFrame', () => ({
   useSandboxFrame: (src: string | null) => ({ src }),
 }));
 
-test('live document blocks reload when their file changes or the connection opens again', () => {
+test('live document blocks reload on a relevant file change, reconnect, or refresh', () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const container = document.createElement('div');
   const root = createRoot(container);
@@ -34,6 +34,8 @@ test('live document blocks reload when their file changes or the connection open
     expect(src()).toBe(`/content/${url}?v=1`);
     act(() => channel.emit({ type: 'open' }));
     expect(src()).toBe(`/content/${url}?v=2`);
+    act(() => channel.emit({ type: 'refresh' }));
+    expect(src()).toBe(`/content/${url}?v=3`);
   } finally {
     act(() => root.unmount());
     vi.unstubAllGlobals();

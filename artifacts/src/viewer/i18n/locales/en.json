@@ -1021,6 +1021,7 @@
   },
   "verification": {
     "title": "Verification checks",
+    "refreshReport": "Refresh report",
     "run": "Run again",
     "runNamed": "Run {{title}} again",
     "running": "Running…",

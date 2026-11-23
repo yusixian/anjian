@@ -1,6 +1,6 @@
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { ClipboardCheck, Maximize2, Minimize2, Play, X } from 'lucide-react';
+import { ClipboardCheck, Maximize2, Minimize2, Play, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import type { VerificationRun, VerificationSnapshot } from '../../shared/verification-runs';
@@ -91,7 +91,13 @@ const styles = stylex.create({
   },
 });
 
-export function VerificationRuns({ documentId }: { documentId: string }) {
+export function VerificationRuns({
+  documentId,
+  onRefreshReport,
+}: {
+  documentId: string;
+  onRefreshReport: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const titleId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -187,6 +193,19 @@ export function VerificationRuns({ documentId }: { documentId: string }) {
             {t('verification.title')}
           </h2>
           <div {...stylex.props(styles.controls)}>
+            <button
+              type="button"
+              {...stylex.props(styles.button)}
+              aria-label={t('verification.refreshReport')}
+              title={t('verification.refreshReport')}
+              onClick={() => {
+                setFailed(false);
+                onRefreshReport();
+                void refresh();
+              }}
+            >
+              <RefreshCw aria-hidden="true" size={16} />
+            </button>
             <button
               type="button"
               {...stylex.props(styles.button, styles.resize)}

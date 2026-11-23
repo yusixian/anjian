@@ -41,7 +41,11 @@ export default function DocumentPage({ id }: { id: string }) {
         transport={transport}
         actions={
           <>
-            <VerificationRuns documentId={id} key={id} />
+            <VerificationRuns
+              documentId={id}
+              key={id}
+              onRefreshReport={() => transport.channel.emit({ type: 'refresh' })}
+            />
             <ShareButton id={id} type="document" />
           </>
         }

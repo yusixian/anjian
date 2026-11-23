@@ -131,9 +131,9 @@ export function LoroSync({ transport, doc, onOffline, onState, onQuotaExceeded }
 
     const { artifact } = transport;
     const unsubscribeChannel = transport.channel.subscribe((event) => {
-      if (event.type === 'open') {
+      if (event.type === 'open' || event.type === 'refresh') {
         retryDelay = RETRY_MS;
-        void resync(true);
+        void resync(event.type === 'open');
       } else if (event.type === 'doc-update' && event.artifact === artifact)
         binding.import(decodeBase64(event.bytes));
     });

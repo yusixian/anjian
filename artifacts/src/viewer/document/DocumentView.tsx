@@ -178,7 +178,7 @@ export function DocumentView({
   useEffect(
     () =>
       channel.subscribe((event) => {
-        if (event.type === 'change') void refreshMeta();
+        if (event.type === 'change' || event.type === 'refresh') void refreshMeta();
         else if (event.type === 'doc-status') {
           setStreaming(event.streaming);
           setAgentActiveAt(event.agentActiveAt);
@@ -203,6 +203,12 @@ export function DocumentView({
       setAgentActiveAt(state.agentActiveAt);
       syncClock(state.now);
       if (state.comments) setComments(state.comments);
+      setRecoveryPending(Boolean(state.recoveryPending));
+      setLoaded((current) =>
+        current && current.assetsRevision !== state.approvalAssetsRevision
+          ? { ...current, assetsRevision: state.approvalAssetsRevision }
+          : current,
+      );
     },
     [syncClock],
   );
