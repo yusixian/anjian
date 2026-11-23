@@ -18,7 +18,11 @@ const watchedComments = {
   whiteboard: whiteboardCommentsOf,
 };
 
-export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifact: string) => void) {
+export function watchArtifacts(
+  ctx: ServerContext,
+  commentFileChanged?: (artifact: string) => void,
+  libraryChanged?: (sourceChanged: boolean) => void,
+) {
   const { root, signatures, clients, documents, boardComments, runtimeWarnings } = ctx;
   const pending = new Set<string>();
   const key = {};
@@ -29,6 +33,7 @@ export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifac
       ctx.inputs.run(key, () => {
         const files = [...pending];
         pending.clear();
+        let sourceChanged = false;
         const byArtifact = new Map<string, { ref: ArtifactRef; files: string[] }>();
         for (const file of files) {
           const ref = artifactKeyOf(file);
@@ -43,7 +48,7 @@ export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifac
           const dir = resolveArtifactDir(root, ref.type, ref.id);
           if (!dir) {
             if (ref.type === 'artboard') ctx.selections.refreshArtboard(ref.id);
-            signatures.delete(key);
+            if (signatures.delete(key)) sourceChanged = true;
             runtimeWarnings.delete(key);
             const frame = textFrame(
               JSON.stringify({
@@ -78,6 +83,7 @@ export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifac
           if (changed.includes('comments.json')) commentFileChanged?.(key);
           const signature = artifactSignature(dir, ref.type);
           if (signatures.get(key) === signature) continue;
+          sourceChanged = true;
           const reported = runtimeWarnings.get(key);
           if (reported?.initialSignature === signature) delete reported.initialSignature;
           else runtimeWarnings.delete(key);
@@ -90,6 +96,7 @@ export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifac
           }
           ctx.changeListeners.forEach((listener) => listener(ref, payload, changed));
         }
+        libraryChanged?.(sourceChanged);
         ctx.touch();
       });
     },

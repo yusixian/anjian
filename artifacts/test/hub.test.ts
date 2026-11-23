@@ -266,6 +266,61 @@ test('the cross-project list refuses another origin', async () => {
   expect(res.status).toBe(403);
 });
 
+test('reuses artifact source metadata between library requests', async () => {
+  const h = await hub();
+  const project = newProject();
+  writeArtboard(rootOf(project), 'example', canvas('Example board'));
+  await h.register(project);
+  await h.linkFor(project, 'artboard', 'example');
+  const file = path.join(rootOf(project), 'artboard', 'example', 'canvas.json');
+  const reads = vi.spyOn(fs, 'readFileSync');
+  try {
+    const first = await api(h, '/api/hub/artifacts');
+    const second = await api(h, '/api/hub/artifacts');
+    expect(first.status).toBe(200);
+    expect(second.body).toBe(first.body);
+    expect(reads.mock.calls.filter(([name]) => name === file)).toHaveLength(1);
+  } finally {
+    reads.mockRestore();
+  }
+});
+
+test('library changes refresh other registered projects and reject cross-origin event streams', async () => {
+  const h = await hub();
+  const one = newProject();
+  const two = newProject();
+  await h.register(one);
+  await h.register(two);
+  const list = () => api(h, '/api/hub/artifacts');
+  const initial = JSON.parse((await list()).body);
+  expect(initial.artifacts).toEqual([]);
+  expect((await api(h, '/api/hub/library-events', { Origin: 'https://evil.example' })).status).toBe(
+    403,
+  );
+
+  const response = await fetch(`http://127.0.0.1:${h.port}/api/hub/library-events`, {
+    signal: AbortSignal.timeout(9000),
+  });
+  expect(response.headers.get('content-type')).toContain('text/event-stream');
+  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+  try {
+    expect((await reader.read()).value).toContain(': connected');
+    writeArtboard(rootOf(one), 'first', canvas('First project'));
+    writeArtboard(rootOf(two), 'second', canvas('Second project'));
+    let event = '';
+    while (!event.includes('data: changed\n\n')) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error('Library event stream closed before the change');
+      event += chunk.value;
+    }
+    expect(
+      JSON.parse((await list()).body).artifacts.map((item: { title: string }) => item.title),
+    ).toEqual(expect.arrayContaining(['First project', 'Second project']));
+  } finally {
+    await reader.cancel();
+  }
+}, 12000);
+
 test('the home page removes a project from its own origin only', async () => {
   const h = await hub();
   const one = newProject();
