@@ -49,6 +49,8 @@ description: 阅读方案、选文批注、直接改字，并查看内容如何�
 
 点验收检查面板顶部的「刷新报告」，可以在当前页面读取最新报告正文、引用和运行记录，同时保留正在编辑的内容。要开始一次新检查，使用对应的「重跑」按钮。
 
+如果面板提示验收检查不可用，关闭面板后可以继续查看报告。请让 Hub 管理员核对报告配置。自托管重跑需要案间 v0.18.3 或更新版本。
+
 ## 文档源文件
 
 文档使用 `.anjian/artifacts/document/<id>/doc.xml`（LiteXML）与 `assets/`。这不是直接把 Markdown 文件改名成 XML。让 Agent 先执行 `anjian skills get artifacts --reference document.md`。

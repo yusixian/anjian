@@ -1020,6 +1020,7 @@
     "unsaved": "Unsaved changes"
   },
   "verification": {
+    "unavailable": "Verification checks are unavailable for this report. Ask the Hub administrator to check the report configuration. If the Hub is running an older version, update it and try again.",
     "title": "Verification checks",
     "refreshReport": "Refresh report",
     "run": "Run again",
