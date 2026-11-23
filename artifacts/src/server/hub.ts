@@ -299,7 +299,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       .filter((entry) => available(entry.dir))
       .map((p) => ({ id: projectId(p.dir), name: path.basename(p.dir), dir: p.dir }));
   const remoteEvents = createRemoteEvents(options.paths.home);
-  const localCommentEvents = loopback ? createLocalCommentEvents(options.token) : undefined;
+  const localCommentEvents = loopback
+    ? createLocalCommentEvents(options.token, readBody)
+    : undefined;
   const mounts = new Map<string, Promise<MountedProject>>();
   const ready = new Map<string, MountedProject>();
   let closing = false;
@@ -1281,7 +1283,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         return;
       }
       const url = new URL(req.url ?? '/', 'http://artifacts.local');
-      if (localCommentEvents?.handle(req, res, url.pathname)) return;
+      if (localCommentEvents && (await localCommentEvents.handle(req, res, url))) return;
       if (options.docsDir && (await serveDocsSite(req, res, url, options.docsDir))) return;
       if (await publicShares(req, res, url)) return;
       if (await privateContent(req, res, url, 'main')) return;

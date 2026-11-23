@@ -97,7 +97,7 @@ anjian comment list --project-dir "$PWD" --artifact document/plan --json
 anjian comment list --artifact document/plan --session review-desk:terminal:123 --json
 ```
 
-在监听进程的标准输入发送 `{"action":"unsubscribe","artifact":"document/plan"}` 可以移除一个作品。发送同格式的 `subscribe` 可重新监听。关闭标准输入或按 Ctrl+C 会停止这次监听。永久移除时更新或删除自己的配置文件。
+在监听进程的标准输入发送 `{"action":"unsubscribe","artifact":"document/plan"}` 可以移除一个作品。发送同格式的 `subscribe` 可重新监听。Hub 按该监听连接当前的订阅清单发送事件，断线重连时恢复仍在清单里的作品。关闭标准输入或按 Ctrl+C 会停止这次监听。永久移除时更新或删除自己的配置文件。
 
 ## 事件与自动处理
 

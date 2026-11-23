@@ -97,7 +97,7 @@ From the artifact project, run `anjian feedback-host --config /absolute/path/hos
 anjian comment list --artifact document/plan --session review-desk:terminal:123 --json
 ```
 
-Send `{"action":"unsubscribe","artifact":"document/plan"}` to the watcher's standard input to remove one artifact. Use the same format with `subscribe` to listen again. Close standard input or press Ctrl+C to stop listening. Edit or remove your configuration file to make the change permanent.
+Send `{"action":"unsubscribe","artifact":"document/plan"}` to the watcher's standard input to remove one artifact. Use the same format with `subscribe` to listen again. The Hub filters events for this connection and restores its current subscriptions when the listener reconnects. Close standard input or press Ctrl+C to stop listening. Edit or remove your configuration file to make the change permanent.
 
 ## Events and automation
 
