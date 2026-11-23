@@ -69,3 +69,5 @@ node dist/cli.cjs start \
 ## 更新案间
 
 备份作品与服务状态。安装包用户可下载新版和校验文件，离线解压后切换入口。源码用户可获取新版、重新构建并重启。
+
+新版安装包的 `anjian start` 会复用仍在响应的源码 Hub。如果要更改监听地址、端口或公开地址，请先在合适的时候运行 `anjian stop`，再用所需配置启动。CLI 启动或停止 Hub、以及从网页手动停止或重启时，可在 `~/.anjian/server/hub-events.jsonl` 查看保留、替换与停止的原因。自定义 `ANJIAN_SERVER_HOME` 时，文件位于该目录。

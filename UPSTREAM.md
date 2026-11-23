@@ -6,6 +6,14 @@
 
 ## 当前对照版本
 
+2026-11-24 核对 Ryugi 正式版 `v1.108.0`，最新提交 `32cd13cd09753ecd72fba40aa6f8228f1c354183`。相对 `v1.107.0` 新增 2 个公开提交，累计审计 225 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.0) · [增量差异](https://github.com/Innei/ryugi/compare/v1.107.0...v1.108.0)
+
+- **保留健康的源码 Hub**。发行版 CLI 复用仍响应的源码 Hub。监听配置冲突时提示用户先明确停止 Hub；失去响应时仍可替换。案间独立实现，CLI 与网页管理操作会追加简洁的 Hub 事件记录。[操作指南](website/content/docs/local.mdx#更新案间)
+- **跨设备编辑**。Ryugi 的所有者可以从另一台设备编辑幻灯片、报告、分镜、白板和验收报告，并在版本不兼容时查看只读视图。案间通过自托管和项目权限提供跨设备访问，按作品类型核对编辑、保存和兼容提示。[跨设备验收 #177](https://github.com/yusixian/anjian/issues/177) · [报告重跑 #152](https://github.com/yusixian/anjian/issues/152)
+- **来源与授权**。两版的 `LICENSE` 文件相同。公开增量包含版本清单和会话启动 Hook 的测试调整。本轮依据正式版公告独立实现。[许可证](https://github.com/Innei/ryugi/blob/v1.108.0/LICENSE)
+
+### v1.107.0 的能力差异
+
 2026-11-24 核对 Ryugi 正式版 `v1.107.0`，本批覆盖 `v1.106.1` 和 `v1.107.0`，最新提交 `c31f85a1caff86c95a1c58db2fac7ad7e88ce1c7`。相对 `v1.105.8` 新增 5 个公开提交，累计审计 223 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.107.0) · [增量差异](https://github.com/Innei/ryugi/compare/v1.105.8...v1.107.0)
 
 - **Antigravity 桌面侧栏**。可选 Auxiliary Pane 打开对话的活跃作品，跟随作品切换并接收实时更新。案间已有 CLI 插件与专用反馈会话，桌面侧栏按 [#166](https://github.com/yusixian/anjian/issues/166) 核对，普通会话投递继续见 [#52](https://github.com/yusixian/anjian/issues/52)。

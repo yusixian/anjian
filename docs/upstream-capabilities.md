@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-24 核对 Ryugi 正式版 `v1.105.8`（`68cd84f`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.13.0`（`d92fdfa`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.13.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.105.8) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.108.0`（`32cd13c`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.0) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -43,19 +43,19 @@
 
 ## v0.7.1 至 v0.7.3 评审和预览修复
 
-| 用户或 Agent 的任务 | 案间入口和验证证据 |
-| --- | --- |
-| 从最新消息开始阅读白板或幻灯片的长讨论，向上查看历史 | 白板「评论」和幻灯片「本页批注」的卡片可以独立滚动。桌面及 390 px Chrome 核对初始位置、键盘和刷新。[验收 PR #101](https://github.com/yusixian/anjian/pull/101) · [v0.7.1 更新说明](https://anjian.cosine.ren/zh/docs/updates/#071) |
+| 用户或 Agent 的任务                                        | 案间入口和验证证据                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 从最新消息开始阅读白板或幻灯片的长讨论，向上查看历史       | 白板「评论」和幻灯片「本页批注」的卡片可以独立滚动。桌面及 390 px Chrome 核对初始位置、键盘和刷新。[验收 PR #101](https://github.com/yusixian/anjian/pull/101) · [v0.7.1 更新说明](https://anjian.cosine.ren/zh/docs/updates/#071)                                                                                                         |
 | 在 Hub 运行时切换或合并 Git 分支，核对并恢复带入的人工批注 | 在原文档、画板、白板、幻灯片或分镜点「恢复批注」，预览并确认合并，也可导入原作品的备份。五类作品的隔离 Hub、Git、CLI 和 Chrome 验收见 [PR #103](https://github.com/yusixian/anjian/pull/103)。[上手指南](https://anjian.cosine.ren/zh/docs/review-workflows/#恢复批注) · [v0.7.2 更新说明](https://anjian.cosine.ren/zh/docs/updates/#072) |
-| 在 HTML 预览中查看页面启动时上报的运行错误 | 保留首次文件监听事件前上报的运行警告。编辑源文件后清除旧警告。[Hub 回归 PR #106](https://github.com/yusixian/anjian/pull/106) · [v0.7.3 主分支检查](https://github.com/yusixian/anjian/actions/runs/45011465868) · [v0.7.3 更新说明](https://anjian.cosine.ren/zh/docs/updates/#073) |
+| 在 HTML 预览中查看页面启动时上报的运行错误                 | 保留首次文件监听事件前上报的运行警告。编辑源文件后清除旧警告。[Hub 回归 PR #106](https://github.com/yusixian/anjian/pull/106) · [v0.7.3 主分支检查](https://github.com/yusixian/anjian/actions/runs/45011465868) · [v0.7.3 更新说明](https://anjian.cosine.ren/zh/docs/updates/#073)                                                       |
 
 ## v0.7.4 至 v0.9.0 画板评审
 
-| 用户或 Agent 的任务 | 案间入口和验证证据 |
-| --- | --- |
-| 从文档查看画板选择组已提交的方案 | 选择组引用卡片显示提交结果，撤回后清除，可跳回原选择组。[Hub 与 Chrome 验收 #111](https://github.com/yusixian/anjian/pull/111) · [v0.7.4 更新说明](https://anjian.cosine.ren/zh/docs/updates/#074) |
-| 在同一画板用动作或条件串起多个界面 | Agent 可用 `canvas.json` 的 `connections` 连接卡片。Chrome 核对跨页隔离、移动、平移和缩放。[验收 #115](https://github.com/yusixian/anjian/pull/115) · [v0.8.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#080) |
-| 在浏览器移动画板卡片、标题和便签，继续让 Agent 更新作品 | 「调整布局」支持拖动和键盘微调。隔离 Hub 核对并发冲突、上传与重启，Chrome 核对桌面和触摸。[验收 #119](https://github.com/yusixian/anjian/pull/119) · [v0.9.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#090) |
+| 用户或 Agent 的任务                                     | 案间入口和验证证据                                                                                                                                                                                                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 从文档查看画板选择组已提交的方案                        | 选择组引用卡片显示提交结果，撤回后清除，可跳回原选择组。[Hub 与 Chrome 验收 #111](https://github.com/yusixian/anjian/pull/111) · [v0.7.4 更新说明](https://anjian.cosine.ren/zh/docs/updates/#074)                      |
+| 在同一画板用动作或条件串起多个界面                      | Agent 可用 `canvas.json` 的 `connections` 连接卡片。Chrome 核对跨页隔离、移动、平移和缩放。[验收 #115](https://github.com/yusixian/anjian/pull/115) · [v0.8.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#080) |
+| 在浏览器移动画板卡片、标题和便签，继续让 Agent 更新作品 | 「调整布局」支持拖动和键盘微调。隔离 Hub 核对并发冲突、上传与重启，Chrome 核对桌面和触摸。[验收 #119](https://github.com/yusixian/anjian/pull/119) · [v0.9.0 更新说明](https://anjian.cosine.ren/zh/docs/updates/#090)  |
 
 ## v0.10.0 画板对象选择
 
@@ -81,14 +81,23 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 本机 Hub 按每条连接订阅的作品发送通知。真实事件流验证单项退订、同名项目隔离、连接恢复和新旧客户端兼容。真实 Ubuntu x64 systemd 用户管理器验证登录目标启动、崩溃恢复、拒绝接管和卸载保留数据。Linux arm64 容器验证生成单元的语法和拒绝接管。[宿主验收 #146](https://github.com/yusixian/anjian/pull/146) · [Linux 验收 #148](https://github.com/yusixian/anjian/pull/148) · [中文更新](https://anjian.cosine.ren/zh/docs/updates/#0130) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0130)
 
+## v0.14.0 至 v0.18.0 评审、安装与反馈
+
+| 用户或 Agent 的任务                                                | 案间入口和验证证据                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 在案间查看或删除画板预览，并把位置交给 Agent                       | 桌面和窄屏验收已发布的预览、撤回和定位回传。[验收 #156](https://github.com/yusixian/anjian/pull/156) · [中文](https://anjian.cosine.ren/zh/docs/updates/#0140) · [English](https://anjian.cosine.ren/en/docs/updates/#0140)                                                        |
+| 在没有系统 Node 的 Linux 安装案间，并在登录后维持 Hub              | Ubuntu x64 与原生 arm64 分别验证独立包、HTML 预览、systemd 用户服务启动、崩溃后重启和卸载。[正式版验收 #139](https://github.com/yusixian/anjian/issues/139) · [中文](https://anjian.cosine.ren/zh/docs/updates/#0150) · [English](https://anjian.cosine.ren/en/docs/updates/#0150) |
+| 从 ChatGPT 桌面应用的 Codex 接收定向作品批注，并判断钩子是否已授权 | 两个真实桌面会话接收各自同名文档的 Chrome 批注。用 v0.17.0 macOS arm64 发布包验证 `anjian doctor codex --json` 的五种状态与配置只读性。[桌面验收 #150](https://github.com/yusixian/anjian/issues/150) · [中英文指南](../website/content/docs/review-workflows.mdx)                 |
+| 在本机报告页重跑登记过的检查并保留原始证据                         | Chrome 1280 和 390 像素视口验收通过与失败结果，原有证据保持可查看。运行依赖本机 Hub 的显式登记并单独保存历史。[合入与验证 #175](https://github.com/yusixian/anjian/pull/175)                                                                                                       |
+
 ## 待验证能力
 
-- [#150](https://github.com/yusixian/anjian/issues/150) Codex Desktop 批注投递与 Hook 授权。
+- [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的跨设备编辑、保存和版本兼容提示。
 - [#153](https://github.com/yusixian/anjian/issues/153) 画板预览删除回传与多人编辑。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互。
 - [#154](https://github.com/yusixian/anjian/issues/154) DeepSeek Harness 安装与定向批注。
-- [#152](https://github.com/yusixian/anjian/issues/152) 验收报告重跑和作品页布局。
-- Linux 独立安装包、原生 arm64 用户管理器和主机状态。[#139](https://github.com/yusixian/anjian/issues/139)
+- [#152](https://github.com/yusixian/anjian/issues/152) 自托管或远程访问时的报告重跑与授权。
+- Linux 主机电源、进程和临时防休眠。原生 arm64 曾有一次强制退出后的服务恢复检查失败，重跑通过。[#139](https://github.com/yusixian/anjian/issues/139)
 
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 
