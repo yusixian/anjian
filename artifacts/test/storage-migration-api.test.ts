@@ -7,14 +7,14 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import type { Principal } from '../src/server/member-store';
-import { createStorageMigrationApi } from '../src/server/storage/migration-api';
 import { createStorageMigration, type MigrationProfile } from '../src/server/storage/migration';
+import { createStorageMigrationApi } from '../src/server/storage/migration-api';
 import type { FileDigest, StoredObject } from '../src/server/storage/objects';
 import { createStorageSettings } from '../src/server/storage/settings';
 
 const homes: string[] = [];
 const servers: http.Server[] = [];
-const handlers: Array<{ close(): Promise<void> }> = [];
+const handlers: Array<{ close: () => Promise<void> }> = [];
 afterEach(async () => {
   await Promise.all(handlers.splice(0).map((handler) => handler.close()));
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
@@ -172,11 +172,13 @@ test('refuses a prepared job after its server-planned ownership changes', async 
     scope, roots: [{ id: 'trusted', directory: f.source, owner: 'github:2' }], fingerprint: 'transferred',
   }));
   expect((await f.request('shared', 'owner', { action: 'resume', id: prepared.job.id })).status).toBe(202);
-  await vi.waitFor(async () => expect(await f.migration.status('shared', prepared.job.id)).toMatchObject({
-    state: 'failed', error: 'source_changed', verifiedFiles: 0,
-  }));
+  await vi.waitFor(async () => {
+    const listed = await (await f.request('shared', 'owner')).json();
+    expect(listed.jobs[0]).toMatchObject({
+      id: prepared.job.id, state: 'failed', error: 'source_changed', verifiedFiles: 0, running: false,
+    });
+  });
   expect(f.remote.size).toBe(0);
-  expect((await (await f.request('shared', 'owner')).json()).jobs[0].running).toBe(false);
 });
 
 test('stops an in-flight copy when the server-planned ownership changes', async () => {
