@@ -81,6 +81,7 @@ import { createStorageSettings } from './storage/settings';
 import { planMigrationSources } from './storage/sources';
 import { createStorageUsage } from './storage/usage';
 import { defaultStoryboard } from './storyboard-source';
+import { createVerificationRuns } from './verification-runs';
 
 export interface HubOptions {
   boardOrigin?: string;
@@ -207,6 +208,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const localBinding = isLoopbackHost(options.host);
   const loopback = localBinding && !options.publicOrigin;
   const localQuestionHome = loopback ? path.resolve(options.paths.home) : undefined;
+  const verificationRuns = loopback ? createVerificationRuns(options.paths.home) : undefined;
   const projectsFile = options.paths.projects;
   const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const settings = createStorageSettings(options.paths.home);
@@ -335,6 +337,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               version: options.version,
               github,
               localQuestionHome,
+              verificationRuns,
               localQuestionProject: loopback ? projectId(project) : undefined,
               commentFileChanged: localCommentEvents
                 ? (artifact) => localCommentEvents.notify(projectId(project), artifact)
@@ -1570,6 +1573,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           throw new AggregateError([error], 'Hub did not close completely', { cause: error });
         }
         clearInterval(trashCleanup);
+        await verificationRuns?.close();
         localCommentEvents?.close();
         remoteAuth.close();
         await migrationApi.close();

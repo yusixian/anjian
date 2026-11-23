@@ -8,8 +8,8 @@ import {
   previewApiRoute,
   thumbnailRoute,
 } from './artifacts';
-import { boardCommentsRoute } from './comments';
 import { commentRecoveryRoute } from './comment-recovery';
+import { boardCommentsRoute } from './comments';
 import { contentRoute, robotsRoute, statusRoute } from './content';
 import { documentStateRoute, documentWriteRoute } from './documents';
 import { reviewEvidenceRoute } from './review-evidence';
@@ -20,6 +20,7 @@ import { clientSocketRoute } from './sockets';
 import { storyboardAssetsRoute, storyboardJobRoute, storyboardRenderRoute, storyboardRoute, storyboardVideoRoute } from './storyboard';
 import { storyboardAgentCommentRoute, storyboardCommentRoute } from './storyboard-comments';
 import type { HttpRoute, UpgradeRoute } from './table';
+import { verificationRunsRoute } from './verification-runs';
 import { libraryRoute, shellRoute, viewerFileRoute } from './viewer';
 import {
   whiteboardAgentCommentRoute,
@@ -56,6 +57,7 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   slidesAgentCommentRoute,
   documentStateRoute,
   documentWriteRoute,
+  verificationRunsRoute,
   commentRecoveryRoute,
   whiteboardSceneRoute,
   whiteboardPagesRoute,

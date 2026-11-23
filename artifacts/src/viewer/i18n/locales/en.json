@@ -1018,5 +1018,22 @@
     "selected_other": "Comment on {{count}} elements",
     "selectToComment": "Select elements to comment",
     "unsaved": "Unsaved changes"
+  },
+  "verification": {
+    "title": "Verification checks",
+    "run": "Run again",
+    "runNamed": "Run {{title}} again",
+    "running": "Running…",
+    "history": "Recent results",
+    "empty": "No runs yet.",
+    "close": "Close",
+    "widen": "Expand results panel",
+    "narrow": "Narrow results panel",
+    "loading": "Loading output…",
+    "requestFailed": "Could not complete the request. Try again.",
+    "writeFailed": "The check finished, but its result could not be saved.",
+    "passed": "Passed",
+    "failed": "Failed",
+    "error": "Could not run"
   }
 }

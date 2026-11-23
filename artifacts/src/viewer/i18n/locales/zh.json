@@ -998,5 +998,22 @@
     "selected_other": "批注 {{count}} 个元素",
     "selectToComment": "选中元素后添加批注",
     "unsaved": "未保存"
+  },
+  "verification": {
+    "title": "验收检查",
+    "run": "重跑",
+    "runNamed": "重跑 {{title}}",
+    "running": "运行中…",
+    "history": "最近结果",
+    "empty": "还没有运行记录。",
+    "close": "关闭",
+    "widen": "展开结果面板",
+    "narrow": "缩小结果面板",
+    "loading": "正在读取输出…",
+    "requestFailed": "无法完成请求，请重试。",
+    "writeFailed": "检查已结束，结果未能保存。",
+    "passed": "通过",
+    "failed": "失败",
+    "error": "运行异常"
   }
 }
