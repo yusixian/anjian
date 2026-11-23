@@ -49,7 +49,11 @@ const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
     timeout: 20000,
     env: baseEnv(env),
   });
-  return { code: result.status, out: JSON.parse(result.stdout.trim().split('\n').pop()!) };
+  return {
+    code: result.status,
+    out: JSON.parse(result.stdout.trim().split('\n').pop()!),
+    stderr: result.stderr.trim(),
+  };
 };
 
 const runAsync = (args: string[], env: NodeJS.ProcessEnv = {}) =>
@@ -204,8 +208,10 @@ describe('anjian start', () => {
       'comment', 'reply', '--project-dir', project, '--artifact', 'artboard/one',
       '--thread', comments.threads[0].id, '--text', 'Reviewed',
     ];
-    expect(run(reply).code).toBe(0);
-    expect(run(reply, { AI_AGENT: 'codex' }).code).toBe(0);
+    const defaultReply = run(reply);
+    expect(defaultReply.code, JSON.stringify(defaultReply)).toBe(0);
+    const explicitReply = run(reply, { AI_AGENT: 'codex' });
+    expect(explicitReply.code, JSON.stringify(explicitReply)).toBe(0);
     const saved = JSON.parse(fs.readFileSync(path.join(artboard, 'comments.json'), 'utf8'));
     expect(saved.threads[0].messages.slice(1).map((message: { name: string }) => message.name))
       .toEqual(['Claude Code', 'Codex']);
