@@ -524,7 +524,12 @@ export const commentCommand: CommandSpec = {
     board: { type: 'string', value: '<boardId>', help: 'add: the artboard board to comment on' },
     x: { type: 'string', value: '<px>', help: 'add: horizontal position on the board' },
     y: { type: 'string', value: '<px>', help: 'add: vertical position on the board' },
-    thread: { type: 'string', value: '<threadId>', help: 'read, reply, resolve: the thread' },
+    thread: {
+      type: 'string',
+      value: '<threadId>',
+      help: 'read, reply, resolve: the thread',
+      dashValue: /^-[\w-]{9}$/,
+    },
     text: { type: 'string', value: '<text>', help: 'add, reply: the message' },
     group: { type: 'string', value: '<groupId>', help: 'choose: the choice group' },
     clear: { type: 'boolean', help: 'choose: clear the choice instead of naming a board' },
