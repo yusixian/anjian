@@ -20,8 +20,7 @@ function unitArgument(value: string, command = false) {
 }
 
 function unitContents(project: string) {
-  const command = [
-    process.execPath,
+  const args = [
     path.resolve(process.argv[1]!),
     'start',
     '--project-dir',
@@ -44,7 +43,8 @@ function unitContents(project: string) {
       ? [`Environment=${unitArgument('ANJIAN_RUNTIME_DIR=' + path.resolve(runtime))}`]
       : []),
     'UnsetEnvironment=ANJIAN_PUBLIC_ORIGIN ANJIAN_BOARD_ORIGIN ARTIFACTS_URL_HOST',
-    `ExecStart=${command.map((value) => unitArgument(value, true)).join(' ')}`,
+    // Systemd uses the executable path literally and expands dollars in its arguments.
+    `ExecStart=${unitArgument(process.execPath)} ${args.map((value) => unitArgument(value, true)).join(' ')}`,
     'Restart=on-failure',
     'RestartPreventExitStatus=78',
     'RestartSec=2s',
