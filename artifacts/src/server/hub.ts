@@ -137,54 +137,39 @@ const DELETED_ARTIFACT_PATH = new RegExp(`^/(${ARTIFACT_TYPE_PATH})/([\\w-]+)/?$
 const ARTIFACT_MUTATION_PATH =
   /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments|artboard\/[^/]+\/positions|document\/[^/]+\/update|(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments\/(?:restore|recovery\/apply)|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?|whiteboard\/[^/]+(?:\/pages)?)$/;
 
-const ARTIFACT_CREATION = new Map<
-  string,
-  {
-    type: ArtifactType;
-    label: string;
-    prefix: string;
-    file: string;
-    maxTitle: number;
-    create: (title: string, language: unknown) => unknown;
-  }
->([
-  [
-    '/api/hub/slides',
-    {
-      type: 'slides',
-      label: 'Slide deck',
-      prefix: 'deck',
-      file: SLIDE_DECK_FILE,
-      maxTitle: MAX_SLIDE_TITLE,
-      create: (title) => defaultSlideDeck(title),
-    },
-  ],
-  [
-    '/api/hub/storyboards',
-    {
-      type: 'storyboard',
-      label: 'Storyboard',
-      prefix: 'storyboard',
-      file: STORYBOARD_FILE,
-      maxTitle: MAX_STORYBOARD_TITLE,
-      create: (title, language) =>
-        defaultStoryboard(
-          title,
-          language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined,
-        ),
-    },
-  ],
-  [
-    '/api/hub/whiteboards',
-    {
-      type: 'whiteboard',
-      label: 'Whiteboard',
-      prefix: 'board',
-      file: WHITEBOARD_SCENE_FILE,
-      maxTitle: 120,
-      create: (title) => ({ ...emptyWhiteboardScene(), appState: { name: title } }),
-    },
-  ],
+const ARTIFACT_CREATION = new Map<string, {
+  type: ArtifactType;
+  label: string;
+  prefix: string;
+  file: string;
+  maxTitle: number;
+  create: (title: string, language: unknown) => unknown;
+}>([
+  ['/api/hub/slides', {
+    type: 'slides',
+    label: 'Slide deck',
+    prefix: 'deck',
+    file: SLIDE_DECK_FILE,
+    maxTitle: MAX_SLIDE_TITLE,
+    create: (title) => defaultSlideDeck(title),
+  }],
+  ['/api/hub/storyboards', {
+    type: 'storyboard',
+    label: 'Storyboard',
+    prefix: 'storyboard',
+    file: STORYBOARD_FILE,
+    maxTitle: MAX_STORYBOARD_TITLE,
+    create: (title, language) =>
+      defaultStoryboard(title, language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined),
+  }],
+  ['/api/hub/whiteboards', {
+    type: 'whiteboard',
+    label: 'Whiteboard',
+    prefix: 'board',
+    file: WHITEBOARD_SCENE_FILE,
+    maxTitle: 120,
+    create: (title) => ({ ...emptyWhiteboardScene(), appState: { name: title } }),
+  }],
 ]);
 
 const realDir = (dir: string) => {
@@ -1081,12 +1066,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     mount: mountOf,
     upload: writeQuota,
     resolveDocument: (dir, documentId) => {
-      const matches = index
-        .list()
-        .filter(
-          (entry) =>
-            entry.project === dir && entry.type === 'document' && entry.address === documentId,
-        );
+      const matches = index.list().filter(
+        (entry) => entry.project === dir && entry.type === 'document' && entry.address === documentId,
+      );
       return matches.length === 1 ? matches[0]!.id : undefined;
     },
     browserProject: (req, artifact) => {
@@ -1269,8 +1251,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       projectAccess.authorized(req, project) ? artifactList(new Set([project])).artifacts : [],
     resolve: (req, input) => {
       if (
-        typeof input.type !== 'string' ||
-        input.type === 'storyboard' ||
+        typeof input.type !== 'string' || input.type === 'storyboard' ||
         typeof input.id !== 'string' ||
         (input.project !== undefined && typeof input.project !== 'string')
       )
