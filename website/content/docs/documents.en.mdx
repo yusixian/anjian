@@ -49,6 +49,8 @@ For a self-hosted Hub, add `"allowSelfHosted": true` to each report entry you wa
 
 Choose **Refresh report** at the top of the verification panel to load the latest document content, references and run history while keeping your edits on the page. Use **Run again** next to a check to start a new run.
 
+If the panel says verification checks are unavailable, close it to continue reading the report. Ask the Hub administrator to check the report configuration. Running checks on a self-hosted Hub requires Anjian v0.18.3 or later.
+
 ## Document source files
 
 Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to run `anjian skills get artifacts --reference document.md` first.

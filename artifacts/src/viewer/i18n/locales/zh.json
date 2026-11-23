@@ -1000,6 +1000,7 @@
     "unsaved": "未保存"
   },
   "verification": {
+    "unavailable": "此报告的验收检查当前不可用。请让 Hub 管理员检查报告配置。如果 Hub 版本过旧，请升级后重试。",
     "title": "验收检查",
     "refreshReport": "刷新报告",
     "run": "重跑",

@@ -101,6 +101,8 @@ export function VerificationRuns({
   const { t, i18n } = useTranslation();
   const titleId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<VerificationSnapshot | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [wide, setWide] = useState(false);
@@ -116,8 +118,8 @@ export function VerificationRuns({
             const data: VerificationSnapshot = await response.json();
             if (!signal?.aborted) setSnapshot(data);
           } else if (response.status === 404) {
-            dialogRef.current?.close();
             setSnapshot(null);
+            setDetails({});
           } else setFailed(true);
         })
         .catch(() => {
@@ -131,6 +133,10 @@ export function VerificationRuns({
     void refresh(abort.signal);
     return () => abort.abort();
   }, [refresh]);
+
+  useEffect(() => {
+    if (open && !snapshot) closeRef.current?.focus();
+  }, [open, snapshot]);
 
   const running = pending ?? snapshot?.running;
   useEffect(() => {
@@ -167,25 +173,29 @@ export function VerificationRuns({
     }
   }
 
-  if (!snapshot) return null;
+  if (!snapshot && !open) return null;
   return (
     <>
-      <button
-        aria-label={t('verification.title')}
-        type="button"
-        {...stylex.props(styles.button)}
-        onClick={() => {
-          dialogRef.current?.showModal();
-          setFailed(false);
-          void refresh();
-        }}
-      >
-        <ClipboardCheck aria-hidden="true" size={16} />
-        <span {...stylex.props(styles.toolbarLabel)}>{t('verification.title')}</span>
-      </button>
+      {snapshot && (
+        <button
+          aria-label={t('verification.title')}
+          type="button"
+          {...stylex.props(styles.button)}
+          onClick={() => {
+            dialogRef.current?.showModal();
+            setOpen(true);
+            setFailed(false);
+            void refresh();
+          }}
+        >
+          <ClipboardCheck aria-hidden="true" size={16} />
+          <span {...stylex.props(styles.toolbarLabel)}>{t('verification.title')}</span>
+        </button>
+      )}
       <dialog
         aria-labelledby={titleId}
         ref={dialogRef}
+        onClose={() => setOpen(false)}
         {...stylex.props(styles.drawer, wide && styles.wide)}
       >
         <header {...stylex.props(styles.header)}>
@@ -219,6 +229,7 @@ export function VerificationRuns({
               )}
             </button>
             <button
+              ref={closeRef}
               type="button"
               {...stylex.props(styles.button)}
               aria-label={t('verification.close')}
@@ -229,57 +240,69 @@ export function VerificationRuns({
           </div>
         </header>
         <div {...stylex.props(styles.body)}>
-          {(failed || snapshot.writeFailed) && (
-            <p role="alert">
-              {t(snapshot.writeFailed ? 'verification.writeFailed' : 'verification.requestFailed')}
-            </p>
-          )}
-          <ul {...stylex.props(styles.checks)}>
-            {snapshot.checks.map(({ id, title }) => (
-              <li key={id} {...stylex.props(styles.check)}>
-                <strong {...stylex.props(styles.checkTitle)}>{title}</strong>
-                <button
-                  type="button"
-                  {...stylex.props(styles.button)}
-                  aria-label={t('verification.runNamed', { title })}
-                  disabled={Boolean(running)}
-                  onClick={() => void start(id)}
-                >
-                  <Play aria-hidden="true" size={14} />
-                  <span aria-live="polite">
-                    {t(running === id ? 'verification.running' : 'verification.run')}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <h3>{t('verification.history')}</h3>
-          {!snapshot.runs.length && <p {...stylex.props(styles.meta)}>{t('verification.empty')}</p>}
-          {snapshot.runs.map((run) => (
-            <details
-              key={run.id}
-              {...stylex.props(styles.details)}
-              onToggle={(event) => {
-                if (event.currentTarget.open && !details[run.id]) void loadResult(run.id);
-              }}
-            >
-              <summary {...stylex.props(styles.summary)}>
-                {run.title} · {t('verification.' + run.status)}{' '}
-                <time dateTime={run.finishedAt} {...stylex.props(styles.meta)}>
-                  {new Date(run.finishedAt).toLocaleString(i18n.language)}
-                </time>
-              </summary>
-              <p {...stylex.props(styles.meta)}>SHA-256 {run.sha256}</p>
-              <pre {...stylex.props(styles.log)}>
-                {details[run.id]?.output ??
-                  t(
-                    details[run.id] === null
-                      ? 'verification.requestFailed'
-                      : 'verification.loading',
+          {!snapshot ? (
+            <p role="status">{t('verification.unavailable')}</p>
+          ) : (
+            <>
+              {(failed || snapshot.writeFailed) && (
+                <p role="alert">
+                  {t(
+                    snapshot.writeFailed
+                      ? 'verification.writeFailed'
+                      : 'verification.requestFailed',
                   )}
-              </pre>
-            </details>
-          ))}
+                </p>
+              )}
+              <ul {...stylex.props(styles.checks)}>
+                {snapshot.checks.map(({ id, title }) => (
+                  <li key={id} {...stylex.props(styles.check)}>
+                    <strong {...stylex.props(styles.checkTitle)}>{title}</strong>
+                    <button
+                      type="button"
+                      {...stylex.props(styles.button)}
+                      aria-label={t('verification.runNamed', { title })}
+                      disabled={Boolean(running)}
+                      onClick={() => void start(id)}
+                    >
+                      <Play aria-hidden="true" size={14} />
+                      <span aria-live="polite">
+                        {t(running === id ? 'verification.running' : 'verification.run')}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <h3>{t('verification.history')}</h3>
+              {!snapshot.runs.length && (
+                <p {...stylex.props(styles.meta)}>{t('verification.empty')}</p>
+              )}
+              {snapshot.runs.map((run) => (
+                <details
+                  key={run.id}
+                  {...stylex.props(styles.details)}
+                  onToggle={(event) => {
+                    if (event.currentTarget.open && !details[run.id]) void loadResult(run.id);
+                  }}
+                >
+                  <summary {...stylex.props(styles.summary)}>
+                    {run.title} · {t('verification.' + run.status)}{' '}
+                    <time dateTime={run.finishedAt} {...stylex.props(styles.meta)}>
+                      {new Date(run.finishedAt).toLocaleString(i18n.language)}
+                    </time>
+                  </summary>
+                  <p {...stylex.props(styles.meta)}>SHA-256 {run.sha256}</p>
+                  <pre {...stylex.props(styles.log)}>
+                    {details[run.id]?.output ??
+                      t(
+                        details[run.id] === null
+                          ? 'verification.requestFailed'
+                          : 'verification.loading',
+                      )}
+                  </pre>
+                </details>
+              ))}
+            </>
+          )}
         </div>
       </dialog>
     </>
