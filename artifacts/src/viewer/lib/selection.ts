@@ -1,10 +1,16 @@
-import type { InspectorDetail, InspectorNode, InspectorTweak } from '../../shared/inspector';
+import type {
+  InspectorDetail,
+  InspectorNode,
+  InspectorRemoval,
+  InspectorTweak,
+} from '../../shared/inspector';
 import {
   type SelectedNode,
   SELECTION_FULL_NODES,
   SELECTION_LIMITS as LIMIT,
   SELECTION_MAX_BYTES,
   SELECTION_MAX_NODES,
+  SELECTION_MAX_REMOVALS,
   type SelectionMessage,
   type SelectionNode,
   type SelectionState,
@@ -14,7 +20,10 @@ import {
 interface Input {
   boards: Record<string, { file: string }>;
   details: Record<string, InspectorDetail>;
-  frames: Record<string, { nodes: InspectorNode[]; tweaks: InspectorTweak[] }>;
+  frames: Record<
+    string,
+    { nodes: InspectorNode[]; tweaks: InspectorTweak[]; removals?: InspectorRemoval[] }
+  >;
   targets: { boardId: string; id: number }[];
 }
 
@@ -55,7 +64,24 @@ export function buildSelectionState({ boards, frames, targets, details }: Input)
       if (entry && !selectedKeys.has(`${board}:${tweak.id}`))
         tweaks.push({ ...entry, property: tweak.property, from: tweak.from, value: tweak.value });
     }
-  return { selected, more: chosen.length - selected.length, tweaks, nodes: [...entries.values()] };
+  const removals = Object.entries(frames).flatMap(([board, frame]) => {
+    const spec = boards[board];
+    return spec
+      ? (frame.removals ?? []).map((node) => ({
+          ...node,
+          id: `${board}#${node.id}`,
+          board,
+          file: spec.file,
+        }))
+      : [];
+  });
+  return {
+    selected,
+    more: chosen.length - selected.length,
+    tweaks,
+    nodes: [...entries.values()],
+    ...(removals.length ? { removals } : {}),
+  };
 }
 
 const fits = (node: SelectionNode) =>
@@ -82,6 +108,9 @@ export function fitSelectionMessage(
     selected,
     tweaks,
     nodes: message.nodes.filter(fits).slice(0, SELECTION_MAX_NODES),
+    ...(message.removals?.length
+      ? { removals: message.removals.filter(fits).slice(0, SELECTION_MAX_REMOVALS) }
+      : {}),
   };
   for (let size = bytes(fitted); size > maxBytes && fitted.nodes.length; size = bytes(fitted)) {
     fitted = {

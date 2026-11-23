@@ -55,6 +55,9 @@ export interface InspectorSelection extends Omit<
   rect: InspectorRect;
   widthMode: 'fixed' | 'fill' | 'hug';
 }
+export const INSPECTOR_MAX_REMOVALS = 100;
+export type InspectorRemoval = Pick<InspectorNode, 'id' | 'name' | 'path' | 'tag'>;
+
 export interface InspectorTweak {
   from: string;
   id: number;
@@ -66,6 +69,8 @@ export type InspectorCommand = { type: 'anjian:inspect'; connection: string; ses
   | { action: 'enable' | 'disable' | 'reset' | 'cancel-drag' }
   | { action: 'mode'; mode: 'select' | 'comment' }
   | { action: 'select'; id: number | null; primary?: boolean; toggle?: boolean }
+  | { action: 'remove'; id: number }
+  | { action: 'undo-removal' }
   | { action: 'hover'; id: number | null }
   | { action: 'track'; ids: number[] }
   | { action: 'leaves'; request: number }
@@ -93,6 +98,7 @@ export type InspectorReport = { session: string; connection: string } & (
   | { type: 'anjian:inspect:hover'; rect: InspectorRect | null; id?: number | null }
   | { type: 'anjian:inspect:rect'; id: number; rect: InspectorRect }
   | { type: 'anjian:inspect:tweaks'; tweaks: InspectorTweak[] }
+  | { type: 'anjian:inspect:removals'; removals: InspectorRemoval[]; edited: boolean }
   | {
       type: 'anjian:inspect:wheel';
       deltaX: number;

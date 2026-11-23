@@ -444,6 +444,9 @@
     "switchLanguage": "Switch language to {{language}}"
   },
   "inspector": {
+    "removeFromPreview": "Remove from preview",
+    "undoRemoval": "Undo removal in {{board}}",
+    "undoRemovalFromBoard": "Restore {{name}} in {{board}}",
     "tab": {
       "Properties": "Properties",
       "Code": "Code",

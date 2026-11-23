@@ -89,6 +89,14 @@ expect "names the board and page" "$out" 'board "main-card" on page "main"'
 expect "names the title and sticky by ID" "$out" 'title "heading" on page "main"'
 expect "preserves object type" "$out" 'sticky "note" on page "main"'
 
+dir="$(project preview-removal)"
+cat > "$dir/.anjian/artifacts/.state/artboard/node-id/selection.json" << 'JSON'
+{"artifact":"artboard/node-id","selected":[],"tweaks":[],"nodes":[],"more":0,"removals":[{"id":"hero#1","board":"hero","file":"pages/main/hero.html","tag":"button","path":"body > button:nth-of-type(2)","name":"Buy"}]}
+JSON
+out="$(run_hook "$dir" "把我刚才的删除应用到源文件")"
+expect "reports a preview-only removal without a selection" "$out" 'Elements removed in the preview (still in the source):'
+expect "names the original file and path" "$out" 'hero#1 <button> in pages/main/hero.html at `body > button:nth-of-type(2)`'
+
 dir="$(project crowded)"
 node -e '
 const fs = require("fs");

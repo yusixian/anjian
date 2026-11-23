@@ -11,9 +11,10 @@ import {
   TabsTab,
 } from '@lobehub/ui';
 import * as stylex from '@stylexjs/stylex';
-import { Circle, Copy, RotateCcw, X } from 'lucide-react';
+import { Circle, Copy, RotateCcw, Trash2, Undo2, X } from 'lucide-react';
 import { memo, useState } from 'react';
 
+import { INSPECTOR_MAX_REMOVALS } from '../../shared/inspector';
 import type { BoardSpec } from '../../shared/types';
 import type { Inspector } from '../hooks/useInspector';
 import { t } from '../i18n';
@@ -27,6 +28,7 @@ interface Props extends Pick<
 > {
   boards: [string, BoardSpec][];
   enabled: boolean;
+  editRemovals?: Inspector['editRemovals'];
   onClose: () => void;
   playing: ReadonlySet<string>;
   fullScreen?: boolean;
@@ -45,6 +47,7 @@ export const InspectorPanel = memo(function InspectorPanel({
   change,
   reset,
   enabled,
+  editRemovals,
   onClose,
   fullScreen = false,
   readOnly = false,
@@ -56,6 +59,24 @@ export const InspectorPanel = memo(function InspectorPanel({
   const tweaks = Object.entries(frames).flatMap(([boardId, frame]) =>
     frame.tweaks.map((tweak) => ({ ...tweak, boardId })),
   );
+  const removalBoard = selection?.boardId;
+  const mayRemove =
+    enabled &&
+    !readOnly &&
+    editRemovals &&
+    removalBoard &&
+    targets.length === 1 &&
+    node &&
+    node.tag !== 'body' &&
+    !playing.has(removalBoard) &&
+    (frames[removalBoard]?.removals?.length ?? 0) < INSPECTOR_MAX_REMOVALS;
+  const undoBoards =
+    editRemovals && !readOnly && enabled
+      ? boards.flatMap(([id, board]) => {
+          const last = frames[id]?.removals?.at(-1);
+          return last && !playing.has(id) ? [{ id, title: board.title ?? id, last }] : [];
+        })
+      : [];
   const css = node
     ? `${node.selector} {\n${Object.entries(node.css)
         .map(([key, value]) => `  ${key}: ${value};`)
@@ -162,6 +183,33 @@ export const InspectorPanel = memo(function InspectorPanel({
               </span>
             )}
           </div>
+          {editRemovals && (mayRemove || undoBoards.length > 0) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '0 12px 8px' }}>
+              {mayRemove && (
+                <Button
+                  icon={Trash2}
+                  size="small"
+                  onClick={() => editRemovals(removalBoard, { action: 'remove', id: node.id })}
+                >
+                  {t('inspector.removeFromPreview')}
+                </Button>
+              )}
+              {undoBoards.map(({ id, title, last }) => (
+                <Button
+                  icon={Undo2}
+                  key={id}
+                  size="small"
+                  title={t('inspector.undoRemovalFromBoard', {
+                    board: title,
+                    name: last.name || last.tag,
+                  })}
+                  onClick={() => editRemovals(id, { action: 'undo-removal' })}
+                >
+                  {t('inspector.undoRemoval', { board: title })}
+                </Button>
+              ))}
+            </div>
+          )}
           {targets.length > 1 && (
             <p {...stylex.props(styles.hint)} style={{ margin: '8px 16px' }}>
               {t('inspector.lastSelected')}

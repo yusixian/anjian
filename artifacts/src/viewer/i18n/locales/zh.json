@@ -431,6 +431,9 @@
     "switchLanguage": "切换语言为{{language}}"
   },
   "inspector": {
+    "removeFromPreview": "从预览中删除",
+    "undoRemoval": "撤回「{{board}}」中的删除",
+    "undoRemovalFromBoard": "在「{{board}}」中恢复 {{name}}",
     "tab": {
       "Properties": "属性",
       "Code": "代码",

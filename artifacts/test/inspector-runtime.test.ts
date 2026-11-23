@@ -89,6 +89,38 @@ test('select mode intercepts clicks, and disabling it restores page interactions
   expect(action).toHaveBeenCalledOnce();
 });
 
+test('remove and undo preserve original source paths and restore live elements', () => {
+  root.innerHTML = '<button>First</button><button>Second</button>';
+  cardId();
+  const first = root.querySelector<HTMLButtonElement>('button:first-child')!;
+  const second = root.querySelector<HTMLButtonElement>('button:last-child')!;
+  const action = vi.fn();
+  second.addEventListener('click', action);
+  const buttons = () =>
+    last('tree')!.nodes.filter((node: { tag: string }) => node.tag === 'button');
+  const [firstNode, secondNode] = buttons();
+  command('select', { id: firstNode.id });
+  command('remove', { id: firstNode.id, session: 'stale' });
+  expect(first.isConnected).toBe(true);
+  command('remove', { id: firstNode.id });
+  expect(first.isConnected).toBe(false);
+  expect(buttons()[0].path).toBe(secondNode.path);
+  command('select', { id: secondNode.id });
+  command('remove', { id: secondNode.id });
+  expect(last('removals')?.removals.map(({ path }: { path: string }) => path)).toEqual([
+    'body > main > section#card > button:nth-of-type(1)',
+    'body > main > section#card > button:nth-of-type(2)',
+  ]);
+  command('undo-removal');
+  expect(Array.from(root.children)).toEqual([second]);
+  command('undo-removal');
+  expect(Array.from(root.children)).toEqual([first, second]);
+  expect(last('removals')?.removals).toEqual([]);
+  command('disable');
+  second.click();
+  expect(action).toHaveBeenCalledOnce();
+});
+
 test('style preview resets only properties it owns and preserves inline priority', () => {
   const id = cardId();
   command('select', { id });

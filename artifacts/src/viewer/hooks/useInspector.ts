@@ -6,6 +6,7 @@ import type {
   InspectorNode,
   InspectorProperty,
   InspectorRect,
+  InspectorRemoval,
   InspectorReport,
   InspectorSelection,
   InspectorTarget,
@@ -15,6 +16,7 @@ import { readInspectorReport } from '../lib/inspector';
 
 export interface InspectedFrame {
   nodes: InspectorNode[];
+  removals?: InspectorRemoval[];
   session: string;
   truncated: boolean;
   tweaks: InspectorTweak[];
@@ -211,6 +213,7 @@ export function useInspector(options: Options) {
               nodes: data.nodes,
               truncated: data.truncated,
               tweaks: previous.frames[boardId]?.tweaks ?? [],
+              removals: previous.frames[boardId]?.removals,
             },
           },
         }));
@@ -294,6 +297,17 @@ export function useInspector(options: Options) {
               ? { boardId, node: { ...previous.selection.node, rect: data.rect } }
               : previous.selection,
         }));
+      } else if (data.type === 'anjian:inspect:removals') {
+        if (current.current.options.readOnly) return;
+        setState((previous) => {
+          const frame = previous.frames[boardId];
+          if (!frame) return previous;
+          return {
+            ...previous,
+            frames: { ...previous.frames, [boardId]: { ...frame, removals: data.removals } },
+            revision: previous.revision + Number(data.edited),
+          };
+        });
       } else if (data.type === 'anjian:inspect:tweaks') {
         setState((previous) =>
           previous.frames[boardId]
@@ -447,6 +461,22 @@ export function useInspector(options: Options) {
     },
     [send],
   );
+  const editRemovals = useCallback(
+    (boardId: string, command: Extract<Command, { action: 'remove' | 'undo-removal' }>) => {
+      const { options, state } = current.current;
+      if (
+        !options.enabled ||
+        options.readOnly ||
+        options.mode === 'comment' ||
+        options.playing.has(boardId) ||
+        !state.frames[boardId]
+      )
+        return;
+      area.current = null;
+      send(boardId, command);
+    },
+    [send],
+  );
   const reset = useCallback(() => {
     if (current.current.options.readOnly) return;
     for (const boardId of registered.current.keys()) send(boardId, { action: 'reset' });
@@ -466,6 +496,7 @@ export function useInspector(options: Options) {
     cancelDrag,
     hoverNode,
     change,
+    editRemovals,
     reset,
   };
 }
