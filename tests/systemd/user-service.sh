@@ -38,13 +38,16 @@ wait_for() {
 }
 manager_ready() { manager show-environment > /dev/null 2>&1; }
 pid_file="$fixture/.anjian/server/server.pid"
+read_pid() { sudo cat "$pid_file"; }
 state() { manager show --property=ActiveState --value anjian-hub.service; }
 service_ready() {
-  [[ "$(state)" == active && -s "$pid_file" ]] \
-    && sudo kill -0 "$(cat "$pid_file")" 2> /dev/null
+  [[ "$(state)" == active ]] \
+    && sudo test -s "$fixture/.anjian/server/server-info" \
+    && sudo test -s "$pid_file" \
+    && sudo kill -0 "$(read_pid)" 2> /dev/null
 }
 no_takeover() { [[ "$(manager show --property=ExecMainStatus --value anjian-hub.service)" == 78 ]]; }
-new_pid() { service_ready && [[ "$(cat "$pid_file")" != "$original" ]]; }
+new_pid() { service_ready && [[ "$(read_pid)" != "$original" ]]; }
 
 wait_for manager_ready
 cli service install --project-dir "$project"
@@ -52,10 +55,10 @@ cli service install --project-dir "$project"
 manager is-enabled --quiet anjian-hub.service
 
 cli start --project-dir "$project" --no-open --background
-original=$(cat "$pid_file")
+original=$(read_pid)
 cli service start || true
 wait_for no_takeover
-[[ "$(cat "$pid_file")" == "$original" ]]
+[[ "$(read_pid)" == "$original" ]]
 cli stop
 
 # Restart the isolated user manager to exercise automatic startup through default.target.
@@ -64,7 +67,7 @@ wait_for manager_ready
 wait_for service_ready
 cli start --project-dir "$project" --artifact document/plan --no-open | jq -e '.reused and (.link | contains("/document/"))'
 
-original=$(cat "$pid_file")
+original=$(read_pid)
 sudo kill -KILL "$original"
 wait_for new_pid
 cli service status | jq -e '.ActiveState == "active" and .UnitFileState == "enabled"'
@@ -73,7 +76,7 @@ cli service stop
 cli service start
 wait_for service_ready
 cli service uninstall
-[[ ! -e "$fixture/.config/systemd/user/anjian-hub.service" ]]
-[[ -f "$project/.anjian/artifacts/document/plan/doc.xml" ]]
-[[ -f "$fixture/.anjian/server/key" ]]
+sudo test ! -e "$fixture/.config/systemd/user/anjian-hub.service"
+sudo test -f "$project/.anjian/artifacts/document/plan/doc.xml"
+sudo test -f "$fixture/.anjian/server/key"
 cli service status | jq -e '.type == "service-not-installed"'
