@@ -76,13 +76,17 @@ pid_file="$fixture/.anjian/server/server.pid"
 read_pid() { sudo cat "$pid_file"; }
 state() { manager show --property=ActiveState --value anjian-hub.service; }
 service_ready() {
-  [[ "$(state)" == active ]] \
-    && sudo test -s "$fixture/.anjian/server/server-info" \
-    && sudo test -s "$pid_file" \
-    && sudo kill -0 "$(read_pid)" 2> /dev/null
+  local previous=${1:-} pid port
+  [[ "$(state)" == active ]] || return 1
+  pid=$(read_pid 2> /dev/null) || return 1
+  [[ "$pid" =~ ^[1-9][0-9]*$ && "$pid" != "$previous" ]] || return 1
+  port=$(sudo jq -er --argjson pid "$pid" 'select(.pid == $pid) | .port' \
+    "$fixture/.anjian/server/server-info" 2> /dev/null) || return 1
+  curl --fail --silent --max-time 1 "http://127.0.0.1:$port/api/status" \
+    | jq -e --argjson pid "$pid" '.pid == $pid' > /dev/null
 }
 no_takeover() { [[ "$(manager show --property=ExecMainStatus --value anjian-hub.service)" == 78 ]]; }
-new_pid() { service_ready && [[ "$(read_pid)" != "$original" ]]; }
+new_pid() { service_ready "$original"; }
 
 wait_for manager_ready
 cli service install --project-dir "$project"

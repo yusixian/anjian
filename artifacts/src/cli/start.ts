@@ -367,10 +367,20 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
     if (foreground) {
       const child = spawn(process.execPath, args, { env, stdio: ['ignore', 'pipe', 'inherit'] });
       fs.writeFileSync(machine.pid, `${child.pid}\n`);
-      for (const signal of ['SIGINT', 'SIGTERM'] as const)
-        process.on(signal, () => child.kill('SIGTERM'));
+      let stopping = false;
+      const stopChild = () => {
+        stopping = true;
+        child.kill('SIGTERM');
+      };
+      process.on('SIGINT', stopChild);
+      process.on('SIGTERM', stopChild);
       const exited = new Promise<number>((resolve) =>
-        child.on('close', (code) => resolve(code ?? 1)),
+        child.once('close', (code, signal) => {
+          process.off('SIGINT', stopChild);
+          process.off('SIGTERM', stopChild);
+          const interrupted = stopping && (signal === 'SIGTERM' || signal === 'SIGINT');
+          resolve(code ?? (interrupted ? 0 : 1));
+        }),
       );
       let announced = false;
       readline.createInterface({ input: child.stdout! }).on('line', (line) => {

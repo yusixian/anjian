@@ -518,6 +518,33 @@ describe('anjian start', () => {
     process.kill(serverPid(), 'SIGTERM');
     await exited;
   }, 30000);
+
+  test('stopping a foreground launch before the Hub installs signal handlers exits cleanly', async () => {
+    const project = newProject();
+    const marker = path.join(project, 'starting');
+    const preload = path.join(project, 'pause-hub.cjs');
+    fs.writeFileSync(
+      preload,
+      `if (process.argv[1]?.endsWith('/server.cjs')) {
+  require('node:fs').writeFileSync(${JSON.stringify(marker)}, '');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);
+}\n`,
+    );
+    const child = spawn(
+      process.execPath,
+      [cli, 'start', '--project-dir', project, '--foreground'],
+      { env: baseEnv({ NODE_OPTIONS: `--require=${JSON.stringify(preload)}` }) },
+    );
+    const exited = new Promise((resolve) => child.once('close', resolve));
+    try {
+      await waitFor(() => fs.existsSync(marker), 5000);
+      child.kill('SIGTERM');
+      expect(await exited).toBe(0);
+      expect(fs.existsSync(machine().info)).toBe(false);
+    } finally {
+      child.kill('SIGTERM');
+    }
+  }, 20000);
 });
 
 describe('anjian stop', () => {
