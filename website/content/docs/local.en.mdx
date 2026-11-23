@@ -14,6 +14,8 @@ description: Keep your artifacts on your own computer. Build Anjian, then open i
 
 On macOS, [download the archive for your Mac](https://github.com/yusixian/anjian/releases), verify its SHA-256 checksum, and extract it. Run the included `anjian` command to start your project. See [macOS installation and offline updates](https://github.com/yusixian/anjian/blob/main/docs/install.md).
 
+On glibc-based Linux, run `uname -m` and choose `linux-x64` for `x86_64` or `linux-arm64` for `aarch64`. Download the archive and checksum from the same release. Verify the archive with `sha256sum -c filename.tar.gz.sha256`, extract it, and run the included `anjian` command. The archive includes Node.js.
+
 <Steps>
 <Step title="Get the source and build">
 Clone the repository, then install the locked dependencies in the application directory.
@@ -43,15 +45,17 @@ Open the complete URL printed in the terminal. Do not invent a port or drop the 
 
 ## Linux user service
 
-After building from source on Linux with systemd, use your own user manager to start the local Hub at login. Install the service and start it separately. If you started the same Hub manually, use `anjian stop` when it is safe to stop it.
+On Linux with systemd, after extracting the archive or building from source, use your own user manager to start the local Hub at login. Install the service and start it separately. If you started the same Hub manually, use `anjian stop` when it is safe to stop it.
+
+Run these commands from the extracted archive. For a source build, use `node dist/cli.cjs` from the `artifacts/` directory.
 
 ```bash
-node dist/cli.cjs service install --project-dir /absolute/path/to/artifact-project
-node dist/cli.cjs service start
-node dist/cli.cjs service status --json
+./anjian service install --project-dir /absolute/path/to/artifact-project
+./anjian service start
+./anjian service status --json
 ```
 
-Run `node dist/cli.cjs start --project-dir /absolute/path/to/artifact-project --no-open` to print the running Hub's link. Systemd retries after an unexpected Hub exit. Use `service stop` to stop the service, or `service uninstall` to stop it and remove login startup. Both preserve artifacts and local Hub state. Uninstall the unit before changing the project or moving the Anjian installation, then install it again. For containers, follow the [self-hosting guide](/docs/self-hosting).
+Run `./anjian start --project-dir /absolute/path/to/artifact-project --no-open` to print the running Hub's link. Systemd retries after an unexpected Hub exit. Use `service stop` to stop the service, or `service uninstall` to stop it and remove login startup. Both preserve artifacts and local Hub state. Uninstall the unit before changing the project or moving the Anjian installation, then install it again. For containers, follow the [self-hosting guide](/docs/self-hosting).
 
 ## Artifacts and service state
 

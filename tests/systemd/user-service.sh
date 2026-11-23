@@ -3,7 +3,7 @@ set -euo pipefail
 
 fixture=$(mktemp -d /tmp/anjian-user-service.XXXXXX)
 account=anjian-systemd-test
-node_bin=$(command -v node)
+archive=${1:-}
 sudo useradd --home-dir "$fixture" --shell /bin/bash "$account"
 uid=$(id -u "$account")
 drop_in="/etc/systemd/system/user@$uid.service.d"
@@ -19,7 +19,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cp -R artifacts/dist "$fixture/dist"
+if [[ -n "$archive" ]]; then
+  install_dir="$fixture/Anjian 100% with \$"
+  mkdir "$install_dir"
+  tar -xzf "$archive" -C "$install_dir" --strip-components=1
+  launcher=("$install_dir/anjian")
+else
+  launcher=("$(command -v node)" "$fixture/dist/cli.cjs")
+  cp -R artifacts/dist "$fixture/dist"
+fi
+
 project="$fixture/Review 100% with \$ markers"
 mkdir -p "$project/.anjian/artifacts/document/plan"
 printf '%s\n' '<doc><p>systemd smoke test</p></doc>' > "$project/.anjian/artifacts/document/plan/doc.xml"
@@ -34,7 +43,7 @@ sudo systemctl daemon-reload
 sudo loginctl enable-linger "$account"
 
 user_home=(sudo -u "$account" env "HOME=$fixture" "XDG_CONFIG_HOME=$fixture/.config" "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus")
-cli() { "${user_home[@]}" "$node_bin" "$fixture/dist/cli.cjs" "$@" --json; }
+cli() { "${user_home[@]}" "${launcher[@]}" "$@" --json; }
 manager() { "${user_home[@]}" systemctl --user "$@"; }
 
 wait_for() {

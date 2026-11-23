@@ -10,25 +10,27 @@ import { root } from './versions.mjs';
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
-    dmg: { type: 'boolean' },
-    identity: { type: 'string' },
+    'dmg': { type: 'boolean' },
+    'identity': { type: 'string' },
     'notary-profile': { type: 'string' },
   },
 });
 const [output, sha, architecture] = positionals;
+const platform = process.platform;
 const { dmg, identity, 'notary-profile': profile } = values;
 if (
   positionals.length !== 3 ||
   !output ||
   !/^[a-f0-9]{40}$/.test(sha ?? '') ||
   !['arm64', 'x64'].includes(architecture) ||
-  process.platform !== 'darwin' ||
+  !['darwin', 'linux'].includes(platform) ||
   process.arch !== architecture
 ) {
   throw new Error(
-    'Usage on the target Mac: node scripts/release/package-macos.mjs <output-dir> <commit> <arm64|x64> [--dmg]',
+    'Usage on the target Linux or Mac: node scripts/release/package-standalone.mjs <output-dir> <commit> <arm64|x64> [--dmg]',
   );
 }
+if (dmg && platform !== 'darwin') throw new Error('Disk images require macOS');
 if ((identity !== undefined || profile !== undefined) && (!dmg || !identity || !profile))
   throw new Error('Notarization requires --dmg, --identity and --notary-profile together');
 
@@ -42,7 +44,7 @@ const nodeLicense = path.join(distribution, 'LICENSE');
 if (!fs.existsSync(nodeLicense))
   throw new Error('Use an official Node.js binary distribution with its LICENSE.');
 
-const artifact = `anjian-v${info.version}-darwin-${architecture}`;
+const artifact = `anjian-v${info.version}-${platform}-${architecture}`;
 const directory = path.resolve(output);
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-package-'));
 const bundle = path.join(temporary, artifact);
@@ -187,7 +189,7 @@ try {
       {
         version: info.version,
         commit: sha,
-        platform: 'darwin',
+        platform,
         architecture,
         node: process.version,
         source: `${repositoryUrl}/archive/${sha}.tar.gz`,
@@ -213,34 +215,54 @@ try {
   if (dmg) {
     if (fs.existsSync(archive)) throw new Error(`Disk image already exists: ${archive}`);
     fs.copyFileSync(diskImage(bundledNode), archive, fs.constants.COPYFILE_EXCL);
-  } else execFileSync(
-    '/usr/bin/tar',
-    [
-      '--format',
-      'ustar',
-      '--uid',
-      '0',
-      '--gid',
-      '0',
-      '--uname',
-      'root',
-      '--gname',
-      'wheel',
-      '--no-recursion',
-      '--options',
-      'gzip:!timestamp',
-      '-czf',
-      archive,
-      '-C',
-      temporary,
-      '-T',
-      '-',
-    ],
-    {
-      env: { ...process.env, COPYFILE_DISABLE: '1' },
-      input: `${entries.join('\n')}\n`,
-    },
-  );
+  } else if (platform === 'linux') {
+    execFileSync(
+      '/usr/bin/tar',
+      [
+        '--format=ustar',
+        '--owner=0',
+        '--group=0',
+        '--numeric-owner',
+        '--no-recursion',
+        '-czf',
+        archive,
+        '-C',
+        temporary,
+        '--verbatim-files-from',
+        '-T',
+        '-',
+      ],
+      { input: `${entries.join('\n')}\n` },
+    );
+  } else
+    execFileSync(
+      '/usr/bin/tar',
+      [
+        '--format',
+        'ustar',
+        '--uid',
+        '0',
+        '--gid',
+        '0',
+        '--uname',
+        'root',
+        '--gname',
+        'wheel',
+        '--no-recursion',
+        '--options',
+        'gzip:!timestamp',
+        '-czf',
+        archive,
+        '-C',
+        temporary,
+        '-T',
+        '-',
+      ],
+      {
+        env: { ...process.env, COPYFILE_DISABLE: '1' },
+        input: `${entries.join('\n')}\n`,
+      },
+    );
   fs.writeFileSync(`${archive}.sha256`, `${hashFile(archive)}  ${filename}\n`);
   console.info(archive);
 } finally {

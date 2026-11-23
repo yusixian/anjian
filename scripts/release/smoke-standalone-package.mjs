@@ -8,8 +8,9 @@ import { hashFile } from './build-info.mjs';
 
 const [archive, expectedSha, expectedArch, mode] = process.argv.slice(2);
 const name = path.basename(archive ?? '');
-assert.match(name, /^anjian-v.+-darwin-(arm64|x64)\.(?:tar\.gz|dmg)$/);
+assert.match(name, /^anjian-v[^/]+-(darwin|linux)-(arm64|x64)\.(?:tar\.gz|dmg)$/);
 const image = name.endsWith('.dmg');
+assert.ok(!image || process.platform === 'darwin');
 assert.ok(mode === undefined || (image && mode === '--notarized'));
 assert.equal(fs.readFileSync(`${archive}.sha256`, 'utf8').trim(), `${hashFile(archive)}  ${name}`);
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-install-'));
@@ -17,8 +18,9 @@ const installed = path.join(directory, image ? 'mounted image' : name.slice(0, -
 const launcher = path.join(installed, 'anjian');
 const project = path.join(directory, 'Example project');
 const state = path.join(directory, 'server');
+const essentialCommands = path.join(directory, 'bin');
 const env = {
-  PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+  PATH: essentialCommands,
   HOME: directory,
   ANJIAN_SERVER_HOME: state,
   ANJIAN_CLIENT_HOME: path.join(directory, 'cli-client'),
@@ -26,7 +28,7 @@ const env = {
 const run = (command, args) =>
   execFileSync(command, args, {
     cwd: directory,
-    env,
+    env: command === launcher ? env : { ...env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
     encoding: 'utf8',
     timeout: 30000,
   });
@@ -39,23 +41,40 @@ const anjian = (...args) =>
   );
 let mounted = false;
 try {
+  fs.mkdirSync(essentialCommands);
+  fs.symlinkSync('/usr/bin/dirname', path.join(essentialCommands, 'dirname'));
   if (image) {
     const file = path.resolve(archive);
     run('/usr/bin/hdiutil', ['verify', '-quiet', file]);
     if (mode === '--notarized') {
       run('/usr/bin/codesign', ['--verify', '--strict', file]);
       run('/usr/bin/xcrun', ['stapler', 'validate', file]);
-      run('/usr/sbin/spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', file]);
+      run('/usr/sbin/spctl', [
+        '--assess',
+        '--type',
+        'open',
+        '--context',
+        'context:primary-signature',
+        file,
+      ]);
     }
     fs.mkdirSync(installed);
-    run('/usr/bin/hdiutil', ['attach', '-quiet', '-readonly', '-nobrowse', '-mountpoint', installed, file]);
+    run('/usr/bin/hdiutil', [
+      'attach',
+      '-quiet',
+      '-readonly',
+      '-nobrowse',
+      '-mountpoint',
+      installed,
+      file,
+    ]);
     mounted = true;
     run('/usr/bin/codesign', ['--verify', '--strict', path.join(installed, 'lib/node')]);
   } else run('/usr/bin/tar', ['-xzf', path.resolve(archive)]);
   const metadata = JSON.parse(fs.readFileSync(path.join(installed, 'build.json')));
   assert.deepEqual(
     [metadata.commit, metadata.platform, metadata.architecture],
-    [expectedSha, 'darwin', expectedArch],
+    [expectedSha, process.platform, expectedArch],
   );
   assert.equal(run(path.join(installed, 'lib/node'), ['-p', 'process.arch']).trim(), expectedArch);
   assert.equal(
@@ -77,7 +96,7 @@ try {
   const work = path.join(project, '.anjian/artifacts/html/smoke');
   fs.mkdirSync(work, { recursive: true });
   const source = path.join(work, 'index.html');
-  fs.writeFileSync(source, '<!doctype html><p>Anjian macOS package smoke</p>');
+  fs.writeFileSync(source, '<!doctype html><p>Anjian standalone package smoke</p>');
   const started = anjian(
     'start',
     '--project-dir',
@@ -100,7 +119,7 @@ try {
   assert.match(await page.text(), /<script[^>]+src=/);
   assert.equal(anjian('stop').status, 'stopped');
   await assert.rejects(fetch(base, { signal: AbortSignal.timeout(3000) }));
-  assert.match(fs.readFileSync(source, 'utf8'), /Anjian macOS package smoke/);
+  assert.match(fs.readFileSync(source, 'utf8'), /Anjian standalone package smoke/);
   console.info(`Verified ${name} with no Node.js or pnpm on PATH.`);
 } finally {
   try {

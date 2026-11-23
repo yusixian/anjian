@@ -13,6 +13,8 @@ description: 让作品留在自己的电脑里。完成构建后，在浏览器�
 
 在 macOS 上，可以 [下载对应架构的安装包](https://github.com/yusixian/anjian/releases)，校验 SHA-256 并解压，再运行包内的 `anjian`。步骤见 [macOS 安装与离线更新](https://github.com/yusixian/anjian/blob/main/docs/install.md#macos-安装包)。
 
+在使用 glibc 的 Linux 上，按 `uname -m` 选择 `linux-x64`（`x86_64`）或 `linux-arm64`（`aarch64`），下载同一发行页的归档和校验文件。用 `sha256sum -c 文件名.tar.gz.sha256` 校验，再解压并运行包内的 `anjian`。包内自带 Node.js。具体步骤见 [Linux 安装包](https://github.com/yusixian/anjian/blob/main/docs/install.md#linux-安装包)。
+
 <Steps>
 <Step title="获取源码并构建">
 在终端获取仓库，再进入应用目录安装锁定的依赖。
@@ -42,15 +44,17 @@ node dist/cli.cjs start \
 
 ## Linux 用户服务
 
-在使用 systemd 的 Linux 桌面或终端上，从源码构建后，可以让当前用户的 systemd 在登录时启动本机 Hub。安装和启动分开执行。若此前手工启动了同一个 Hub，先在合适的时候用 `anjian stop` 停止它。
+在使用 systemd 的 Linux 桌面或终端上，解压安装包或完成源码构建后，可以让当前用户的 systemd 在登录时启动本机 Hub。安装和启动分开执行。若此前手工启动了同一个 Hub，先在合适的时候用 `anjian stop` 停止它。
+
+以下命令在解压目录中运行。从源码构建时，在 `artifacts/` 目录使用 `node dist/cli.cjs` 入口。
 
 ```bash
-node dist/cli.cjs service install --project-dir /绝对路径/作品项目
-node dist/cli.cjs service start
-node dist/cli.cjs service status --json
+./anjian service install --project-dir /绝对路径/作品项目
+./anjian service start
+./anjian service status --json
 ```
 
-再执行 `node dist/cli.cjs start --project-dir /绝对路径/作品项目 --no-open` 可查看已运行 Hub 的链接。Hub 异常退出时，systemd 会尝试重启。要停止服务，执行 `service stop`；要停止并取消登录启动，执行 `service uninstall`。两者都保留作品及本机 Hub 状态。更换项目或移动案间安装目录时，先卸载原单元再重新安装。容器部署仍沿用[自托管指南](/docs/self-hosting)。
+再执行 `./anjian start --project-dir /绝对路径/作品项目 --no-open` 可查看已运行 Hub 的链接。Hub 异常退出时，systemd 会尝试重启。要停止服务，执行 `service stop`；要停止并取消登录启动，执行 `service uninstall`。两者都保留作品及本机 Hub 状态。更换项目或移动案间安装目录时，先卸载原单元再重新安装。容器部署仍沿用[自托管指南](/docs/self-hosting)。
 
 ## 作品和服务状态
 

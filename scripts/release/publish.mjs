@@ -26,8 +26,11 @@ function request(endpoint, method = 'GET', data) {
 }
 
 function releaseAssets(directory, tag) {
-  return ['arm64', 'x64'].flatMap((arch) => {
-    const archive = `anjian-${tag}-darwin-${arch}.tar.gz`;
+  const targets = ['darwin', 'linux'].flatMap((platform) =>
+    ['arm64', 'x64'].map((arch) => `${platform}-${arch}`),
+  );
+  return targets.flatMap((target) => {
+    const archive = `anjian-${tag}-${target}.tar.gz`;
     const checksum = `${archive}.sha256`;
     const archivePath = path.resolve(directory, archive);
     const checksumPath = path.resolve(directory, checksum);
