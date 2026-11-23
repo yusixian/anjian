@@ -341,7 +341,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               localQuestionHome,
               verificationRuns,
               localQuestionProject: loopback ? projectId(project) : undefined,
-              libraryChanged: () => libraryChanged(project),
+              libraryChanged: (sourceChanged) => {
+                const cached = librarySnapshots.get(project);
+                if (sourceChanged || (cached && cached.directoryStamp !== libraryDirectoryStamp(project)))
+                  libraryChanged(project);
+              },
               commentFileChanged: localCommentEvents
                 ? (artifact) => localCommentEvents.notify(projectId(project), artifact)
                 : undefined,
@@ -470,9 +474,9 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       directoryStamp: string;
     }
   >();
-  const readLibrary = (project: string) => {
+  const libraryDirectoryStamp = (project: string) => {
     const root = artifactsRootOf(project);
-    const directoryStamp = ['', ...ARTIFACT_TYPES]
+    return ['', ...ARTIFACT_TYPES]
       .map((type) => {
         try {
           const stat = fs.statSync(path.join(root, type), { throwIfNoEntry: false });
@@ -482,6 +486,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         }
       })
       .join(',');
+  };
+  const readLibrary = (project: string) => {
+    const root = artifactsRootOf(project);
+    const directoryStamp = libraryDirectoryStamp(project);
     const cached = librarySnapshots.get(project);
     if (cached && cached.directoryStamp === directoryStamp && cached.expiresAt > Date.now())
       return cached;
@@ -884,7 +892,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
             return artifactPath(artifactsRootOf(target), creation.type, id);
           }),
         );
-        libraryChanged(target);
+        librarySnapshots.delete(target);
+        if (!ready.has(target)) libraryEvents.changed(target);
         sendJson(res, 201, { id, url: link });
       } catch (error) {
         sendJson(res, error instanceof RemoteTransferError ? error.status : 500, {

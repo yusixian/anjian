@@ -62,7 +62,7 @@ export interface MountSettings {
   commentFileChanged?: (artifact: string) => void;
   contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   github?: ReturnType<typeof createGitHubAuth>;
-  libraryChanged?: () => void;
+  libraryChanged?: (sourceChanged: boolean) => void;
   localQuestionHome?: string;
   localQuestionProject?: string;
   port: number;
