@@ -1,5 +1,36 @@
 # anjian-workflow
 
+## 0.18.2
+
+### Patch Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+打开作品库即可看到各可访问项目里的新增和保存。连续变更会合并刷新，Hub 会复用未变化的作品元数据。连接中断时会自动重连并定期获取列表。
+
+<!-- anjian:en -->
+
+#### English
+
+Keep the library open to see artifacts added or saved in any project you can access. Bursts of changes refresh together, and the Hub reuses metadata for unchanged projects. When the connection drops, the library reconnects and fetches the list periodically.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+`anjian verify-report` 会将通过摘要校验的 JSON 对象和对象列表显示为来源数据表格。展开「原始输出」可以查看完整的 JSON 和语法高亮。采集文件发生变更时，报告会提示复核。
+
+<!-- anjian:en -->
+
+#### English
+
+`anjian verify-report` shows verified JSON objects and lists of objects as source data tables. Open **Raw output** to read the full syntax-highlighted JSON. The report asks for review when the captured file changes.
+
+<!-- anjian:end -->
+
 ## 0.18.1
 
 ### Patch Changes
