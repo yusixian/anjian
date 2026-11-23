@@ -29,6 +29,11 @@ const rootOf = (project: string) => path.join(project, '.anjian', 'artifacts');
 
 async function hub(home = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-hub-home-'))) {
   const temp = tempRoot();
+  fs.writeFileSync(
+    path.join(temp.viewer, 'index.html'),
+    '<!doctype html><title>viewer</title><meta name="referrer" content="no-referrer" />',
+  );
+
   const started = await startHub({
     host: '127.0.0.1',
     urlHost: 'localhost',
@@ -437,6 +442,8 @@ test('a page call without an artifact in its path reaches the project of the pag
   const page = await h.linkFor(one, 'artboard', 'flow');
   const viewer = await api(h, new URL(page).pathname, { Host: `localhost:${h.port}` });
   expect(viewer.headers['referrer-policy']).toBe('same-origin');
+  expect(viewer.body).toContain('<meta name="referrer" content="same-origin"');
+  expect((await api(h, '/')).body).toContain('<meta name="referrer" content="no-referrer"');
   const res = await api(h, '/api/artifacts', {
     Host: `localhost:${h.port}`,
     Referer: page,

@@ -40,8 +40,27 @@ function endpoint(value) {
   }
 }
 
+function transportForProcess(executable, args, platform = process.platform) {
+  const match = args.match(/--listen(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/);
+  const listen = match && (match[1] || match[2] || match[3]);
+  const remote = endpoint(listen);
+  if (remote) return { remote, executable: 'codex' };
+  const bundledDesktopCli =
+    platform === 'darwin' &&
+    /\/(?:ChatGPT|Codex)\.app\/Contents\/Resources\/codex-cli\/(?:CodexCLI\.app\/Contents\/MacOS|bin)\/codex$/.test(
+      executable,
+    );
+  if (
+    bundledDesktopCli &&
+    /(?:^|\s)app-server(?:\s|$)/.test(args) &&
+    (!listen || listen === 'stdio://')
+  )
+    return { executable };
+  return listen ? null : undefined;
+}
+
 // Hooks do not receive the connection URL. Follow the launching host, never another thread's env ID.
-function hostEndpoint() {
+function hostTransport() {
   if (process.platform === 'win32') return null;
   let pid = process.ppid;
   for (let i = 0; i < 8 && pid > 1; i++) {
@@ -54,12 +73,12 @@ function hostEndpoint() {
         .match(/^(\d+)\s+(\S.*)$/);
       if (!info) return null;
       if (path.basename(info[2]).startsWith('codex')) {
-        const args = execFileSync('ps', ['-p', String(pid), '-o', 'args='], {
+        const args = execFileSync('ps', ['-ww', '-p', String(pid), '-o', 'args='], {
           encoding: 'utf8',
           timeout: 1000,
         });
-        const match = args.match(/--listen(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/);
-        if (match) return endpoint(match[1] || match[2] || match[3]);
+        const result = transportForProcess(info[2], args);
+        if (result !== undefined) return result;
       }
       pid = Number(info[1]);
     } catch {
@@ -139,23 +158,26 @@ function commentMessage(event) {
   return `${what} Local skill: ${JSON.stringify(skill)}; guide: ${JSON.stringify(guide)}. ${instruction}${summary}\nRun: ${event.command}`;
 }
 
-function queueMessage(ctx, remote, message, signal) {
+function queueArgs(transport, thread, message, tokenEnv) {
   const args = [
     'queue',
-    '--remote',
-    remote,
+    ...(transport.remote ? ['--remote', transport.remote] : []),
     '--thread',
-    ctx.session,
+    thread,
     '--message',
     message,
-    '--resume',
+    ...(transport.remote ? ['--resume'] : []),
   ];
-  const tokenEnv = process.env.ANJIAN_CODEX_REMOTE_AUTH_TOKEN_ENV;
-  if (tokenEnv && /^[a-z_]\w*$/i.test(tokenEnv)) args.push('--remote-auth-token-env', tokenEnv);
+  if (transport.remote && tokenEnv && /^[a-z_]\w*$/i.test(tokenEnv))
+    args.push('--remote-auth-token-env', tokenEnv);
+  return args;
+}
+
+function queueMessage(ctx, transport, message, signal) {
   return new Promise((resolve, reject) => {
     execFile(
-      'codex',
-      args,
+      transport.executable,
+      queueArgs(transport, ctx.session, message, process.env.ANJIAN_CODEX_REMOTE_AUTH_TOKEN_ENV),
       {
         cwd: ctx.project,
         env: { ...process.env, CODEX_THREAD_ID: ctx.session, CODEX_SESSION_ID: ctx.session },
@@ -184,8 +206,9 @@ function notice(input, message) {
 }
 
 function watch(ctx, input) {
-  const remote = endpoint(process.env.ANJIAN_CODEX_REMOTE) || hostEndpoint();
-  if (!remote) {
+  const configured = endpoint(process.env.ANJIAN_CODEX_REMOTE);
+  const transport = configured ? { remote: configured, executable: 'codex' } : hostTransport();
+  if (!transport) {
     notice(
       input,
       'Anjian comment watch needs the current Codex App Server endpoint. Set ANJIAN_CODEX_REMOTE for a host that does not expose --listen.',
@@ -194,7 +217,8 @@ function watch(ctx, input) {
   }
   const state = claim(ctx);
   if (!state) return;
-  state.remote = remote;
+  if (transport.remote) state.remote = transport.remote;
+  else state.transport = 'desktop-local-queue';
   fs.writeFileSync(ctx.file, JSON.stringify(state), { mode: 0o600 });
   const session = `codex:${ctx.session}`;
   const poll = createProjectPoll('Codex', session);
@@ -262,7 +286,7 @@ function watch(ctx, input) {
         : selection
           ? event.instruction
           : commentMessage(event);
-      const { receipt, warning } = await queueMessage(ctx, remote, message, controller.signal);
+      const { receipt, warning } = await queueMessage(ctx, transport, message, controller.signal);
       if (question) await question.acknowledge();
       else if (selection) selection.acknowledge();
       else pending.delete(delivery[0]);
@@ -301,5 +325,5 @@ function main() {
   else if (process.argv[2] === 'watch') watch(ctx, input);
 }
 
-module.exports = { context, endpoint, hostEndpoint, projectRoot, register };
+module.exports = { context, endpoint, projectRoot, queueArgs, register, transportForProcess };
 if (require.main === module) main();

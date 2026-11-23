@@ -14,6 +14,7 @@ const repo = path.resolve(__dirname, '../..');
 const adapter = path.join(repo, 'skills/artifacts/app/codex-comment-watch.cjs');
 const id = '01a18caa-a157-7071-ac28-96aa9066af5f';
 const inherited = '01a18ca7-51af-77f0-8c4d-0c4bd2e2fcaf';
+const { queueArgs, transportForProcess } = require(adapter);
 const at = (n) => `2026-10-30T10:00:${String(n).padStart(2, '0')}.000Z`;
 
 async function until(check, explanation, timeout = 5000) {
@@ -160,6 +161,32 @@ function hooks() {
   if (typeof manifest.hooks !== 'string') return {};
   return JSON.parse(fs.readFileSync(path.resolve(repo, manifest.hooks), 'utf8')).hooks;
 }
+
+test('bundled macOS desktop stdio uses its own executable and queues without resuming', () => {
+  const codex =
+    '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
+  const appServer = `${codex} app-server`;
+  for (const args of [appServer, `${appServer} --listen stdio://`]) {
+    const transport = transportForProcess(codex, args, 'darwin');
+    assert.deepEqual(transport, { executable: codex });
+    assert.deepEqual(queueArgs(transport, id, 'Test message', 'AUTH_TOKEN'), [
+      'queue',
+      '--thread',
+      id,
+      '--message',
+      'Test message',
+    ]);
+  }
+  assert.equal(transportForProcess('/bin/codex', 'codex app-server', 'darwin'), undefined);
+  assert.equal(transportForProcess(codex, `${appServer} --listen off`, 'darwin'), null);
+  assert.deepEqual(
+    transportForProcess(codex, `${appServer} --listen unix:///tmp/server.sock`, 'darwin'),
+    {
+      remote: 'unix:///tmp/server.sock',
+      executable: 'codex',
+    },
+  );
+});
 
 test('a new comment is queued to the hook session rather than an inherited parent thread', async (t) => {
   const f = fixture(t);
