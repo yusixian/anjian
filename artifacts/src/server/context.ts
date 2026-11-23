@@ -34,6 +34,7 @@ import { artifactLayoutState, artifactStateWarnings, readCanvas, writeArtifactSt
 import { createBackgroundWrites } from './storage/background-writes';
 import { createPreparedStateFiles } from './storage/prepared-files';
 import { listStoryboardAssets, readStoryboard } from './storyboard-source';
+import type { createVerificationRuns } from './verification-runs';
 import { createVerifyRecordings } from './verify-recordings';
 import { readWhiteboardScene, whiteboardTitle } from './whiteboard';
 import { textFrame } from './ws';
@@ -58,14 +59,15 @@ export interface MountSettings {
   authorize?: (req: http.IncomingMessage) => boolean;
   backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
   boardPort: number;
+  commentFileChanged?: (artifact: string) => void;
   contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
   github?: ReturnType<typeof createGitHubAuth>;
   localQuestionHome?: string;
-  commentFileChanged?: (artifact: string) => void;
   localQuestionProject?: string;
   port: number;
   recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
   token: string;
+  verificationRuns?: ReturnType<typeof createVerificationRuns>;
   version: string;
 }
 

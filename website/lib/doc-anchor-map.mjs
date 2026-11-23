@@ -53,6 +53,7 @@ export const docAnchorMap = {
     edit: { zh: '阅读与编辑', en: 'read-and-edit' },
     comment: { zh: '在文字上批注', en: 'comment-on-text' },
     history: { zh: '历史对比', en: 'compare-history' },
+    verification: { zh: '重跑验收检查', en: 'rerun-verification-checks' },
     files: { zh: '文档源文件', en: 'document-source-files' },
   },
   'html': {

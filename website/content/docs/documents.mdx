@@ -27,6 +27,24 @@ description: 阅读方案、选文批注、直接改字，并查看内容如何�
 
 历史中的动态内容不运行；媒体资源没有完整历史归档，同一地址的图片可能已经更新。历史对比不能代替文件备份。
 
+## 重跑验收检查
+
+在运行本机 Hub 的机器上，编辑案间服务器目录中的 `verification-checks.json`。默认服务器目录是 `~/.anjian/server`，设置了 `ANJIAN_SERVER_HOME` 时用指定目录。项目填 `pwd -P` 返回的绝对路径，文档填私有链接中 `/document/` 后的稳定 ID。每条命令填可执行文件的绝对路径及其参数。Hub 以该项目目录为工作目录运行命令。
+
+```json
+{
+  "reports": [
+    {
+      "project": "/path/to/project",
+      "document": "A12345678901234567890",
+      "checks": [{ "id": "test", "title": "项目测试", "command": ["/path/to/pnpm", "test"] }]
+    }
+  ]
+}
+```
+
+打开这份本机私有文档，点击页头的「验收检查」，选择「重跑」。展开最近结果可以查看输出和 SHA-256。运行历史保存在服务器目录的 `verification-runs/`，原文档内已采集的证据保留。桌面可展开结果面板，手机使用全宽。
+
 ## 文档源文件
 
 文档使用 `.anjian/artifacts/document/<id>/doc.xml`（LiteXML）与 `assets/`。这不是直接把 Markdown 文件改名成 XML。让 Agent 先执行 `anjian skills get artifacts --reference document.md`。

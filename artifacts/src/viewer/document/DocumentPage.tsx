@@ -4,6 +4,7 @@ import { feedbackApi } from '../feedback/localApi';
 import type { ArtifactReferenceResolver } from './ArtifactReferenceCard';
 import { DocumentView } from './DocumentView';
 import { useLocalTransport } from './useDocumentTransport';
+import { VerificationRuns } from './VerificationRuns';
 
 const resolveReference: ArtifactReferenceResolver = async (
   { type, target, focus, reviewGroups },
@@ -33,12 +34,17 @@ export default function DocumentPage({ id }: { id: string }) {
   return (
     <FeedbackProvider createApi={feedbackApi}>
       <DocumentView
-        actions={<ShareButton id={id} type="document" />}
         commentRecoveryUrl={`/api/document/${encodeURIComponent(id)}/comments`}
         id={id}
         live={live}
         resolveReference={resolveReference}
         transport={transport}
+        actions={
+          <>
+            <VerificationRuns documentId={id} key={id} />
+            <ShareButton id={id} type="document" />
+          </>
+        }
       />
     </FeedbackProvider>
   );

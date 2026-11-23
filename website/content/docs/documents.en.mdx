@@ -27,6 +27,24 @@ Open History and choose a point in time or comparison range to see additions, de
 
 Dynamic content does not run in history. Media resources do not have a complete historical archive, so an image at the same URL may have changed. History comparisons do not replace file backups.
 
+## Rerun verification checks
+
+On the machine that runs the local Hub, edit `verification-checks.json` in the Anjian server directory. The default is `~/.anjian/server`. If you set `ANJIAN_SERVER_HOME`, use that directory. Set the project to the absolute path from `pwd -P` and the document to the stable ID after `/document/` in its private link. Give each check an absolute executable path followed by its arguments. The Hub runs it from the project directory.
+
+```json
+{
+  "reports": [
+    {
+      "project": "/path/to/project",
+      "document": "A12345678901234567890",
+      "checks": [{ "id": "test", "title": "Project tests", "command": ["/path/to/pnpm", "test"] }]
+    }
+  ]
+}
+```
+
+Open that private document in the local Hub and choose **Verification checks** in the header, then **Run again**. Expand a recent result to see its output and SHA-256. The Hub keeps the run history in `verification-runs/` under its server directory and preserves the evidence already captured in the document. You can widen the results panel on desktop. On a phone it opens full width.
+
 ## Document source files
 
 Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to run `anjian skills get artifacts --reference document.md` first.
