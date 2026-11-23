@@ -10,6 +10,7 @@ const path = require('node:path');
 const isLoopback = (host) =>
   host === 'localhost' || host === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(host);
 const ARTIFACT = /^(?:artboard|document|slides|storyboard|whiteboard)\/[a-z0-9][a-z0-9-]*$/;
+const CHANNEL = /^[a-f0-9-]{36}$/;
 const hubProjectId = (dir) => createHash('sha256').update(dir).digest('hex').slice(0, 32);
 
 function canonical(dir) {
@@ -68,6 +69,7 @@ function createLocalCommentEvents(wake, env = process.env, entry) {
   let restarting;
   let failures = 0;
   let lastFullScan = 0;
+  let updateScope;
 
   function restore() {
     // The CLI coordinates startup across watchers through its existing lock.
@@ -129,15 +131,69 @@ function createLocalCommentEvents(wake, env = process.env, entry) {
       reconnect();
       return;
     }
+    const controlUrl = new URL(target.url);
+    target.url.searchParams.set('scope', '1');
     const active = http.get(target.url, {
       agent: false,
       headers: { Authorization: 'Bearer ' + target.credential },
       timeout: 1500,
     });
     request = active;
+    let upload;
+    let applied;
+    updateScope = () => {
+      if (upload || !controlUrl.searchParams.has('channel')) return;
+      const body = JSON.stringify(
+        Array.from(projects, ([project, { artifacts }]) => ({
+          project,
+          artifacts: [...artifacts],
+        })),
+      );
+      if (applied === body) return;
+      upload = http.request(
+        controlUrl,
+        {
+          method: 'PUT',
+          agent: false,
+          timeout: 1500,
+          headers: {
+            'Authorization': 'Bearer ' + target.credential,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          res.once('error', () => active.destroy());
+          res.resume();
+          res.once('end', () => {
+            if (request !== active) return;
+            upload = undefined;
+            if (res.statusCode !== 204) {
+              active.destroy();
+              return;
+            }
+            applied = body;
+            updateScope();
+            // Reconcile edits saved between the local scope change and the Hub acknowledgment.
+            if (!upload) {
+              connected = true;
+              failures = 0;
+              reconcile = true;
+              wake();
+            }
+          });
+        },
+      );
+      upload.on('socket', (socket) => socket.unref());
+      upload.once('error', () => active.destroy());
+      upload.once('timeout', () => upload?.destroy());
+      upload.end(body);
+    };
     const disconnect = () => {
       if (request !== active) return;
       request = undefined;
+      updateScope = undefined;
+      upload?.destroy();
       connected = false;
       if (!closed) reconnect();
     };
@@ -174,6 +230,11 @@ function createLocalCommentEvents(wake, env = process.env, entry) {
             continue;
           }
           if (event?.ready === true) {
+            if (typeof event.channel === 'string' && CHANNEL.test(event.channel)) {
+              controlUrl.searchParams.set('channel', event.channel);
+              updateScope();
+              continue;
+            }
             connected = true;
             failures = 0;
             reconcile = changed = true;
@@ -214,6 +275,7 @@ function createLocalCommentEvents(wake, env = process.env, entry) {
         }
       }
       connect();
+      updateScope?.();
       const now = Date.now();
       const full = reconcile || !connected || now - lastFullScan >= 30_000;
       if (full) lastFullScan = now;
@@ -226,7 +288,6 @@ function createLocalCommentEvents(wake, env = process.env, entry) {
       closed = true;
       clearTimeout(retry);
       request?.destroy();
-      request = undefined;
     },
   };
 }

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { get } from 'node:http';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 
 import { expect, test } from 'vitest';
 
@@ -12,12 +14,16 @@ import { tempRoot, waitFor, writeFiles } from './helpers';
 type Sources = Map<string, Set<string>>;
 type Event = { event: { artifact: string; type: string } };
 const require = createRequire(import.meta.url);
-const { createLocalCommentEvents } = require('../../skills/artifacts/app/local-comment-events.cjs') as {
-  createLocalCommentEvents: (wake: () => void, env: NodeJS.ProcessEnv) => {
-    scope: (sources: Sources) => Sources;
-    close: () => void;
+const { createLocalCommentEvents } =
+  require('../../skills/artifacts/app/local-comment-events.cjs') as {
+    createLocalCommentEvents: (
+      wake: () => void,
+      env: NodeJS.ProcessEnv,
+    ) => {
+      scope: (sources: Sources) => Sources;
+      close: () => void;
+    };
   };
-};
 const { createProjectPoll } = require('../../skills/artifacts/app/comment-watch.cjs') as {
   createProjectPoll: (host: string) => (sources: Sources, changed: Sources) => Event[];
 };
@@ -68,27 +74,35 @@ test('a local Hub pushes saved comments and replies to the subscribed project an
     wakes++;
     events.push(...poll(sources, channel.scope(sources)));
   }, env);
-  const post = async (id: string, data: unknown) => {
+  const post = async (id: string, data: unknown, dir = project) => {
     const origin = new URL(hub!.localUrl).origin;
     const response = await fetch(`${origin}/api/slides/${id}/comments`, {
       method: 'POST',
       headers: {
-        Origin: origin,
-        Referer: await hub!.linkFor(project, 'slides', id),
+        'Origin': origin,
+        'Referer': await hub!.linkFor(dir, 'slides', id),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
     });
     expect(response.status).toBe(200);
   };
-  const commentsPath = (dir: string) => path.join(dir, '.anjian/artifacts/slides/local/comments.json');
+  const commentsPath = (dir: string) =>
+    path.join(dir, '.anjian/artifacts/slides/local/comments.json');
   try {
     const first = await start();
     const url = new URL('/api/local/comment-events', first.localUrl);
     expect((await fetch(url)).status).toBe(404);
-    expect((await fetch(url, {
-      headers: { Authorization: `Bearer ${credential}`, Origin: new URL(first.localUrl).origin },
-    })).status).toBe(404);
+    expect(
+      (
+        await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${credential}`,
+            Origin: new URL(first.localUrl).origin,
+          },
+        })
+      ).status,
+    ).toBe(404);
     const create = { op: 'create', slideId: 'intro', text: 'Draft review' };
     channel.scope(sources);
     await waitFor(() => wakes === 1);
@@ -117,8 +131,58 @@ test('a local Hub pushes saved comments and replies to the subscribed project an
     await start();
     await waitFor(() => events.length === 3, 5000);
     expect(poll(sources, channel.scope(sources))).toEqual([]);
+
+    const streamUrl = new URL('/api/local/comment-events?scope=1', hub!.localUrl);
+    const frames: Record<string, unknown>[] = [];
+    let closing = false;
+    const streamError = (error: NodeJS.ErrnoException) => {
+      if (!closing || error.code !== 'ECONNRESET') throw error;
+    };
+    const raw = get(streamUrl, { headers: { Authorization: `Bearer ${credential}` } }, (res) => {
+      expect(res.statusCode).toBe(200);
+      const lines = createInterface({ input: res });
+      lines.on('error', streamError);
+      lines.on('line', (line) => frames.push(JSON.parse(line)));
+    });
+    raw.on('error', streamError);
+    try {
+      await waitFor(() => frames.length === 1);
+      expect(frames[0]).toMatchObject({ ready: true, channel: expect.any(String) });
+      const control = new URL(streamUrl.pathname, streamUrl);
+      control.searchParams.set('channel', String(frames[0]?.channel));
+      const projectId = createHash('sha256').update(project).digest('hex').slice(0, 32);
+      const put = (body: unknown, authorized = true) =>
+        fetch(control, {
+          method: 'PUT',
+          headers: authorized ? { Authorization: `Bearer ${credential}` } : {},
+          body: JSON.stringify(body),
+        });
+      const both = [{ project: projectId, artifacts: ['slides/local', 'slides/ignored'] }];
+      expect((await put(both, false)).status).toBe(404);
+      expect((await put(both)).status).toBe(204);
+      await post('ignored', create);
+      await waitFor(() => frames.length === 2);
+      expect(frames[1]).toEqual({ project: projectId, artifact: 'slides/ignored' });
+
+      expect((await put([{ project: projectId, artifacts: ['../local'] }])).status).toBe(400);
+      expect((await put([{ project: projectId, artifacts: ['slides/local'] }])).status).toBe(204);
+      await post('local', create, other);
+      await post('ignored', create);
+      await post('local', create);
+      await waitFor(() => frames.some((frame) => frame.artifact === 'slides/local'));
+      expect(frames.slice(1)).toEqual([
+        { project: projectId, artifact: 'slides/ignored' },
+        { project: projectId, artifact: 'slides/local' },
+      ]);
+      closing = true;
+      raw.destroy();
+      await expect.poll(async () => (await put(both)).status).toBe(404);
+    } finally {
+      closing = true;
+      raw.destroy();
+    }
   } finally {
     channel.close();
     await hub?.close();
   }
-}, 12000);
+}, 16000);
