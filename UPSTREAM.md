@@ -6,6 +6,16 @@
 
 ## 当前对照版本
 
+2026-11-24 核对 Ryugi 正式版 `v1.105.8`，本批覆盖自 `v1.103.0` 起的 15 个正式版，最新提交 `68cd84f11b6d935d9295f09d3b46ee17332918c9`。相对 `v1.102.9` 新增 28 个公开提交，累计审计 218 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.105.8) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.9...v1.105.8)
+
+- **宿主反馈**。正式说明记录了 Codex Desktop Hook 授权和投递修复，以及 DeepSeek Harness 的 Skill 加载与批注回传。案间已有 Codex App Server 定向投递和通用宿主回执。桌面端授权、送达和 DSH 各自验收。[#150](https://github.com/yusixian/anjian/issues/150) · [#154](https://github.com/yusixian/anjian/issues/154)
+- **浏览器任务与会话**。上游新增会话等待状态、浏览器与手机回复、多终端接入和文档任务编辑器。案间已有 Lody 评审任务与结果回传，浏览器首轮提示词、已有本地会话的待输入和受权交互作为独立工作核对。[#151](https://github.com/yusixian/anjian/issues/151)
+- **画布和评审**。记录预览平移、删除和撤回、把删除位置交给 Agent、白板缩放点阵及幻灯片结构广播。验收报告涉及脚本重跑和新的页头、抽屉。按两个工作流验收。[#153](https://github.com/yusixian/anjian/issues/153) · [#152](https://github.com/yusixian/anjian/issues/152)
+- **运行和发布**。上游把 Hook 改为签名的原生程序，并调整 daemon 发布缓存、源码身份、优先级和信任对话时序。案间按作品反馈、会话控制和可信制品轨迹验收任务。Linux 自产制品与 macOS 公证继续由 [#139](https://github.com/yusixian/anjian/issues/139) 和 [#124](https://github.com/yusixian/anjian/issues/124) 跟踪。官方云登录、更新及首次调用下载上游二进制不接入案间。
+- **来源与授权**。Ryugi License 1.1 更新了内部使用条件，Exhibit B 保留特定早期 MIT 材料。本轮采用正式发布说明和公开差异做行为审计，新增实现按案间架构独立完成。[Ryugi License 1.1](https://github.com/Innei/ryugi/blob/v1.105.8/LICENSE)
+
+### v1.102.9 的能力差异
+
 2026-11-23 核对 Ryugi 正式版 `v1.102.9`（`0e5f03594b723f4248b46bbf213c2fb75163c271`）。相对 `v1.102.8` 新增 2 个公开提交，累计审计 190 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.102.9) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.8...v1.102.9)
 
 - `9f2422a` 修正带宿主前缀的自定义会话 ID，并隔离 Codex 绑定。案间把会话标识校验、Codex 环境变量隔离纳入 [#142](https://github.com/yusixian/anjian/issues/142) 的端到端验收。

@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-23 核对 Ryugi 正式版 `v1.102.9`（`0e5f035`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.11.2`（`3c361eb`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.11.2) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.102.9) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.105.8`（`68cd84f`）。案间以 `0.4.0`（`04d711a`）为实施起点，本表核验到案间 `0.13.0`（`d92fdfa`）。[案间正式版](https://github.com/yusixian/anjian/releases/tag/v0.13.0) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.105.8) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -77,11 +77,18 @@ macOS 活动监视器实测显示案间 Hub 和反馈监听器的名字、版本
 
 Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和本地 OpenAI 兼容模型替身验收了项目级 Skill 加载、创建案间文档与 CLI 校验、Chrome 提交批注及原会话恢复后主动回读。自动投递另作验证。[案间 #136](https://github.com/yusixian/anjian/issues/136) · [中文上手](../website/content/docs/agent.mdx#github-copilot-cli) · [English guide](../website/content/docs/agent.en.mdx#github-copilot-cli)
 
+## v0.12.1 自定义宿主退订与 v0.13.0 Linux 用户服务
+
+本机 Hub 按每条连接订阅的作品发送通知。真实事件流验证单项退订、同名项目隔离、连接恢复和新旧客户端兼容。真实 Ubuntu x64 systemd 用户管理器验证登录目标启动、崩溃恢复、拒绝接管和卸载保留数据。Linux arm64 容器验证生成单元的语法和拒绝接管。[宿主验收 #146](https://github.com/yusixian/anjian/pull/146) · [Linux 验收 #148](https://github.com/yusixian/anjian/pull/148) · [中文更新](https://anjian.cosine.ren/zh/docs/updates/#0130) · [English notes](https://anjian.cosine.ren/en/docs/updates/#0130)
+
 ## 待验证能力
 
-- 本机自定义宿主接收批注，并在同一连接取消单项订阅。已有 Hub SSE 和内置宿主路由；Copilot 原型已验证跨项目同名作品的隔离及会话回执。产品入口与取消订阅由 [#142](https://github.com/yusixian/anjian/issues/142) 跟踪。
-
-- Linux 本机常驻服务和主机状态。案间已验证 Linux 容器运行和 Hub 启停。用户级 systemd 服务、两种 CPU 架构和电源或进程状态操作由 [#139](https://github.com/yusixian/anjian/issues/139) 跟踪。
+- [#150](https://github.com/yusixian/anjian/issues/150) Codex Desktop 批注投递与 Hook 授权。
+- [#153](https://github.com/yusixian/anjian/issues/153) 画板预览删除回传与多人编辑。
+- [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互。
+- [#154](https://github.com/yusixian/anjian/issues/154) DeepSeek Harness 安装与定向批注。
+- [#152](https://github.com/yusixian/anjian/issues/152) 验收报告重跑和作品页布局。
+- Linux 独立安装包、原生 arm64 用户管理器和主机状态。[#139](https://github.com/yusixian/anjian/issues/139)
 
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 
