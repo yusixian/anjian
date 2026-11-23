@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,6 +29,61 @@ const environmentKeys = [
   'LANG',
   'LC_ALL',
 ];
+
+function executeCheck(command: string[], project: string, signal: AbortSignal) {
+  const [executable, ...args] = command;
+  const env = Object.fromEntries(environmentKeys.map((name) => [name, process.env[name]]));
+  const ownGroup = process.platform !== 'win32';
+  const child = spawn(executable!, args, {
+    cwd: project,
+    env,
+    detached: ownGroup,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const maxOutput = 512 * 1024;
+  const chunks: Buffer[] = [];
+  let size = 0;
+  let failure: string | undefined;
+  const stop = (reason: string) => {
+    if (failure) return;
+    failure = reason;
+    if (child.pid === undefined) return;
+    try {
+      if (ownGroup) process.kill(-child.pid, 'SIGKILL');
+      else child.kill('SIGKILL');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH')
+        console.error('Could not stop verification check', error);
+    }
+  };
+  const collect = (chunk: Buffer) => {
+    const part = chunk.subarray(0, maxOutput - size);
+    if (part.length) chunks.push(part);
+    size += part.length;
+    if (part.length < chunk.length) stop('Check exceeded the output limit.');
+  };
+  const abort = () => stop('Check stopped when the Hub closed.');
+  child.stdout.on('data', collect);
+  child.stderr.on('data', collect);
+  const timer = setTimeout(() => stop('Check timed out after 5 minutes.'), 300_000);
+  signal.addEventListener('abort', abort, { once: true });
+  return new Promise<{ exitCode: number | null; output: string }>((resolve) => {
+    child.once('error', () => {
+      failure ??= 'Check could not start.';
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      const text = Buffer.concat(chunks).toString('utf8');
+      resolve({
+        exitCode: failure ? null : code,
+        output: [text, failure ?? (code === null ? 'Check was terminated.' : '')]
+          .filter(Boolean)
+          .join('\n'),
+      });
+    });
+  });
+}
 
 export function createVerificationRuns(home: string) {
   const configFile = path.join(home, 'verification-checks.json');
@@ -125,45 +180,26 @@ export function createVerificationRuns(home: string) {
     const runId = Date.now() + '-' + randomUUID();
     const startedAt = new Date().toISOString();
     const abort = new AbortController();
-    const [executable, ...args] = check.command;
-    const env = Object.fromEntries(environmentKeys.map((name) => [name, process.env[name]]));
-    const done = new Promise<void>((resolve) => {
-      execFile(
-        executable!,
-        args,
-        { cwd: project, env, timeout: 300_000, maxBuffer: 512 * 1024, signal: abort.signal },
-        (error, stdout, stderr) => {
-          const exitCode = typeof error?.code === 'number' ? error.code : error ? null : 0;
-          const failure =
-            error && exitCode === null
-              ? error.killed
-                ? 'Check was stopped or timed out.'
-                : 'Check could not complete.'
-              : '';
-          const output = [stdout, stderr, failure].filter(Boolean).join('\n');
-          const run: VerificationRun = {
-            id: runId,
-            check: id,
-            title: check.title,
-            status: exitCode === 0 ? 'passed' : exitCode === null ? 'error' : 'failed',
-            startedAt,
-            finishedAt: new Date().toISOString(),
-            exitCode,
-            output,
-            sha256: digest(output),
-          };
-          try {
-            writeJsonAtomic(path.join(directory, runId + '.json'), run);
-          } catch (error) {
-            failedWrites.add(key);
-            console.error('Could not save verification run', error);
-          } finally {
-            active.delete(key);
-            resolve();
-          }
-        },
-      );
-    });
+    const done = executeCheck(check.command, project, abort.signal)
+      .then(({ exitCode, output }) => {
+        const run: VerificationRun = {
+          id: runId,
+          check: id,
+          title: check.title,
+          status: exitCode === 0 ? 'passed' : exitCode === null ? 'error' : 'failed',
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          exitCode,
+          output,
+          sha256: digest(output),
+        };
+        writeJsonAtomic(path.join(directory, runId + '.json'), run);
+      })
+      .catch((error) => {
+        failedWrites.add(key);
+        console.error('Could not save verification run', error);
+      })
+      .finally(() => active.delete(key));
     active.set(key, { check: id, abort, done });
     return 'accepted';
   }

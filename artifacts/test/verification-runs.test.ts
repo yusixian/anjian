@@ -6,6 +6,7 @@ import { expect, test } from 'vitest';
 
 import { startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
+import { createVerificationRuns } from '../src/server/verification-runs';
 import type { VerificationSnapshot } from '../src/shared/verification-runs';
 import { tempRoot, writeDocument } from './helpers';
 
@@ -104,3 +105,54 @@ test('a private local document runs only its registered checks and retains the r
     for (const item of Object.values(fixture)) fs.rmSync(item, { force: true, recursive: true });
   }
 }, 15_000);
+
+test.skipIf(process.platform === 'win32')(
+  'closing the Hub stops descendants and persists the stopped run',
+  async () => {
+    const fixture = tempRoot();
+    const home = fs.realpathSync(fixture.root);
+    const service = createVerificationRuns(home);
+    const document = 'A12345678901234567890';
+    const ready = path.join(home, 'descendant-started');
+    const survived = path.join(home, 'descendant-survived');
+    const script =
+      'const fs = require("node:fs"); fs.writeFileSync(process.argv[1], "ready"); setTimeout(() => fs.writeFileSync(process.argv[2], "survived"), 1200);';
+    const parent =
+      'require("node:child_process").spawn(process.execPath, ["-e", ...process.argv.slice(1)], { stdio: "inherit" });';
+    try {
+      fs.writeFileSync(
+        path.join(home, 'verification-checks.json'),
+        JSON.stringify({
+          reports: [
+            {
+              project: home,
+              document,
+              checks: [
+                {
+                  id: 'stop',
+                  title: 'Check with a subprocess',
+                  command: [process.execPath, '-e', parent, script, ready, survived],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      expect(service.start(home, document, 'stop')).toBe('accepted');
+      await expect.poll(() => fs.existsSync(ready)).toBe(true);
+      await service.close();
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      expect(fs.existsSync(survived)).toBe(false);
+      const restarted = createVerificationRuns(home);
+      expect(restarted.snapshot(home, document)?.runs[0]).toMatchObject({
+        check: 'stop',
+        status: 'error',
+        exitCode: null,
+      });
+    } finally {
+      await service.close();
+      for (const item of Object.values(fixture)) fs.rmSync(item, { force: true, recursive: true });
+    }
+  },
+  10_000,
+);
