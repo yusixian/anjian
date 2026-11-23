@@ -18,7 +18,11 @@ const watchedComments = {
   whiteboard: whiteboardCommentsOf,
 };
 
-export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifact: string) => void) {
+export function watchArtifacts(
+  ctx: ServerContext,
+  commentFileChanged?: (artifact: string) => void,
+  libraryChanged?: () => void,
+) {
   const { root, signatures, clients, documents, boardComments, runtimeWarnings } = ctx;
   const pending = new Set<string>();
   const key = {};
@@ -29,6 +33,7 @@ export function watchArtifacts(ctx: ServerContext, commentFileChanged?: (artifac
       ctx.inputs.run(key, () => {
         const files = [...pending];
         pending.clear();
+        libraryChanged?.();
         const byArtifact = new Map<string, { ref: ArtifactRef; files: string[] }>();
         for (const file of files) {
           const ref = artifactKeyOf(file);

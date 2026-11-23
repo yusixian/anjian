@@ -1,33 +1,64 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { HubArtifactList } from '../../../shared/hub';
-import { useArtifactSocket } from '../../hooks/useArtifactSocket';
 
-const REFRESH_MS = 10000;
+const FALLBACK_REFRESH_MS = 15000;
+const INITIAL_WAIT_MS = 1500;
 
 export function useHubArtifacts() {
   const [list, setList] = useState<HubArtifactList | null>(null);
   const [error, setError] = useState(false);
+  const [live, setLive] = useState(false);
+  const request = useRef<AbortController | null>(null);
+  const hasDormantProjects = useRef(false);
 
   const refresh = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     try {
-      const response = await fetch('/api/hub/artifacts', { cache: 'no-store' });
+      const response = await fetch('/api/hub/artifacts', {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       if (!response.ok) throw new Error(String(response.status));
-      setList((await response.json()) as HubArtifactList);
+      const next = (await response.json()) as HubArtifactList;
+      if (controller.signal.aborted) return;
+      hasDormantProjects.current = next.projects.some((project) => project.dormant);
+      setList(next);
       setError(false);
     } catch {
-      setError(true);
+      if (!controller.signal.aborted) setError(true);
     }
   }, []);
 
-  const { live } = useArtifactSocket((message) => {
-    if (message.type === 'change') void refresh();
-  }, refresh);
-
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), REFRESH_MS);
-    return () => clearInterval(timer);
+    let connected = false;
+    const events =
+      typeof EventSource === 'undefined' ? null : new EventSource('/api/hub/library-events');
+    const initial = setTimeout(() => void refresh(), events ? INITIAL_WAIT_MS : 0);
+    if (events) {
+      events.onopen = () => {
+        clearTimeout(initial);
+        connected = true;
+        setLive(true);
+        void refresh();
+      };
+      events.onmessage = () => void refresh();
+      events.onerror = () => {
+        connected = false;
+        setLive(false);
+      };
+    }
+    const timer = setInterval(() => {
+      if (!connected || hasDormantProjects.current) void refresh();
+    }, FALLBACK_REFRESH_MS);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(timer);
+      events?.close();
+      request.current?.abort();
+    };
   }, [refresh]);
 
   const removeProject = useCallback(

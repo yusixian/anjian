@@ -253,7 +253,7 @@ export async function startArtifactsServer(options: ServerOptions): Promise<Arti
     localQuestionProject: mount?.localQuestionProject,
   });
 
-  const watcher = watchArtifacts(ctx, mount?.commentFileChanged);
+  const watcher = watchArtifacts(ctx, mount?.commentFileChanged, mount?.libraryChanged);
   let maintenance: Promise<unknown> = Promise.resolve();
   const quiesce = <T>(
     work: () => Promise<T>,

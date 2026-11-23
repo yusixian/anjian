@@ -41,6 +41,7 @@ import { safeEqual, send, sendJson, urlHostForHttp } from './http';
 import { createHubShare } from './hub-share';
 import { createHubTrash } from './hub-trash';
 import { serveHubViewer } from './hub-viewer';
+import { createLibraryEvents } from './library-events';
 import { createLocalCommentEvents } from './local-comment-events';
 import {
   artifactsRootOf,
@@ -127,6 +128,7 @@ export interface Hub {
 const CONTROL_PATH = /^\/api\/hub\/(?:stop|restart|log)$/;
 const LOG_TAIL_BYTES = 256 * 1024;
 const STATUS_SCAN_MS = 10_000;
+const LIBRARY_SNAPSHOT_MS = 15_000;
 const LOG_TAIL_LINES = 500;
 const ARTIFACT_TYPE_PATH = ARTIFACT_TYPES.join('|');
 const ARTIFACT_IN_PATH = new RegExp(`(?:^|/)(${ARTIFACT_TYPE_PATH})/([\\w-]+)`);
@@ -339,6 +341,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               localQuestionHome,
               verificationRuns,
               localQuestionProject: loopback ? projectId(project) : undefined,
+              libraryChanged: () => libraryChanged(project),
               commentFileChanged: localCommentEvents
                 ? (artifact) => localCommentEvents.notify(projectId(project), artifact)
                 : undefined,
@@ -457,31 +460,61 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       }));
   };
 
-  const artifactList = (scope?: ReadonlySet<string>): HubArtifactList => {
+  const librarySnapshots = new Map<
+    string,
+    {
+      artifacts: HubArtifact[];
+      warnings: string[];
+      count: number;
+      expiresAt: number;
+    }
+  >();
+  const readLibrary = (project: string) => {
+    const cached = librarySnapshots.get(project);
+    if (cached && cached.expiresAt > Date.now()) return cached;
+    const root = artifactsRootOf(project);
+    const listed = listArtifacts(root);
+    const artifacts: HubArtifact[] = [];
+    for (const artifact of listed.artifacts) {
+      try {
+        artifacts.push({
+          project,
+          type: artifact.type,
+          id: artifact.id,
+          url: artifactPath(root, artifact.type, artifact.id),
+          title: titleOf(readArtifactSource(artifact.dir, artifact)),
+          updatedAt: latestMtime(artifact.dir),
+        });
+      } catch {}
+    }
+    const snapshot = {
+      artifacts,
+      warnings: listed.warnings.map((warning) => `${path.basename(project)}: ${warning}`),
+      count: listed.artifacts.length,
+      expiresAt: Date.now() + LIBRARY_SNAPSHOT_MS,
+    };
+    librarySnapshots.set(project, snapshot);
+    return snapshot;
+  };
+  const artifactList = (scope: ReadonlySet<string>): HubArtifactList => {
+    const projects: HubArtifactList['projects'] = [];
     const artifacts: HubArtifact[] = [];
     const warnings: string[] = [];
     for (const entry of ordered()) {
-      if (!available(entry.dir)) continue;
-      if (scope && !scope.has(entry.dir)) continue;
-      const root = artifactsRootOf(entry.dir);
-      const listed = listArtifacts(root);
-      for (const warning of listed.warnings)
-        warnings.push(`${path.basename(entry.dir)}: ${warning}`);
-      for (const artifact of listed.artifacts) {
-        try {
-          artifacts.push({
-            project: entry.dir,
-            type: artifact.type,
-            id: artifact.id,
-            url: artifactPath(root, artifact.type, artifact.id),
-            title: titleOf(readArtifactSource(artifact.dir, artifact)),
-            updatedAt: latestMtime(artifact.dir),
-          });
-        } catch {}
-      }
+      if (!scope.has(entry.dir) || !available(entry.dir)) continue;
+      const snapshot = readLibrary(entry.dir);
+      projects.push({
+        dir: entry.dir,
+        name: path.basename(entry.dir),
+        lastUsedAt: entry.lastUsedAt,
+        dormant: isDormant(entry),
+        artifacts: snapshot.count,
+      });
+      for (const artifact of snapshot.artifacts) artifacts.push(artifact);
+      for (const warning of snapshot.warnings) warnings.push(warning);
     }
     artifacts.sort((a, b) => b.updatedAt - a.updatedAt);
-    return { projects: projectStatuses(scope), artifacts, warnings };
+    return { projects, artifacts, warnings };
   };
 
   const status = (): HubStatus => {
@@ -576,6 +609,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       req,
       ordered().map((p) => p.dir),
     );
+  const libraryEvents = createLibraryEvents(visibleProjects, authenticated);
+  const libraryChanged = (project: string) => {
+    librarySnapshots.delete(project);
+    libraryEvents.changed(project);
+  };
   const projectReference = (req: http.IncomingMessage, project: string) =>
     authorized(req, new URL(req.url ?? '/', origin)) ? project : projectId(project);
   const resolveProject = (req: http.IncomingMessage, reference: string) =>
@@ -674,6 +712,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       fs.mkdirSync(artifactsRootOf(real), { recursive: true });
       const entry = registerProject(projectsFile, real);
       index.rescan();
+      libraryChanged(real);
       writeCompatInfo(real);
       const mounted = await mountOf(real);
       if (open) openWhenReady(mounted, open);
@@ -715,6 +754,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           },
           () => {
             index.rescan();
+            libraryChanged(real);
           },
         ),
       ),
@@ -831,6 +871,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
             return artifactPath(artifactsRootOf(target), creation.type, id);
           }),
         );
+        libraryChanged(target);
         sendJson(res, 201, { id, url: link });
       } catch (error) {
         sendJson(res, error instanceof RemoteTransferError ? error.status : 500, {
@@ -907,6 +948,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           work,
           () => {
             index.rescan();
+            libraryChanged(project);
           },
         ),
       ),
@@ -925,6 +967,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       },
       () => {
         index.rescan();
+        libraryChanged(project);
       },
     );
   const trashApi = createHubTrash({
@@ -1254,11 +1297,11 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       projectAccess.authorized(req, project) ? artifactList(new Set([project])).artifacts : [],
     resolve: (req, input) => {
       if (
-        typeof input.type !== 'string' || input.type === 'storyboard' ||
+        typeof input.type !== 'string' ||
+        input.type === 'storyboard' ||
         typeof input.id !== 'string' ||
         (input.project !== undefined && typeof input.project !== 'string')
-      )
-        return null;
+      ) return null;
       const project =
         typeof input.project === 'string'
           ? resolveProject(req, input.project)
@@ -1350,6 +1393,17 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         if (!authorized(req, url) || !originAllowed(policy, req.headers.origin))
           send(res, 403, 'Forbidden');
         else await handleControl(req, res, url);
+        return;
+      }
+      if (url.pathname === '/api/hub/library-events') {
+        if (req.method !== 'GET') send(res, 405, 'Method not allowed');
+        else if (
+          !authenticated(req, url) ||
+          !originAllowed(policy, req.headers.origin) ||
+          !navigationAllowed(req.headers['sec-fetch-site'] as string | undefined)
+        )
+          send(res, 403, 'Forbidden');
+        else libraryEvents.subscribe(req, res, url);
         return;
       }
       if (url.pathname === '/api/hub/artifacts') {
@@ -1573,6 +1627,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           throw new AggregateError([error], 'Hub did not close completely', { cause: error });
         }
         clearInterval(trashCleanup);
+        libraryEvents.close();
         await verificationRuns?.close();
         localCommentEvents?.close();
         remoteAuth.close();
