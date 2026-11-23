@@ -85,7 +85,7 @@ function executeCheck(command: string[], project: string, signal: AbortSignal) {
   });
 }
 
-export function createVerificationRuns(home: string) {
+export function createVerificationRuns(home: string, selfHosted = false) {
   const configFile = path.join(home, 'verification-checks.json');
   const active = new Map<string, { check: string; abort: AbortController; done: Promise<void> }>();
   const failedWrites = new Set<string>();
@@ -105,9 +105,11 @@ export function createVerificationRuns(home: string) {
       (row) => isObject(row) && row.project === project && row.document === document,
     );
     if (!reports.length) return [];
-    const checks: unknown = reports[0]?.checks;
+    const report = reports[0];
+    const checks: unknown = report?.checks;
     if (reports.length !== 1 || !Array.isArray(checks))
       throw new Error('A report must have one verification configuration with a checks array');
+    if (selfHosted && report?.allowSelfHosted !== true) return [];
     const ids = new Set<string>();
     return checks.map((check) => {
       if (

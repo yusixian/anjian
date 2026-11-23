@@ -19,7 +19,8 @@ export const verificationRunsRoute: HttpRoute<ServerContext> = {
     if (req.method === 'POST' && (!check || !ctx.sameOrigin(req))) {
       return sendJson(res, 403, { error: 'Forbidden' });
     }
-    if (!service?.enabled() || !isArtifactLocator(locator)) return sendJson(res, 404, {});
+    if (!ctx.mount?.verificationAccess?.(req) || !service?.enabled() || !isArtifactLocator(locator))
+      return sendJson(res, 404, {});
     try {
       const artifact = resolveArtifactAddress(ctx.root, 'document', locator, {
         mintMissing: false,

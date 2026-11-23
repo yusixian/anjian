@@ -68,6 +68,7 @@ export interface MountSettings {
   port: number;
   recordingWrite?: (work: (admit: CommentAdmission) => Promise<void>) => Promise<void>;
   token: string;
+  verificationAccess?: (req: http.IncomingMessage) => boolean;
   verificationRuns?: ReturnType<typeof createVerificationRuns>;
   version: string;
 }

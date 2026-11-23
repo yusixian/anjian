@@ -45,6 +45,8 @@ description: 阅读方案、选文批注、直接改字，并查看内容如何�
 
 打开这份本机私有文档，点击页头的「验收检查」，选择「重跑」。展开最近结果可以查看输出和 SHA-256。运行历史保存在服务器目录的 `verification-runs/`，原文档内已采集的证据保留。桌面可展开结果面板，手机使用全宽。
 
+自托管时，在需要运行的报告配置中加入 `"allowSelfHosted": true`，然后以站点所有者身份通过自建站点打开报告。只有所有者可以运行检查及查看这段运行历史。使用 Docker 时，配置文件位于容器内的 `/data/server/verification-checks.json`，项目和可执行文件也填容器内的绝对路径。
+
 ## 文档源文件
 
 文档使用 `.anjian/artifacts/document/<id>/doc.xml`（LiteXML）与 `assets/`。这不是直接把 Markdown 文件改名成 XML。让 Agent 先执行 `anjian skills get artifacts --reference document.md`。
