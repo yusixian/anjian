@@ -15,6 +15,9 @@ cleanup() {
   sudo rm -f "$drop_in/anjian-test.conf"
   sudo rmdir "$drop_in" || true
   sudo systemctl daemon-reload || true
+  if sudo test -f "$fixture/runner-environment"; then
+    sudo cp -p "$fixture/runner-environment" /etc/environment
+  fi
   sudo rm -rf "$fixture"
 }
 trap cleanup EXIT
@@ -40,6 +43,13 @@ sudo tee "$drop_in/anjian-test.conf" > /dev/null << MANAGER
 Environment=HOME=$fixture XDG_CONFIG_HOME=$fixture/.config XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus
 MANAGER
 sudo systemctl daemon-reload
+
+# GitHub may set the runner account's XDG paths in PAM's global environment.
+if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]] \
+  && sudo grep -Eq '^[[:space:]]*(XDG_RUNTIME_DIR|XDG_CONFIG_HOME)=' /etc/environment; then
+  sudo cp -p /etc/environment "$fixture/runner-environment"
+  sudo sed -i -E '/^[[:space:]]*(XDG_RUNTIME_DIR|XDG_CONFIG_HOME)=/d' /etc/environment
+fi
 sudo loginctl enable-linger "$account"
 
 user_home=(sudo -u "$account" env "HOME=$fixture" "XDG_CONFIG_HOME=$fixture/.config" "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus")
@@ -57,7 +67,11 @@ wait_for() {
   "${user_home[@]}" journalctl --user -u anjian-hub.service --no-pager -n 50 || true
   return 1
 }
-manager_ready() { manager show-environment > /dev/null 2>&1; }
+manager_ready() {
+  sudo test -S "/run/user/$uid/bus" \
+    && manager is-active --quiet default.target \
+    && manager show-environment | grep -Fx "XDG_RUNTIME_DIR=/run/user/$uid" > /dev/null
+}
 pid_file="$fixture/.anjian/server/server.pid"
 read_pid() { sudo cat "$pid_file"; }
 state() { manager show --property=ActiveState --value anjian-hub.service; }
