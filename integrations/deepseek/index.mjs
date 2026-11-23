@@ -24,6 +24,7 @@ function loadAnjian() {
   return {
     ...require(path.join(app, 'comment-watch.cjs')),
     ...require(path.join(app, 'local-comment-events.cjs')),
+    ...require(path.join(app, 'local-question-dispatch.cjs')),
   };
 }
 
@@ -46,6 +47,7 @@ export function apply(ctx) {
     sessions.delete(session);
     clearInterval(watch.timer);
     watch.events.close();
+    watch.questions?.close(watch.sources);
   }
 
   function listen(agent, project, session, helpers) {
@@ -53,31 +55,55 @@ export function apply(ctx) {
     const artifacts = new Set();
     const sources = new Map([[project, artifacts]]);
     const poll = helpers.createProjectPoll('DeepSeek Harness', receipt);
-    const tick = () => {
-      if (ctx.agents.get(agent.session.id) !== agent) {
-        stop(session);
-        return;
-      }
+    // Comment receipts allow colons, but question heartbeats use session IDs as filenames.
+    const questions = session.includes(':')
+      ? undefined
+      : helpers.createLocalQuestionDispatch('dsh', session);
+    let readingQuestions = false;
+    const isCurrent = () =>
+      sessions.get(session) === watch &&
+      ctx.agents.get(agent.session.id) === agent &&
+      projectFor(agent) === project;
+    const report = (cause) => ctx.logger.warn(`Anjian feedback for ${session}: ${cause.message}`);
+    const followup = (text) =>
+      agent.followup(
+        createUserMessage({
+          content: [{ type: 'text', text }],
+          source: { kind: name, form: 'notice' },
+        }),
+      );
+    async function deliverQuestion() {
+      readingQuestions = true;
       try {
-        if (projectFor(agent) !== project) {
-          stop(session);
-          return;
-        }
-        for (const { event } of poll(sources, events.scope(sources))) {
-          agent.followup(
-            createUserMessage({
-              content: [{ type: 'text', text: notice(event) }],
-              source: { kind: name, form: 'notice' },
-            }),
-          );
+        const delivery = await questions?.next(sources);
+        if (delivery && isCurrent() && artifacts.has(delivery.artifact)) {
+          followup(delivery.message);
+          await delivery.acknowledge();
         }
       } catch (cause) {
-        ctx.logger.warn(`Anjian feedback for ${session}: ${cause.message}`);
+        report(cause);
+      } finally {
+        readingQuestions = false;
+      }
+    }
+    const tick = () => {
+      try {
+        if (!isCurrent()) {
+          if (sessions.get(session) === watch) stop(session);
+          return;
+        }
+        questions?.update(sources);
+        if (questions && !readingQuestions) void deliverQuestion();
+        for (const { event } of poll(sources, events.scope(sources))) {
+          followup(notice(event));
+        }
+      } catch (cause) {
+        report(cause);
       }
     };
     const events = helpers.createLocalCommentEvents(tick);
     const timer = setInterval(tick, 1000);
-    const watch = { project, artifacts, events, timer, tick };
+    const watch = { project, artifacts, events, questions, sources, timer, tick };
     sessions.set(session, watch);
     return watch;
   }
@@ -103,8 +129,10 @@ export function apply(ctx) {
       }
       if (!artifact || !ARTIFACT.test(artifact) || rest.length) return error(USAGE);
       if (action === 'unwatch') {
-        watch?.artifacts.delete(artifact);
-        if (watch && !watch.artifacts.size) stop(session);
+        if (watch?.artifacts.delete(artifact)) {
+          watch.questions?.close(new Map([[watch.project, new Set([artifact])]]));
+          if (!watch.artifacts.size) stop(session);
+        }
         return success(`Stopped watching ${artifact} in this session.`);
       }
       if (action !== 'watch' || !SESSION.test(session)) return error(USAGE);

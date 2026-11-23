@@ -37,7 +37,7 @@ const styles = stylex.create({
   hint: { color: cssVar.colorTextSecondary, fontSize: 13 },
 });
 
-const localHostNames = { agy: 'Antigravity', codex: 'Codex', pi: 'Pi' };
+const localHostNames = { agy: 'Antigravity', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' };
 
 type AnswerMutation = Exclude<QuestionMutation, { action: 'decide' }>;
 
