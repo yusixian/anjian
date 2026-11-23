@@ -172,11 +172,13 @@ test('refuses a prepared job after its server-planned ownership changes', async 
     scope, roots: [{ id: 'trusted', directory: f.source, owner: 'github:2' }], fingerprint: 'transferred',
   }));
   expect((await f.request('shared', 'owner', { action: 'resume', id: prepared.job.id })).status).toBe(202);
-  await vi.waitFor(async () => expect(await f.migration.status('shared', prepared.job.id)).toMatchObject({
-    state: 'failed', error: 'source_changed', verifiedFiles: 0,
-  }));
+  await vi.waitFor(async () => {
+    const listed = await (await f.request('shared', 'owner')).json();
+    expect(listed.jobs[0]).toMatchObject({
+      id: prepared.job.id, state: 'failed', error: 'source_changed', verifiedFiles: 0, running: false,
+    });
+  });
   expect(f.remote.size).toBe(0);
-  expect((await (await f.request('shared', 'owner')).json()).jobs[0].running).toBe(false);
 });
 
 test('stops an in-flight copy when the server-planned ownership changes', async () => {
