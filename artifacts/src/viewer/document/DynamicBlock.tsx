@@ -28,9 +28,8 @@ export function DynamicBlock({ url, componentProps, initialHeight }: Props) {
     () =>
       host?.channel.subscribe((event) => {
         if (
-          event.type === 'change' &&
-          event.artifact === host.artifact &&
-          event.files.includes(url)
+          event.type === 'open' ||
+          (event.type === 'change' && event.artifact === host.artifact && event.files.includes(url))
         )
           setVersion((v) => v + 1);
       }),
