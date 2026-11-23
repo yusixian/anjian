@@ -13,6 +13,7 @@ import { registryDir, writeEntry } from '../src/server/registry';
 import { get, waitFor } from './helpers';
 
 const cli = path.resolve(__dirname, '../../skills/artifacts/app/cli.cjs');
+const localLauncher = path.join(path.dirname(cli), 'anjian.cjs');
 
 const withoutAgent = () =>
   Object.fromEntries(Object.entries(process.env).filter(([key]) => !AGENT_MARKERS.includes(key)));
@@ -43,8 +44,8 @@ const baseEnv = (env: NodeJS.ProcessEnv = {}) => ({
   ...env,
 });
 
-const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
-  const result = spawnSync(process.execPath, [cli, ...args], {
+const run = (args: string[], env: NodeJS.ProcessEnv = {}, entry = cli) => {
+  const result = spawnSync(process.execPath, [entry, ...args], {
     encoding: 'utf8',
     timeout: 20000,
     env: baseEnv(env),
@@ -66,6 +67,12 @@ const runAsync = (args: string[], env: NodeJS.ProcessEnv = {}) =>
 
 const machine = () => machinePaths(isolation);
 const serverPid = () => Number(fs.readFileSync(machine().pid, 'utf8'));
+const hubEvents = () =>
+  fs
+    .readFileSync(machine().events, 'utf8')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line));
 
 function newProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-project-'));
@@ -195,7 +202,7 @@ describe('anjian start', () => {
     const artboard = path.join(project, '.anjian/artifacts/artboard/one');
     const created = await fetch(`${origin}/api/artboard/one/comments`, {
       method: 'POST',
-      headers: { Origin: origin, 'Content-Type': 'application/json' },
+      headers: { 'Origin': origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         op: 'create',
         anchor: { page: 'p', board: 'a', x: 10, y: 10 },
@@ -205,16 +212,25 @@ describe('anjian start', () => {
     expect(created.status).toBe(200);
     const { comments } = await created.json();
     const reply = [
-      'comment', 'reply', '--project-dir', project, '--artifact', 'artboard/one',
-      '--thread', comments.threads[0].id, '--text', 'Reviewed',
+      'comment',
+      'reply',
+      '--project-dir',
+      project,
+      '--artifact',
+      'artboard/one',
+      '--thread',
+      comments.threads[0].id,
+      '--text',
+      'Reviewed',
     ];
     const defaultReply = run(reply);
     expect(defaultReply.code, JSON.stringify(defaultReply)).toBe(0);
     const explicitReply = run(reply, { AI_AGENT: 'codex' });
     expect(explicitReply.code, JSON.stringify(explicitReply)).toBe(0);
     const saved = JSON.parse(fs.readFileSync(path.join(artboard, 'comments.json'), 'utf8'));
-    expect(saved.threads[0].messages.slice(1).map((message: { name: string }) => message.name))
-      .toEqual(['Claude Code', 'Codex']);
+    expect(
+      saved.threads[0].messages.slice(1).map((message: { name: string }) => message.name),
+    ).toEqual(['Claude Code', 'Codex']);
   }, 30000);
 
   test('a start from a subdirectory of the repository registers the root', () => {
@@ -282,7 +298,9 @@ describe('anjian start', () => {
         encoding: 'utf8',
       });
       expect(command.stdout.trim()).toMatch(
-        new RegExp(`^Anjian ${version.replaceAll('.', '\\.')} Hub --artifacts-server-id=[a-f0-9]{48}$`),
+        new RegExp(
+          `^Anjian ${version.replaceAll('.', '\\.')} Hub --artifacts-server-id=[a-f0-9]{48}$`,
+        ),
       );
     }
     expect(run(['stop']).out.status).toBe('stopped');
@@ -384,6 +402,14 @@ describe('anjian start', () => {
     expect(() => process.kill(serverPid(), 0)).not.toThrow();
     expect(fs.existsSync(machine().stopped)).toBe(false);
     expect(() => process.kill(oldPid, 0)).toThrow();
+    expect(hubEvents()).toEqual([
+      expect.objectContaining({ action: 'replace', reason: 'browser', pid: oldPid }),
+    ]);
+    const newPid = serverPid();
+    const stop = await fetch(`http://127.0.0.1:${port}/api/hub/stop`, { method: 'POST' });
+    expect(stop.status).toBe(202);
+    await waitFor(() => hubEvents().some((event) => event.action === 'stop'), 5000);
+    expect(hubEvents().at(-1)).toMatchObject({ action: 'stop', reason: 'browser', pid: newPid });
   }, 40000);
 
   test('a start while the server is shutting down waits for it instead of starting a second one', async () => {
@@ -428,9 +454,33 @@ describe('anjian start', () => {
     expect(() => process.kill(oldPid, 0)).toThrow();
   }, 30000);
 
-  test('a hung server is replaced', () => {
+  test('a release CLI keeps a healthy source Hub and reports conflicting settings', () => {
+    const args = ['start', '--project-dir', newProject(), '--no-open'];
+    const local = run(args, {}, localLauncher);
+    expect(local.code).toBe(0);
+    const pid = serverPid();
+    const info = fs.readFileSync(machine().info, 'utf8');
+    const release = run(args);
+    expect(release.out).toMatchObject({ reused: true, url: local.out.url });
+
+    const conflicting = run([...args, '--url-host', '127.0.0.1']);
+    expect(conflicting.code).toBe(1);
+    expect(conflicting.out.error).toMatch(/Kept the running local Anjian Hub.*stop/);
+    expect(serverPid()).toBe(pid);
+    expect(fs.readFileSync(machine().info, 'utf8')).toBe(info);
+    expect(run(['stop']).out.status).toBe('stopped');
+    expect(hubEvents()).toEqual([
+      expect.objectContaining({ action: 'keep', reason: 'local-build', pid }),
+      expect.objectContaining({ action: 'keep', reason: 'local-build-settings', pid }),
+      expect.objectContaining({ action: 'stop', reason: 'cli', pid }),
+    ]);
+    expect(Object.keys(hubEvents()[0]).sort()).toEqual(['action', 'pid', 'reason', 'timestamp']);
+    expect(fs.statSync(machine().events).mode & 0o777).toBe(0o600);
+  }, 30000);
+
+  test('a release CLI replaces an unresponsive source Hub', () => {
     const project = newProject();
-    run(['start', '--project-dir', project]);
+    run(['start', '--project-dir', project], {}, localLauncher);
     const pid = serverPid();
     process.kill(pid, 'SIGSTOP');
     try {
@@ -438,6 +488,9 @@ describe('anjian start', () => {
       expect(out.type).toBe('server-started');
       expect(out.reused).toBeUndefined();
       expect(serverPid()).not.toBe(pid);
+      expect(hubEvents()).toEqual([
+        expect.objectContaining({ action: 'replace', reason: 'unresponsive', pid }),
+      ]);
     } finally {
       try {
         process.kill(pid, 'SIGKILL');

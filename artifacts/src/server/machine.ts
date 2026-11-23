@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 export interface MachinePaths {
+  events: string;
   home: string;
   info: string;
   key: string;
@@ -31,6 +32,7 @@ export function machinePaths(
   const home = env.ANJIAN_SERVER_HOME || path.join(homedir, '.anjian', 'server');
   return {
     home,
+    events: path.join(home, 'hub-events.jsonl'),
     pid: path.join(home, 'server.pid'),
     serverId: path.join(home, 'server-instance-id'),
     info: path.join(home, 'server-info'),
@@ -110,11 +112,14 @@ export function removeProject(file: string, projectDir: string) {
   if (kept.length !== projects.length) writeProjects(file, kept);
 }
 
-export const artifactsRootOf = (projectDir: string) => path.join(projectDir, '.anjian', 'artifacts');
+export const artifactsRootOf = (projectDir: string) =>
+  path.join(projectDir, '.anjian', 'artifacts');
 
 export function pruneProjects(file: string, retain?: (project: string) => boolean) {
   const projects = readProjects(file);
-  const kept = projects.filter((entry) => retain?.(entry.dir) || fs.existsSync(artifactsRootOf(entry.dir)));
+  const kept = projects.filter(
+    (entry) => retain?.(entry.dir) || fs.existsSync(artifactsRootOf(entry.dir)),
+  );
   if (kept.length !== projects.length) writeProjects(file, kept);
   return kept;
 }

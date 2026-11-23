@@ -20,8 +20,8 @@ test('a rebuilt local build replaces a local build with another hash', () => {
   expect(replaceDecision('local-aaa', 'local-aaa')).toBe('keep');
 });
 
-test('a release never replaces a local build', () => {
-  expect(replaceDecision('local-aaa', '1.60.0')).toBe('keep');
+test('a release protects a running local build', () => {
+  expect(replaceDecision('local-aaa', '1.60.0')).toBe('keep-local-build');
 });
 
 test('a local build replaces a release', () => {

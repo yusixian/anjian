@@ -9,6 +9,7 @@ import { artifactPath } from '../server/artifact-address';
 import { artifactKeyOf } from '../server/artifacts';
 import { openBrowser } from '../server/browser-focus';
 import { artifactAgentFile } from '../server/comment-names';
+import { recordHubEvent } from '../server/hub-events';
 import { ensureHome, type MachinePaths, machinePaths, readProjects } from '../server/machine';
 import { readEntries, registryDir, removeEntry } from '../server/registry';
 import { writeJsonAtomic } from '../server/state';
@@ -122,12 +123,12 @@ function readInfo(machine: MachinePaths): ServerInfo | null {
   }
 }
 
-async function answers(info: ServerInfo) {
+async function answers(info: ServerInfo, pid: number) {
   try {
     const res = await fetch(apiUrl(info, '/api/status'), {
       signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
     });
-    return res.ok;
+    return res.ok && (await res.json()).pid === pid;
   } catch {
     return false;
   }
@@ -294,7 +295,10 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
         await sleep(100);
         info = readInfo(machine);
       }
-      if (!info && alive(running)) await stopPid(running, 'stopping artifacts server');
+      if (!info && alive(running)) {
+        await stopPid(running, 'stopping artifacts server');
+        recordHubEvent(machine, { action: 'replace', reason: 'unresponsive', pid: running });
+      }
     }
     if (running && info) {
       const runningVersion = readText(machine.version) ?? '';
@@ -306,7 +310,23 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
           (process.env.ANJIAN_PUBLIC_ORIGIN ?? '').replace(/\/+$/, '') ||
         (info.boardOrigin ?? '') !== (process.env.ANJIAN_BOARD_ORIGIN ?? '').replace(/\/+$/, '') ||
         (options.port !== undefined && String(info.port) !== options.port);
-      if (decision !== 'replace' && !mismatch && (await answers(info))) {
+      const keepLocal = decision === 'keep-local-build';
+      if (decision !== 'replace' && (!mismatch || keepLocal) && (await answers(info, running))) {
+        if (keepLocal && mismatch) {
+          recordHubEvent(machine, { action: 'keep', reason: 'local-build-settings', pid: running });
+          throw new CliError(
+            `Kept the running local Anjian Hub. Use \`${invocation()} stop\` before starting with different listening settings`,
+          );
+        }
+        recordHubEvent(machine, {
+          action: 'keep',
+          reason: keepLocal
+            ? 'local-build'
+            : decision === 'keep-older-cli'
+              ? 'older-cli'
+              : 'same-version',
+          pid: running,
+        });
         unlock();
         await finish(
           info,
@@ -318,6 +338,16 @@ export async function start(options: StartOptions, emit: Emit): Promise<number> 
         return 0;
       }
       await stopPid(running, 'running artifacts server');
+      recordHubEvent(machine, {
+        action: 'replace',
+        reason:
+          decision === 'replace'
+            ? 'version-changed'
+            : mismatch && !keepLocal
+              ? 'settings-changed'
+              : 'unresponsive',
+        pid: running,
+      });
     }
     await stopOldProjectServers();
 

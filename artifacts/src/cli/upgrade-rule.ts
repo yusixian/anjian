@@ -1,4 +1,4 @@
-export type ReplaceDecision = 'replace' | 'keep' | 'keep-older-cli';
+export type ReplaceDecision = 'replace' | 'keep' | 'keep-older-cli' | 'keep-local-build';
 
 const isLocal = (version: string) => version.startsWith('local-');
 
@@ -17,6 +17,6 @@ export function replaceDecision(running: string, cli: string): ReplaceDecision {
   if (!running) return 'replace';
   if (running === cli) return 'keep';
   if (isLocal(cli)) return 'replace';
-  if (isLocal(running)) return 'keep';
+  if (isLocal(running)) return 'keep-local-build';
   return compare(cli, running) > 0 ? 'replace' : 'keep-older-cli';
 }

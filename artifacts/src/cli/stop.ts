@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { recordHubEvent } from '../server/hub-events';
 import { artifactsRootOf, machinePaths, readProjects } from '../server/machine';
 import type { CommandSpec } from './command';
 import { alive, hasServerId, readText, waitForExit } from './process';
@@ -50,6 +51,7 @@ export async function stop(emit: Emit): Promise<number> {
   }
   for (const file of [machine.pid, machine.serverId]) fs.rmSync(file, { force: true });
   markStopped('stop');
+  recordHubEvent(machine, { action: 'stop', reason: 'cli', pid });
   emit({ status: 'stopped' });
   return 0;
 }

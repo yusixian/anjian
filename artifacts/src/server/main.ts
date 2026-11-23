@@ -7,6 +7,7 @@ import { labelProcess } from '../../../skills/artifacts/app/process-label.cjs';
 import { version } from '../../package.json';
 import { openBrowser } from './browser-focus';
 import { startHub } from './hub';
+import { recordHubEvent } from './hub-events';
 import { parseEnv } from './lifecycle';
 import { ensureHome, machinePaths } from './machine';
 import { relaunchCommand, spawnAfterExit } from './relaunch';
@@ -26,9 +27,10 @@ async function main() {
   const config = parseEnv(process.env, process.argv.slice(2));
   // Linux start and stop match an exact argv entry in /proc.
   if (process.platform === 'darwin') {
-    const identity = config.serverId && /^[\w-]{32,64}$/.test(config.serverId)
-      ? `--artifacts-server-id=${config.serverId}`
-      : undefined;
+    const identity =
+      config.serverId && /^[\w-]{32,64}$/.test(config.serverId)
+        ? `--artifacts-server-id=${config.serverId}`
+        : undefined;
     labelProcess('Hub', identity);
   }
   const paths = machinePaths();
@@ -71,6 +73,13 @@ async function main() {
       await hub.close();
       fs.rmSync(paths.info, { force: true });
       if (intended) writeJsonAtomic(paths.stopped, { reason, timestamp: Date.now() });
+      if (reason === 'stop' || reason === 'restart') {
+        recordHubEvent(paths, {
+          action: reason === 'stop' ? 'stop' : 'replace',
+          reason: 'browser',
+          pid: process.pid,
+        });
+      }
       clearInterval(shutdownRetry);
       console.info(JSON.stringify({ type: 'server-stopped', reason }));
       process.exit(0);

@@ -70,3 +70,5 @@ A local service can register multiple projects. Stopping a shared service affect
 ## Update Anjian
 
 Back up your artifacts and service state. To update a packaged installation, download the new archive and checksum, extract it offline, and start from the new folder. If you built from source, rebuild the new version and restart the service.
+
+The packaged `anjian start` reuses a responsive Hub built from source. To change its bind address, port, or public URL, run `anjian stop` when it is safe to stop the Hub, then start it with the desired settings. For CLI start and stop commands and manual stops or restarts from the browser, see `~/.anjian/server/hub-events.jsonl` for the reason the Hub was kept, replaced, or stopped. If you set `ANJIAN_SERVER_HOME`, look for the file there.
