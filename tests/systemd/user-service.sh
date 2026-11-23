@@ -52,6 +52,7 @@ wait_for() {
     if "$check"; then return 0; fi
     sleep 0.25
   done
+  manager list-jobs || true
   manager status anjian-hub.service || true
   "${user_home[@]}" journalctl --user -u anjian-hub.service --no-pager -n 50 || true
   return 1

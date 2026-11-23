@@ -43,6 +43,7 @@ let mounted = false;
 try {
   fs.mkdirSync(essentialCommands);
   fs.symlinkSync('/usr/bin/dirname', path.join(essentialCommands, 'dirname'));
+  if (process.platform === 'darwin') fs.symlinkSync('/bin/ps', path.join(essentialCommands, 'ps'));
   if (image) {
     const file = path.resolve(archive);
     run('/usr/bin/hdiutil', ['verify', '-quiet', file]);

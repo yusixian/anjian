@@ -23,7 +23,7 @@ tar -xzf "$file.tar.gz"
 
 ## Linux 安装包
 
-在使用 glibc 的 Linux 上，按 `uname -m` 的结果选择 `linux-x64`（`x86_64`）或 `linux-arm64`（`aarch64`）。从同一个发行页下载归档和 SHA-256 校验文件。发行流程在原生 Ubuntu 22.04 x64 和 arm64 上验证两种包。
+在使用 glibc 的 Linux 上，按 `uname -m` 的结果选择 `linux-x64`（`x86_64`）或 `linux-arm64`（`aarch64`）。从同一个发行页下载归档和 SHA-256 校验文件。发行流程在原生 Ubuntu 24.04 x64 和 arm64 上验证两种包。
 
 以 x64 为例，将 `版本` 替换为实际版本号。
 
