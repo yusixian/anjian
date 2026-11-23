@@ -1001,6 +1001,7 @@
   },
   "verification": {
     "title": "验收检查",
+    "refreshReport": "刷新报告",
     "run": "重跑",
     "runNamed": "重跑 {{title}}",
     "running": "运行中…",

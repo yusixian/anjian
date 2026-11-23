@@ -47,6 +47,8 @@ Open that private document in the local Hub and choose **Verification checks** i
 
 For a self-hosted Hub, add `"allowSelfHosted": true` to each report entry you want to enable, then open the report on your site as its owner. The owner can run checks and view their history. With Docker, the configuration lives at `/data/server/verification-checks.json` inside the container. Specify the project and executable paths as seen from inside the container.
 
+Choose **Refresh report** at the top of the verification panel to load the latest document content, references and run history while keeping your edits on the page. Use **Run again** next to a check to start a new run.
+
 ## Document source files
 
 Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to run `anjian skills get artifacts --reference document.md` first.

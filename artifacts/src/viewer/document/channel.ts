@@ -1,6 +1,6 @@
 import type { ServerMessage } from '../../shared/types';
 
-export type ChannelEvent = ServerMessage | { type: 'open' };
+export type ChannelEvent = ServerMessage | { type: 'open' | 'refresh' };
 
 export interface Channel {
   emit: (event: ChannelEvent) => void;
