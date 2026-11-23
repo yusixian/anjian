@@ -158,10 +158,29 @@ describe('anjian comment', () => {
   });
 
   test('explicit sessions can inspect and confirm only the captured messages', async () => {
-    const dir = await project();
+    const dir = await project({ running: false });
+    const threadId = '--AbC_09xY';
+    const at = '2026-11-22T10:00:00.000Z';
+    fs.writeFileSync(
+      path.join(dir, '.anjian/artifacts/document/relay/comments.json'),
+      JSON.stringify({
+        version: 1,
+        threads: [
+          {
+            id: threadId,
+            anchor: { blockId: 'b1', quote: '' },
+            status: 'open',
+            statusAt: at,
+            statusBy: 'agent',
+            messages: [{ id: 'question', author: 'agent', at, text: 'q?' }],
+          },
+        ],
+      }),
+    );
+    expect((await run(['start', '--project-dir', dir, '--background'])).out.type).toBe(
+      'server-started',
+    );
     const args = ['comment', 'list', ...doc(dir)];
-    const threadId = (await run(['comment', 'add', ...doc(dir), '--block', 'b1', '--text', 'q?']))
-      .out.threadId;
     await humanReply(dir, threadId, 'First reply');
     const first = await run([...args, '--session', 'codex:first', '--all']);
     expect(first.out.threads).toMatchObject([{ id: threadId, unread: true }]);
@@ -195,6 +214,15 @@ describe('anjian comment', () => {
     );
     expect((await run(args)).out.threads).toHaveLength(1);
     expect((await run(args)).out.threads).toEqual([]);
+    expect(
+      (await run(['comment', 'reply', ...doc(dir), '--thread', threadId, '--text', 'Seen'])).out,
+    ).toMatchObject({ type: 'comment-replied', threadId });
+    expect(
+      (await run(['comment', 'resolve', ...doc(dir), '--thread', threadId])).out,
+    ).toMatchObject({
+      type: 'comment-resolved',
+      threadId,
+    });
   });
 
   test('Codex and Claude use the same session names as their notification watchers', async () => {

@@ -4,6 +4,7 @@ import { CliError } from './paths';
 import type { Emit } from './start';
 
 export interface OptionSpec {
+  dashValue?: RegExp;
   help?: string;
   short?: string;
   type: 'string' | 'boolean';
@@ -50,9 +51,21 @@ export function parse(args: string[], options: Options, positionals = 0) {
       short ? { type, short } : { type },
     ]),
   );
+  const normalized = [...args];
+  for (let i = 0; i < normalized.length - 1; i++) {
+    const flag = normalized[i]!;
+    if (flag === '--') break;
+    if (!flag.startsWith('--')) continue;
+    const value = normalized[i + 1]!;
+    if (
+      options[flag.slice(2)]?.dashValue?.test(value) &&
+      !(value.startsWith('--') && Object.hasOwn(config, value.slice(2)))
+    )
+      normalized.splice(i, 2, `${flag}=${value}`);
+  }
   try {
     const parsed = parseArgs({
-      args,
+      args: normalized,
       options: config,
       allowPositionals: positionals > 0,
       strict: true,
