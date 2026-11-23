@@ -7,14 +7,14 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import type { Principal } from '../src/server/member-store';
-import { createStorageMigrationApi } from '../src/server/storage/migration-api';
 import { createStorageMigration, type MigrationProfile } from '../src/server/storage/migration';
+import { createStorageMigrationApi } from '../src/server/storage/migration-api';
 import type { FileDigest, StoredObject } from '../src/server/storage/objects';
 import { createStorageSettings } from '../src/server/storage/settings';
 
 const homes: string[] = [];
 const servers: http.Server[] = [];
-const handlers: Array<{ close(): Promise<void> }> = [];
+const handlers: Array<{ close: () => Promise<void> }> = [];
 afterEach(async () => {
   await Promise.all(handlers.splice(0).map((handler) => handler.close()));
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
