@@ -210,7 +210,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
   const localBinding = isLoopbackHost(options.host);
   const loopback = localBinding && !options.publicOrigin;
   const localQuestionHome = loopback ? path.resolve(options.paths.home) : undefined;
-  const verificationRuns = loopback ? createVerificationRuns(options.paths.home) : undefined;
+  const verificationRuns = createVerificationRuns(options.paths.home, !loopback);
   const projectsFile = options.paths.projects;
   const members = createMemberStore(options.paths.home, githubConfig?.ownerId);
   const settings = createStorageSettings(options.paths.home);
@@ -339,6 +339,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               version: options.version,
               github,
               localQuestionHome,
+              verificationAccess: (req) =>
+                loopback ||
+                (originAllowed(policy, req.headers.origin) &&
+                  authorized(req, new URL(req.url ?? '/', origin))),
               verificationRuns,
               localQuestionProject: loopback ? projectId(project) : undefined,
               libraryChanged: (sourceChanged) => {
@@ -1650,7 +1654,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         }
         clearInterval(trashCleanup);
         libraryEvents.close();
-        await verificationRuns?.close();
+        await verificationRuns.close();
         localCommentEvents?.close();
         remoteAuth.close();
         await migrationApi.close();

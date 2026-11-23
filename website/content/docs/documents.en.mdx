@@ -45,6 +45,8 @@ On the machine that runs the local Hub, edit `verification-checks.json` in the A
 
 Open that private document in the local Hub and choose **Verification checks** in the header, then **Run again**. Expand a recent result to see its output and SHA-256. The Hub keeps the run history in `verification-runs/` under its server directory and preserves the evidence already captured in the document. You can widen the results panel on desktop. On a phone it opens full width.
 
+For a self-hosted Hub, add `"allowSelfHosted": true` to each report entry you want to enable, then open the report on your site as its owner. The owner can run checks and view their history. With Docker, the configuration lives at `/data/server/verification-checks.json` inside the container. Specify the project and executable paths as seen from inside the container.
+
 ## Document source files
 
 Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to run `anjian skills get artifacts --reference document.md` first.

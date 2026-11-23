@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+
+import { afterEach, expect, test, vi } from 'vitest';
+
 import { startHub } from '../src/server/hub';
 import { machinePaths } from '../src/server/machine';
 import { tempRoot, writeHtml } from './helpers';
@@ -45,8 +47,78 @@ async function fixture() {
     const cookie = callback.headers.getSetCookie().find((item) => item.includes('_github='))!.split(';')[0]!;
     return { cookie, project: path.join(fs.realpathSync(home), 'workspaces', `github-${id}`), invitation };
   };
-  return { hub, request, ownerCookie, ownerProject, join };
+  return { home, hub, request, ownerCookie, ownerProject, join };
 }
+
+test('only the owner can run or read a self-hosted check after the operator opts in', async () => {
+  const f = await fixture();
+  const alice = await f.join('alice', 2);
+  const document = 'A12345678901234567890';
+  const directory = path.join(alice.project, '.anjian/artifacts/document/report');
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'doc.xml'), '<doc><p>Original evidence</p></doc>');
+  fs.writeFileSync(path.join(directory, '.artifact-id'), document);
+  const link = new URL(await f.hub.linkFor(alice.project, 'document', 'report'));
+  const endpoint = '/api' + link.pathname + '/verification';
+  const report = {
+    project: alice.project,
+    document,
+    checks: [
+      {
+        id: 'evidence',
+        title: 'Capture evidence',
+        command: [process.execPath, '-e', 'console.log("approved output")'],
+      },
+    ],
+  };
+  const configure = (allowSelfHosted: boolean) =>
+    fs.writeFileSync(
+      path.join(f.home, 'verification-checks.json'),
+      JSON.stringify({ reports: [{ ...report, allowSelfHosted }] }),
+    );
+  configure(false);
+  expect((await f.request(endpoint)).status).toBe(404);
+  expect((await f.request(endpoint + '/evidence', f.ownerCookie, {})).status).toBe(404);
+  configure(true);
+  expect((await f.request(endpoint)).status).toBe(200);
+  expect((await f.request(endpoint, alice.cookie)).status).toBe(404);
+  expect((await f.request(endpoint + '/evidence', alice.cookie, {})).status).toBe(404);
+  expect(
+    (
+      await fetch(link.origin + endpoint + '/evidence', {
+        method: 'POST',
+        headers: { Cookie: f.ownerCookie },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await fetch(link.origin + endpoint + '/evidence', {
+        method: 'POST',
+        headers: { Cookie: f.ownerCookie, Origin: 'https://other.invalid' },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await f.request(endpoint + '/evidence', f.ownerCookie, {
+        command: [process.execPath, '-e', 'console.log("request supplied output")'],
+      })
+    ).status,
+  ).toBe(202);
+  let id: string;
+  await vi.waitFor(async () => {
+    const snapshot = await (await f.request(endpoint)).json();
+    expect(snapshot.running).toBeNull();
+    expect(snapshot.runs[0]).toMatchObject({ status: 'passed' });
+    id = snapshot.runs[0].id;
+  });
+  const run = endpoint + '/runs/' + id!;
+  expect(await (await f.request(run)).json()).toMatchObject({ output: 'approved output\n' });
+  expect((await f.request(run, alice.cookie)).status).toBe(404);
+  configure(false);
+  expect((await f.request(run)).status).toBe(404);
+});
 
 test('invited members enter isolated workspaces and cannot read owner or other member resources', async () => {
   const f = await fixture();
