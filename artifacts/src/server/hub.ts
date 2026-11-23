@@ -467,12 +467,24 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       warnings: string[];
       count: number;
       expiresAt: number;
+      directoryStamp: string;
     }
   >();
   const readLibrary = (project: string) => {
-    const cached = librarySnapshots.get(project);
-    if (cached && cached.expiresAt > Date.now()) return cached;
     const root = artifactsRootOf(project);
+    const directoryStamp = ['', ...ARTIFACT_TYPES]
+      .map((type) => {
+        try {
+          const stat = fs.statSync(path.join(root, type), { throwIfNoEntry: false });
+          return stat ? `${stat.ino}:${stat.mtimeMs}:${stat.ctimeMs}` : '-';
+        } catch {
+          return '-';
+        }
+      })
+      .join(',');
+    const cached = librarySnapshots.get(project);
+    if (cached && cached.directoryStamp === directoryStamp && cached.expiresAt > Date.now())
+      return cached;
     const listed = listArtifacts(root);
     const artifacts: HubArtifact[] = [];
     for (const artifact of listed.artifacts) {
@@ -491,6 +503,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       artifacts,
       warnings: listed.warnings.map((warning) => `${path.basename(project)}: ${warning}`),
       count: listed.artifacts.length,
+      directoryStamp,
       expiresAt: Date.now() + LIBRARY_SNAPSHOT_MS,
     };
     librarySnapshots.set(project, snapshot);
