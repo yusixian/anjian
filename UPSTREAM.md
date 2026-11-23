@@ -6,6 +6,16 @@
 
 ## 当前对照版本
 
+2026-11-24 核对 Ryugi 正式版 `v1.107.0`，本批覆盖 `v1.106.1` 和 `v1.107.0`，最新提交 `c31f85a1caff86c95a1c58db2fac7ad7e88ce1c7`。相对 `v1.105.8` 新增 5 个公开提交，累计审计 223 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.107.0) · [增量差异](https://github.com/Innei/ryugi/compare/v1.105.8...v1.107.0)
+
+- **Antigravity 桌面侧栏**。可选 Auxiliary Pane 打开对话的活跃作品，跟随作品切换并接收实时更新。案间已有 CLI 插件与专用反馈会话，桌面侧栏按 [#166](https://github.com/yusixian/anjian/issues/166) 核对，普通会话投递继续见 [#52](https://github.com/yusixian/anjian/issues/52)。
+- **宿主运行状态**。Ryugi 在桌面左下角和手机顶部呈现统一的多会话状态。案间已有作品级 Agent 反馈连接，统一状态与浏览器会话交互合并在 [#151](https://github.com/yusixian/anjian/issues/151) 验收。
+- **文档与手势**。Ryugi 开始监听打开文档后发现的嵌入，案间按 [#167](https://github.com/yusixian/anjian/issues/167) 验证现有动态内容和作品引用。双指手势按作品实际使用检查，保留浏览器缩放作为阅读辅助。
+- **Hook 和 daemon**。Ryugi 提前安装按版本存放的 Hook，诊断显示可执行文件，进程名称包含角色和版本，并为 daemon 双端增加同一套协议样例。案间已交付可辨认的本机 Hub 和批注监听进程，见 [#133](https://github.com/yusixian/anjian/pull/133)。离线首次操作、Hook 诊断及协议边界见 [#165](https://github.com/yusixian/anjian/issues/165)。
+- **来源与授权**。两版之间的 `LICENSE` 文件无变化。共核对 1 项分发改动、1 项宿主扩展、1 项发行说明 CI 改动及 2 项版本提交。本轮使用公开行为和提交范围作对照。[许可证](https://github.com/Innei/ryugi/blob/v1.107.0/LICENSE)
+
+### v1.105.8 的能力差异
+
 2026-11-24 核对 Ryugi 正式版 `v1.105.8`，本批覆盖自 `v1.103.0` 起的 15 个正式版，最新提交 `68cd84f11b6d935d9295f09d3b46ee17332918c9`。相对 `v1.102.9` 新增 28 个公开提交，累计审计 218 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.105.8) · [增量差异](https://github.com/Innei/ryugi/compare/v1.102.9...v1.105.8)
 
 - **宿主反馈**。正式说明记录了 Codex Desktop Hook 授权和投递修复，以及 DeepSeek Harness 的 Skill 加载与批注回传。案间已有 Codex App Server 定向投递和通用宿主回执。桌面端授权、送达和 DSH 各自验收。[#150](https://github.com/yusixian/anjian/issues/150) · [#154](https://github.com/yusixian/anjian/issues/154)
