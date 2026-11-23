@@ -6,6 +6,14 @@
 
 ## 当前对照版本
 
+2026-11-24 核对 Ryugi 正式版 `v1.108.1`，最新提交 `6f5b4cc70c0493f4848a8ec1fa090258389eff08`。相对 `v1.108.0` 新增 2 个公开提交，累计审计 227 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.1) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.0...v1.108.1)
+
+- **作品库刷新**。Ryugi 减少了跨项目列表的文件读取，并合并连续发布引发的刷新。案间目前每次请求重新读取可见作品元数据，浏览器固定轮询并响应变更事件。扫描和刷新合并由 [#180](https://github.com/yusixian/anjian/issues/180) 跟踪。
+- **报告来源与侧栏空态**。验收报告原始证据可以展开，来源数据表和统一刷新由 [#152](https://github.com/yusixian/anjian/issues/152) 核对。Antigravity 无作品对话应留在侧栏空态，首次打开作品后再切换，归 [#166](https://github.com/yusixian/anjian/issues/166) 验收。
+- **来源与授权**。许可证文件未变。公开提交涉及 Antigravity 侧栏及其测试、发布清单。案间按发布行为独立核对。[许可证](https://github.com/Innei/ryugi/blob/v1.108.1/LICENSE)
+
+### v1.108.0 的能力差异
+
 2026-11-24 核对 Ryugi 正式版 `v1.108.0`，最新提交 `32cd13cd09753ecd72fba40aa6f8228f1c354183`。相对 `v1.107.0` 新增 2 个公开提交，累计审计 225 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.0) · [增量差异](https://github.com/Innei/ryugi/compare/v1.107.0...v1.108.0)
 
 - **保留健康的源码 Hub**。发行版 CLI 复用仍响应的源码 Hub。监听配置冲突时提示用户先明确停止 Hub；失去响应时仍可替换。案间独立实现，CLI 与网页管理操作会追加简洁的 Hub 事件记录。[操作指南](website/content/docs/local.mdx#更新案间)

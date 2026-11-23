@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-24 核对 Ryugi 正式版 `v1.108.0`（`32cd13c`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.0) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.108.1`（`6f5b4cc`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.1) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -90,8 +90,13 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 | 从 ChatGPT 桌面应用的 Codex 接收定向作品批注，并判断钩子是否已授权 | 两个真实桌面会话接收各自同名文档的 Chrome 批注。用 v0.17.0 macOS arm64 发布包验证 `anjian doctor codex --json` 的五种状态与配置只读性。[桌面验收 #150](https://github.com/yusixian/anjian/issues/150) · [中英文指南](../website/content/docs/review-workflows.mdx)                 |
 | 在本机报告页重跑登记过的检查并保留原始证据                         | Chrome 1280 和 390 像素视口验收通过与失败结果，原有证据保持可查看。运行依赖本机 Hub 的显式登记并单独保存历史。[合入与验证 #175](https://github.com/yusixian/anjian/pull/175)                                                                                                       |
 
+## 自托管 HTTPS 浏览器验收
+
+在隔离 Hub 上分别使用 1280 像素桌面和 390 像素触摸视口。两个独立 Chrome 会话交替编辑并回读幻灯片和分镜标题，验证白板页面新增与验收报告正文保存。匿名会话能阅读已分享的幻灯片快照，私有幻灯片的读写请求均返回 403。[步骤与待验项 #177](https://github.com/yusixian/anjian/issues/177)
+
 ## 待验证能力
 
+- [#180](https://github.com/yusixian/anjian/issues/180) 减少跨项目作品库重复扫描和浏览器刷新。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的跨设备编辑、保存和版本兼容提示。
 - [#153](https://github.com/yusixian/anjian/issues/153) 画板预览删除回传与多人编辑。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互。
