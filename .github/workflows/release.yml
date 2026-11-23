@@ -1,4 +1,5 @@
 name: Verified GitHub Release
+run-name: Verified GitHub Release (${{ github.event.workflow_run.head_sha }})
 on:
   workflow_run:
     workflows: [Anjian checks]
@@ -9,7 +10,7 @@ permissions:
   actions: read
 concurrency:
   group: verified-release
-  cancel-in-progress: false
+  queue: max
 jobs:
   version:
     if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
