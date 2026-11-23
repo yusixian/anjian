@@ -226,7 +226,7 @@ async function ready(source = '<doc><p blockId="intro">draft</p></doc>') {
   };
 }
 
-test('local document questions accept only a fresh exact-project recipient and persist withdrawal', async () => {
+test.each(['codex', 'dsh'])('local question routing and withdrawal for %s', async (host) => {
   const f = await fixture('<doc><ask key="notes" prompt="What else?"/></doc>');
   const info = JSON.parse(
     fs.readFileSync(path.join(f.alpha, '.anjian/artifacts/.state/server-info'), 'utf8'),
@@ -248,7 +248,7 @@ test('local document questions accept only a fresh exact-project recipient and p
   const beat = (project: string, artifact: string, session: string, timestamp = Date.now()) => {
     const dir = path.join(
       project,
-      '.anjian/artifacts/.state/codex-comment-watch/questions',
+      `.anjian/artifacts/.state/${host}-comment-watch/questions`,
       artifact,
     );
     fs.mkdirSync(dir, { recursive: true });
@@ -261,7 +261,7 @@ test('local document questions accept only a fresh exact-project recipient and p
   const listing = await browser();
   expect(listing.status, JSON.stringify(listing.body)).toBe(200);
   expect(listing.body.localRecipients).toEqual([
-    { host: 'codex', id: expect.stringMatching(/^[\w-]{43}$/), label: chosen.slice(-6) },
+    { host, id: expect.stringMatching(/^[\w-]{43}$/), label: chosen.slice(-6) },
   ]);
   expect(JSON.stringify(listing.body)).not.toContain(chosen);
   const initial = listing.body.items[0];
@@ -301,7 +301,10 @@ test('local document questions accept only a fresh exact-project recipient and p
   const poll = (route = outbox, authorization = token, origin?: string) =>
     f.request(route, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + authorization, ...(origin ? { Origin: origin } : {}) },
+      headers: {
+        Authorization: 'Bearer ' + authorization,
+        ...(origin ? { Origin: origin } : {}),
+      },
     });
   expect((await poll(outbox, 'a'.repeat(64))).status).toBe(404);
   expect((await poll(outbox, token, f.origin)).status).toBe(404);
@@ -309,7 +312,10 @@ test('local document questions accept only a fresh exact-project recipient and p
   const response = await poll();
   expect(response.status).toBe(200);
   const delivery = (await response.json()).delivery;
-  expect(delivery).toMatchObject({ id: next.body.item.localSubmission.id, answer: request.answer });
+  expect(delivery).toMatchObject({
+    id: next.body.item.localSubmission.id,
+    answer: request.answer,
+  });
   expect(
     (await browser({ action: 'withdraw', id: initial.id, version: next.body.item.version })).status,
   ).toBe(409);

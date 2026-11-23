@@ -9,7 +9,7 @@ export interface FeedbackConnection {
   id: string;
 }
 export interface LocalQuestionRecipient {
-  host: 'agy' | 'codex' | 'pi';
+  host: 'agy' | 'codex' | 'dsh' | 'pi';
   id: string;
   label: string;
 }

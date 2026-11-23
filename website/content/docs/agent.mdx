@@ -128,7 +128,7 @@ anjian comment list --artifact document/plan --session review-desk:terminal:123 
 
 ## 把文档答案发给本地 Agent
 
-先让 Codex、Pi 或 Antigravity 在当前会话里用案间打开该文档，具体入口见[评审流程](/docs/review-workflows)。在问答卡中填写或选择答案，选定会话后点「发送给…」。同一个文档有多个会话时，用列表中的宿主名和会话末尾标识区分。Agent 会直接收到题目、答案和文档修订。
+先让 Codex、Pi 或 Antigravity 在当前会话里用案间打开该文档，具体入口见[评审流程](/docs/review-workflows)。使用 DeepSeek Harness 时，在要接收答案的会话输入 `/anjian watch document/plan`，替换成你的文档 ID。在问答卡中填写或选择答案，选定会话后点「发送给…」。同一个文档有多个会话时，用列表中的宿主名和会话末尾标识区分。Agent 会直接收到题目、答案和文档修订。
 
 「等待本地 Agent 接收」时，如果仍显示「撤回提交」，可以撤回并保留草稿。「已发送给本地 Agent」表示宿主已接收消息。需要在文档里等待 Agent 回传答复时，选择已连接的 Lody 会话。
 

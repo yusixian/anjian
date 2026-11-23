@@ -6,7 +6,7 @@ import { artifactsRootOf } from '../machine';
 
 const HEARTBEAT_TTL = 10_000;
 const PROOF = /^[a-f0-9]{64}$/;
-const HOSTS = ['codex', 'pi', 'agy'] as const;
+const HOSTS = ['codex', 'pi', 'agy', 'dsh'] as const;
 const SESSION = /^[a-z0-9][\w.-]{0,124}$/i;
 
 function readRecipients(project: string, artifact: string, now = Date.now()) {
