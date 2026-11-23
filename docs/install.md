@@ -1,6 +1,6 @@
 # Anjian 本地安装
 
-从案间 GitHub Releases 获取适合你的 macOS 安装包，也可以从本仓库源码构建。[Anjian Releases](https://github.com/yusixian/anjian/releases)
+从案间 GitHub Releases 获取适合你的 macOS 或 Linux 安装包，也可以从本仓库源码构建。[Anjian Releases](https://github.com/yusixian/anjian/releases)
 
 ## macOS 安装包
 
@@ -20,6 +20,23 @@ tar -xzf "$file.tar.gz"
 包内附 Node.js、构建信息和许可证，解压后即可使用。录屏裁剪等功能仍需系统提供 `ffmpeg` 和 `ffprobe`。
 
 离线更新时，先将新版归档和校验文件复制到目标机器。用旧版执行 `stop`，将新版解压到另一个目录，核对 `version` 后从新目录启动。作品和服务状态独立于安装目录。保留旧版目录即可再次使用旧入口。没有安装包的发行仍可使用该版本的源码。
+
+## Linux 安装包
+
+在使用 glibc 的 Linux 上，按 `uname -m` 的结果选择 `linux-x64`（`x86_64`）或 `linux-arm64`（`aarch64`）。从同一个发行页下载归档和 SHA-256 校验文件。发行流程在原生 Ubuntu 24.04 x64 和 arm64 上验证两种包。
+
+以 x64 为例，将 `版本` 替换为实际版本号。
+
+```bash
+file=anjian-v版本-linux-x64
+sha256sum -c "$file.tar.gz.sha256"
+tar -xzf "$file.tar.gz"
+"./$file/anjian" version
+"./$file/anjian" start --project-dir /绝对路径/项目 --no-open --background
+"./$file/anjian" stop
+```
+
+包内自带 Node.js。录屏裁剪等功能需要系统提供 `ffmpeg` 和 `ffprobe`。需要让 Hub 随用户会话启动时，先停止手工启动的 Hub，再用解压目录里的 `anjian service install` 安装用户服务。更新安装路径时，先用旧版卸载服务，再用新版安装。服务器部署也可以继续走[容器方式](self-hosting.md)。
 
 ## 构建与运行
 

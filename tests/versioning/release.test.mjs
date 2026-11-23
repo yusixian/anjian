@@ -107,7 +107,7 @@ function publishing() {
     }
     if (method === 'PATCH' && endpoint === 'releases/1') {
       assert.equal(store.release.draft, true);
-      assert.equal(store.assets.length, 4);
+      assert.equal(store.assets.length, 8);
       store.writes++;
       return (store.release = { ...store.release, ...data });
     }
@@ -174,7 +174,9 @@ test('failed CI, dirty identity, unchanged version and conflicting tags or relea
 function packageAssets(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-assets-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const names = ['arm64', 'x64'].map((arch) => `anjian-v0.2.0-darwin-${arch}.tar.gz`);
+  const names = ['darwin', 'linux'].flatMap((platform) =>
+    ['arm64', 'x64'].map((arch) => `anjian-v0.2.0-${platform}-${arch}.tar.gz`),
+  );
   for (const name of names) {
     const file = path.join(directory, name);
     fs.writeFileSync(file, name);
@@ -183,14 +185,14 @@ function packageAssets(t) {
   return { directory, names };
 }
 
-test('requires complete matching macOS packages before creating a tag or release', (t) => {
+test('requires complete matching macOS and Linux packages before creating a tag or release', (t) => {
   const { input, store, api, gate } = publishing();
   const { directory, names } = packageAssets(t);
   const publish = () => publishRelease({ ...input, assetsDirectory: directory }, api, gate);
   fs.appendFileSync(path.join(directory, names[0]), 'modified');
   assert.throws(publish, /Checksum mismatch/);
   fs.writeFileSync(path.join(directory, names[0]), names[0]);
-  fs.rmSync(path.join(directory, `${names[1]}.sha256`));
+  fs.rmSync(path.join(directory, `${names.at(-1)}.sha256`));
   assert.throws(publish, /ENOENT/);
   assert.equal(store.writes, 0);
 });
@@ -210,7 +212,7 @@ test('resumes a partially uploaded draft and verifies published assets without c
       publish((tag, files) => {
         assert.equal(tag, 'v0.2.0');
         assert.equal(store.release.draft, true);
-        assert.equal(files.length, 4);
+        assert.equal(files.length, 8);
         store.assets.push(asset(files[0]), {
           id: 2,
           state: 'starter',
@@ -224,7 +226,7 @@ test('resumes a partially uploaded draft and verifies published assets without c
   assert.equal(store.release.draft, true);
   assert.throws(() => publish(() => {}), /Release assets incomplete/);
   publish((_, files) => {
-    assert.equal(files.length, 3);
+    assert.equal(files.length, 7);
     assert(!files.some((file) => path.basename(file) === store.assets[0].name));
     store.assets.push(...files.map(asset));
   });

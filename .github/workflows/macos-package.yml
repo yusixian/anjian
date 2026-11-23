@@ -48,8 +48,8 @@ jobs:
         shell: bash
         run: |
           directory="$RUNNER_TEMP/anjian-packages"
-          archive=$(node scripts/release/package-macos.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH")
-          node scripts/release/smoke-macos-package.mjs "$archive" "$EXPECTED_SHA" "$TARGET_ARCH"
+          archive=$(node scripts/release/package-standalone.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH")
+          node scripts/release/smoke-standalone-package.mjs "$archive" "$EXPECTED_SHA" "$TARGET_ARCH"
       - name: Verify a disk image from a read-only mount
         if: github.event_name == 'pull_request'
         env:
@@ -58,11 +58,11 @@ jobs:
         shell: bash
         run: |
           directory="$RUNNER_TEMP/anjian-dmg-smoke"
-          image=$(node scripts/release/package-macos.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH" --dmg)
-          node scripts/release/smoke-macos-package.mjs "$image" "$EXPECTED_SHA" "$TARGET_ARCH"
+          image=$(node scripts/release/package-standalone.mjs "$directory" "$EXPECTED_SHA" "$TARGET_ARCH" --dmg)
+          node scripts/release/smoke-standalone-package.mjs "$image" "$EXPECTED_SHA" "$TARGET_ARCH"
       - uses: actions/upload-artifact@v4
         with:
-          name: anjian-macos-${{ matrix.arch }}
+          name: anjian-standalone-darwin-${{ matrix.arch }}
           path: ${{ runner.temp }}/anjian-packages/
           if-no-files-found: error
           compression-level: 0

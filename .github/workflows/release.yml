@@ -44,8 +44,16 @@ jobs:
     uses: ./.github/workflows/macos-package.yml
     with:
       sha: ${{ github.event.workflow_run.head_sha }}
+  linux:
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/linux-package.yml
+    with:
+      sha: ${{ github.event.workflow_run.head_sha }}
   release:
-    needs: macos
+    needs: [macos, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +65,7 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v4
         with:
-          pattern: anjian-macos-*
+          pattern: anjian-standalone-*
           path: ${{ runner.temp }}/anjian-packages
           merge-multiple: true
       - name: Publish the verified release and macOS packages
