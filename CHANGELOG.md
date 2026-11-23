@@ -1,5 +1,36 @@
 # anjian-workflow
 
+## 0.18.3
+
+### Patch Changes
+
+<!-- anjian:zh -->
+
+#### 中文
+
+自托管 Hub 可以重跑已登记的验收检查。在服务器的 `verification-checks.json` 中给对应报告设置 `"allowSelfHosted": true`，站点所有者即可从报告页启动检查并查看输出、摘要和历史。
+
+<!-- anjian:en -->
+
+#### English
+
+Self-hosted Hubs can rerun registered verification checks. Set `"allowSelfHosted": true` for a report in the server's `verification-checks.json` so the site owner can run checks and review output, digests, and history from that report.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+#### 中文
+
+验收检查面板新增「刷新报告」，可在保留编辑内容的同时更新正文、引用和运行记录。
+
+<!-- anjian:en -->
+
+#### English
+
+Use **Refresh report** in the verification panel to update document content, references and run history while keeping your edits.
+
+<!-- anjian:end -->
+
 ## 0.18.2
 
 ### Patch Changes
