@@ -94,15 +94,21 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 在隔离 Hub 上分别使用 1280 像素桌面和 390 像素触摸视口。两个独立 Chrome 会话交替编辑并回读幻灯片和分镜标题，验证白板页面新增与验收报告正文保存。匿名会话能阅读已分享的幻灯片快照，私有幻灯片的读写请求均返回 403。[步骤与待验项 #177](https://github.com/yusixian/anjian/issues/177)
 
+通过合成 OAuth 服务走实际邀请和登录。受邀成员在自己的项目里编辑四类私有作品，另一成员的读写被拒绝，暂停成员后原会话立即失效。并发编辑报告时两处改动合并并持久化，白板会提示版本冲突并保护已保存内容。正式 v0.18.0 macOS arm64 安装包能读取新版生成的 JSON 报告。[完整验收 #177](https://github.com/yusixian/anjian/issues/177)
+
+## 作品库与 JSON 证据
+
+- 作品库保持打开时，两项目各连续创建八份作品，桌面与 390 像素触摸视口每批各刷新一次。空闲 20.5 秒无列表请求，断线时仍能回退刷新。[实现 #183](https://github.com/yusixian/anjian/pull/183) · [测量 #180](https://github.com/yusixian/anjian/issues/180)
+- 在验收报告里展开「原始输出」，可阅读通过摘要校验的完整 JSON，先用数据表预览筛查内容。桌面和 390 像素触摸视口均验收表格、语法高亮和原文。[实现 #184](https://github.com/yusixian/anjian/pull/184) · [中英文指南](../website/content/docs/review-workflows.mdx)
+
 ## 待验证能力
 
-- [#180](https://github.com/yusixian/anjian/issues/180) 减少跨项目作品库重复扫描和浏览器刷新。
-- [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的跨设备编辑、保存和版本兼容提示。
+- [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及独立客户端实际遇到协议不兼容时的行为。
 - [#153](https://github.com/yusixian/anjian/issues/153) 画板预览删除回传与多人编辑。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互。
 - [#154](https://github.com/yusixian/anjian/issues/154) DeepSeek Harness 安装与定向批注。
-- [#152](https://github.com/yusixian/anjian/issues/152) 自托管或远程访问时的报告重跑与授权。
-- Linux 主机电源、进程和临时防休眠。原生 arm64 曾有一次强制退出后的服务恢复检查失败，重跑通过。[#139](https://github.com/yusixian/anjian/issues/139)
+- [#152](https://github.com/yusixian/anjian/issues/152) 自托管或远程访问时的报告重跑、授权与统一刷新。
+- Linux 主机电源、进程和临时防休眠。v0.18.1 已修复启动期间停止 systemd 用户服务会误报失败的问题。[#139](https://github.com/yusixian/anjian/issues/139)
 
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
 
