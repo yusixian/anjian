@@ -57,7 +57,7 @@ description: 从白板、幻灯片和分镜开始，完成一轮文档评审与 
 使用本机 Hub 时，先从要接收反馈的会话打开具体作品，再在浏览器添加评论或回复。已订阅的 Claude Code、Codex、Pi 和案间启动的 Antigravity 会话会收到通知。Hub 重启后会自动重连并检查未读评论。
 
 - **白板、幻灯片和分镜。** 先在作品的「Agent 反馈」连接目标 Lody 会话。给元素、页面或片段添加批注，选中要处理的批注后点「提交给 Agent」。结果回来后打开原批注和对应作品，核对再点「验收通过」。
-- **Codex 桌面端。** 安装或升级案间插件后，在 Codex 的「设置 → 钩子」查看案间的待审 Hook，核对后批准。然后在要接收反馈的本地会话中，让案间插件打开该项目的具体作品。如果反馈没有出现，检查钩子是否已通过审核，也可以用 `anjian comment list` 读取该作品的批注。
+- **Codex 桌面端。** 安装或升级案间插件后，在 Codex 的「设置 → 钩子」查看案间的待审 Hook，核对后批准。然后在要接收反馈的本地会话中，让案间插件打开该项目的具体作品。如果反馈没有出现，检查钩子是否已通过审核，也可以用 `anjian comment list` 读取该作品的批注。在该项目运行 `anjian doctor codex --json`，可以查看钩子是否缺失、停用或需要重新审核。如果桌面应用在自定义位置，或你希望检查命令行安装，用 `--codex-bin /path/to/codex` 选择对应可执行文件。使用自定义配置目录时，保留该会话的 `CODEX_HOME`。
 - **本地 HTML 预览。** 在想接收反馈的 Codex 或 Claude Code 会话里运行下方命令。打开它返回的链接，在网页选中文字，点「发送选区」，然后选择接收会话。发送的是点击当时的选区和预览版本。
 - **另一工作区。** 从要接收反馈的 Codex 或 Claude Code 会话，用项目已有的启动器打开另一工作区里的具体作品。通知里的命令指向实际作品目录。不同会话的已读状态独立。用通知里的 `comment list --session <会话>` 读取该会话的反馈，或加 `--all` 查看历史并保留未读状态。
 - **Pi 或 Antigravity。** Pi 安装本地案间包后，用 `/anjian-open document/plan` 打开并订阅。Antigravity CLI 用案间的 `antigravity-session.cjs` 启动专用本地会话。安装和其他读取方式见[源码安装说明](https://github.com/yusixian/anjian/blob/integration/ryugi-local-workflows/docs/install.md)。
