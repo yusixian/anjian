@@ -1,7 +1,12 @@
 import { installInspector } from '../inspector/runtime';
 import { installSnapshot, serializeBoard } from '../inspector/snapshot';
 import { installTweaks } from '../runtime/tweaks';
-import { COMMENT_CURSOR, INSPECTOR_PROPERTIES, POINTER_CURSOR } from '../shared/inspector';
+import {
+  COMMENT_CURSOR,
+  INSPECTOR_MAX_REMOVALS,
+  INSPECTOR_PROPERTIES,
+  POINTER_CURSOR,
+} from '../shared/inspector';
 import { PREVIEW_SELECTION_SELECTOR, PREVIEW_SELECTION_TEXT } from '../shared/selection-send';
 import { tweakTools } from '../shared/tweaks';
 import { EMBEDDED_STYLE, injectionPoint } from './strip-runtime';
@@ -142,7 +147,7 @@ export function injectRuntime(
 ): string {
   const inspect =
     options.inspector || options.readOnlyInspector
-      ? `${options.readOnlyInspector ? '' : `;(${installTweaks.toString().replaceAll('\n', ' ')})(window,${tweakTools.toString().replaceAll('\n', ' ')});`};(${installInspector.toString().replaceAll('\n', ' ')})(window,${JSON.stringify(INSPECTOR_PROPERTIES)},${JSON.stringify(COMMENT_CURSOR)},${JSON.stringify(POINTER_CURSOR)},${options.readOnlyInspector === true});;(${installSnapshot.toString().replaceAll('\n', ' ')})(window,${serializeBoard.toString().replaceAll('\n', ' ')});`
+      ? `${options.readOnlyInspector ? '' : `;(${installTweaks.toString().replaceAll('\n', ' ')})(window,${tweakTools.toString().replaceAll('\n', ' ')});`};(${installInspector.toString().replaceAll('\n', ' ')})(window,${JSON.stringify(INSPECTOR_PROPERTIES)},${JSON.stringify(COMMENT_CURSOR)},${JSON.stringify(POINTER_CURSOR)},${options.readOnlyInspector === true},${INSPECTOR_MAX_REMOVALS});;(${installSnapshot.toString().replaceAll('\n', ' ')})(window,${serializeBoard.toString().replaceAll('\n', ' ')});`
       : '';
   const tag = `${options.embedded ? EMBEDDED_STYLE : ''}<script>${inspect || RUNTIME_LINE}</script>`;
   const ui =

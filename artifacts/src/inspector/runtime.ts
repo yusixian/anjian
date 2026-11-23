@@ -2,6 +2,7 @@ import type {
   InspectorNode,
   InspectorProperty,
   InspectorRect,
+  InspectorRemoval,
   InspectorSelection,
   LayerKind,
 } from '../shared/inspector';
@@ -13,6 +14,7 @@ export function installInspector(
   commentCursor = 'crosshair',
   pointerCursor = 'default',
   readOnly = false,
+  maxRemovals = 100,
 ) {
   const doc = win.document;
   const session = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -29,6 +31,8 @@ export function installInspector(
       }
     >
   >();
+  /* Detached nodes leave placeholders so sibling paths still locate the source elements. */
+  const removed = new Map<Comment, { element: Element; node: InspectorRemoval }>();
   const ignored = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'NOSCRIPT', 'HEAD']);
   let nextId = 0;
   let enabled = false;
@@ -58,6 +62,8 @@ export function installInspector(
   cursor.textContent = `*{cursor:${pointerCursor}!important}`;
   const post = (type: string, data: Record<string, unknown>) =>
     win.parent.postMessage({ type: `anjian:inspect:${type}`, session, connection, ...data }, '*');
+  const reportRemovals = (edited = false) =>
+    post('removals', { removals: Array.from(removed.values(), ({ node }) => node), edited });
   const idOf = (el: Element) => {
     let id = ids.get(el);
     if (!id) {
@@ -95,7 +101,11 @@ export function installInspector(
       const parent = node.parentElement;
       const same =
         parent && node !== doc.body
-          ? Array.from(parent.children).filter((child) => child.tagName === node!.tagName)
+          ? Array.from(parent.childNodes).filter((child) =>
+              child instanceof win.Element
+                ? child.tagName === node!.tagName
+                : removed.get(child as Comment)?.element.tagName === node!.tagName,
+            )
           : [];
       segments.unshift(
         node.id && node.id.length <= 64 && /^[A-Z][\w-]*$/i.test(node.id)
@@ -154,6 +164,7 @@ export function installInspector(
     const list = [];
     for (const [el, changes] of originals) {
       if (!el.isConnected) {
+        if (Array.from(removed.values()).some(({ element }) => element.contains(el))) continue;
         originals.delete(el);
         continue;
       }
@@ -435,6 +446,7 @@ export function installInspector(
       geometryFrame = win.requestAnimationFrame(geometry);
       tree();
       tweaks();
+      if (!readOnly) reportRemovals();
       if (selected) selection('update');
       return;
     }
@@ -517,6 +529,42 @@ export function installInspector(
       hoverRect = hovered ? rectOf(hovered) : null;
       hoverId = hovered ? treeId(hovered) : null;
       post('hover', { rect: hoverRect, id: hoverId });
+    } else if (data.action === 'remove') {
+      if (
+        mode !== 'select' ||
+        !selected ||
+        ids.get(selected) !== data.id ||
+        !selected.isConnected ||
+        selected === doc.body ||
+        !doc.body.contains(selected) ||
+        removed.size >= maxRemovals
+      )
+        return;
+      const element = selected;
+      const marker = doc.createComment('');
+      const node = {
+        id: data.id,
+        name: label(element),
+        tag: element.tagName.toLowerCase(),
+        path: pathOf(element),
+      };
+      removed.set(marker, { element, node });
+      selected = null;
+      element.replaceWith(marker);
+      tree();
+      tweaks();
+      reportRemovals(true);
+    } else if (data.action === 'undo-removal') {
+      if (mode !== 'select') return;
+      const last = Array.from(removed).at(-1);
+      if (!last) return;
+      const [marker, { element }] = last;
+      removed.delete(marker);
+      if (marker.isConnected && !element.isConnected) marker.replaceWith(element);
+      else marker.remove();
+      tree();
+      tweaks();
+      reportRemovals(true);
     } else if (
       data.action === 'style' &&
       data.session === session &&

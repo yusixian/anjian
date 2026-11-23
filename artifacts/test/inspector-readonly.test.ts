@@ -28,6 +28,9 @@ test('published inspector reads the DOM but rejects forged write commands', () =
 
     send('style', { id, property: 'color', value: 'blue' });
     send('reset');
+    send('remove', { id });
+    send('undo-removal');
+    expect(card.isConnected).toBe(true);
     send('mode', { mode: 'comment' });
     expect(card.style.color).toBe('red');
     card.querySelector('button')!.click();

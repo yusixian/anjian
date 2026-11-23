@@ -69,9 +69,17 @@ function typedNodes(nodes, prompt) {
 }
 
 function describe(session, { file, value }, prompt, budget) {
+  const removals = Array.isArray(value.removals) ? value.removals : [];
   const named = typedNodes(value.nodes, prompt);
   const objects = Array.isArray(value.objects) ? value.objects : [];
-  if (!value.selected.length && !value.tweaks.length && !named.length && !objects.length) return '';
+  if (
+    !value.selected.length &&
+    !value.tweaks.length &&
+    !named.length &&
+    !objects.length &&
+    !removals.length
+  )
+    return '';
   const head = [`Artboard ${value.artifact}, open in the viewer (updated ${value.updatedAt}):`];
   if (named.length) {
     head.push('Nodes named in this message:');
@@ -79,6 +87,10 @@ function describe(session, { file, value }, prompt, budget) {
   }
   const tail = `Full selection and node map: ${path.relative(session, file)}`;
   const body = [];
+  if (removals.length) {
+    body.push('Elements removed in the preview (still in the source):');
+    for (const node of removals) body.push(`- ${where(node)}${node.name ? ` "${node.name}"` : ''}`);
+  }
   if (objects.length) {
     body.push('Selected canvas objects:');
     for (const { kind, id, page } of objects)

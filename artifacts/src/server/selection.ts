@@ -12,6 +12,7 @@ import {
   SELECTION_LIMITS as LIMIT,
   SELECTION_MAX_NODES as MAX_NODES,
   SELECTION_MAX_OBJECTS,
+  SELECTION_MAX_REMOVALS,
   type SelectionChange,
   type SelectionNode,
   type SelectionState,
@@ -110,6 +111,12 @@ export function readSelectionMessage(
     return node && change && { ...node, ...change };
   });
   const nodes = readAll(value.nodes, readNode);
+  let removals: SelectionNode[] | null | undefined;
+  if (value.removals !== undefined) {
+    if (!list(value.removals, SELECTION_MAX_REMOVALS)) return null;
+    removals = readAll(value.removals, readNode);
+    if (!removals) return null;
+  }
   let objects: SelectedArtboardObject[] | null | undefined;
   if (value.objects !== undefined) {
     if (!list(value.objects, SELECTION_MAX_OBJECTS)) return null;
@@ -129,7 +136,14 @@ export function readSelectionMessage(
     id,
     tab: value.tab,
     human: value.human,
-    state: { selected, more: value.more as number, tweaks, nodes, ...(objects ? { objects } : {}) },
+    state: {
+      selected,
+      more: value.more as number,
+      tweaks,
+      nodes,
+      ...(objects ? { objects } : {}),
+      ...(removals?.length ? { removals } : {}),
+    },
   };
 }
 

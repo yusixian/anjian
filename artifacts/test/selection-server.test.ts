@@ -90,6 +90,22 @@ test('a viewer selection is written to selection.json for its artboard', async (
   ws.socket?.destroy();
 });
 
+test('preview removals follow the foreground tab and clear on undo', async () => {
+  const { server, root } = await start();
+  writeArtboard(root, 'b1', canvas, { 'pages/p/a.html': '<p>a</p>' });
+  const active = await connect(server);
+  const background = await connect(server);
+  sendWsText(active.socket!, message('t1', true, [], { removals: [node(2)] }));
+  await waitFor(() => fs.existsSync(selectionFile(root)));
+  expect(readJson(selectionFile(root)).removals).toEqual([node(2)]);
+  sendWsText(background.socket!, message('t2', false, []));
+  sendWsText(active.socket!, message('t1', true, []));
+  await waitFor(() => !readJson(selectionFile(root)).removals);
+  expect(readJson(selectionFile(root)).selected).toEqual([]);
+  active.socket?.destroy();
+  background.socket?.destroy();
+});
+
 test('canvas selections coexist with DOM selections and drop removed objects', async () => {
   const { server, root } = await start();
   const source = {

@@ -239,10 +239,16 @@ function DesktopArtboard({
       else if (input.down) onKey(input);
     },
   });
+  const allBoards = canvas?.boards ?? {};
+  const boards = useMemo(
+    () => Object.entries(canvas?.boards ?? {}).filter(([, board]) => board.page === page),
+    [canvas, page],
+  );
+  const pageBoards = useMemo(() => Object.fromEntries(boards), [boards]);
   const objectSelection = useArtboardObjectSelection(canvas, page, pickingObjects);
   useSelectionSync({
     artifact: readOnly ? null : artifact,
-    boards: canvas?.boards,
+    boards: pageBoards,
     live: readOnly ? false : live,
     inspector,
     objects: objectSelection.objects,
@@ -359,11 +365,6 @@ function DesktopArtboard({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const allBoards = canvas?.boards ?? {};
-  const boards = useMemo(
-    () => Object.entries(canvas?.boards ?? {}).filter(([, b]) => b.page === page),
-    [canvas, page],
-  );
   const groups = Object.entries(canvas?.groups ?? {}).filter(([, g]) =>
     g.boards.some((id) => allBoards[id]?.page === page),
   );
@@ -417,7 +418,7 @@ function DesktopArtboard({
         ...[expanded, parameterBoard].filter((board): board is string => !!board),
         ...inspector.selectedTargets.map((target) => target.boardId),
         ...Object.entries(inspector.frames)
-          .filter(([, frame]) => frame.tweaks.length > 0)
+          .filter(([, frame]) => frame.tweaks.length > 0 || frame.removals?.length)
           .map(([id]) => id),
         ...(marquee
           ? boards
@@ -773,6 +774,7 @@ function DesktopArtboard({
         <InspectorPanel
           boards={boards}
           change={inspector.change}
+          editRemovals={inspector.editRemovals}
           enabled={!expanded}
           frames={inspector.frames}
           hoverNode={inspector.hoverNode}

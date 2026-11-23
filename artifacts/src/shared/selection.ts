@@ -2,6 +2,7 @@ import type { InspectorProperty } from './inspector';
 
 export const SELECTION_FULL_NODES = 20;
 export const SELECTION_MAX_NODES = 25000;
+export const SELECTION_MAX_REMOVALS = 500;
 export const SELECTION_MAX_BYTES = 4 * 1024 * 1024;
 export const SELECTION_LIMITS = {
   id: 200,
@@ -48,6 +49,7 @@ export interface SelectionState {
   more: number;
   objects?: SelectedArtboardObject[];
   nodes: SelectionNode[];
+  removals?: SelectionNode[];
   selected: SelectedNode[];
   tweaks: SelectionTweak[];
 }

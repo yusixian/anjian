@@ -1,4 +1,5 @@
 import {
+  INSPECTOR_MAX_REMOVALS,
   INSPECTOR_PROPERTIES,
   type InspectorNode,
   type InspectorProperty,
@@ -135,6 +136,21 @@ export function readInspectorReport(value: unknown): InspectorReport | null {
         number(value.y) &&
         typeof value.append === 'boolean' &&
         (value.id === undefined || id(value.id));
+      break;
+    }
+    case 'anjian:inspect:removals': {
+      valid =
+        typeof value.edited === 'boolean' &&
+        Array.isArray(value.removals) &&
+        value.removals.length <= INSPECTOR_MAX_REMOVALS &&
+        value.removals.every(
+          (node) =>
+            object(node) &&
+            id(node.id) &&
+            text(node.name, 100) &&
+            text(node.tag, 80) &&
+            text(node.path, 4000),
+        );
       break;
     }
     case 'anjian:inspect:tweaks': {
