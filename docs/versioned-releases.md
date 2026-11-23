@@ -16,9 +16,9 @@ Changesets 只计算私有根包 `anjian-workflow` 的版本。应用、CLI、�
 
 `Verified GitHub Release` 仅响应 main 的成功 push 检查。它检出该次检查的完整 SHA，只处理相对第一父提交引入产品新版本的提交；普通功能提交不会发版。发布前再次检查该 SHA 的最新 CI attempt、必需任务、版本清单、双语说明、干净工作树及 main 祖先关系。
 
-发布流水线使用 GitHub Actions 的多任务队列。前一版仍在打包时，后续通过检查的提交可以排队，普通提交不会替换已排队的版本提交。如果成功的版本检查没有对应的发布流水线，重跑该版本提交的 main 检查以重新触发发布。
+发布流水线使用 GitHub Actions 的多任务队列。前一版仍在打包时，后续通过检查的提交可以排队，普通提交不会替换已排队的版本提交。用运行标题中的目标 SHA 定位发布任务。如果成功的版本检查没有对应的发布任务，重跑该版本提交的 main 检查以重新触发发布。
 
-The release workflow queues multiple waiting runs. While a version is packaging, an ordinary commit can join the queue without replacing a waiting version. If a successful version check has no matching release run, rerun that version commit's main check to trigger publication again.
+The release workflow queues multiple waiting runs. While a version is packaging, an ordinary commit can join the queue without replacing a waiting version. The run title shows the target commit SHA. If a successful version check has no matching release run, rerun that version commit's main check to trigger publication again.
 
 常规发布先为 macOS 和 Linux 各构建 x64 与 arm64 归档。各目标在原生 runner 解压出包并验收 Hub，Linux 还用出包验证 systemd 用户服务。四份归档及各自的 SHA-256 校验文件通过验证后才公开发布。
 
