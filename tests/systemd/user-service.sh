@@ -6,11 +6,15 @@ account=anjian-systemd-test
 node_bin=$(command -v node)
 sudo useradd --home-dir "$fixture" --shell /bin/bash "$account"
 uid=$(id -u "$account")
+drop_in="/etc/systemd/system/user@$uid.service.d"
 cleanup() {
   sudo journalctl --no-pager -u "user@$uid.service" -n 45 || true
   sudo loginctl disable-linger "$account" || true
   sudo loginctl terminate-user "$account" || true
   sudo userdel "$account" || true
+  sudo rm -f "$drop_in/anjian-test.conf"
+  sudo rmdir "$drop_in" || true
+  sudo systemctl daemon-reload || true
   sudo rm -rf "$fixture"
 }
 trap cleanup EXIT
@@ -20,9 +24,16 @@ project="$fixture/Review 100% with \$ markers"
 mkdir -p "$project/.anjian/artifacts/document/plan"
 printf '%s\n' '<doc><p>systemd smoke test</p></doc>' > "$project/.anjian/artifacts/document/plan/doc.xml"
 sudo chown -R "$account:$account" "$fixture"
+# The hosted runner's manager-wide defaults point to the runner account.
+sudo mkdir -p "$drop_in"
+sudo tee "$drop_in/anjian-test.conf" > /dev/null << MANAGER
+[Service]
+Environment=HOME=$fixture XDG_CONFIG_HOME=$fixture/.config XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus
+MANAGER
+sudo systemctl daemon-reload
 sudo loginctl enable-linger "$account"
 
-user_home=(sudo -u "$account" env "HOME=$fixture" "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus")
+user_home=(sudo -u "$account" env "HOME=$fixture" "XDG_CONFIG_HOME=$fixture/.config" "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus")
 cli() { "${user_home[@]}" "$node_bin" "$fixture/dist/cli.cjs" "$@" --json; }
 manager() { "${user_home[@]}" systemctl --user "$@"; }
 
