@@ -147,6 +147,10 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "codexTasks": {
+    "threadId": "Codex session ID",
+    "attach": "Connect existing session",
+    "attached": "Codex session connected.",
+    "attachFailed": "Could not connect. Check that the session is active and belongs to this project.",
     "createDocument": "Create a task document",
     "openDocument": "Open task document",
     "recent": "Recent tasks",

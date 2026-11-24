@@ -151,3 +151,17 @@ anjian comment list --artifact document/plan --session review-desk:terminal:123 
 打开面板里的「最近任务」可查看本次 Hub 运行期间的任务状态和 Codex 返回的方案。需要保留方案时，可从任务详情复制内容。
 
 如果想用独立文档记录首轮提示，启动前勾选「创建任务文档」。文档保存在当前作品所属项目。启动后点击「打开任务文档」，也可以从最近任务打开同一份文档。
+
+要从作品页回复已有的终端会话，在 Hub 主机上显式启动一个共享 Codex App Server，并用同一服务打开 Codex 终端。准备一个仅服务账号可读的令牌文件，内容是一条随机令牌。示例使用回环地址：
+
+```bash
+codex app-server --listen ws://127.0.0.1:8765 --ws-auth capability-token --ws-token-file /path/to/token
+```
+
+在 Hub 的环境中设置 `ANJIAN_CODEX_SHARED_URL=ws://127.0.0.1:8765` 和 `ANJIAN_CODEX_SHARED_TOKEN_FILE=/path/to/token`，然后重启 Hub。设置后，从案间启动的新任务也使用这个 App Server。在终端中让 `CODEX_SHARED_TOKEN` 保存同一令牌，并在作品项目目录运行：
+
+```bash
+codex --remote ws://127.0.0.1:8765 --remote-auth-token-env CODEX_SHARED_TOKEN
+```
+
+会话运行后，在同一项目的作品页展开「Codex 任务」，填写会话 ID 并选择「接入已有会话」。已有待答问题会出现在面板。Hub 断开后，只要 App Server 上的会话仍在运行，可以再次输入同一 ID 接入。此前通过独立进程启动的会话，需要继续在原 Codex 客户端操作。

@@ -151,3 +151,17 @@ This panel manages sessions created by Anjian. Open existing desktop sessions in
 Open **Recent tasks** in the panel to see task status and plans returned by Codex during the current Hub run. To keep a plan, copy it from the task details.
 
 To keep the first prompt in a separate document, select **Create a task document** before starting. Anjian saves it in the current artifact's project. Select **Open task document** after starting, or open the same document from the recent task.
+
+To answer an existing terminal session from an artifact, explicitly start a shared Codex App Server on the Hub host and open the Codex TUI against that same server. Create a file containing one random token, readable only by the service account. This example uses a loopback address:
+
+```bash
+codex app-server --listen ws://127.0.0.1:8765 --ws-auth capability-token --ws-token-file /path/to/token
+```
+
+Set `ANJIAN_CODEX_SHARED_URL=ws://127.0.0.1:8765` and `ANJIAN_CODEX_SHARED_TOKEN_FILE=/path/to/token` in the Hub environment, then restart the Hub. New tasks started from Anjian also use this App Server. In the terminal, set `CODEX_SHARED_TOKEN` to the same token and run this command in the artifact project directory:
+
+```bash
+codex --remote ws://127.0.0.1:8765 --remote-auth-token-env CODEX_SHARED_TOKEN
+```
+
+While the session is active, open **Codex tasks** on an artifact in the same project, enter the session ID, and select **Connect existing session**. Any pending question appears in the panel. If the Hub disconnects, reconnect with the same ID while the session is still running on the App Server. Continue using the original Codex client for sessions started in independent processes.

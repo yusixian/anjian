@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { isObject } from '../shared/comments';
-import { createCodexTaskSession } from './codex-task-session';
+import { createCodexTaskSession, type SharedCodexServer } from './codex-task-session';
 import { sendJson } from './http';
 
 type Options = {
@@ -12,13 +13,51 @@ type Options = {
   readBody: (req: IncomingMessage) => Promise<unknown>;
 };
 
+function sharedServer(): SharedCodexServer | undefined {
+  const address = process.env.ANJIAN_CODEX_SHARED_URL;
+  const tokenFile = process.env.ANJIAN_CODEX_SHARED_TOKEN_FILE;
+  if (!address && !tokenFile) return undefined;
+  const url = URL.parse(address ?? '');
+  if (
+    !url ||
+    !tokenFile ||
+    url.protocol !== 'ws:' ||
+    !['127.0.0.1', '[::1]'].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== '/'
+  )
+    throw new Error('Configure a loopback ANJIAN_CODEX_SHARED_URL and a private token file');
+  const token = readFileSync(tokenFile, 'utf8').trim();
+  if (!/^[\w.~+/=-]{16,512}$/.test(token)) throw new Error('Invalid Codex shared server token');
+  return { url, token };
+}
+
 export function createCodexTaskApi(options: Options) {
+  const shared = sharedServer();
   const sessions = new Map<string, ReturnType<typeof createCodexTaskSession>>();
 
   function stop(project: string) {
     const session = sessions.get(project);
     sessions.delete(project);
     session?.close();
+  }
+
+  function connectionFor(project: string) {
+    const current = sessions.get(project);
+    if (current && !current.closed) return current;
+    const connection = createCodexTaskSession(
+      'codex',
+      project,
+      () => {
+        if (connection.closed && sessions.get(project) === connection) sessions.delete(project);
+      },
+      shared,
+    );
+    sessions.set(project, connection);
+    return connection;
   }
 
   return {
@@ -43,6 +82,7 @@ export function createCodexTaskApi(options: Options) {
       const session = sessions.get(project);
       if (req.method === 'GET') {
         sendJson(res, 200, {
+          sharedAvailable: Boolean(shared),
           pending: session?.pendingQuestions() ?? [],
           tasks: url.searchParams.has('results') ? (session?.tasks() ?? []) : [],
         });
@@ -62,6 +102,23 @@ export function createCodexTaskApi(options: Options) {
 
       if (!isObject(body)) {
         sendJson(res, 400, { error: 'invalid_request' });
+        return true;
+      }
+      if (
+        body.action === 'attach' &&
+        typeof body.threadId === 'string' &&
+        /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.threadId)
+      ) {
+        try {
+          const attached = shared && (await connectionFor(project).attach(body.threadId));
+          sendJson(
+            res,
+            attached ? 200 : 404,
+            attached ? { attached: true } : { error: 'thread_unavailable' },
+          );
+        } catch {
+          sendJson(res, 502, { error: 'codex_attach_failed' });
+        }
         return true;
       }
       if (
@@ -89,16 +146,7 @@ export function createCodexTaskApi(options: Options) {
           return true;
         }
         try {
-          let current = sessions.get(project);
-          if (!current || current.closed) {
-            const connection = createCodexTaskSession('codex', project, () => {
-              if (connection.closed && sessions.get(project) === connection)
-                sessions.delete(project);
-            });
-            sessions.set(project, connection);
-            current = connection;
-          }
-          const threadId = await current.start(prompt, documentUrl);
+          const threadId = await connectionFor(project).start(prompt, documentUrl);
           sendJson(res, 201, { threadId, documentUrl });
         } catch {
           sendJson(res, 502, { error: 'codex_start_failed', documentUrl });
