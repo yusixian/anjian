@@ -10,6 +10,7 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
   resolveFocus,
+  titleExpansionLimit,
   titleScale,
   zoomAround,
 } from '../src/viewer/lib/view';
@@ -142,5 +143,22 @@ describe('titleScale', () => {
   test('enlarges a title so it never renders below 24px', () => {
     expect(96 * 0.1 * titleScale(96, 0.1)).toBeCloseTo(24);
     expect(16 * 1 * titleScale(16, 1)).toBeCloseTo(24);
+  });
+});
+
+describe('titleExpansionLimit', () => {
+  const title = { x: 0, y: -75, w: 180, h: 360 };
+  test('limits expansion to the first new collision to the right or above', () => {
+    const right = { x: 250, y: 0, w: 640, h: 420 };
+    const above = { x: 0, y: -200, w: 300, h: 100 };
+    expect(titleExpansionLimit(title, [right])).toBeCloseTo(250 / 180);
+    expect(titleExpansionLimit(title, [right, above])).toBeCloseTo(385 / 360);
+  });
+
+  test('preserves authored overlaps and leaves room on the left or below', () => {
+    const authored = { x: 160, y: 200, w: 80, h: 300 };
+    const left = { x: -250, y: 0, w: 100, h: 420 };
+    const below = { x: 0, y: 285, w: 300, h: 100 };
+    expect(titleExpansionLimit(title, [authored, left, below])).toBe(Infinity);
   });
 });

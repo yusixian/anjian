@@ -1,19 +1,21 @@
 import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { memo, type Ref, useState } from 'react';
+import { memo, type Ref, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DEFAULT_TITLE_SIZE,
+  noteRect,
   STICKY_DEFAULT_W,
   STICKY_FONT_SIZE,
   STICKY_LINE_H,
   STICKY_PAD,
+  TITLE_LINE_HEIGHT,
 } from '../../shared/geometry';
 import { type BoardSpec, type CanvasSpec, isMediaBoard, type NoteSpec } from '../../shared/types';
 import type { Inspector } from '../hooks/useInspector';
 import type { BoardPhase } from '../lib/board-lifecycle';
 import { boardReady, boardSrc, canPlay } from '../lib/play';
-import { titleScale, type View } from '../lib/view';
+import { titleExpansionLimit, titleScale, type View } from '../lib/view';
 import { color } from '../tokens.stylex';
 import { ArtboardMoveHandle, type ArtboardPositionEditor } from './ArtboardMoveHandle';
 import { ArtboardObjectButton, type ArtboardObjectPicker } from './ArtboardObjectButton';
@@ -70,7 +72,7 @@ const styles = stylex.create({
     position: 'absolute',
     margin: 0,
     fontWeight: 700,
-    lineHeight: 1.15,
+    overflowWrap: 'break-word',
     letterSpacing: '-0.01em',
     color: cssVar.colorText,
     transformOrigin: 'left bottom',
@@ -108,9 +110,9 @@ interface CanvasProps extends BoardsProps {
   agent?: string;
   connections?: CanvasSpec['connections'];
   live?: boolean;
+  notes: [string, NoteSpec][];
   objectPicker?: ArtboardObjectPicker;
   positionEditor?: ArtboardPositionEditor;
-  notes: [string, NoteSpec][];
   view: View;
   worldRef?: Ref<HTMLDivElement>;
 }
@@ -299,6 +301,52 @@ function MediaBoards({
   });
 }
 
+function CanvasTitle({
+  boards,
+  note,
+  zoom,
+}: {
+  boards: readonly BoardSpec[];
+  note: NoteSpec;
+  zoom: number;
+}) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  const [size, setSize] = useState<{ w: number; h: number }>();
+  useLayoutEffect(() => {
+    const heading = ref.current;
+    if (!heading || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const { width: w, height: h } = entry.contentRect;
+      setSize((previous) => (previous?.w === w && previous.h === h ? previous : { w, h }));
+    });
+    observer.observe(heading);
+    return () => observer.disconnect();
+  }, []);
+  const limit = useMemo(
+    () => titleExpansionLimit({ ...noteRect(note), ...size }, boards),
+    [note, size, boards],
+  );
+  const fontSize = note.size ?? DEFAULT_TITLE_SIZE;
+  return (
+    <h2
+      ref={ref}
+      {...stylex.props(styles.title)}
+      style={{
+        left: note.x,
+        top: note.y,
+        width: note.w,
+        whiteSpace: note.w === undefined ? 'nowrap' : 'normal',
+        fontSize,
+        lineHeight: TITLE_LINE_HEIGHT,
+        transform: `scale(${Math.min(titleScale(fontSize, zoom), limit)})`,
+      }}
+    >
+      {note.text}
+    </h2>
+  );
+}
+
 export function Canvas({
   boardBase,
   boardSandbox,
@@ -326,6 +374,7 @@ export function Canvas({
   agent,
   onExpand,
 }: CanvasProps) {
+  const titleObstacles = useMemo(() => boards.map(([, board]) => board), [boards]);
   let cursor = writing;
   if (live) {
     cursor = undefined;
@@ -380,25 +429,10 @@ export function Canvas({
         zoom={view.k}
         onExpand={onExpand}
       />
-      {connections && (
-        <CanvasConnections boards={boards} connections={connections} zoom={view.k} />
-      )}
+      {connections && <CanvasConnections boards={boards} connections={connections} zoom={view.k} />}
       {notes.map(([id, note]) =>
         note.kind === 'title' ? (
-          <h2
-            key={id}
-            {...stylex.props(styles.title)}
-            style={{
-              left: note.x,
-              top: note.y,
-              width: note.w,
-              whiteSpace: note.w === undefined ? 'nowrap' : 'normal',
-              fontSize: note.size ?? DEFAULT_TITLE_SIZE,
-              transform: `scale(${titleScale(note.size ?? DEFAULT_TITLE_SIZE, view.k)})`,
-            }}
-          >
-            {note.text}
-          </h2>
+          <CanvasTitle boards={titleObstacles} key={id} note={note} zoom={view.k} />
         ) : (
           <div
             key={id}
