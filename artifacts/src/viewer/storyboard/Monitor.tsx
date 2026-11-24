@@ -11,6 +11,11 @@ interface RevisionJob {
   revision: string;
 }
 
+function togglePlayback(media: HTMLMediaElement) {
+  if (media.paused) void media.play().catch(() => {});
+  else media.pause();
+}
+
 function restoreJob(key: string, revision: string, mediaRevision: string): RevisionJob | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(key) || 'null') as RevisionJob | null;
@@ -293,6 +298,12 @@ export function Monitor({
         ref={screen}
         role={hasPlayableMedia ? 'group' : undefined}
         tabIndex={hasPlayableMedia ? 0 : undefined}
+        onClick={(event) => {
+          if (!(event.target instanceof HTMLVideoElement) || event.detail === 0) return;
+          event.preventDefault();
+          event.currentTarget.focus({ preventScroll: true });
+          togglePlayback(event.target);
+        }}
         onKeyDown={(event) => {
           if (
             event.target !== event.currentTarget ||
@@ -309,9 +320,7 @@ export function Monitor({
           if (!media || !Number.isFinite(media.duration)) return;
           event.preventDefault();
           if (key === ' ') {
-            if (event.repeat) return;
-            if (media.paused) void media.play().catch(() => {});
-            else media.pause();
+            if (!event.repeat) togglePlayback(media);
             return;
           }
           const start = output ? 0 : (clip?.trimMs ?? 0) / 1000;

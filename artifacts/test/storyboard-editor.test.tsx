@@ -82,6 +82,22 @@ test('monitor arrow shortcuts respect the source trim and leave native controls 
   expect(video.currentTime).toBe(1);
 });
 
+test('clicking the picture toggles playback and focuses the monitor shortcuts', () => {
+  const host = renderMonitor();
+  const video = host.querySelector('video')!;
+  const group = host.querySelector<HTMLElement>('[aria-keyshortcuts]')!;
+  const focus = vi.spyOn(group, 'focus');
+  const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
+  const click = (detail: number) =>
+    video.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail }));
+
+  expect(click(0)).toBe(true);
+  expect(play).not.toHaveBeenCalled();
+  expect(click(1)).toBe(false);
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  expect(play).toHaveBeenCalledOnce();
+});
+
 test('video clock advances on presented frames and holds during a seek without a frame', () => {
   const prototype = HTMLVideoElement.prototype;
   const request = Object.getOwnPropertyDescriptor(prototype, 'requestVideoFrameCallback');
