@@ -1,42 +1,37 @@
 ---
 title: Artboards
-description: Put pages and alternatives on one canvas, with feedback at specific locations.
+description: Lay out multiple pages and design options on one canvas, inspect elements, and pin comments.
 ---
 
-## Browse and inspect
+## Browsing & inspecting [#browse-and-inspect]
 
-An artboard supports multiple pages. Switch sections by page name, then use zoom, the hand tool, and panning to explore designs. The toolbar offers fit-to-canvas and 100% zoom. On desktop, use `V` to select, `H` or hold Space to pan, and `C` to comment.
+Artboards support multiple pages with fit-to-view and 100% zoom controls. Desktop shortcuts:
 
-Select an element to inspect its layers, dimensions, style properties, and code. Inspector adjustments are preview feedback; an Agent must change the source and upload it again to make them persistent artifact content.
+- `V`: Select elements
+- `H` or hold `Space`: Pan the canvas
+- `C`: Add a comment
 
-On the desktop artboard, select one element and click **Remove from preview** in the Inspector. Use **Undo removal** for that board to restore the last element. The current selection provides the Agent with each removal’s source file and element path. Ask the Agent to apply the preview removals if you want to save them to the source. Switching pages or reloading clears the preview removals.
+Click any element to inspect its layer tree, dimensions, computed styles, and live HTML/CSS. Tweaks in the inspector are preview-only and reset on reload—leave a comment when you want your Agent to update the source files.
 
-Open an editable artboard and choose **Edit layout**. Drag a handle on a board, title, or sticky note, or focus it and use the arrow keys. Choose **Finish editing layout** to exit. The Hub keeps positions for the same objects on the same page when an Agent updates the source.
+## Comments, voting & sign-off [#comments-and-option-selection]
 
-Choose **Select canvas objects**, then mark the boards, titles, or sticky notes you want the Agent to work on. Tell the Agent what to change. Choose **Clear canvas selection** or switch pages to clear that page’s selection.
+- **Pinned comments**: Anchor notes to a specific element, a spot on a board, or blank canvas. Concrete feedback gets cleaner revisions from your Agent.
+- **Option voting & verification**: Agents can group boards into choice sets for voting or verification sets for pass/reject sign-off.
 
-Arrows connect boards on the same page into a flow. Ask the Agent to connect the start and destination and label the action, such as **Continue** from Sign in to Dashboard. The arrow follows the boards when they move.
+## Interactive prototypes & parameters [#interactions-and-parameters]
 
-## Comments and option selection
+Most boards are static by default. When a board declares interactivity or parameters, click **Play** to try interactions or **Parameters** to adjust controls live. Images, videos, and mobile browsing are supported.
 
-Anchor comments to an element, a position within an artboard, or the empty canvas. Describe the intended change, such as “Align this button with the heading,” rather than only saying “This is wrong.”
+## File layout (for Agents) [#file-conventions-for-agents]
 
-An Agent can arrange alternatives into a selection group for you to choose and submit, or provide an acceptance group to approve or reject. These controls depend on the artifact's declarations and do not appear on every artboard.
+Artboards live in `.anjian/artifacts/artboard/<id>/` (`canvas.json` + `pages/`). Have your Agent read the bundled skill via CLI (setup in [Connect an Agent](/en/docs/agent)):
 
-## Interactions and parameters
-
-Artboards are static designs by default. Only boards marked interactive have a play control. Try the page while playing, then stop or replay it. Boards with declared parameters provide a panel for adjusting content. A static mockup does not establish that a feature is implemented.
-
-Supported boards can also be expanded or downloaded. Images and video can be artboard content too. On mobile, use page switching and the inspector to see details.
-
-## File conventions for Agents
-
-An artboard lives in `.anjian/artifacts/artboard/<id>/`. `canvas.json` declares pages, boards, groups, annotations, and positions; page assets live under `pages/`. Agents should first run `anjian skills get artifacts --reference artboard.md`, plus `anjian skills get artifacts --reference artboard-prototype.md` for interactive designs.
-
-Preserve existing IDs, pages, and comment context when editing an artboard. For remote artifacts, pull first, then edit, upload, and check.
+```bash
+anjian skills get artifacts
+anjian skills get artifacts --reference artboard.md
+anjian skills get artifacts --reference artboard-prototype.md
+```
 
 ## Public artboards
 
-[Public sharing](/docs/sharing) includes every page of the entire artboard. Visitors can browse, zoom, inspect layers, and copy code, but cannot change properties, adjust parameters, comment, or manage artifacts.
-
-Here, `anjian` is the built CLI or your existing wrapper. See [Comments and Agents](/docs/agent) for the executable path and built-in Skill discovery.
+[Public sharing](/en/docs/sharing) publishes every page in the artboard. Visitors can pan, zoom, inspect layers, and copy code without signing in, but cannot comment or edit parameters.

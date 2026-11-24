@@ -1,74 +1,80 @@
 ---
-title: Run locally
-description: Keep your artifacts on your own computer. Build Anjian, then open it in your browser.
+title: Local Setup
+description: Grab a macOS/Linux release package or build from source to run Anjian on your machine.
 ---
 
-<Environment />
+<Environment locale="en" />
 
-<Notice title="Before you start">
-  Use a package from Anjian's GitHub Releases or build from this repository. The source build below
-  requires Git, Node.js, and pnpm.
-</Notice>
+## Option 1: Download a release package (fastest) [#install-and-start]
 
-## Install and start
+Grab the archive and `.sha256` file from [GitHub Releases](https://github.com/yusixian/anjian/releases) (Node.js is bundled inside—just verify, unpack, and run):
 
-On macOS, [download the archive for your Mac](https://github.com/yusixian/anjian/releases), verify its SHA-256 checksum, and extract it. Run the included `anjian` command to start your project. See [macOS installation and offline updates](https://github.com/yusixian/anjian/blob/main/docs/install.md).
+- **macOS**: `darwin-arm64` for Apple Silicon, `darwin-x64` for Intel (`shasum -a 256 -c <file>.sha256`).
+- **Linux (glibc)**: `linux-x64` for `x86_64`, `linux-arm64` for `aarch64` (`sha256sum -c <file>.sha256`).
 
-On glibc-based Linux, run `uname -m` and choose `linux-x64` for `x86_64` or `linux-arm64` for `aarch64`. Download the archive and checksum from the same release. Verify the archive with `sha256sum -c filename.tar.gz.sha256`, extract it, and run the included `anjian` command. The archive includes Node.js.
+Then run `./anjian start --project-dir /abs/path/to/your-project --no-open --foreground`. See [docs/install.md](https://github.com/yusixian/anjian/blob/main/docs/install.md) for details.
+
+## Option 2: Build from source [#build-from-source]
+
+Requires Git, Node.js (22 recommended), and pnpm:
 
 <Steps>
-<Step title="Get the source and build">
-Clone the repository, then install the locked dependencies in the application directory.
+<Step title="Clone and build">
 
-```bash title="Terminal · Get the source"
+```bash title="Terminal"
 git clone https://github.com/yusixian/anjian.git
 cd anjian/artifacts
 pnpm install --frozen-lockfile
 pnpm build
 ```
 
-</Step>
-<Step title="Start your artifact project">
-Replace the path below with your actual artifact project directory and keep this terminal running.
+Optional alias so every `anjian` command in these docs works out of the box:
 
-```bash title="Terminal · artifacts directory"
-node dist/cli.cjs start \
-  --project-dir /absolute/path/to/artifact-project \
-  --no-open --foreground
+```bash title="Add to ~/.zshrc or ~/.bashrc"
+alias anjian="node /path/to/anjian/artifacts/dist/cli.cjs"
 ```
 
 </Step>
-<Step title="Open your browser">
-Open the complete URL printed in the terminal. Do not invent a port or drop the access parameters. If your library is empty, continue with [your first artifact](/docs/first-artifact).
+<Step title="Start for your project">
+
+Point `--project-dir` to any folder where you want to store artifacts:
+
+```bash title="Terminal"
+anjian start --project-dir /abs/path/to/your-project --no-open --foreground
+```
+
+</Step>
+<Step title="Open in your browser">
+
+Open the full URL printed in the terminal (including its access query parameter). Head to [Create Your First Artifact](/en/docs/first-artifact) next.
+
 </Step>
 </Steps>
 
-## Linux user service
+## Linux user service (systemd) [#linux-user-service]
 
-On Linux with systemd, after extracting the archive or building from source, use your own user manager to start the local Hub at login. Install the service and start it separately. If you started the same Hub manually, use `anjian stop` when it is safe to stop it.
-
-Run these commands from the extracted archive. For a source build, use `node dist/cli.cjs` from the `artifacts/` directory.
+On systemd-based Linux machines, you can register the local Hub as a user service (stop any manually started Hub with `anjian stop` first):
 
 ```bash
-./anjian service install --project-dir /absolute/path/to/artifact-project
+./anjian service install --project-dir /abs/path/to/your-project
 ./anjian service start
 ./anjian service status --json
 ```
 
-Run `./anjian start --project-dir /absolute/path/to/artifact-project --no-open` to print the running Hub's link. Systemd retries after an unexpected Hub exit. Use `service stop` to stop the service, or `service uninstall` to stop it and remove login startup. Both preserve artifacts and local Hub state. Uninstall the unit before changing the project or moving the Anjian installation, then install it again. For containers, follow the [self-hosting guide](/docs/self-hosting).
+Use `service stop` to pause or `service uninstall` to remove autostart—your artifacts stay intact.
 
-## Artifacts and service state
+## Where files live [#artifacts-and-service-state]
 
-Artifacts live in the project's `.anjian/artifacts/`; service state defaults to `~/.anjian/server/`. Exiting the foreground process does not delete artifacts. Start with the same project directory next time to continue.
+- **Artifacts**: `<your-project>/.anjian/artifacts/`
+- **Server state & logs**: `~/.anjian/server/` (including `hub-events.jsonl`)
 
-A local service can register multiple projects. Stopping a shared service affects every project it serves; check that no other project is using it first.
+Stopping the process never deletes artifacts.
 
-## Open from another device
+## Need access from another device? [#open-from-another-device]
 
-`localhost` means the device opening the link, so you cannot send that address directly to another computer or phone. For remote access, set up [self-hosting](/docs/self-hosting), then create a [public share](/docs/sharing) or [member invitation](/docs/members). The service must stay running and be reachable from the other device.
+`localhost` only works on the machine running it. To open links on your phone or share with friends, deploy over HTTPS with [Self-Hosting](/en/docs/self-hosting).
 
-## Update Anjian
+## Updating [#update-anjian]
 
-Back up your artifacts and service state. To update a packaged installation, download the new archive and checksum, extract it offline, and start from the new folder. If you built from source, rebuild the new version and restart the service.
-
-The packaged `anjian start` reuses a responsive Hub built from source. To change its bind address, port, or public URL, run `anjian stop` when it is safe to stop the Hub, then start it with the desired settings. For CLI start and stop commands and manual stops or restarts from the browser, see `~/.anjian/server/hub-events.jsonl` for the reason the Hub was kept, replaced, or stopped. If you set `ANJIAN_SERVER_HOME`, look for the file there.
+- **Release packages**: Download and unpack the new archive from Releases.
+- **Source builds**: Run `git pull`, rebuild in `artifacts/` with `pnpm install --frozen-lockfile && pnpm build`, and restart.

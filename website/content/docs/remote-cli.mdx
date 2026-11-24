@@ -1,13 +1,17 @@
 ---
 title: 设备与 CLI
-description: 将本地项目连接到自己的远程工作台，通过 HTTPS 同步作品。
+description: 用浏览器配对授权，把本地项目和自托管案间连起来，通过 HTTPS 同步作品。
 ---
 
-## 安装与授权
+如果你使用的是自托管实例（例如 `https://anjian.cosine.ren`），本地 Agent 通过 CLI 同步作品和评论，每台电脑只需配对一次。
 
-先按[本机使用](/docs/local)构建 CLI。下文的 `anjian` 可替换为 `node /绝对路径/anjian/artifacts/dist/cli.cjs`。
+> 下文 `anjian` 指你的 CLI 包装器、安装包入口，或 `node /绝对路径/anjian/artifacts/dist/cli.cjs`（详见 [批注与 Agent](/zh/docs/agent)）。
 
-```bash title="终端 · 发现指引并核验绑定"
+## 1. 先检查指引与绑定状态 [#安装与授权]
+
+先确认当前项目是不是已经连好了（已绑定直接复用，不需要重新配对）：
+
+```bash title="终端 · 发现指引并检查状态"
 anjian --help
 anjian skills list
 anjian skills get artifacts
@@ -15,54 +19,55 @@ anjian skills get artifacts --reference remote.md
 anjian remote status --json
 ```
 
-在实际作品项目目录执行，或始终传入相同的 `--project-dir`，复用已有包装器与客户端配置。帮助和 Skill 读取没有副作用；宿主接入见[批注与 Agent](/docs/agent)。配对前先查状态：有效绑定直接复用，继续下方作品流程，不为扩大权限撤销重绑。已有凭证但当前目录未绑定时，直接进入绑定步骤。
+## 2. 首次配对设备 [#首次配对]
 
-仅在未授权、凭证过期或被撤销时发起配对：
+仅在未授权、凭证过期或被撤销时运行：
 
-```bash title="终端 · 首次配对"
-anjian login https://你的案间域名 --name "我的电脑"
+```bash title="终端 · 发起配对"
+anjian login https://你的案间域名 --name "我的 MacBook"
 ```
 
-Agent 可以发起 `login`，保持进程运行，等待用户在浏览器批准。浏览器打开配对页。登录后核对设备名称和配对码，选择账号可授予的所需全部项目，再批准连接。终端不能打开浏览器时加 `--no-open`，手动打开输出地址。
+浏览器会自动打开配对页（无桌面环境可加 `--no-open`，手动打开终端输出的链接）：
 
-当前协议使用设备名称与项目列表，没有 `--scope all` 或管理员权限级别参数。
+1. 还没登录的话先登录工作台。
+2. 核对**设备名称**和 **12 位配对码**。
+3. 勾选允许这台设备访问的项目，点「批准连接」。
 
-配对码 10 分钟有效，设备凭证 90 天有效。浏览器登录和设备批准是两步操作。
+配对码 10 分钟有效，设备凭证 90 天有效。
 
-## 绑定作品项目
+## 3. 绑定本地项目目录 [#绑定作品项目]
 
-在实际本地作品项目目录执行：
+进入你的本地项目目录执行：
 
 ```bash title="终端 · 绑定项目"
 anjian link
 anjian remote status --json
 ```
 
-只有一个可访问项目时自动选择；多个项目时按提示使用 `link --project <项目ID>`。多实例用 `--server` 指定服务器。项目 ID 不是服务器磁盘路径。
+账号下有多个项目时，按提示用 `anjian link --project <项目ID>` 指定即可。
 
-## 上传与拉取
+## 4. 推送与拉取作品 [#上传与拉取]
 
-```bash title="终端 · 同步单个作品"
-anjian push --artifact document/plan
-anjian check --artifact document/plan
-anjian pull --artifact document/plan
+```bash title="终端"
+anjian push --artifact document/plan  # 上传本地改动
+anjian check --artifact document/plan # 检查格式与资源
+anjian pull --artifact document/plan  # 拉取服务器最新版本
 ```
 
-源文件仍在 `.anjian/artifacts/<类型>/<名称>/`。只传输选中作品的源文件与资源，不同步评论、历史、点目录或密钥；不支持符号链接。单次最多 1,000 个文件、32 MiB。
+- **只同步作品源文件**：传输 `.anjian/artifacts/<类型>/<名称>/` 下的文件，不含评论、历史、隐藏文件或符号链接。上限 1,000 个文件、32 MiB。
+- **不会悄悄覆盖**：发生冲突时 `push` / `pull` 都会拦截。想保留本地副本再拉取，用 `anjian pull --artifact <id> --backup-local`，之后手动对比合并。
 
-远端已有同名作品时，先拉取建立版本基线。远端发生变化会拒绝覆盖；本地也有修改时普通 `pull` 会拒绝覆盖。需要保留本地副本再拉取时，可显式使用 `--backup-local`，随后比较并手动合并。同步不会自动合并两个版本。
+## 5. 查看与撤销设备 [#查看与撤销设备]
 
-## 查看与撤销设备
+在工作台左侧「设备与 CLI」可随时撤销任意设备（只取消访问权限，不删作品和评论）。在终端退出或解绑：
 
-工作台「设备与 CLI」显示名称、授权项目与到期时间，不代表设备当前在线。撤销阻止后续请求，正在执行的操作可能已完成，作品与批注会保留。
-
-```bash title="终端 · 退出与解绑"
+```bash title="终端"
 anjian logout https://你的案间域名
 anjian unlink
 ```
 
-`logout` 撤销服务器凭证；`unlink` 只移除当前目录绑定。客户端凭证默认位于 `~/.anjian/client/`，自定义 `ANJIAN_CLIENT_HOME` 时所有命令保持一致。
+客户端凭证保存在 `~/.anjian/client/`（可用 `ANJIAN_CLIENT_HOME` 自定义）。
 
-## 连接问题
+## 常见连接报错 [#连接问题]
 
-公网地址必须是 HTTPS，且与服务公布的 origin 一致。设备过期或被撤销时重新配对；403 时检查授权项目；429 时等待重试。不要通过关闭认证解决问题。
+公网实例必须使用 `https://` 且与服务配置的域名一致；401 重新 `login`，403 检查授权项目，429 稍等几秒重试。

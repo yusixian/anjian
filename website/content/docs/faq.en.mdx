@@ -1,40 +1,46 @@
 ---
-title: Frequently asked questions
-description: Troubleshoot an empty library, unreachable links, and sync conflicts.
+title: FAQ
+description: Quick answers for an empty library, unreachable links, sync conflicts, and S3.
 ---
 
 ## Why is my library empty?
 
-Check that `--project-dir` points to the actual artifact project, that files live in `.anjian/artifacts/<type>/<id>/`, and that the entry filename is correct. Remote mode also requires `push`. The source repository does not automatically become an artifact project.
+1. Make sure `--project-dir` points to your actual project folder (not the Anjian source repo).
+2. Check that files live in `.anjian/artifacts/<type>/<id>/` with the right entry file (`index.html`, `doc.xml`, or `canvas.json`).
+3. In remote mode, remember to run `anjian push` after saving local files.
 
-## Why can't my friend open the link?
+## Why can't my friend open the link? [#why-cant-my-friend-open-the-link]
 
-Check for a `localhost` address, whether the server is still running, whether HTTPS and the proxy are reachable, and whether the public link expired or was disabled. Create a public share for viewing; never send an administrator access key.
+Make sure you didn't send a `localhost` URL, your self-hosted server is up over HTTPS, and the share link hasn't expired or been turned off. Use **Share** for read-only viewing—never share your admin access key.
 
-## Why is the public page out of date?
+## I edited the artifact—why didn't the public link update? [#why-is-the-public-page-out-of-date]
 
-Public shares are snapshots. After editing a draft, choose Update share to publish it. Public snapshots also have different network restrictions from workspace previews, so external dependencies may be unavailable.
+Public links are static snapshots. Open **Share** and click **Update shared version** to publish your latest edits.
 
-## Why didn't a comment automatically start my Agent?
+## Why didn't my Agent start working after I left a comment? [#why-didnt-a-comment-automatically-start-my-agent]
 
-Saving comments and scheduling host tasks are separate concerns. Return to the Agent conversation and ask it to read comments. `watch` only emits events; automatic processing needs a separately configured host integration.
+In remote mode, comments are saved without auto-waking chat sessions—send the link to your Agent (or wire up `anjian watch --json`). For live local subscriptions, see [Review Workflows](/en/docs/review-workflows).
 
-## What should I do about a push or pull conflict?
+## How do I fix a `push` or `pull` conflict? [#what-should-i-do-about-a-push-or-pull-conflict]
 
-Stop concurrent edits, inspect remote state, and compare both versions. Do not force an overwrite of local changes. If needed, explicitly use `pull --backup-local` to keep a copy, then pull, merge, and upload. See [Devices and CLI](/docs/remote-cli).
+Both local and remote copies changed. Pull with a local backup and merge manually:
 
-## What if a document says it is unsaved?
+```bash
+anjian pull --artifact < type > / < id > --backup-local
+```
 
-Keep the page open and check connectivity and storage capacity. Restore the connection or increase capacity, then confirm saving finishes. Refreshing may lose changes held only in the current page.
+## A document says "Not synced"—what should I do? [#what-if-a-document-says-it-is-unsaved]
 
-## Why can't I push a deleted artifact again?
+**Don't refresh or close the tab.** Check your network or storage quota; once resolved, the page saves automatically.
 
-The server prevents old IDs from reviving automatically. Restore from Trash first, or create a new artifact ID after permanent deletion.
+## Why can't I push a deleted artifact ID? [#why-cant-i-push-a-deleted-artifact-again]
 
-## Can I delete server files after setting up S3?
+The server blocks deleted IDs to avoid accidental resurrection. Restore it from **Trash** first, or pick a new ID if it was permanently deleted.
 
-Enabling S3 does not make the server disposable. Access still relies on the cache, metadata remains on the server, and retained files support recovery. Read [Storage and backups](/docs/storage) to understand the data boundaries.
+## Can I delete server files after turning on S3? [#can-i-delete-server-files-after-setting-up-s3]
 
-## How do I report a problem?
+No. Serving uses the server cache, and metadata (members, invites, credentials, bindings) lives on the server. See [Storage & Backups](/en/docs/storage).
 
-Open a [GitHub Issue](https://github.com/yusixian/anjian/issues) with steps, expected and actual results, version, and redacted errors. Never include access keys, device tokens, or complete URLs containing credentials.
+## How do I report a bug? [#how-do-i-report-a-problem]
+
+Open an issue on [GitHub Issues](https://github.com/yusixian/anjian/issues) with steps to reproduce and error output. **Strip any access keys, device tokens, or signed URLs first.**

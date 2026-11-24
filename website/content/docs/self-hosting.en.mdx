@@ -1,56 +1,51 @@
 ---
-title: Host your own instance
-description: Give your devices and friends HTTPS access to a persistent Anjian workspace.
+title: Self-Hosting
+description: Deploy Anjian on your own server with Docker Compose or Dokploy over HTTPS.
 ---
 
-## Prepare for deployment
+## Requirements [#prepare-for-deployment]
 
-You need a server that can run Docker Compose, a domain with HTTPS, and persistent disk storage. Public shares and member invitations require recipients to reach your service.
+- A server with Docker Compose and persistent storage
+- Two HTTPS domains: one for the main workbench, one for isolated artboard previews
 
-## Two origins
+## Two origins [#two-origins]
 
 | Purpose | Container port | Environment variable | Example |
 | --- | --- | --- | --- |
-| Workspace, documents, comments, and WebSocket | 27319 | `ANJIAN_PUBLIC_ORIGIN` | `https://anjian.example.com` |
-| Isolated artboard previews | 27329 | `ANJIAN_BOARD_ORIGIN` | `https://preview.example.net` |
+| Main workbench, docs, comments & WebSocket | `27319` | `ANJIAN_PUBLIC_ORIGIN` | `https://anjian.example.com` |
+| Isolated artboard preview | `27329` | `ANJIAN_BOARD_ORIGIN` | `https://preview.example.net` |
 
-An origin contains a scheme, host, and optional port, with no path. Configure HTTPS for both. The main reverse proxy must support WebSocket. Artboard previews use a separate origin; standalone HTML uses sandbox restrictions on same-origin privileges.
+> Set each origin to `https://domain` only (no trailing path). Enable WebSocket proxying on the main domain.
 
 ## Docker Compose
 
-Set your actual deployment addresses and start from the repository root:
-
-```bash title="Terminal · Repository root"
+```bash title="Terminal · repo root"
 export ANJIAN_PUBLIC_ORIGIN=https://anjian.example.com
 export ANJIAN_BOARD_ORIGIN=https://preview.example.net
 docker compose up --build -d
 docker compose logs anjian
 ```
 
-These domains are placeholders and must be replaced. Default ports bind only to the server's loopback address. Use a reverse proxy to forward each HTTPS origin to its corresponding port.
+Ports bind to loopback by default—point Nginx, Caddy, or Traefik at `27319` and `27329`. Data persists in the `anjian-data` volume (`/data/project` and `/data/server`); save the admin access key printed in the startup logs.
 
-The project is at `/data/project` and service state at `/data/server`, both inside the `anjian-data` volume. Save the administrator access instructions from startup output, and retain and back up the volume.
+## Deploying with Dokploy [#dokploy]
 
-## Dokploy
+1. Create a Compose app pointing to this repo (build path `/`, Compose file `compose.yaml`).
+2. Add `ANJIAN_PUBLIC_ORIGIN` and `ANJIAN_BOARD_ORIGIN` in environment variables.
+3. Attach your main domain (`27319`) and preview domain (`27329`) with HTTPS enabled, then deploy.
 
-Create a Compose application from this repository's source with build path `/` and Compose file `compose.yaml`. Configure the main and preview domains and ports for the `anjian` service, enter the actual origins, and deploy.
+## GitHub sign-in & friend invites (optional) [#github-sign-in-and-invitations]
 
-For automatic deployment, configure the target branch and On Push trigger in your repository. Push triggers do not automatically wait for CI. Pass checks before updating the deployment branch. Successful deployment logs still require verification of the actual pages.
+Create a GitHub OAuth App (Homepage URL = your main domain, callback = `https://your-main-domain/auth/github/callback`) and set:
 
-## GitHub sign-in and invitations
-
-Create a dedicated GitHub OAuth App. Use the main site as Homepage URL and its `/auth/github/callback` path as the callback. Set these private environment variables in your deployment platform:
-
-```dotenv title="Deployment configuration · Never commit actual secrets"
+```dotenv title="Deployment env (never commit secrets)"
 ANJIAN_GITHUB_CLIENT_ID=<OAuth Client ID>
 ANJIAN_GITHUB_CLIENT_SECRET=<OAuth Client Secret>
-ANJIAN_GITHUB_OWNER_ID=<administrator's numeric GitHub user ID>
+ANJIAN_GITHUB_OWNER_ID=<Admin numeric GitHub user ID>
 ```
 
-Authentication uses the numeric ID. Leaving all three unset uses access-key sign-in; partial configuration prevents startup. Once configured, administrators and invited members can sign in through GitHub. There is no open registration. The administrator access key remains a backup administrator entry point, not a member sign-in method to send to friends.
+Leave all three blank to use access-key login only (partial config prevents startup). Only the admin and invited members can sign in; the admin key remains available as a fallback.
 
-## Check after deployment
+## Post-deploy check [#check-after-deployment]
 
-Verify the main site, artboard and HTML previews, comment saving, live connections, CLI pairing, uploads, and pulls. Check that artifacts and comments survive a restart, and independently test backup restoration.
-
-Browser sign-out affects only that browser session. Revoke CLI devices separately in Devices and CLI. Preserve service and preview isolation, access control, and persistence.
+Sign in, open an artboard and HTML preview, verify live comments, run a CLI `login` → `link` → `push`, and confirm data survives a container restart.

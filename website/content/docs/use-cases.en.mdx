@@ -1,32 +1,24 @@
 ---
-title: Improve a docs site with artboard comments
-description: Review a design, leave specific feedback, and ask an Agent to read comments and edit.
+title: Iterating on Designs with Artboard Comments
+description: A real walkthrough of how we designed this docs site using Anjian artboard comments.
 ---
 
-The design of this Anjian docs site is itself a use case: an Agent first created an artboard, the user pointed out changes in the browser, then returned to the conversation to ask the Agent to read comments and edit.
+This docs site itself was designed inside Anjian: our Agent created an artboard, we pinned comments directly on the parts we wanted changed, and sent the link back to the Agent to iterate.
 
-## 1. Point out problems on the artboard
+## 1. Pin feedback right on the artboard [#1-point-out-problems-on-the-artboard]
 
-Open the design and use the comment tool on specific elements or regions. For example: an unclear search icon, small header icons, redundant wording, or a home page presentation that needs adjustment. Comments remain beside the artifact, and the Agent can read both their content and location.
+Open the design, press `C` to switch to the comment tool, and click the exact element—icon too small, copy too wordy, spacing off. Each comment stores both your note and its element anchor.
 
-![The Anjian artboard shows light and dark docs designs. Four comments identify search visibility, icon size, redundant wording, and home page presentation.](/use-cases/artboard-comments.png)
+![An Anjian artboard showing light and dark docs designs with four pinned comments on icons, copy, and layout.](/use-cases/artboard-comments.png)
 
-<ScreenshotTranscript index={0} />
+## 2. Send the link back to your Agent [#2-return-to-the-conversation-and-request-edits]
 
-## 2. Return to the conversation and request edits
+Drop the link in your Agent chat and say: "Read all my comments and fix them." The Agent pulls the threads via CLI, edits the source files, pushes the update, and replies to each comment.
 
-Send the artifact link to an Agent connected to Anjian and ask it to “Read all my comments and fix the issues.” The Agent reads comments, pulls the artifact, edits, uploads and checks, then replies in the original threads.
+![Chat session where the user sends the artboard link and the Agent pulls all comments via CLI.](/use-cases/agent-feedback.png)
 
-![In a Lody conversation, the user requests an Anjian design, then sends an artboard link and asks the Agent to handle comments. The Agent starts reading all comments.](/use-cases/agent-feedback.png)
+## 3. Review and resolve [#3-review-the-new-version-and-decide-what-comes-next]
 
-<ScreenshotTranscript index={1} />
+Reload the artboard to inspect the new version. Leave another round of comments if needed, or mark threads resolved once they look right.
 
-These user-provided screenshots document the original Chinese-language workflow: the artboard before changes and the conversation starting feedback processing. They are not acceptance screenshots of the finished work. The code-change list in the screenshot does not establish that the docs site was deployed.
-
-## 3. Review the new version and decide what comes next
-
-Return to the same artifact to check the changes. Add more comments if adjustments are needed, and resolve them once satisfied. Comments and event watching do not wake an Agent automatically; in this example, the user returned to the conversation and requested action.
-
-[View the public artifact for this example](https://anjian.cosine.ren/s/eTPVcN0J7yUd7-a1Gu9fv0FSsKRP3b7fUGoGqyfKfzA)
-
-The public link is a read-only snapshot; visitors cannot add comments. The workflow above takes place in an authorized workspace. After editing the original, explicitly update the share to change the public version.
+Want to explore the artboard yourself? [Open the public read-only snapshot](https://anjian.cosine.ren/s/eTPVcN0J7yUd7-a1Gu9fv0FSsKRP3b7fUGoGqyfKfzA) (no sign-in needed).

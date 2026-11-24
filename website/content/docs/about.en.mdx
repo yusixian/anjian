@@ -1,26 +1,26 @@
 ---
 title: Source and licensing
-description: Anjian's origins, licenses, and maintenance boundaries.
+description: Upstream origin, licensing, and maintenance boundaries for Anjian.
 ---
 
-## Project origins
+## Origin [#project-origins]
 
-Anjian is an independently maintained fork of [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2), based on commit `6054b65ab9b2208a234a78632eb065cfeb3eb166`. It focuses on personal use, a Chinese-language experience, local operation, and deployment to your own server.
+Anjian is forked from [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2) (commit `6054b65ab9b2208a234a78632eb065cfeb3eb166`) and maintained independently for personal workflows, bilingual UX, local-first usage, and self-hosting.
 
-Thanks to Innei and the Ryugi contributors. The Ryugi workflow itself derives from [Superpowers](https://github.com/obra/superpowers), maintained by Jesse Vincent and contributors. The repository's `UPSTREAM.md` preserves the history.
+Thanks to Innei and the Ryugi contributors, as well as Jesse Vincent and the [Superpowers](https://github.com/obra/superpowers) contributors. Full attribution lives in `UPSTREAM.md`.
 
 ## Licenses
 
-| Scope                                      | License                   |
-| ------------------------------------------ | ------------------------- |
-| `artifacts/` application and build outputs | AGPL-3.0-only             |
-| Skills, integrations, and documentation    | Root MIT LICENSE          |
-| Third-party dependencies                   | Their respective licenses |
+| Scope | License |
+| --- | --- |
+| `artifacts/` app & build output | [AGPL-3.0-only](https://github.com/yusixian/anjian/blob/main/artifacts/LICENSE) |
+| Skills, integrations & docs | [MIT License](https://github.com/yusixian/anjian/blob/main/LICENSE) |
+| Third-party dependencies | Respective open-source licenses |
 
-Renaming does not change inherited code licenses. If you offer a modified network service to others, comply with AGPL's corresponding-source requirements. The [application license](https://github.com/yusixian/anjian/blob/main/artifacts/LICENSE) and [root license](https://github.com/yusixian/anjian/blob/main/LICENSE) contain the full terms.
+Renaming does not change inherited licenses. If you run a modified version as a network service for others, follow the AGPL-3.0 source-availability requirement.
 
-## Maintenance and updates
+## Independent maintenance [#maintenance-and-updates]
 
-Anjian does not connect to Ryugi's official cloud or automatically install upstream releases. Download updates from Anjian's GitHub Releases or build and deploy from this repository. Any later upstream code is reviewed individually for licensing.
+Anjian does not connect to Ryugi Cloud and does not auto-download upstream packages. All builds and releases come directly from this repository.
 
-[Visit Anjian's source repository](https://github.com/yusixian/anjian).
+[Browse the source on GitHub](https://github.com/yusixian/anjian)

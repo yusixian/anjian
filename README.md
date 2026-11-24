@@ -1,67 +1,107 @@
+<div align="center">
+
 # Anjian · 案间
 
-面向个人使用的画板、文档与 HTML 作品工作台，以本地运行、中文体验和自主维护为方向。
+**给你和 AI Agent 用的开源作品工作台**
 
-案间（Anjian）基于 Ryugi `v1.51.2` 分叉，独立维护和发布。项目持续对照上游正式版本，复用具备授权的改动，并在案间逐步实现适合本地和自托管工作流的能力。[分叉基线](https://github.com/Innei/ryugi/tree/v1.51.2) · [能力对照](docs/upstream-capabilities.md)
+画板 · 文档 · HTML 预览 · 白板 · 幻灯片 · 分镜 · 本机运行与自托管
 
-## 产品方向
+[在线文档](https://anjian.cosine.ren) · [English README](README.en.md) · [更新记录](https://anjian.cosine.ren/zh/docs/updates) · [GitHub Releases](https://github.com/yusixian/anjian/releases)
 
-- **个人使用**：围绕方案展示、文档批注、HTML 预览与 Agent 反馈整理使用流程。
-- **本地优先**：作品与评论保存在自己控制的设备或服务器上；基本功能不要求第三方账号。
-- **中文体验**：完善中文界面、错误提示和使用文档。
-- **移除官方云服务**：已移除 Ryugi Cloud 登录、发布、云中继及官方包自动更新路径，使用本项目自行构建的程序。
-- **可自行部署**：保留部署到自己的 Dokploy 的方向，单独处理 HTTPS、持久化、访问控制以及本地 Agent 与服务器之间的通信。
+</div>
 
-这里的“移除云端”指移除官方托管服务依赖；部署到自己控制的服务器仍属于项目目标。自建账号平台、订阅计费和公共云服务不在当前范围内。
+---
 
-## 当前状态
+## 这是什么？
 
-Anjian 已完成本地构建、独立命名空间与官方云端入口移除。初始语言为中文；保留手动语言选择。
+和 AI Agent 一起做设计、写技术方案或搭原型时，光靠聊天框很难看清效果，也没法指着某个按钮说「这里往左挪一点」。
 
-2026-11-07 已验证：
+**案间（Anjian）**把 Agent 生成的**画板、文档、HTML、白板、幻灯片和分镜**直接呈现在浏览器里：你在具体位置留下批注，Agent 通过本地 CLI 拉取评论、修改源文件、推送新版，再在原评论下回复。
 
-- server、CLI、viewer、viewer library 与 runtime 完整构建和类型检查通过。
-- 浏览器中文作品库、HTML 交互、桌面与手机画板预览可用。
-- 浏览器文档批注 → CLI 读取 → 文件修改 → CLI 回复 → 网页实时同步的本地闭环通过。
-- 限制 4 个 worker 的完整测试集通过：160 个文件、1,373 项测试。
+## 核心功能
 
-Dokploy 已完成源码镜像构建和 HTTPS 文档访问验证；推送 main 已实际触发自动部署。线上文档批注与容器内 CLI 回复已互通。已验证容器重启后文档与评论保留；线上 HTML 沙箱与画板独立 HTTPS 来源已验证，手机画板无横向溢出。容器替换后的卷恢复未验证。2026-11-09 已完成 HTTPS 远程 CLI 的浏览器设备授权、文档同步与批注闭环、冲突保护和设备撤销验收。详见 [交付记录](docs/DELIVERY_GOAL.md)。
+- **画板（Artboard）**：多页设计稿并排对比，支持缩放平移、元素图层与样式检查、定点批注、方案投票、验收打回、手机样机和交互原型。
+- **文档（Document）**：富文本方案评审，支持划词评论、浏览器直接改字、引用其他作品与块定位、发起问答/批准、验收报告和历史差异对比。
+- **HTML 预览**：在独立沙盒域里运行网页原型，边点交互边把选区反馈发给 Agent。
+- **白板、幻灯片与分镜**：画流程图、带演讲者备注放演示文稿、剪辑分镜导出 MP4。
+- **多宿主 Agent 集成**：内置 Skill（`anjian skills get artifacts`），支持 Claude Code、Codex（含审批与规划任务）、Pi、Antigravity、GitHub Copilot CLI、DeepSeek Harness 及自定义宿主。
+- **公开分享与好友空间**：一键生成免登录只读快照链接，或通过 GitHub 邀请朋友拥有完全独立的工作空间。
+- **本机优先 & 自托管**：提供 macOS / Linux 开箱安装包，也支持 Docker Compose / Dokploy 部署、共享容量管理与 S3 存储接入。
 
-## 使用与开发
+> 案间不连任何官方云服务，没有订阅，也不会自动下载上游包。所有数据都在你自己的电脑或服务器上。
 
-- [Fumadocs 文档站：本地预览与静态构建](website/README.md)
-- [macOS 安装包与源码构建](docs/install.md)
-- [CLI 命令](docs/artifacts-cli.md)
-- [作品多选、回收站与恢复](docs/artifact-trash.md)
-- [公开只读分享](docs/public-sharing.md)
-- [通过 HTTPS 连接远程工作台](docs/remote-cli.md)
-- [Agent 远程操作指引](skills/artifacts/remote.md)（新会话接入见 [安装说明](docs/install.md#agent-集成)）
+---
+
+## 快速开始
+
+### 1. 本机安装（推荐：直接下载安装包）
+
+到 [GitHub Releases](https://github.com/yusixian/anjian/releases) 下载对应系统的归档（已内置 Node.js，支持 macOS Apple Silicon / Intel 与 Linux x64 / arm64），校验 SHA-256 解压后运行：
+
+```bash
+./anjian start --project-dir /绝对路径/你的项目 --no-open --foreground
+```
+
+或从源码构建（需要 Git、Node.js 22 和 pnpm）：
+
+```bash
+git clone https://github.com/yusixian/anjian.git
+cd anjian/artifacts
+pnpm install --frozen-lockfile
+pnpm build
+node dist/cli.cjs start --project-dir /绝对路径/你的项目 --no-open --foreground
+```
+
+打开终端打印的完整 URL 即可进入工作台。详见 [安装说明](docs/install.md) 或 [在线文档](https://anjian.cosine.ren/zh/docs/local)。
+
+### 2. 部署到自己的服务器
+
+需要两个 HTTPS 域名（主站 `27319` + 画板隔离预览 `27329`）：
+
+```bash
+export ANJIAN_PUBLIC_ORIGIN=https://anjian.example.com
+export ANJIAN_BOARD_ORIGIN=https://preview.example.net
+docker compose up --build -d
+```
+
+反向代理、Dokploy 部署和 GitHub 登录配置见 [自托管部署](docs/self-hosting.md)。
+
+### 3. 连接本地 CLI 与 Agent
+
+```bash
+# 查看内置 Skill 与当前绑定状态
+anjian skills get artifacts
+anjian remote status --json
+
+# 配对远程工作台并绑定本地项目
+anjian login https://你的案间域名 --name "我的电脑"
+anjian link
+anjian push --artifact html/hello
+```
+
+更多用法见 [远程 CLI](docs/remote-cli.md) 和 [在线 Agent 接入指南](https://anjian.cosine.ren/zh/docs/agent)。
+
+---
+
+## 文档导航
+
+- [在线使用文档（中英双语）](https://anjian.cosine.ren)
+- [macOS / Linux 安装包与源码构建](docs/install.md)
 - [Docker / Dokploy 自托管](docs/self-hosting.md)
-
-## 开发起点
-
-工作台源码位于 `artifacts/`，包含前端、服务端、CLI、构建脚本和测试；Agent skills 与适配脚本位于 `skills/`、`hooks/` 等目录。
-
-优先从本地源码构建，不要把 `npx ryugi-artifacts` 当成本项目的安装命令：该命令获取的是上游发行包。
-
-改造顺序：
-
-1. 统一 Anjian 品牌、命令及文档，并保留来源署名。
-2. 移除官方云服务和官方自动更新路径，验证本地内容与评论流程。
-3. 完善中文体验和个人使用流程。
-4. 提供 Docker / Dokploy 部署方式，验证数据持久化和 HTTPS 访问。
-5. 接通本地 Agent 与自有服务器上的作品和评论；文件同步与会话通知需要分别验证。
-
-仓库其他文档目前仍主要来自上游，可能包含官方安装、发布或云服务指引；这些尚不是本项目的操作说明。
+- [HTTPS 远程 CLI 与设备配对](docs/remote-cli.md)
+- [CLI 命令速查](docs/artifacts-cli.md)
+- [公开只读分享](docs/public-sharing.md)
+- [作品多选与回收站](docs/artifact-trash.md)
+- [成员管理与 S3 存储](docs/members-storage.md)
+- [文档站本地预览与构建](website/README.md)
+- [上游能力对照](docs/upstream-capabilities.md) · [阶段交付记录](docs/DELIVERY_GOAL.md)
 
 ## 来源与许可证
 
-基线为 [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2)，提交 `6054b65ab9b2208a234a78632eb065cfeb3eb166`。感谢 Innei 与 Ryugi 贡献者。Ryugi 的工作流又源自 Jesse Vincent 与贡献者维护的 [Superpowers](https://github.com/obra/superpowers)；历史来源见 [UPSTREAM.md](UPSTREAM.md)。
+案间基于 [Innei/ryugi v1.51.2](https://github.com/Innei/ryugi/tree/v1.51.2)（提交 `6054b65ab9b2208a234a78632eb065cfeb3eb166`）分叉并独立维护，持续对照上游正式版本并按授权实现适合本地与自托管的能力。感谢 Innei 与 Ryugi 贡献者，也感谢 Jesse Vincent 与 [Superpowers](https://github.com/obra/superpowers) 贡献者；完整历史来源见 [UPSTREAM.md](UPSTREAM.md)。
 
-沿用此基线的许可证划分，并保留原有版权声明：
+- **Skills、集成与文档**：[MIT License](LICENSE)
+- **`artifacts/` 应用及构建产物**：[AGPL-3.0-only](artifacts/LICENSE)
+- **第三方依赖**：遵循各自开源协议
 
-- Skills、集成与文档：见根目录 [MIT LICENSE](LICENSE)。
-- `artifacts/` 应用及其构建产物：见 [AGPL-3.0-only](artifacts/LICENSE)。
-- 第三方依赖遵循各自许可证；发布和部署前仍需核对其要求。
-
-新的项目名称不改变继承代码的许可证。若向其他人提供修改后的网络服务，须遵守 AGPL 的对应源码提供要求。后续引入上游代码时应逐项核对该版本授权，不能假定仍适用本基线的许可证。
+项目改名不改变继承代码的许可证；如修改后对外提供网络服务，须遵守 AGPL-3.0 的对应源码开放要求。
