@@ -276,3 +276,24 @@ test('Pi receipts leave inherited host subscriptions alone while ordinary explic
   assert.equal(read('custom-reader').status, 0);
   assert.deepEqual(JSON.parse(await readFile(subscribed, 'utf8')).artifacts, ['document/plan']);
 });
+
+test('an embedded runtime uses Node on PATH instead of relaunching the host', async (t) => {
+  const root = await mkdtemp(resolve(tmpdir(), 'anjian-embedded-host-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const launcher = resolve(root, 'anjian.cjs');
+  await copyFile(resolve(repoRoot, 'skills/artifacts/app/anjian.cjs'), launcher);
+  await writeFile(resolve(root, 'cli.cjs'), 'process.stdout.write("CLI reached");');
+  const embeddedHost = resolve(root, 'embedded-host');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      'process.execPath = process.argv[1]; process.argv = ["node", process.argv[2], "--version"]; require("node:module").runMain();',
+      embeddedHost,
+      launcher,
+    ],
+    { encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, 'CLI reached');
+});

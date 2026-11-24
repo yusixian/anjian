@@ -120,6 +120,8 @@ anjian comment list --artifact document/plan --session review-desk:terminal:123 
 
 Send `{"action":"unsubscribe","artifact":"document/plan"}` to the watcher's standard input to remove one artifact. Use the same format with `subscribe` to listen again. The Hub filters events for this connection and restores its current subscriptions when the listener reconnects. Close standard input or press Ctrl+C to stop listening. Edit or remove your configuration file to make the change permanent.
 
+For hosts with an embedded JavaScript runtime, make sure the host's `PATH` contains a standalone `node` before starting Anjian from the host. Run `node --version` in the same environment to check. Anjian continues to reuse Node when the host already runs under standalone Node.
+
 ## Events and automation
 
 `anjian watch --json` emits events; the host must subscribe and schedule tasks itself. After an event, read comments or pull the artifact. Event output does not mean an Agent has automatically started working. The first watch does not replay all historical comments; use `comment list --all` when you need history.

@@ -120,6 +120,8 @@ anjian comment list --artifact document/plan --session review-desk:terminal:123 
 
 在监听进程的标准输入发送 `{"action":"unsubscribe","artifact":"document/plan"}` 可以移除一个作品。发送同格式的 `subscribe` 可重新监听。Hub 按该监听连接当前的订阅清单发送事件，断线重连时恢复仍在清单里的作品。关闭标准输入或按 Ctrl+C 会停止这次监听。永久移除时更新或删除自己的配置文件。
 
+如果宿主使用嵌入式 JavaScript 运行时，从宿主启动案间前要确保其环境中的 `PATH` 能找到独立的 `node`。可在同一环境运行 `node --version` 核对。已使用独立 Node 运行的宿主会继续复用该运行时。
+
 ## 事件与自动处理
 
 `anjian watch --json` 输出事件，宿主需要自己订阅并调度任务。收到事件后再读取评论或拉取作品；事件输出不等于 Agent 已自动醒来处理。首次监听不重放全部历史评论，需要历史时使用 `comment list --all`。

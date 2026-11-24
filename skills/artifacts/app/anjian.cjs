@@ -8,6 +8,15 @@ const path = require('node:path');
 
 const win32 = process.platform === 'win32';
 
+function nodeRuntime() {
+  // Embedded hosts can expose Node APIs while execPath points to the host itself.
+  const nativeNode =
+    !process.versions.bun &&
+    !process.versions.electron &&
+    /^node(?:\.exe)?$/i.test(path.basename(process.execPath));
+  return nativeNode ? process.execPath : 'node';
+}
+
 function localVersion() {
   const hash = nodeCrypto.createHash('sha256');
   for (const name of ['cli.cjs', 'server.cjs']) {
@@ -87,7 +96,7 @@ function main() {
   const given = Number(env.ANJIAN_ARTIFACTS_OWNER);
   const owner = Number.isInteger(given) && given > 1 ? given : ownerPid();
   if (owner) env.ANJIAN_ARTIFACTS_OWNER = String(owner);
-  const child = spawn(process.execPath, [cli, ...args], {
+  const child = spawn(nodeRuntime(), [cli, ...args], {
     env,
     stdio: explicitStart ? ['inherit', 'inherit', 'inherit', 'ipc'] : 'inherit',
   });
@@ -106,6 +115,8 @@ function main() {
     process.exitCode = code ?? (signal ? 1 : 0);
   });
 }
+
+module.exports = { nodeRuntime };
 
 if (require.main === module) {
   try {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+const { nodeRuntime } = require('./anjian.cjs');
 const { execFile, spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
@@ -242,7 +243,7 @@ async function main() {
   }
   for (const artifact of artifacts) {
     const { stdout } = await promisify(execFile)(
-      process.execPath,
+      nodeRuntime(),
       [LAUNCHER, 'start', '--artifact', artifact, '--project-dir', project, '--json', '--no-open'],
       { env: sessionEnvironment(process.env), timeout: 30_000 },
     );
