@@ -62,3 +62,14 @@
     inset-block: max(3.5rem, env(safe-area-inset-top)) auto;
   }
 }
+
+.codex-task-panel h2 {
+  font-size: 1rem;
+}
+.codex-task-panel details {
+  margin-block: 0.5rem;
+}
+.codex-task-panel pre {
+  white-space: pre-wrap;
+  font: inherit;
+}

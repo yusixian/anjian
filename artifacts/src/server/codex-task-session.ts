@@ -4,6 +4,14 @@ import { createInterface } from 'node:readline';
 import { isObject } from '../shared/comments';
 
 type RequestId = number | string;
+type Task = {
+  threadId: string;
+  title: string;
+  status: 'running' | 'completed' | 'failed' | 'interrupted';
+  output: string;
+  plan: string;
+};
+
 type PendingQuestion = {
   requestId: RequestId;
   threadId: string;
@@ -72,7 +80,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
-  const threads = new Set<string>();
+  const tasks = new Map<string, Task>();
   const questions = new Map<RequestId, PendingQuestion>();
   const replies = new Map<RequestId, (status: boolean) => void>();
   let closed = false;
@@ -85,7 +93,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     child.kill();
     for (const { reject } of calls.values()) reject(new Error('Codex App Server disconnected'));
     calls.clear();
-    threads.clear();
+    tasks.clear();
     questions.clear();
     for (const finish of replies.values()) finish(false);
     replies.clear();
@@ -143,20 +151,36 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
       }
       return;
     }
-    if (message.method === 'turn/completed' && threads.delete(threadId)) {
-      let removed = false;
+    const task = tasks.get(threadId);
+    if (
+      task?.status === 'running' &&
+      message.method === 'item/completed' &&
+      isObject(params.item) &&
+      typeof params.item.text === 'string'
+    ) {
+      if (params.item.type === 'plan') task.plan = params.item.text.slice(0, 64_000);
+      if (params.item.type === 'agentMessage') task.output = params.item.text.slice(0, 64_000);
+      return;
+    }
+    if (
+      task?.status === 'running' &&
+      message.method === 'turn/completed' &&
+      isObject(params.turn)
+    ) {
+      const status = params.turn.status;
+      task.status = status === 'completed' || status === 'interrupted' ? status : 'failed';
       for (const [id, pending] of questions) {
         if (pending.threadId === threadId) {
-          removed = questions.delete(id) || removed;
+          questions.delete(id);
           replies.get(id)?.(false);
         }
       }
-      if (removed) changed();
+      changed();
       return;
     }
     if (!requestId(message.id)) return;
     const parsed =
-      message.method === 'item/tool/requestUserInput' && threads.has(threadId)
+      message.method === 'item/tool/requestUserInput' && task?.status === 'running'
         ? parseQuestions(params.questions)
         : null;
     if (!parsed) {
@@ -180,6 +204,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     },
     pendingQuestions: () =>
       [...questions.values()].filter(({ requestId }) => !replies.has(requestId)),
+    tasks: () => Array.from(tasks.values()).reverse(),
     async start(prompt: string) {
       await ready;
       const result = await call('thread/start', {
@@ -195,7 +220,17 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
       )
         throw new Error('Codex App Server returned an invalid thread');
       const threadId = result.thread.id;
-      threads.add(threadId);
+      if (tasks.size >= 30) {
+        const finished = [...tasks.values()].find(({ status }) => status !== 'running');
+        if (finished) tasks.delete(finished.threadId);
+      }
+      tasks.set(threadId, {
+        threadId,
+        title: prompt.slice(0, 160),
+        status: 'running',
+        output: '',
+        plan: '',
+      });
       try {
         await call('turn/start', {
           threadId,
@@ -206,7 +241,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
           },
         });
       } catch (error) {
-        threads.delete(threadId);
+        tasks.delete(threadId);
         throw error;
       }
       return threadId;

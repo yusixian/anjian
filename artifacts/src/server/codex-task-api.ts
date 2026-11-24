@@ -41,7 +41,10 @@ export function createCodexTaskApi(options: Options) {
 
       const session = sessions.get(project);
       if (req.method === 'GET') {
-        sendJson(res, 200, { pending: session?.pendingQuestions() ?? [] });
+        sendJson(res, 200, {
+          pending: session?.pendingQuestions() ?? [],
+          tasks: url.searchParams.has('results') ? (session?.tasks() ?? []) : [],
+        });
         return true;
       }
       if (req.method !== 'POST') {

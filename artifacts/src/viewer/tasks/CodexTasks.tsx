@@ -4,6 +4,14 @@ import { type FormEvent, useEffect, useId, useState } from 'react';
 
 import { useTranslation } from '../i18n';
 
+type Task = {
+  threadId: string;
+  title: string;
+  status: 'running' | 'completed' | 'failed' | 'interrupted';
+  output: string;
+  plan: string;
+};
+
 type Pending = {
   requestId: string | number;
   threadId: string;
@@ -66,6 +74,7 @@ function QuestionForm({
 export function CodexTasks({ artifact }: { artifact: string }) {
   const { t } = useTranslation();
   const [pending, setPending] = useState<Pending[] | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
@@ -78,7 +87,9 @@ export function CodexTasks({ artifact }: { artifact: string }) {
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
-        const response = await fetch(endpoint, { signal: abort.signal });
+        const response = await fetch(open ? endpoint + '&results=1' : endpoint, {
+          signal: abort.signal,
+        });
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
           if (response.status === 403 || response.status === 404 || response.ok) {
             if (!abort.signal.aborted) setPending(null);
@@ -86,9 +97,12 @@ export function CodexTasks({ artifact }: { artifact: string }) {
           }
           throw new Error('Task status unavailable');
         }
-        const value = (await response.json()) as { pending: Pending[] };
+        const value = (await response.json()) as { pending: Pending[]; tasks?: Task[] };
         if (!Array.isArray(value.pending)) return;
-        if (!abort.signal.aborted) setPending(value.pending);
+        if (!abort.signal.aborted) {
+          setPending(value.pending);
+          setTasks(Array.isArray(value.tasks) ? value.tasks : []);
+        }
       } catch {
         if (!abort.signal.aborted) setPending((previous) => (previous === null ? null : []));
       }
@@ -99,7 +113,7 @@ export function CodexTasks({ artifact }: { artifact: string }) {
       abort.abort();
       clearTimeout(timer);
     };
-  }, [endpoint]);
+  }, [endpoint, open]);
 
   async function post(payload: object, success: string, failure: string) {
     setNotice('');
@@ -179,6 +193,20 @@ export function CodexTasks({ artifact }: { artifact: string }) {
             }
           />
         ))}
+        {tasks.length > 0 && (
+          <section aria-label={t('codexTasks.recent')}>
+            <h2>{t('codexTasks.recent')}</h2>
+            {tasks.map((task) => (
+              <details key={task.threadId}>
+                <summary>
+                  {task.title} · {t('codexTasks.' + task.status)}
+                </summary>
+                <p>{t('codexTasks.session', { id: task.threadId.slice(-6) })}</p>
+                {(task.plan || task.output) && <pre>{task.plan || task.output}</pre>}
+              </details>
+            ))}
+          </section>
+        )}
       </div>
     </aside>
   );
