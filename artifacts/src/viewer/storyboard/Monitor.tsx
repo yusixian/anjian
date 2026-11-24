@@ -1,5 +1,5 @@
 import { AudioLines, Clapperboard, Download, Film } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 
 import type { StoryboardAsset, StoryboardClip, StoryboardJob } from '../../shared/storyboard';
 import { useStoryboardCopy } from './copy';
@@ -83,6 +83,68 @@ function SourceMedia({
     </div>
   ) : (
     <video {...props} playsInline />
+  );
+}
+
+function PlaybackTime({
+  screen,
+  startMs,
+  totalMs,
+  showElapsed,
+}: {
+  screen: RefObject<HTMLDivElement | null>;
+  startMs: number;
+  totalMs: number | null;
+  showElapsed: boolean;
+}) {
+  const c = useStoryboardCopy();
+  const [elapsed, setElapsed] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(0);
+  useEffect(() => {
+    const media = screen.current?.querySelector<HTMLMediaElement>('video, audio');
+    if (!showElapsed || !media) return;
+    const measureDuration = () => {
+      if (Number.isFinite(media.duration))
+        setMediaDuration(Math.max(0, Math.round(media.duration * 1000) - startMs));
+    };
+    const setPosition = (seconds: number) => {
+      const ms = Math.max(0, Math.round(seconds * 1000) - startMs);
+      setElapsed(Math.min(ms, totalMs ?? ms));
+    };
+    const update = () => setPosition(media.currentTime);
+    let cancelClock: () => void;
+    if (media instanceof HTMLVideoElement && 'requestVideoFrameCallback' in media) {
+      const frame = (_now: number, { mediaTime }: VideoFrameCallbackMetadata) => {
+        setPosition(mediaTime);
+        frameId = media.requestVideoFrameCallback(frame);
+      };
+      let frameId = media.requestVideoFrameCallback(frame);
+      cancelClock = () => media.cancelVideoFrameCallback(frameId);
+    } else {
+      update();
+      media.addEventListener('timeupdate', update);
+      media.addEventListener('seeked', update);
+      cancelClock = () => {
+        media.removeEventListener('timeupdate', update);
+        media.removeEventListener('seeked', update);
+      };
+    }
+    measureDuration();
+    media.addEventListener('durationchange', measureDuration);
+    return () => {
+      cancelClock();
+      media.removeEventListener('durationchange', measureDuration);
+    };
+  }, [screen, startMs, totalMs, showElapsed]);
+  return (
+    <span className="sb-timecode">
+      {showElapsed && (
+        <>
+          <span title={c.playbackPosition}>{timecode(elapsed)}</span> /{' '}
+        </>
+      )}
+      <span title={c.durationLabel}>{timecode(totalMs ?? mediaDuration)}</span>
+    </span>
   );
 }
 
@@ -201,6 +263,7 @@ export function Monitor({
   }
   const videoUrl = job?.status === 'ready' ? jobUrl + '/video' : null;
   const hasPlayableMedia = output ? !!videoUrl : !!asset && !isStill(asset.path);
+  const screen = useRef<HTMLDivElement>(null);
   const busy = starting || running;
   const notice = error
     ? c.renderFailed + ' ' + error
@@ -227,6 +290,7 @@ export function Monitor({
         aria-keyshortcuts={hasPlayableMedia ? 'Space ArrowLeft ArrowRight' : undefined}
         aria-label={hasPlayableMedia ? c.preview : undefined}
         className="sb-screen"
+        ref={screen}
         role={hasPlayableMedia ? 'group' : undefined}
         tabIndex={hasPlayableMedia ? 0 : undefined}
         onKeyDown={(event) => {
@@ -296,9 +360,17 @@ export function Monitor({
         </div>
       </div>
       <div className="sb-monitor-foot">
-        <span className="sb-timecode" title={c.durationLabel}>
-          {timecode(output ? duration : (clip?.durationMs ?? 0))}
-        </span>
+        <PlaybackTime
+          screen={screen}
+          showElapsed={hasPlayableMedia}
+          startMs={output ? 0 : (clip?.trimMs ?? 0)}
+          totalMs={output ? duration : (clip?.durationMs ?? (hasPlayableMedia ? null : 0))}
+          key={
+            output
+              ? (videoUrl ?? 'output')
+              : [asset?.path, clip?.id, clip?.trimMs, clip?.durationMs].join(':')
+          }
+        />
         <span className="sb-monitor-name" title={asset && fileName(asset.path, asset.name)}>
           {output ? c.output : asset && fileName(asset.path, asset.name)}
         </span>
