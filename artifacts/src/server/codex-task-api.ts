@@ -91,12 +91,16 @@ export function createCodexTaskApi(options: Options) {
 
       const session = sessions.get(project);
       if (req.method === 'GET') {
+        const includeResults = url.searchParams.has('results');
+        const fileApprovals = session?.pendingFileApprovals() ?? [];
         sendJson(res, 200, {
           sharedAvailable: Boolean(shared),
           approvals: session?.pendingApprovals() ?? [],
+          fileApprovals: includeResults ? fileApprovals : [],
+          fileApprovalCount: fileApprovals.length,
           permissions: session?.pendingPermissions() ?? [],
           pending: session?.pendingQuestions() ?? [],
-          tasks: url.searchParams.has('results') ? (session?.tasks() ?? []) : [],
+          tasks: includeResults ? (session?.tasks() ?? []) : [],
         });
         return true;
       }
@@ -188,16 +192,17 @@ export function createCodexTaskApi(options: Options) {
         return true;
       }
       if (
-        body.action === 'decide' &&
+        (body.action === 'decide' || body.action === 'decide-file') &&
         typeof body.threadId === 'string' &&
         (typeof body.requestId === 'string' ||
           (typeof body.requestId === 'number' && Number.isSafeInteger(body.requestId))) &&
         isCommandApprovalDecision(body.decision)
       ) {
         try {
-          const sent = await sessions
-            .get(project)
-            ?.decide(body.threadId, body.requestId, body.decision);
+          const connection = sessions.get(project);
+          const sent = await (body.action === 'decide-file'
+            ? connection?.decideFile(body.threadId, body.requestId, body.decision)
+            : connection?.decide(body.threadId, body.requestId, body.decision));
           sendJson(
             res,
             sent ? 200 : 409,
