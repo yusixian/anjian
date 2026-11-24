@@ -1,5 +1,5 @@
 name: anjian
-version: 0.18.11
+version: 0.18.12
 description: Anjian skills and workflow bootstrap for Hermes Agent
 author: Innei
 provides_hooks:
