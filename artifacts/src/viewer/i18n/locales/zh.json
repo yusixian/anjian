@@ -142,6 +142,16 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "codexTasks": {
+    "commandApproval": "命令审批 · 会话 {{id}}",
+    "commandDirectory": "工作目录 {{directory}}",
+    "approvalsPending": "{{count}} 项待审批",
+    "approvalSent": "已发送审批决定。",
+    "approvalFailed": "无法发送决定。请确认该请求仍待审批。",
+    "approvalDecision": {
+      "accept": "仅允许这一次",
+      "decline": "拒绝命令",
+      "cancel": "取消本轮"
+    },
     "threadId": "Codex 会话 ID",
     "attach": "接入已有会话",
     "attached": "已接入 Codex 会话。",

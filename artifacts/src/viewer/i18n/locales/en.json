@@ -147,6 +147,16 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "codexTasks": {
+    "commandApproval": "Command approval · Session {{id}}",
+    "commandDirectory": "Working directory {{directory}}",
+    "approvalsPending": "{{count}} awaiting approval",
+    "approvalSent": "Decision sent.",
+    "approvalFailed": "Could not send the decision. Check whether the approval is still pending.",
+    "approvalDecision": {
+      "accept": "Allow once",
+      "decline": "Decline command",
+      "cancel": "Cancel turn"
+    },
     "threadId": "Codex session ID",
     "attach": "Connect existing session",
     "attached": "Codex session connected.",

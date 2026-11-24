@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute } from 'node:path';
 
+import { isCommandApprovalDecision } from '../shared/codex-approvals';
 import { isObject } from '../shared/comments';
 import { createCodexTaskSession, type SharedCodexServer } from './codex-task-session';
 import { sendJson } from './http';
@@ -92,6 +93,7 @@ export function createCodexTaskApi(options: Options) {
       if (req.method === 'GET') {
         sendJson(res, 200, {
           sharedAvailable: Boolean(shared),
+          approvals: session?.pendingApprovals() ?? [],
           pending: session?.pendingQuestions() ?? [],
           tasks: url.searchParams.has('results') ? (session?.tasks() ?? []) : [],
         });
@@ -159,6 +161,27 @@ export function createCodexTaskApi(options: Options) {
           sendJson(res, 201, { threadId, documentUrl });
         } catch {
           sendJson(res, 502, { error: 'codex_start_failed', documentUrl });
+        }
+        return true;
+      }
+      if (
+        body.action === 'decide' &&
+        typeof body.threadId === 'string' &&
+        (typeof body.requestId === 'string' ||
+          (typeof body.requestId === 'number' && Number.isSafeInteger(body.requestId))) &&
+        isCommandApprovalDecision(body.decision)
+      ) {
+        try {
+          const sent = await sessions
+            .get(project)
+            ?.decide(body.threadId, body.requestId, body.decision);
+          sendJson(
+            res,
+            sent ? 200 : 409,
+            sent ? { sent: true } : { error: 'approval_unavailable' },
+          );
+        } catch {
+          sendJson(res, 502, { error: 'codex_approval_failed' });
         }
         return true;
       }
