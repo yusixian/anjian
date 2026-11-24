@@ -24,6 +24,7 @@ const PREVIEW_ROUTE = new RegExp(
 export const viewerCsp = (boardOrigins: string[]) =>
   [
     "default-src 'self'",
+    "media-src 'self' blob:",
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",

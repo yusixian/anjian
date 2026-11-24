@@ -100,7 +100,7 @@
 .sb-icon,
 .sb-import,
 .sb-tools select,
-.sb-field :is(input, select) {
+.sb-field :is(input, select, textarea) {
   background: var(--sb-paper);
   border: 1px solid var(--sb-rule);
   border-radius: 7px;
@@ -388,7 +388,7 @@
 .sb-field span {
   color: var(--sb-muted);
 }
-.sb-field :is(input, select) {
+.sb-field :is(input, select, textarea) {
   width: 46%;
   min-width: 0;
   padding: 5px 6px;
@@ -651,7 +651,7 @@
   .sb-field {
     min-height: 36px;
   }
-  .sb-field :is(input, select),
+  .sb-field :is(input, select, textarea),
   .sb-toolbar .sb-title {
     font-size: 16px;
   }
@@ -675,4 +675,72 @@
   .sb-readonly .sb-monitor {
     margin: 10px;
   }
+}
+
+.sb-narration-trigger {
+  margin: 0 12px 8px;
+}
+
+.sb-narration {
+  max-width: min(520px, calc(100vw - 24px));
+  width: 100%;
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  color: var(--sb-text);
+}
+
+.sb-narration::backdrop {
+  background: rgba(0, 0, 0, 0.38);
+}
+
+.sb-narration .sb-panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--sb-paper);
+}
+
+.sb-narration-body {
+  padding: 8px 14px 14px;
+}
+
+.sb-narration-fields .sb-field {
+  display: grid;
+  gap: 4px;
+}
+
+.sb-narration-fields .sb-field :is(input, select, textarea) {
+  width: 100%;
+}
+
+.sb-narration summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.sb-narration-fields {
+  min-inline-size: 0;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--sb-rule);
+  border-radius: 8px;
+}
+
+.sb-narration-fields textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+}
+
+.sb-narration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 8px;
+}
+
+.sb-narration audio {
+  width: 100%;
+  margin-block-end: 6px;
 }

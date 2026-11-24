@@ -1,4 +1,5 @@
 import { type AnchorSpec, type CommentsFile, isObject } from './comments';
+import { type NarrationScript, parseNarration } from './storyboard-narration';
 
 export const STORYBOARD_FILE = 'timeline.json';
 export const MAX_STORYBOARD_ASSET_BYTES = 24 * 1024 * 1024;
@@ -36,6 +37,7 @@ export interface StoryboardTrack {
 }
 
 export interface Storyboard {
+  narration?: NarrationScript;
   title: string;
   tracks: StoryboardTrack[];
   version: 1;
@@ -52,6 +54,7 @@ export interface StoryboardSnapshot {
   comments: StoryboardComments;
   commentsWarning?: string;
   listening: boolean;
+  narrationAvailable?: boolean;
   revision: string;
   storyboard: Storyboard;
 }
@@ -159,7 +162,9 @@ export function parseStoryboard(value: unknown): Storyboard | null {
       return null;
     tracks.push({ clips, id: entry.id, kind: entry.kind, name: entry.name.trim() });
   }
-  return { title: value.title.trim(), tracks, version: 1 };
+  const narration = value.narration === undefined ? undefined : parseNarration(value.narration);
+  if (narration === null) return null;
+  return { title: value.title.trim(), tracks, version: 1, ...(narration && { narration }) };
 }
 
 export function storyboardDuration(storyboard: Storyboard): number {

@@ -57,3 +57,24 @@ describe('storyboard timeline', () => {
     expect(parseStoryboard(plan(clips))).toBeNull();
   });
 });
+
+test('keeps narration text and pronunciation in the revisioned storyboard', () => {
+  const narration = {
+    lexicon: [{ id: 'word-1', term: '案间', spoken: '岸间' }],
+    lines: [{ id: 'intro', locale: 'zh-CN', text: '欢迎使用案间。', hint: '欢迎使用安见。' }],
+  };
+  expect(parseStoryboard({ ...plan([]), narration })?.narration).toEqual(narration);
+  expect(parseStoryboard(plan([]))?.narration).toBeUndefined();
+  expect(
+    parseStoryboard({
+      ...plan([]),
+      narration: { ...narration, lines: [...narration.lines, ...narration.lines] },
+    }),
+  ).toBeNull();
+  expect(
+    parseStoryboard({
+      ...plan([]),
+      narration: { ...narration, lines: [{ ...narration.lines[0], locale: 'unknown' }] },
+    }),
+  ).toBeNull();
+});

@@ -11,14 +11,16 @@ import {
   STORYBOARD_FILE,
   type StoryboardSnapshot,
 } from '../../shared/storyboard';
+import { isNarrationLocale, MAX_NARRATION_TEXT } from '../../shared/storyboard-narration';
 import { resolveArtifactAddress } from '../artifact-address';
 import type { ServerContext } from '../context';
-import { mimeOf, sendFile, sendJson } from '../http';
+import { mimeOf, send, sendFile, sendJson } from '../http';
 import {
   refreshRequestStorageAdmission,
   requestStorageAdmission,
 } from '../storage/request-admission';
 import { storyboardJobsOf } from '../storyboard-jobs';
+import { narrationAvailable, synthesizeNarration } from '../storyboard-narration';
 import {
   listStoryboardAssets,
   openStoryboardAsset,
@@ -142,6 +144,7 @@ export const storyboardRoute: HttpRoute<ServerContext> = {
       const snapshot: StoryboardSnapshot = {
         storyboard: timeline.storyboard,
         revision: timeline.revision,
+        ...(narrationAvailable(ctx.loopback) && { narrationAvailable: true }),
         assets,
         ...comments,
       };
@@ -183,6 +186,36 @@ export const storyboardAssetsRoute: HttpRoute<ServerContext> = {
       const asset = uploadStoryboardAsset(dir, name, data, requestStorageAdmission(req));
       ctx.broadcast({ type: 'change', artifact: `storyboard/${id}`, files: [asset.path] });
       sendJson(res, 201, { asset });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  },
+};
+
+export const storyboardNarrationRoute: HttpRoute<ServerContext> = {
+  path: new RegExp(`^${PATH}/narration$`),
+  methods: ['POST'],
+  auth: 'viewer',
+  async handle(req, res, ctx, { key, match }) {
+    try {
+      requireOrigin(req, ctx);
+      requireAuthorization(req, ctx, key);
+      if (!narrationAvailable(ctx.loopback))
+        throw new StoryboardError(404, 'Local system narration is unavailable.');
+      artifactOf(ctx, match[1]!);
+      const body = await readJson(req, MAX_NARRATION_TEXT * 8 + 128);
+      if (
+        !isObject(body) ||
+        !isNarrationLocale(body.locale) ||
+        typeof body.text !== 'string' ||
+        !body.text.trim() ||
+        body.text.length > MAX_NARRATION_TEXT ||
+        Array.from(body.text).some((char) => char.charCodeAt(0) < 32 && !'\n\r\t'.includes(char))
+      )
+        throw new StoryboardError(400, 'Use a non-empty narration line within the length limit.');
+      const audio = await synthesizeNarration(body.text.trim(), body.locale);
+      if (res.destroyed) return;
+      send(res, 200, audio, { ...mediaHeaders, 'Content-Type': 'audio/wav' });
     } catch (error) {
       errorResponse(res, error);
     }

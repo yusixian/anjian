@@ -2,22 +2,30 @@ import { AudioLines, FileImage, Film, FolderOpen, Plus, Upload } from 'lucide-re
 import { useLayoutEffect, useRef, useState } from 'react';
 
 import type { StoryboardAsset } from '../../shared/storyboard';
+import type { NarrationScript } from '../../shared/storyboard-narration';
 import { useStoryboardCopy } from './copy';
+import { NarrationPanel } from './NarrationPanel';
 import { assetUrl, fileName, isStill } from './timeline-utils';
 
 export function MediaBin({
   url,
   assets,
   selected,
+  narration,
+  narrationAvailable,
+  onNarrationChange,
   onSelect,
   onAdd,
   onImport,
 }: {
   url: string;
   assets: StoryboardAsset[];
+  narration?: NarrationScript;
+  narrationAvailable?: boolean;
+  onNarrationChange: (script: NarrationScript) => void;
   selected?: string;
   onSelect: (asset: StoryboardAsset) => void;
-  onAdd: (asset: StoryboardAsset, duration?: number) => void;
+  onAdd: (asset: StoryboardAsset, duration?: number) => boolean;
   onImport: (asset: StoryboardAsset) => void;
 }) {
   const c = useStoryboardCopy();
@@ -32,11 +40,8 @@ export function MediaBin({
     addLatestRef.current = onAdd;
   }, [onAdd]);
   async function add(asset: StoryboardAsset) {
-    if (probingRef.current) return;
-    if (isStill(asset.path)) {
-      onAdd(asset);
-      return;
-    }
+    if (probingRef.current) return false;
+    if (isStill(asset.path)) return onAdd(asset);
     probingRef.current = true;
     setPending(asset.path);
     const media = document.createElement(asset.kind === 'audio' ? 'audio' : 'video');
@@ -63,7 +68,21 @@ export function MediaBin({
     media.load();
     probingRef.current = false;
     setPending('');
-    addLatestRef.current(asset, ms);
+    return addLatestRef.current(asset, ms);
+  }
+  async function uploadAsset(file: File) {
+    const response = await fetch(url + '/assets?name=' + encodeURIComponent(file.name), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: file,
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(typeof data?.error === 'string' ? data.error : response.statusText);
+    }
+    const data: { asset: StoryboardAsset } = await response.json();
+    onImport(data.asset);
+    return data.asset;
   }
   async function upload(files: File[]) {
     if (uploadingRef.current || !files.length) return;
@@ -73,17 +92,7 @@ export function MediaBin({
     const failures: string[] = [];
     for (const file of files) {
       try {
-        const response = await fetch(url + '/assets?name=' + encodeURIComponent(file.name), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: file,
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => null);
-          throw new Error(typeof data?.error === 'string' ? data.error : response.statusText);
-        }
-        const data: { asset: StoryboardAsset } = await response.json();
-        onImport(data.asset);
+        await uploadAsset(file);
       } catch (err) {
         failures.push(file.name + (err instanceof Error ? ' · ' + err.message : ''));
       }
@@ -129,6 +138,16 @@ export function MediaBin({
           {c.importFailed} {error}
         </p>
       )}
+      <NarrationPanel
+        available={narrationAvailable}
+        script={narration}
+        url={url}
+        onChange={onNarrationChange}
+        onUse={async (file) => {
+          const asset = await uploadAsset(file);
+          return add(asset);
+        }}
+      />
       {!assets.length && <p className="sb-empty">{c.noMedia}</p>}
       <div className="sb-assets">
         {assets.map((asset) => {
