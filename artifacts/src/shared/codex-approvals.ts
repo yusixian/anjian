@@ -3,7 +3,7 @@ export const COMMAND_APPROVAL_DECISIONS = ['accept', 'decline', 'cancel'] as con
 export type CommandApprovalDecision = (typeof COMMAND_APPROVAL_DECISIONS)[number];
 
 export function isCommandApprovalDecision(value: unknown): value is CommandApprovalDecision {
-  return COMMAND_APPROVAL_DECISIONS.includes(value);
+  return value === 'accept' || value === 'decline' || value === 'cancel';
 }
 
 export type PendingCommandApproval = {
