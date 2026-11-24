@@ -48,7 +48,10 @@ describe('validateCanvas', () => {
     canvas.connections = { next: { from: 'a', to: 'b', label: 'Continue' } };
     expect(validateCanvas(canvas, exists)).toEqual([]);
     expect(
-      validateCanvas({ ...canvas, connections: { next: { from: 'a', to: 'b', label: ' ' } } }, exists),
+      validateCanvas(
+        { ...canvas, connections: { next: { from: 'a', to: 'b', label: ' ' } } },
+        exists,
+      ),
     ).toContain('connection "next" needs board IDs "from", "to" and a non-empty "label"');
     canvas.pages.push({ id: 'q', name: 'Q' });
     canvas.boards.b!.page = 'q';
@@ -140,6 +143,26 @@ describe('validateCanvas', () => {
     canvas.groups = { g: { boards: ['a', 'b'] } };
     canvas.notes = { t: { page: 'p', kind: 'title', x: 0, y: -180, text: 'Round 1' } };
     expect(validateCanvas(canvas, exists)).toContain('title "t" overlaps group "g"');
+  });
+
+  test('reports a wrapped title that reaches an ungrouped board on its page', () => {
+    const canvas = base();
+    canvas.pages.push({ id: 'q', name: 'Q' });
+    canvas.boards.b!.page = 'q';
+    canvas.boards.b!.x = 0;
+    canvas.notes = {
+      t: {
+        page: 'p',
+        kind: 'title',
+        x: 0,
+        y: -70,
+        w: 180,
+        text: 'Review the next design proposal',
+      },
+    };
+    const warnings = validateCanvas(canvas, exists);
+    expect(warnings).toContain('title "t" overlaps board "a"');
+    expect(warnings).not.toContain('title "t" overlaps board "b"');
   });
 
   test('reports a sticky covering a board, using its estimated height', () => {
