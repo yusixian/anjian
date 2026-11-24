@@ -75,6 +75,11 @@ export const docAnchorMap = {
     files: { zh: '给-agent-的文件约定', en: 'file-conventions-for-agents' },
     public: { zh: '公开画板', en: 'public-artboards' },
   },
+  'storyboards': {
+    edit: { zh: '剪辑第一段', en: 'edit-your-first-clip' },
+    narration: { zh: '逐行旁白', en: 'generate-narration-by-line' },
+    render: { zh: '生成与下载', en: 'render-and-download' },
+  },
   'library': {
     find: { zh: '查找作品', en: 'find-artifacts' },
     organize: { zh: '批量整理', en: 'organize-in-bulk' },
