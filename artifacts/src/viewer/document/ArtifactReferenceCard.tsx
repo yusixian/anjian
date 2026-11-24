@@ -13,6 +13,9 @@ export type ArtifactReferenceResolver = (
   signal: AbortSignal,
 ) => Promise<Partial<Result> | null>;
 export const LiveReferenceContext = createContext<ArtifactReferenceResolver | null>(null);
+export const OpenDocumentBlockContext = createContext<
+  ((href: string, title: string, trigger: HTMLAnchorElement) => boolean) | null
+>(null);
 
 const styles = stylex.create({
   card: {
@@ -40,6 +43,8 @@ const styles = stylex.create({
 type Review = 'pending' | 'pass' | 'reject';
 type ReviewSummary = Record<Review | 'unavailable', number>;
 interface Result {
+  blockMissing?: true;
+  blockTitle?: string;
   choice?: string | null;
   href: string;
   review?: Review;
@@ -50,7 +55,7 @@ interface Result {
 function readResult(
   value: Partial<Result>,
   path: string,
-  kind: 'board' | 'group' | undefined,
+  kind: NonNullable<ArtifactReference['focus']>['kind'] | undefined,
   id: string | undefined,
   expectedGroups: number,
 ): Result | null {
@@ -67,7 +72,8 @@ function readResult(
     if (key === 'page' || (key === 'ref' && val === '1') || (key === kind && val === id)) continue;
     return null;
   }
-  if (kind && url.searchParams.get(kind) !== id) return null;
+  const blockMissing = kind === 'block' && value.blockMissing === true;
+  if (kind && url.searchParams.get(kind) !== (blockMissing ? null : id)) return null;
   const choice = value.choice;
   const review = value.review;
   const reviewSummary = value.reviewSummary;
@@ -86,6 +92,10 @@ function readResult(
       return null;
   }
   return {
+    ...(blockMissing ? { blockMissing: true } : {}),
+    ...(kind === 'block' && !blockMissing && typeof value.blockTitle === 'string'
+      ? { blockTitle: value.blockTitle }
+      : {}),
     href: url.href,
     title: value.title,
     ...(kind === 'group' && (choice === null || typeof choice === 'string') ? { choice } : {}),
@@ -96,6 +106,7 @@ function readResult(
 
 export function ArtifactReferenceCard({ reference }: { reference: ArtifactReference }) {
   const resolve = useContext(LiveReferenceContext);
+  const openDocumentBlock = useContext(OpenDocumentBlockContext);
   const channel = use(DynamicHostContext)?.channel;
   const { t } = useTranslation();
   const { type, target, focus, label } = reference;
@@ -162,6 +173,11 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
         <strong>{title}</strong>
         <span {...stylex.props(styles.meta)}>
           {t('type.' + type)}
+          {resolved?.blockMissing
+            ? ' · ' + t('reference.blockMissing')
+            : resolved &&
+              kind === 'block' &&
+              ' · ' + t('reference.blockTarget', { title: resolved.blockTitle || id })}
           {resolved?.choice !== undefined &&
             ' · ' +
               (resolved.choice === null
@@ -192,6 +208,20 @@ export function ArtifactReferenceCard({ reference }: { reference: ArtifactRefere
       contentEditable={false}
       href={resolved.href}
       referrerPolicy="no-referrer"
+      onClick={(event) => {
+        if (
+          kind !== 'block' ||
+          resolved.blockMissing ||
+          !openDocumentBlock ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        if (openDocumentBlock(resolved.href, title, event.currentTarget)) event.preventDefault();
+      }}
     >
       {body}
       <ArrowUpRight aria-hidden="true" size={16} />

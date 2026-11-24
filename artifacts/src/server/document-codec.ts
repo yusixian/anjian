@@ -156,7 +156,16 @@ registry.registerWriter('question', (node) => {
   };
 });
 
-const REFERENCE_ATTRS = new Set(['id', 'type', 'target', 'label', 'board', 'group', 'groups']);
+const REFERENCE_ATTRS = new Set([
+  'id',
+  'type',
+  'target',
+  'label',
+  'board',
+  'group',
+  'groups',
+  'block',
+]);
 const REFERENCE_ATTR = /\s+([a-z]+)\s*=\s*(?:"[^"]*"|'[^']*')/gy;
 
 registry.registerReader('ref', (el) => {
@@ -164,16 +173,17 @@ registry.registerReader('ref', (el) => {
     throw new Error('<ref> must be empty');
   const id = el.getAttribute('id');
   const label = el.getAttribute('label');
-  const board = el.getAttribute('board');
-  const group = el.getAttribute('group');
   const groups = el.getAttribute('groups');
-  if (board !== null && group !== null) throw new Error('<ref> allows either board or group');
-  const focus = board !== null ? { kind: 'board', id: board } : { kind: 'group', id: group };
+  const focuses = (['board', 'group', 'block'] as const).flatMap((kind) => {
+    const id = el.getAttribute(kind);
+    return id === null ? [] : [{ kind, id }];
+  });
+  if (focuses.length > 1) throw new Error('<ref> allows one of board, group, or block');
   const reference = {
     type: el.getAttribute('type'),
     target: el.getAttribute('target'),
     ...(label !== null ? { label } : {}),
-    ...(focus.id !== null ? { focus } : {}),
+    ...(focuses[0] ? { focus: focuses[0] } : {}),
     ...(groups !== null ? { reviewGroups: groups.split(',') } : {}),
   };
   validateArtifactReference(reference);
@@ -385,6 +395,11 @@ export function boxDrawingDiagrams(state: SerializedEditorState): string[] {
 }
 
 const textOf = (node: Block): string => node.text ?? (node.children ?? []).map(textOf).join('');
+
+export function documentBlockTitle(state: SerializedEditorState, id: string): string | null {
+  const block = (state.root.children as Block[]).find((node) => node.$?.blockId === id);
+  return block ? textOf(block).replaceAll(/\s+/g, ' ').trim().slice(0, 120) : null;
+}
 
 export function documentTitle(state: SerializedEditorState): string | null {
   const heading = (state.root.children as Block[]).find((block) => block.type === 'heading');

@@ -13,6 +13,7 @@ import type { MountedProject } from './app';
 import type { IndexedArtifact } from './artifact-index';
 import { findTrashedArtifact } from './artifact-trash';
 import { readArtifactSource, titleOf } from './context';
+import { documentBlockTitle, parseDocument } from './document-codec';
 import { send, sendJson } from './http';
 import { artifactsRootOf } from './machine';
 import { withProjectMutation } from './project-mutations';
@@ -30,16 +31,13 @@ const PRIMARY: Record<ArtifactType, string> = {
 };
 
 function referenceFrom(url: URL, match: RegExpExecArray): ArtifactReference | null {
-  const board = url.searchParams.getAll('board');
-  const group = url.searchParams.getAll('group');
+  const focuses = (['board', 'group', 'block'] as const).flatMap((kind) =>
+    url.searchParams.getAll(kind).map((id) => ({ kind, id })),
+  );
   const summary = url.searchParams.getAll('groups');
-  if (board.length + group.length > 1 || summary.length > 1) return null;
+  if (focuses.length > 1 || summary.length > 1) return null;
   try {
-    const focus = board.length
-      ? { kind: 'board' as const, id: board[0]! }
-      : group.length
-        ? { kind: 'group' as const, id: group[0]! }
-        : undefined;
+    const focus = focuses[0];
     const reference: ArtifactReference = {
       type: match[1] as ArtifactType,
       target: decodeURIComponent(match[2]!),
@@ -48,6 +46,15 @@ function referenceFrom(url: URL, match: RegExpExecArray): ArtifactReference | nu
     };
     validateArtifactReference(reference);
     return reference;
+  } catch {
+    return null;
+  }
+}
+
+function readDocumentBlockTitle(dir: string, id: string) {
+  try {
+    const state = parseDocument(fs.readFileSync(path.join(dir, 'doc.xml'), 'utf8'));
+    return documentBlockTitle(state, id);
   } catch {
     return null;
   }
@@ -107,6 +114,7 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       const payload = readArtifactSource(dir, { type, id });
       if (
         focus &&
+        focus.kind !== 'block' &&
         (!('canvas' in payload) ||
           !payload.canvas ||
           !payload.layout ||
@@ -129,7 +137,10 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
         return;
       }
       const query = new URLSearchParams({ ref: '1' });
-      if (focus) query.set(focus.kind, focus.id);
+      const blockTitle =
+        focus?.kind === 'block' ? readDocumentBlockTitle(dir, focus.id) : undefined;
+      const blockMissing = blockTitle === null;
+      if (focus && !blockMissing) query.set(focus.kind, focus.id);
       const review =
         mounted && focus && group?.verify ? mounted.referenceVerdict(id, focus.id) : undefined;
       const selected =
@@ -162,6 +173,8 @@ export function createArtifactReferenceRoute({ list, visible, mount }: Options) 
       sendJson(res, 200, {
         href: `/${type}/${target}?${query}`,
         title: (typeof title === 'string' && title.trim()) || titleOf(payload),
+        ...(blockMissing ? { blockMissing: true } : {}),
+        ...(blockTitle ? { blockTitle } : {}),
         ...(review ? { review } : {}),
         ...(choiceRound ? { choice: selectedTitle } : {}),
         ...(reviewSummary ? { reviewSummary } : {}),

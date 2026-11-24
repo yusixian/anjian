@@ -68,6 +68,7 @@ access key or share token.
 
 ```xml
 <ref type="artboard" target="A12345678901234567890" group="proposal" label="Proposal review" />
+<ref type="document" target="D12345678901234567890" block="decision" label="Approved decision" />
 <ref type="html" target="B12345678901234567890" label="Interactive preview" />
 <ref type="storyboard" target="C12345678901234567890" label="Launch walkthrough" />
 ```
@@ -77,6 +78,15 @@ Use the target type: `document`, `html`, `artboard`, `whiteboard`, `slides`, or
 only, use either `group` or `board` to focus an exact ID, even when a group and
 a board have the same ID. When the target group
 uses human verification, the authenticated document shows its current verdict.
+
+For a document, `block` names the `id` of a top-level block such as
+`<h2 id="decision">Decision</h2>`. Keep that ID when updating or moving the
+block. Use the current document's stable address to jump within it. A reference
+to another document opens a read-only pane on desktop, with a link to open the
+document itself. Narrow screens open the document at the block. If the block
+is gone, the reference opens the top of the authorized document. Public
+sharing requires an explicit selection to publish the referenced document as
+a separate whole-document snapshot.
 
 Run the document check and open each reference in the browser with the intended
 reader's access. The destination is resolved when the reference is opened. A

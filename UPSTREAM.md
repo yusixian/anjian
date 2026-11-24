@@ -9,7 +9,7 @@
 2026-11-24 核对 Ryugi 正式版 `v1.108.5`，最新提交 `4b20d0d7fe98cfca4f18f3871e55595b99a542d1`。相对 `v1.108.2` 新增 1 个公开提交，累计审计 231 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.5) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.2...v1.108.5)
 
 - **选案批注**。案间让选案轮次开放时的普通批注立即通知已订阅作品的本地会话。选项点按保持安静，明确提交仍发送现有的一条选案摘要。同一轮的批注和提交若在一次扫描中到达，由提交通知引导 Agent 读取线程。
-- **文档引用与分镜**。现有作品引用只支持画板组或卡片定位，新的文档块定位由 [#213](https://github.com/yusixian/anjian/issues/213) 跟踪。现有分镜可编辑并导出时间线，播放时钟、快捷键和旁白发音由 [#214](https://github.com/yusixian/anjian/issues/214) 独立验收。
+- **文档引用与分镜**。案间独立实现文档块引用，支持同文档跳转、跨文档只读预览、窄屏定位及缺失回退，沿用项目访问校验。[文档块 #213](https://github.com/yusixian/anjian/issues/213) · [分镜播放与旁白 #214](https://github.com/yusixian/anjian/issues/214)
 - **来源与授权**。公开提交只改动版本清单，许可证文件未变。案间依据正式说明核对公开行为，本批使用案间现有监听器独立实现。官方云的登录和发布行为在案间产品范围之外。[许可证](https://github.com/Innei/ryugi/blob/v1.108.5/LICENSE)
 
 ### v1.108.2 的能力差异

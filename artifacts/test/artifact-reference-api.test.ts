@@ -13,6 +13,65 @@ const missingId = 'b'.repeat(21);
 const htmlReference = '/api/artifact-reference/html/';
 const artboardReference = '/api/artifact-reference/artboard/';
 
+test('a document block reference follows its stable ID and falls back only after access is granted', async () => {
+  const { root, get, request } = await fixture();
+  const dir = writeDocument(root, 'plan', {
+    '.artifact-id': stableId + '\n',
+    'doc.xml': '<doc><h1>Plan</h1><p id="important">First location</p></doc>',
+  });
+  const url = `/api/artifact-reference/document/${stableId}?block=important`;
+  const href = `/document/${stableId}?ref=1`;
+  expect((await request(url)).status).toBe(404);
+  expect((await get(url + '&block=important')).status).toBe(404);
+  expect((await get(url + '&group=important')).status).toBe(404);
+  expect(await (await get(url)).json()).toEqual({
+    href: href + '&block=important',
+    title: 'Plan',
+    blockTitle: 'First location',
+  });
+  expect((await get(href + '&block=important')).status).toBe(200);
+  fs.writeFileSync(
+    path.join(dir, 'doc.xml'),
+    '<doc><h1>Plan</h1><p>New paragraph</p><p id="important">New location and text</p></doc>',
+  );
+  expect(await (await get(url)).json()).toEqual({
+    href: href + '&block=important',
+    title: 'Plan',
+    blockTitle: 'New location and text',
+  });
+  fs.writeFileSync(path.join(dir, 'doc.xml'), '<doc><h1>Plan</h1><p>Target removed</p></doc>');
+  expect(await (await get(url)).json()).toEqual({ href, title: 'Plan', blockMissing: true });
+  expect((await request(url)).status).toBe(404);
+});
+
+test('public document snapshots do not disclose an unshared document block', async () => {
+  const { root, project, request, post } = await fixture();
+  writeDocument(root, 'target', {
+    '.artifact-id': stableId + '\n',
+    'doc.xml': '<doc><p id="private-anchor">Private decision</p></doc>',
+  });
+  writeDocument(root, 'source', {
+    'doc.xml': `<doc><ref type="document" target="${stableId}" block="private-anchor" label="Decision" /></doc>`,
+  });
+  const published = await post('/api/hub/share', {
+    project,
+    type: 'document',
+    id: 'source',
+    action: 'publish',
+  });
+  expect(published.status, await published.clone().text()).toBe(200);
+  const snapshot = new URL((await published.json()).share.url);
+  const data = await (await request(snapshot.pathname + '/data')).text();
+  expect(data).toContain('Decision');
+  expect(data).not.toContain(stableId);
+  expect(data).not.toContain('private-anchor');
+  const route = `/api/artifact-reference/document/${stableId}?block=private-anchor`;
+  const token = snapshot.pathname.split('/').at(-1)!;
+  expect((await request(route, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(
+    404,
+  );
+});
+
 test.each([
   [
     'slides',
@@ -247,7 +306,10 @@ test('choice references only expose the current submitted option', async () => {
 
   canvas.groups.pick.boards = ['second'];
   const { second } = canvas.boards;
-  fs.writeFileSync(path.join(dir, 'canvas.json'), JSON.stringify({ ...canvas, boards: { second } }));
+  fs.writeFileSync(
+    path.join(dir, 'canvas.json'),
+    JSON.stringify({ ...canvas, boards: { second } }),
+  );
   await expectChoice(null);
 });
 

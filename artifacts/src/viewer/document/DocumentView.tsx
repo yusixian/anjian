@@ -27,6 +27,7 @@ import { PendingContext, type PendingProgress } from './PendingBlock';
 import { PhoneLayout } from './PhoneLayout';
 import { TopBar } from './TopBar';
 import type { DocumentMeta, DocumentState, DocumentTransport } from './transport';
+import { type DocumentBlockTarget, useDocumentBlockTarget } from './useDocumentBlockTarget';
 import { useDocumentSelectionSync } from './useDocumentSelectionSync';
 import { useNow, usePendingBlocks } from './usePendingBlocks';
 import { type SelectionTarget, useSelectionComment } from './useSelectionComment';
@@ -87,6 +88,7 @@ function useAssetBase(contentBase: string | undefined) {
 }
 
 const IDLE_PLAYBACK: AgentPlaybackState = { playing: false, section: null };
+const NO_BLOCK_TARGET: DocumentBlockTarget = { blockId: null };
 
 export function DocumentView({
   id,
@@ -96,6 +98,7 @@ export function DocumentView({
   commentRecoveryUrl,
   fallback,
   actions: barActions,
+  blockTarget,
 }: {
   id: string;
   transport: DocumentTransport;
@@ -104,6 +107,7 @@ export function DocumentView({
   commentRecoveryUrl?: string;
   fallback?: ReactNode;
   actions?: ReactNode;
+  blockTarget?: DocumentBlockTarget;
 }) {
   const feedbackEnabled = useFeedbackEnabled();
   const [meta, setMeta] = useState<DocumentMeta | null>(null);
@@ -126,6 +130,7 @@ export function DocumentView({
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyVisible = historyOpen;
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
+  useDocumentBlockTarget(historyVisible ? null : editor, blockTarget ?? NO_BLOCK_TARGET);
   const [mainEl, setMainEl] = useState<HTMLElement | null>(null);
   const dark = usePrefersDark();
   const { artifact, channel } = transport;

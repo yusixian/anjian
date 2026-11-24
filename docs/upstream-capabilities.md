@@ -118,9 +118,12 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 开放轮次内的板块或分组批注会即时通知已订阅作品的本地会话。选项点按保持安静，明确提交发送一条专用选案摘要。批注与提交若在同一次扫描内到达，Agent 可从提交通知读取该轮批注。[Hook 回归](../tests/hooks/test-comment-watch.cjs)
 
+## 文档块引用
+
+在 `<ref type="document">` 中填写 `block`，按目标文档和顶层块的稳定标识跳转。同文档引用支持浏览器返回。跨文档时桌面用只读侧栏，窄屏用完整文档。目标块缺失时，案间提示并打开有权查看的文档。公开分享仍需明确选择另行公开的目标快照。[实现与验收 #213](https://github.com/yusixian/anjian/issues/213) · [编写示例](../skills/artifacts/document.md)
+
 ## 待验证能力
 
-- [#213](https://github.com/yusixian/anjian/issues/213) 引用并定位具体的文档块。
 - [#214](https://github.com/yusixian/anjian/issues/214) 分镜播放时钟、快捷键和旁白发音。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
 - [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。

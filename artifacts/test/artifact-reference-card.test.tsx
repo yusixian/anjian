@@ -36,15 +36,34 @@ afterEach(() => {
   resolve.mockReset();
 });
 
-async function render(live = false) {
+async function render(live = false, entry = reference) {
   await act(async () =>
     root.render(
       <LiveReferenceContext.Provider value={live ? resolve : null}>
-        <ArtifactReferenceCard reference={reference} />
+        <ArtifactReferenceCard reference={entry} />
       </LiveReferenceContext.Provider>,
     ),
   );
 }
+
+test('a missing block links to the authorized document and never accepts another block', async () => {
+  const documentHref = '/document/' + target + '?ref=1';
+  const entry: ArtifactReference = {
+    type: 'document',
+    target,
+    focus: { kind: 'block', id: 'intro' },
+  };
+  resolve.mockResolvedValueOnce({ title: 'Plan', href: documentHref, blockMissing: true });
+  await render(true, entry);
+  expect(document.querySelector('a')?.href).toBe(window.location.origin + documentHref);
+  resolve.mockResolvedValueOnce({
+    title: 'Plan',
+    href: documentHref + '&block=elsewhere',
+    blockMissing: true,
+  });
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(document.querySelector('a')).toBeNull();
+});
 
 test('snapshots show authored text without looking up or exposing the target', async () => {
   await render();
