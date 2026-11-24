@@ -1,7 +1,15 @@
+import { createHmac } from 'node:crypto';
+
 import { renderThumbnail } from '../../shared/thumbnail';
 import type { ArtifactSummary } from '../../shared/types';
 import { artifactPath, resolveArtifactAddress } from '../artifact-address';
-import { artifactKeyOf, isArtifactLocator, listArtifacts, resolveArtifactDir } from '../artifacts';
+import {
+  artifactKeyOf,
+  artifactSignature,
+  isArtifactLocator,
+  listArtifacts,
+  resolveArtifactDir,
+} from '../artifacts';
 import { AVATAR_ROUTE } from '../avatars';
 import { projectName, type ServerContext, titleOf } from '../context';
 import { latestMtime } from '../html';
@@ -62,12 +70,16 @@ export const previewApiRoute: HttpRoute<ServerContext> = {
     try {
       const payload = ctx.readArtifact(dir, ref);
       const title = titleOf(payload);
+      const access = ctx.mount?.contentAccess?.(req, ref);
       sendJson(res, 200, {
         ...previewPayload(ref, dir, title, payload, url.searchParams.get('page') ?? undefined),
         title,
         warnings: payload.warnings,
         contentBase: `${ctx.contentPrefix}${type}/${id}/`,
-        ...ctx.mount?.contentAccess?.(req, ref),
+        ...(access && {
+          contentBase: access.contentBase,
+          contentExpiresAt: access.contentExpiresAt,
+        }),
       });
     } catch {
       sendJson(res, 422, { error: 'Preview unavailable' });
@@ -122,9 +134,19 @@ export const artifactApiRoute: HttpRoute<ServerContext> = {
     }
     const ref = artifactKeyOf(`${type}/${id}`)!;
     const access = ctx.mount?.contentAccess?.(req, ref);
+    const { snapshotSecret, ...content } = access ?? {};
+    const secret = snapshotSecret ?? (ctx.loopback ? ctx.token : undefined);
+    const boardSnapshotKey =
+      ref.type === 'artboard' && secret
+        ? createHmac('sha256', secret)
+            .update('board-snapshot-revision\0')
+            .update(JSON.stringify([dir, artifactSignature(dir, ref.type)]))
+            .digest('hex')
+        : undefined;
     sendJson(res, 200, {
       ...ctx.artifactMeta(ref, dir),
-      ...access,
+      ...content,
+      ...(boardSnapshotKey ? { boardSnapshotKey } : {}),
       ...(ref.type === 'artboard' && ctx.boardPort
         ? {
             boardPort: ctx.boardPort,

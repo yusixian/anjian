@@ -60,7 +60,7 @@ export interface MountSettings {
   backgroundWrite?: (work: (admit: CommentAdmission) => void) => Promise<void>;
   boardPort: number;
   commentFileChanged?: (artifact: string) => void;
-  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number };
+  contentAccess?: (req: http.IncomingMessage, ref: ArtifactRef) => { contentBase: string; contentExpiresAt: number; snapshotSecret?: string };
   github?: ReturnType<typeof createGitHubAuth>;
   libraryChanged?: (sourceChanged: boolean) => void;
   localQuestionHome?: string;

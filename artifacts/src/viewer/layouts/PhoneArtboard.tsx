@@ -89,6 +89,7 @@ interface Props {
   boardOrigin?: string;
   boardPath?: string;
   boardPort?: number;
+  boardSnapshotKey?: string;
   canvas: CanvasSpec | null;
   comment?: (op: BoardHumanOp) => Promise<unknown>;
   comments?: BoardCommentsState | null;
@@ -120,6 +121,7 @@ export function PhoneArtboard({
   boardOrigin,
   boardPort,
   boardPath,
+  boardSnapshotKey,
   versions,
   live,
   loaded,
@@ -241,6 +243,7 @@ export function PhoneArtboard({
   );
   const lifecycle = useBoardLifecycle({
     boards,
+    snapshotKey: readOnly ? undefined : boardSnapshotKey,
     versions,
     pending: waiting,
     view,
