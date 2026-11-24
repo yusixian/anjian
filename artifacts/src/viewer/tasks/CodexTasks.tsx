@@ -2,7 +2,11 @@ import './codex-tasks.css';
 
 import { type FormEvent, useEffect, useId, useState } from 'react';
 
-import type { CommandApprovalDecision, PendingCommandApproval } from '../../shared/codex-approvals';
+import type {
+  CommandApprovalDecision,
+  PendingCommandApproval,
+  PendingPermissionApproval,
+} from '../../shared/codex-approvals';
 import { useTranslation } from '../i18n';
 
 type Task = {
@@ -108,8 +112,56 @@ function CommandApproval({
   );
 }
 
+function PermissionApproval({
+  approval,
+  submit,
+}: {
+  approval: PendingPermissionApproval;
+  submit: (selected: number[]) => Promise<boolean>;
+}) {
+  const { t } = useTranslation();
+  const [selected, setSelected] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false);
+  async function send(options: number[]) {
+    setBusy(true);
+    if (!(await submit(options))) setBusy(false);
+  }
+  return (
+    <fieldset disabled={busy}>
+      <legend>{t('codexTasks.permissionApproval', { id: approval.threadId.slice(-6) })}</legend>
+      {approval.cwd && <p>{t('codexTasks.commandDirectory', { directory: approval.cwd })}</p>}
+      {approval.reason && <p>{approval.reason}</p>}
+      {approval.options.map((option, index) => (
+        <label key={index}>
+          <input
+            checked={selected.includes(index)}
+            type="checkbox"
+            onChange={({ target }) =>
+              setSelected((previous) =>
+                target.checked ? [...previous, index] : previous.filter((value) => value !== index),
+              )
+            }
+          />
+          {option.kind === 'network'
+            ? t('codexTasks.permissionNetwork')
+            : t('codexTasks.permissionPath.' + option.kind, { path: option.path })}
+        </label>
+      ))}
+      <div className="codex-approval-actions">
+        <button disabled={!selected.length} type="button" onClick={() => void send(selected)}>
+          {t('codexTasks.grantForTurn')}
+        </button>
+        <button type="button" onClick={() => void send([])}>
+          {t('codexTasks.denyPermissions')}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 export function CodexTasks({ artifact }: { artifact: string }) {
   const { t } = useTranslation();
+  const [permissions, setPermissions] = useState<PendingPermissionApproval[]>([]);
   const [approvals, setApprovals] = useState<PendingCommandApproval[]>([]);
   const [pending, setPending] = useState<Pending[] | null>(null);
   const [sharedAvailable, setSharedAvailable] = useState(false);
@@ -145,11 +197,13 @@ export function CodexTasks({ artifact }: { artifact: string }) {
           tasks?: Task[];
           sharedAvailable?: boolean;
           approvals?: PendingCommandApproval[];
+          permissions?: PendingPermissionApproval[];
         };
         if (!Array.isArray(value.pending)) return;
         if (!abort.signal.aborted) {
           setPending(value.pending);
           setApprovals(Array.isArray(value.approvals) ? value.approvals : []);
+          setPermissions(Array.isArray(value.permissions) ? value.permissions : []);
           setSharedAvailable(value.sharedAvailable === true);
           setTasks(Array.isArray(value.tasks) ? value.tasks : []);
         }
@@ -157,6 +211,7 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         if (!abort.signal.aborted) {
           setPending((previous) => (previous === null ? null : []));
           setApprovals([]);
+          setPermissions([]);
         }
       }
       if (!abort.signal.aborted) timer = setTimeout(refresh, 2000);
@@ -227,6 +282,7 @@ export function CodexTasks({ artifact }: { artifact: string }) {
   }
 
   if (!pending) return null;
+  const approvalCount = approvals.length + permissions.length;
   return (
     <aside aria-label={t('codexTasks.title')} className="codex-tasks">
       <button
@@ -238,8 +294,8 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         {t('codexTasks.title')}
         <span role="status">
           {pending.length > 0 && t('codexTasks.pending', { count: pending.length })}
-          {pending.length > 0 && approvals.length > 0 && ' · '}
-          {approvals.length > 0 && t('codexTasks.approvalsPending', { count: approvals.length })}
+          {pending.length > 0 && approvalCount > 0 && ' · '}
+          {approvalCount > 0 && t('codexTasks.approvalsPending', { count: approvalCount })}
         </span>
       </button>
       <div className="codex-task-panel" hidden={!open} id="codex-task-panel">
@@ -300,6 +356,24 @@ export function CodexTasks({ artifact }: { artifact: string }) {
                   threadId: approval.threadId,
                   requestId: approval.requestId,
                   decision,
+                },
+                'codexTasks.approvalSent',
+                'codexTasks.approvalFailed',
+              )
+            }
+          />
+        ))}
+        {permissions.map((approval) => (
+          <PermissionApproval
+            approval={approval}
+            key={JSON.stringify([approval.threadId, approval.requestId])}
+            submit={(selected) =>
+              post(
+                {
+                  action: 'grant',
+                  threadId: approval.threadId,
+                  requestId: approval.requestId,
+                  selected,
                 },
                 'codexTasks.approvalSent',
                 'codexTasks.approvalFailed',

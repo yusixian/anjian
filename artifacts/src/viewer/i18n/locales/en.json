@@ -147,6 +147,14 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "codexTasks": {
+    "permissionApproval": "Permission request · Session {{id}}",
+    "permissionNetwork": "Network access",
+    "permissionPath": {
+      "read": "Read {{path}}",
+      "write": "Write {{path}}"
+    },
+    "grantForTurn": "Grant selected for this turn",
+    "denyPermissions": "Deny all permissions",
     "commandApproval": "Command approval · Session {{id}}",
     "commandDirectory": "Working directory {{directory}}",
     "approvalsPending": "{{count}} awaiting approval",

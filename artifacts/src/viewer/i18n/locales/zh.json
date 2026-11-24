@@ -142,6 +142,14 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "codexTasks": {
+    "permissionApproval": "权限请求 · 会话 {{id}}",
+    "permissionNetwork": "访问网络",
+    "permissionPath": {
+      "read": "读取 {{path}}",
+      "write": "写入 {{path}}"
+    },
+    "grantForTurn": "仅为本轮授予所选权限",
+    "denyPermissions": "拒绝全部权限",
     "commandApproval": "命令审批 · 会话 {{id}}",
     "commandDirectory": "工作目录 {{directory}}",
     "approvalsPending": "{{count}} 项待审批",
