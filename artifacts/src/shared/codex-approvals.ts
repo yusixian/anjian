@@ -24,3 +24,17 @@ export type PendingPermissionApproval = {
   reason?: string;
   options: PermissionOption[];
 };
+
+export type FileApprovalChange = {
+  path: string;
+  kind: 'add' | 'delete' | 'update';
+  movePath?: string;
+  diff: string;
+};
+
+export type PendingFileApproval = {
+  requestId: number | string;
+  threadId: string;
+  reason?: string;
+  changes: FileApprovalChange[];
+};
