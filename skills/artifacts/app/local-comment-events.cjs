@@ -1,5 +1,6 @@
 'use strict';
 
+const { nodeRuntime } = require('./anjian.cjs');
 const { spawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
@@ -83,7 +84,7 @@ function createLocalCommentEvents(wake, env = process.env, entry) {
     if (!project) return;
     const host = url.hostname === '[::1]' ? '::1' : url.hostname;
     const child = spawn(
-      process.execPath,
+      nodeRuntime(),
       [
         launcher,
         'start',

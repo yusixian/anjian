@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -18,6 +19,7 @@ const skillsDir = resolve(packageRoot, 'skills');
 const bootstrapSkillPath = resolve(skillsDir, 'using-anjian', 'SKILL.md');
 
 const launcher = resolve(skillsDir, 'artifacts', 'app', 'anjian.cjs');
+const { nodeRuntime }: { nodeRuntime: () => string } = createRequire(import.meta.url)(launcher);
 const openedEntry = 'anjian-opened-artifact';
 const artifactPattern = /^(?:document|artboard)\/[a-z0-9][a-z0-9-]*$/;
 const run = promisify(execFile);
@@ -130,7 +132,7 @@ export default function anjianPiExtension(pi: ExtensionAPI) {
     delete env.CODEX_THREAD_ID;
     delete env.CLAUDE_CODE_SESSION_ID;
     const { stdout } = await run(
-      process.execPath,
+      nodeRuntime(),
       [
         launcher,
         'start',
