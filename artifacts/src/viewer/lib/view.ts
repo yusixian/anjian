@@ -123,6 +123,22 @@ export function labelSize(rule: LabelRule, k: number) {
 export const titleScale = (size: number, k: number) =>
   labelSize({ ...TITLE_RULE, base: size }, k)! / (size * k);
 
+// A title grows right and up from its bottom-left anchor.
+export function titleExpansionLimit(title: Rect, boards: readonly Rect[]) {
+  if (title.w <= 0 || title.h <= 0) return Infinity;
+  const bottom = title.y + title.h;
+  let limit = Infinity;
+  for (const board of boards) {
+    if (board.x + board.w <= title.x || board.y >= bottom) continue;
+    const firstContact = Math.max(
+      (board.x - title.x) / title.w,
+      (bottom - board.y - board.h) / title.h,
+    );
+    if (firstContact >= 1) limit = Math.min(limit, firstContact);
+  }
+  return limit;
+}
+
 export function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
   const at = (t: number, a: number, b: number) =>
     3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
