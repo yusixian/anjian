@@ -1,6 +1,6 @@
 {
   "meta": {
     "artifact": "View {{type}} artifact “{{title}}” in {{project}}.",
-    "library": "Browse all artboards, documents, and HTML artifacts in {{project}}."
+    "library": "Browse every artboard, document, and HTML artifact in {{project}}."
   }
 }

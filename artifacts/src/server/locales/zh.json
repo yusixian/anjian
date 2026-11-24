@@ -1,6 +1,6 @@
 {
   "meta": {
     "artifact": "在 {{project}} 中查看{{type}}作品「{{title}}」。",
-    "library": "浏览 {{project}} 的全部画板、文档和 HTML 作品。"
+    "library": "浏览 {{project}} 项目的全部画板、文档和 HTML 作品。"
   }
 }
