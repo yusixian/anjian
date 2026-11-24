@@ -7,8 +7,10 @@ import WebSocket from 'ws';
 
 import {
   type CommandApprovalDecision,
+  type FileApprovalChange,
   isCommandApprovalDecision,
   type PendingCommandApproval,
+  type PendingFileApproval,
   type PendingPermissionApproval,
   type PermissionOption,
 } from '../shared/codex-approvals';
@@ -66,6 +68,36 @@ function parseQuestions(input: unknown): PendingQuestion['questions'] | null {
     questions.push({ id: item.id, header: item.header, question: item.question, options });
   }
   return questions;
+}
+
+function parseFileChanges(item: unknown): FileApprovalChange[] | null {
+  if (
+    !isObject(item) ||
+    item.type !== 'fileChange' ||
+    !Array.isArray(item.changes) ||
+    !item.changes.length
+  )
+    return null;
+  const changes: FileApprovalChange[] = [];
+  let size = 0;
+  for (const change of item.changes as unknown[]) {
+    if (
+      !isObject(change) ||
+      typeof change.path !== 'string' ||
+      typeof change.diff !== 'string' ||
+      !isObject(change.kind) ||
+      (change.kind.type !== 'add' && change.kind.type !== 'update' && change.kind.type !== 'delete')
+    )
+      return null;
+    size += change.diff.length;
+    if (size > 512_000) return null;
+    const movePath =
+      change.kind.type === 'update' && typeof change.kind.move_path === 'string'
+        ? change.kind.move_path
+        : undefined;
+    changes.push({ path: change.path, diff: change.diff, kind: change.kind.type, movePath });
+  }
+  return changes;
 }
 
 function permissionOptions(permissions: unknown): PermissionOption[] | null {
@@ -198,6 +230,11 @@ export function createCodexTaskSession(
   >();
   const tasks = new Map<string, Task>();
   const questions = new Map<RequestId, PendingQuestion>();
+  const fileApprovals = new Map<
+    RequestId,
+    Omit<PendingFileApproval, 'changes'> & { itemId: string }
+  >();
+  const filePreviews = new Map<string, Map<string, FileApprovalChange[]>>();
   const approvals = new Map<RequestId, PendingCommandApproval>();
   const permissions = new Map<RequestId, PendingPermissionApproval>();
   const replies = new Map<RequestId, (status: boolean) => void>();
@@ -213,6 +250,8 @@ export function createCodexTaskSession(
     tasks.clear();
     questions.clear();
     approvals.clear();
+    fileApprovals.clear();
+    filePreviews.clear();
     permissions.clear();
     for (const finish of replies.values()) finish(false);
     replies.clear();
@@ -261,10 +300,12 @@ export function createCodexTaskSession(
       const pending =
         questions.get(params.requestId) ??
         approvals.get(params.requestId) ??
+        fileApprovals.get(params.requestId) ??
         permissions.get(params.requestId);
       if (pending?.threadId === threadId) {
         questions.delete(params.requestId);
         approvals.delete(params.requestId);
+        fileApprovals.delete(params.requestId);
         permissions.delete(params.requestId);
         replies.get(params.requestId)?.(true);
         changed();
@@ -272,6 +313,13 @@ export function createCodexTaskSession(
       return;
     }
     const task = tasks.get(threadId);
+    if (shared && task && message.method === 'turn/started') {
+      task.status = 'running';
+      task.plan = '';
+      task.output = '';
+      changed();
+      return;
+    }
     if (
       task?.status === 'running' &&
       message.method === 'item/completed' &&
@@ -293,6 +341,8 @@ export function createCodexTaskSession(
       changed();
       return;
     }
+    if (shared && task?.status === 'running' && message.method === 'item/started')
+      rememberFilePreview(threadId, params.item);
     if (!requestId(message.id)) return;
     if (
       shared &&
@@ -337,6 +387,22 @@ export function createCodexTaskSession(
       }
       return;
     }
+    if (
+      shared &&
+      task?.status === 'running' &&
+      message.method === 'item/fileChange/requestApproval'
+    ) {
+      if (typeof params.itemId === 'string' && !params.grantRoot) {
+        fileApprovals.set(message.id, {
+          requestId: message.id,
+          threadId,
+          itemId: params.itemId,
+          reason: typeof params.reason === 'string' ? params.reason : undefined,
+        });
+        changed();
+      }
+      return;
+    }
     const parsed =
       message.method === 'item/tool/requestUserInput' && task?.status === 'running'
         ? parseQuestions(params.questions)
@@ -350,8 +416,21 @@ export function createCodexTaskSession(
     changed();
   }, close);
 
+  function rememberFilePreview(threadId: string, item: unknown) {
+    if (!isObject(item) || typeof item.id !== 'string' || item.status !== 'inProgress') return;
+    const changes = parseFileChanges(item);
+    if (!changes) return;
+    let previews = filePreviews.get(threadId);
+    if (!previews) {
+      previews = new Map();
+      filePreviews.set(threadId, previews);
+    }
+    previews.set(item.id, changes);
+  }
+
   function clearThreadRequests(threadId: string) {
-    for (const requests of [questions, approvals, permissions]) {
+    filePreviews.delete(threadId);
+    for (const requests of [questions, approvals, permissions, fileApprovals]) {
       for (const [id, pending] of requests) {
         if (pending.threadId !== threadId) continue;
         requests.delete(id);
@@ -396,6 +475,24 @@ export function createCodexTaskSession(
     decide(threadId: string, id: RequestId, decision: CommandApprovalDecision) {
       const pending = approvals.get(id);
       if (!pending || pending.threadId !== threadId || !pending.decisions.includes(decision))
+        return false;
+      return respond(id, { decision });
+    },
+    pendingFileApprovals(): PendingFileApproval[] {
+      const pending: PendingFileApproval[] = [];
+      for (const { itemId, ...request } of fileApprovals.values()) {
+        const changes = filePreviews.get(request.threadId)?.get(itemId);
+        if (changes && !replies.has(request.requestId)) pending.push({ ...request, changes });
+      }
+      return pending;
+    },
+    decideFile(threadId: string, id: RequestId, decision: CommandApprovalDecision) {
+      const pending = fileApprovals.get(id);
+      if (
+        !pending ||
+        pending.threadId !== threadId ||
+        !filePreviews.get(threadId)?.has(pending.itemId)
+      )
         return false;
       return respond(id, { decision });
     },
@@ -466,6 +563,13 @@ export function createCodexTaskSession(
           (!isObject(result.thread.status) || result.thread.status.type !== 'active')
         )
           throw new Error('Codex thread is no longer active');
+        if (tasks.get(threadId)?.status === 'running' && Array.isArray(result.thread.turns)) {
+          for (const turn of result.thread.turns as unknown[]) {
+            if (!isObject(turn) || turn.status !== 'inProgress' || !Array.isArray(turn.items))
+              continue;
+            for (const item of turn.items as unknown[]) rememberFilePreview(threadId, item);
+          }
+        }
         return true;
       } catch {
         tasks.delete(threadId);

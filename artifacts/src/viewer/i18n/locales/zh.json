@@ -142,6 +142,13 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "codexTasks": {
+    "fileApproval": "文件改动 · 会话 {{id}}",
+    "declineChanges": "拒绝改动",
+    "fileChange": {
+      "add": "新增 {{path}}",
+      "update": "修改 {{path}}",
+      "delete": "删除 {{path}}"
+    },
     "permissionApproval": "权限请求 · 会话 {{id}}",
     "permissionNetwork": "访问网络",
     "permissionPath": {

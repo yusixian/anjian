@@ -147,6 +147,13 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "codexTasks": {
+    "fileApproval": "File changes · Session {{id}}",
+    "declineChanges": "Decline changes",
+    "fileChange": {
+      "add": "Add {{path}}",
+      "update": "Update {{path}}",
+      "delete": "Delete {{path}}"
+    },
     "permissionApproval": "Permission request · Session {{id}}",
     "permissionNetwork": "Network access",
     "permissionPath": {

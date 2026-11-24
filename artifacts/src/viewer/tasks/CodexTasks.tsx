@@ -1,10 +1,11 @@
 import './codex-tasks.css';
 
-import { type FormEvent, useEffect, useId, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 
 import type {
   CommandApprovalDecision,
   PendingCommandApproval,
+  PendingFileApproval,
   PendingPermissionApproval,
 } from '../../shared/codex-approvals';
 import { useTranslation } from '../i18n';
@@ -77,25 +78,27 @@ function QuestionForm({
   );
 }
 
-function CommandApproval({
-  approval,
+function ApprovalCard({
+  title,
+  children,
+  decisions,
   submit,
+  file = false,
 }: {
-  approval: PendingCommandApproval;
+  title: string;
+  children: ReactNode;
+  decisions: readonly CommandApprovalDecision[];
+  file?: boolean;
   submit: (decision: CommandApprovalDecision) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   return (
     <fieldset disabled={busy}>
-      <legend>{t('codexTasks.commandApproval', { id: approval.threadId.slice(-6) })}</legend>
-      <pre>
-        <code>{approval.command}</code>
-      </pre>
-      {approval.cwd && <p>{t('codexTasks.commandDirectory', { directory: approval.cwd })}</p>}
-      {approval.reason && <p>{approval.reason}</p>}
+      <legend>{title}</legend>
+      {children}
       <div className="codex-approval-actions">
-        {approval.decisions.map((decision) => (
+        {decisions.map((decision) => (
           <button
             key={decision}
             type="button"
@@ -104,7 +107,11 @@ function CommandApproval({
               if (!(await submit(decision))) setBusy(false);
             }}
           >
-            {t('codexTasks.approvalDecision.' + decision)}
+            {t(
+              file && decision === 'decline'
+                ? 'codexTasks.declineChanges'
+                : 'codexTasks.approvalDecision.' + decision,
+            )}
           </button>
         ))}
       </div>
@@ -162,6 +169,8 @@ function PermissionApproval({
 export function CodexTasks({ artifact }: { artifact: string }) {
   const { t } = useTranslation();
   const [permissions, setPermissions] = useState<PendingPermissionApproval[]>([]);
+  const [fileApprovals, setFileApprovals] = useState<PendingFileApproval[]>([]);
+  const [fileApprovalCount, setFileApprovalCount] = useState(0);
   const [approvals, setApprovals] = useState<PendingCommandApproval[]>([]);
   const [pending, setPending] = useState<Pending[] | null>(null);
   const [sharedAvailable, setSharedAvailable] = useState(false);
@@ -197,12 +206,16 @@ export function CodexTasks({ artifact }: { artifact: string }) {
           tasks?: Task[];
           sharedAvailable?: boolean;
           approvals?: PendingCommandApproval[];
+          fileApprovals?: PendingFileApproval[];
+          fileApprovalCount?: number;
           permissions?: PendingPermissionApproval[];
         };
         if (!Array.isArray(value.pending)) return;
         if (!abort.signal.aborted) {
           setPending(value.pending);
           setApprovals(Array.isArray(value.approvals) ? value.approvals : []);
+          setFileApprovals(Array.isArray(value.fileApprovals) ? value.fileApprovals : []);
+          setFileApprovalCount(value.fileApprovalCount ?? 0);
           setPermissions(Array.isArray(value.permissions) ? value.permissions : []);
           setSharedAvailable(value.sharedAvailable === true);
           setTasks(Array.isArray(value.tasks) ? value.tasks : []);
@@ -211,6 +224,8 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         if (!abort.signal.aborted) {
           setPending((previous) => (previous === null ? null : []));
           setApprovals([]);
+          setFileApprovals([]);
+          setFileApprovalCount(0);
           setPermissions([]);
         }
       }
@@ -282,7 +297,7 @@ export function CodexTasks({ artifact }: { artifact: string }) {
   }
 
   if (!pending) return null;
-  const approvalCount = approvals.length + permissions.length;
+  const approvalCount = approvals.length + permissions.length + fileApprovalCount;
   return (
     <aside aria-label={t('codexTasks.title')} className="codex-tasks">
       <button
@@ -346,9 +361,10 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         {documentUrl && <a href={documentUrl}>{t('codexTasks.openDocument')}</a>}
         {error && <p role="alert">{error}</p>}
         {approvals.map((approval) => (
-          <CommandApproval
-            approval={approval}
+          <ApprovalCard
+            decisions={approval.decisions}
             key={JSON.stringify([approval.threadId, approval.requestId])}
+            title={t('codexTasks.commandApproval', { id: approval.threadId.slice(-6) })}
             submit={(decision) =>
               post(
                 {
@@ -361,7 +377,46 @@ export function CodexTasks({ artifact }: { artifact: string }) {
                 'codexTasks.approvalFailed',
               )
             }
-          />
+          >
+            <pre>
+              <code>{approval.command}</code>
+            </pre>
+            {approval.cwd && <p>{t('codexTasks.commandDirectory', { directory: approval.cwd })}</p>}
+            {approval.reason && <p>{approval.reason}</p>}
+          </ApprovalCard>
+        ))}
+        {fileApprovals.map((approval) => (
+          <ApprovalCard
+            file
+            decisions={['accept', 'decline', 'cancel']}
+            key={JSON.stringify([approval.threadId, approval.requestId])}
+            title={t('codexTasks.fileApproval', { id: approval.threadId.slice(-6) })}
+            submit={(decision) =>
+              post(
+                {
+                  action: 'decide-file',
+                  threadId: approval.threadId,
+                  requestId: approval.requestId,
+                  decision,
+                },
+                'codexTasks.approvalSent',
+                'codexTasks.approvalFailed',
+              )
+            }
+          >
+            {approval.reason && <p>{approval.reason}</p>}
+            {approval.changes.map(({ kind, path, movePath, diff }, index) => (
+              <details open key={JSON.stringify([path, index])}>
+                <summary>
+                  {t('codexTasks.fileChange.' + kind, { path })}
+                  {movePath && ' → ' + movePath}
+                </summary>
+                <pre>
+                  <code>{diff}</code>
+                </pre>
+              </details>
+            ))}
+          </ApprovalCard>
         ))}
         {permissions.map((approval) => (
           <PermissionApproval
