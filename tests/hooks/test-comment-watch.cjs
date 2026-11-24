@@ -367,12 +367,29 @@ function choiceFixture(t) {
   return { ...f, rounds, comment };
 }
 
-test('comments on an open choice round stay silent until the round is submitted', (t) => {
+test('open round group and board comments notify immediately, and submit still sends its summary', (t) => {
   const f = choiceFixture(t);
   f.rounds('open');
   const poll = watch(f.project);
   assert.deepEqual(poll(), []);
-  f.save('artboard/pick', [f.comment('t1', 1, 'q1-a')]);
+  const board = f.comment('t1', 1, 'q1-a');
+  const group = f.comment('t2', 2, undefined);
+  group.anchor.group = 'q1';
+  f.save('artboard/pick', [board]);
+  assert.deepEqual(
+    poll().map((event) => event.type),
+    ['anjian-comments'],
+  );
+  f.save('artboard/pick', [board, group]);
+  assert.deepEqual(
+    poll().map((event) => event.type),
+    ['anjian-comments'],
+  );
+  assert.deepEqual(poll(), []);
+  const pick = f.comment('pick', 3, undefined);
+  pick.anchor.group = 'q1';
+  pick.anchor.choice = 'q1-a';
+  f.save('artboard/pick', [board, group, pick]);
   assert.deepEqual(poll(), []);
   const summary = {
     choices: [{ group: 'q1', label: 'Layout', answer: 'Full width' }],
