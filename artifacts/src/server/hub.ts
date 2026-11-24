@@ -680,6 +680,32 @@ export async function startHub(options: HubOptions): Promise<Hub> {
           },
           available: (project) =>
             !closing && registered(project) && available(project) && !suspension.wait(project),
+          createDocument: (project, prompt, guard) =>
+            writeQuota(project, (prepare) =>
+              withProjectMutation(project, async () => {
+                const admit = await prepare();
+                if (!guard()) throw new Error('Project access changed');
+                const slug = `codex-${crypto.randomUUID()}`;
+                const text = prompt
+                  // eslint-disable-next-line no-control-regex -- XML 1.0 forbids these code points.
+                  .replaceAll(/[\u0000-\u0008\v\f\u000E-\u001F\uFFFE\uFFFF]/g, '\uFFFD')
+                  .replaceAll('&', '&amp;')
+                  .replaceAll('<', '&lt;')
+                  .replaceAll('>', '&gt;');
+                const lines = text.split(/\r?\n/);
+                const blocks = lines.map((line) => `<p>${line}</p>`).join('');
+                const xml = `<doc><h1>Codex</h1>${blocks}</doc>`;
+                writeRemoteArtifact(
+                  project,
+                  `document/${slug}`,
+                  { baseRevision: null, files: { 'doc.xml': Buffer.from(xml).toString('base64') } },
+                  admit,
+                );
+                index.rescan();
+                libraryChanged(project);
+                return artifactPath(artifactsRootOf(project), 'document', slug);
+              }),
+            ),
           readBody,
         })
       : null;

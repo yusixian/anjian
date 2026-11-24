@@ -147,6 +147,8 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "codexTasks": {
+    "createDocument": "Create a task document",
+    "openDocument": "Open task document",
     "recent": "Recent tasks",
     "running": "Running",
     "completed": "Completed",

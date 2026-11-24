@@ -8,6 +8,7 @@ type Options = {
   authorize: (req: IncomingMessage, url: URL) => boolean;
   project: (req: IncomingMessage, url: URL) => string | null;
   available: (project: string) => boolean;
+  createDocument: (project: string, prompt: string, guard: () => boolean) => Promise<string>;
   readBody: (req: IncomingMessage) => Promise<unknown>;
 };
 
@@ -64,11 +65,29 @@ export function createCodexTaskApi(options: Options) {
         return true;
       }
       if (
-        body.action === 'start' &&
+        (body.action === 'start' || body.action === 'start-document') &&
         typeof body.prompt === 'string' &&
         body.prompt.trim() &&
         body.prompt.length <= 16_000
       ) {
+        const prompt = body.prompt.trim();
+        const allowed = () =>
+          options.authorize(req, url) &&
+          options.available(project) &&
+          options.project(req, url) === project;
+        let documentUrl: string | undefined;
+        if (body.action === 'start-document') {
+          try {
+            documentUrl = await options.createDocument(project, prompt, allowed);
+          } catch {
+            sendJson(res, 409, { error: 'task_document_failed' });
+            return true;
+          }
+        }
+        if (!allowed()) {
+          sendJson(res, 409, { error: 'project_unavailable', documentUrl });
+          return true;
+        }
         try {
           let current = sessions.get(project);
           if (!current || current.closed) {
@@ -79,10 +98,10 @@ export function createCodexTaskApi(options: Options) {
             sessions.set(project, connection);
             current = connection;
           }
-          const threadId = await current.start(body.prompt.trim());
-          sendJson(res, 201, { threadId });
+          const threadId = await current.start(prompt, documentUrl);
+          sendJson(res, 201, { threadId, documentUrl });
         } catch {
-          sendJson(res, 502, { error: 'codex_start_failed' });
+          sendJson(res, 502, { error: 'codex_start_failed', documentUrl });
         }
         return true;
       }

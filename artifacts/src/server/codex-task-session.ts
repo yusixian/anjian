@@ -7,6 +7,7 @@ type RequestId = number | string;
 type Task = {
   threadId: string;
   title: string;
+  documentUrl?: string;
   status: 'running' | 'completed' | 'failed' | 'interrupted';
   output: string;
   plan: string;
@@ -205,7 +206,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     pendingQuestions: () =>
       [...questions.values()].filter(({ requestId }) => !replies.has(requestId)),
     tasks: () => Array.from(tasks.values()).reverse(),
-    async start(prompt: string) {
+    async start(prompt: string, documentUrl?: string) {
       await ready;
       const result = await call('thread/start', {
         cwd,
@@ -227,6 +228,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
       tasks.set(threadId, {
         threadId,
         title: prompt.slice(0, 160),
+        documentUrl,
         status: 'running',
         output: '',
         plan: '',
