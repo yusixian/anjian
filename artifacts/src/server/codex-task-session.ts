@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
 
 import WebSocket from 'ws';
@@ -67,15 +68,29 @@ type Transport = {
   close: () => void;
 };
 
-export type SharedCodexServer = { url: URL; token: string };
+export type SharedCodexServer = { url: URL; token: string } | { socketPath: string };
 
 function sharedTransport(config: SharedCodexServer): Transport {
-  const socket = new WebSocket(config.url, {
-    headers: { Authorization: `Bearer ${config.token}` },
+  const options = {
     followRedirects: false,
     handshakeTimeout: 10_000,
     maxPayload: 8 * 1024 * 1024,
-  });
+  };
+  let socket: WebSocket;
+  if ('socketPath' in config) {
+    const endpoint = statSync(config.socketPath);
+    if (!endpoint.isSocket() || endpoint.uid !== process.geteuid?.() || endpoint.mode & 0o022)
+      throw new Error('Codex App Server socket must be owner-controlled');
+    socket = new WebSocket('ws://localhost/', {
+      ...options,
+      createConnection: () => createConnection(config.socketPath),
+    });
+  } else {
+    socket = new WebSocket(config.url, {
+      ...options,
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+  }
   const ready = new Promise<void>((resolve, reject) => {
     socket.once('open', resolve);
     socket.once('error', reject);

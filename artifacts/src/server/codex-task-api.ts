@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isAbsolute } from 'node:path';
 
 import { isObject } from '../shared/comments';
 import { createCodexTaskSession, type SharedCodexServer } from './codex-task-session';
@@ -16,6 +17,14 @@ type Options = {
 function sharedServer(): SharedCodexServer | undefined {
   const address = process.env.ANJIAN_CODEX_SHARED_URL;
   const tokenFile = process.env.ANJIAN_CODEX_SHARED_TOKEN_FILE;
+  const socketPath = process.env.ANJIAN_CODEX_SHARED_SOCKET;
+  if (socketPath) {
+    if (address || tokenFile || !isAbsolute(socketPath) || process.platform === 'win32')
+      throw new Error(
+        'Configure one Codex App Server transport using an absolute Unix socket path',
+      );
+    return { socketPath };
+  }
   if (!address && !tokenFile) return undefined;
   const url = URL.parse(address ?? '');
   if (
