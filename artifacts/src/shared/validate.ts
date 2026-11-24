@@ -1,4 +1,4 @@
-import { groupFrame, intersects, noteRect } from './geometry';
+import { groupFrame, intersects, NAME_STRIP_H, noteRect } from './geometry';
 import { BOARD_TYPES, type BoardSpec, type CanvasSpec, isMediaBoard } from './types';
 
 const BOARD_NUMBERS = ['x', 'y', 'w', 'h'] as const;
@@ -73,7 +73,9 @@ export function structuralWarnings(raw: unknown): string[] {
   }
   if (warnings.length > 0) return warnings;
 
-  for (const [id, connection] of Object.entries((raw.connections ?? {}) as Record<string, unknown>)) {
+  for (const [id, connection] of Object.entries(
+    (raw.connections ?? {}) as Record<string, unknown>,
+  )) {
     if (
       !isObject(connection) ||
       typeof connection.from !== 'string' ||
@@ -195,6 +197,7 @@ export function validateCanvas(
   }
 
   const frames: [string, ReturnType<typeof groupFrame>][] = [];
+  const framedBoards = new Set<string>();
   for (const [id, group] of groups) {
     for (const member of group.boards) {
       if (!canvas.boards[member])
@@ -202,7 +205,11 @@ export function validateCanvas(
     }
     const memberPages = new Set(group.boards.map((m) => canvas.boards[m]?.page).filter(Boolean));
     if (memberPages.size > 1) warnings.push(`group "${id}" spans several pages`);
-    else frames.push([id, groupFrame(group, canvas.boards)]);
+    else {
+      const frame = groupFrame(group, canvas.boards);
+      frames.push([id, frame]);
+      if (frame) for (const member of group.boards) framedBoards.add(member);
+    }
   }
 
   for (let i = 0; i < frames.length; i++) {
@@ -224,6 +231,15 @@ export function validateCanvas(
       for (const [gid, frame] of frames) {
         if (frame && frame.page === note.page && intersects(rect, frame)) {
           warnings.push(`title "${id}" overlaps group "${gid}"`);
+        }
+      }
+      for (const [bid, board] of boards) {
+        if (
+          !framedBoards.has(bid) &&
+          board.page === note.page &&
+          intersects(rect, { ...board, y: board.y - NAME_STRIP_H, h: board.h + NAME_STRIP_H })
+        ) {
+          warnings.push(`title "${id}" overlaps board "${bid}"`);
         }
       }
     } else {
