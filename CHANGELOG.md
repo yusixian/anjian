@@ -1,5 +1,28 @@
 # anjian-workflow
 
+## 0.18.11
+
+### Patch Changes
+
+<!-- anjian:zh -->
+
+从作品页查看已接入 Codex 会话的文件改动补丁，并选择一次允许、拒绝改动或取消本轮。
+
+<!-- anjian:en -->
+
+Review a connected Codex session's file changes on the artifact page and approve them once, decline them, or cancel the turn.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+从使用嵌入式 JavaScript 运行时的宿主启动案间时，改用路径中的独立 Node，避免再次启动宿主。
+
+<!-- anjian:en -->
+
+Launching Anjian from a host with an embedded JavaScript runtime now uses standalone Node on PATH, preventing the host from relaunching itself.
+
+<!-- anjian:end -->
+
 ## 0.18.10
 
 ### Patch Changes
