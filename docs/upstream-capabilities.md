@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-24 核对 Ryugi 正式版 `v1.108.5`（`4b20d0d`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.5) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.108.6`（`92b2621`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.6) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -122,8 +122,13 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 在 `<ref type="document">` 中填写 `block`，按目标文档和顶层块的稳定标识跳转。同文档引用支持浏览器返回。跨文档时桌面用只读侧栏，窄屏用完整文档。目标块缺失时，案间提示并打开有权查看的文档。公开分享仍需明确选择另行公开的目标快照。[实现与验收 #213](https://github.com/yusixian/anjian/issues/213) · [编写示例](../skills/artifacts/document.md)
 
+## 分镜末帧
+
+分镜导出时，视频片段超出素材的部分保留最后一帧，原音轨自然结束。700 毫秒素材的 1.5 秒成片在桌面和窄屏 Chrome 均验证了末帧。[渲染回归](../artifacts/test/storyboard-render.test.ts) · [分镜用法](../skills/artifacts/storyboard.md)
+
 ## 待验证能力
 
+- [#219](https://github.com/yusixian/anjian/issues/219) 画板折行标题、跨次打开快照以及实际板块加载后的缩放基准。
 - [#214](https://github.com/yusixian/anjian/issues/214) 分镜播放时钟、快捷键和旁白发音。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
 - [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。

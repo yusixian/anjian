@@ -6,10 +6,18 @@
 
 ## 当前对照版本
 
+2026-11-24 核对 Ryugi 正式版 `v1.108.6`，最新提交 `92b2621f098500e5fc1ff5dc572dd2312297bc9d`。相对 `v1.108.5` 新增 1 个公开提交，累计审计 232 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.6) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.5...v1.108.6)
+
+- **画板标题和缩放**。案间已有板块捕获和缩放状态管理。对照长标题、重开画板是否复用快照，以及基准是否在实际加载的画板上计时，见 [#219](https://github.com/yusixian/anjian/issues/219)。
+- **来源与授权**。公开差异只改动版本清单。功能对照使用正式说明，本批不引入新的上游实现。[许可证](https://github.com/Innei/ryugi/blob/v1.108.6/LICENSE)
+
+### v1.108.5 的能力差异
+
 2026-11-24 核对 Ryugi 正式版 `v1.108.5`，最新提交 `4b20d0d7fe98cfca4f18f3871e55595b99a542d1`。相对 `v1.108.2` 新增 1 个公开提交，累计审计 231 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.5) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.2...v1.108.5)
 
 - **选案批注**。案间让选案轮次开放时的普通批注立即通知已订阅作品的本地会话。选项点按保持安静，明确提交仍发送现有的一条选案摘要。同一轮的批注和提交若在一次扫描中到达，由提交通知引导 Agent 读取线程。
 - **文档引用与分镜**。案间独立实现文档块引用，支持同文档跳转、跨文档只读预览、窄屏定位及缺失回退，沿用项目访问校验。[文档块 #213](https://github.com/yusixian/anjian/issues/213) · [分镜播放与旁白 #214](https://github.com/yusixian/anjian/issues/214)
+- **分镜末帧**。案间导出可延长短视频素材的末帧，音频在实际音轨结束时停止。浏览器和 FFmpeg 回归覆盖颜色、画面时长、静音和末尾裁切。[分镜 #214](https://github.com/yusixian/anjian/issues/214)
 - **来源与授权**。公开提交只改动版本清单，许可证文件未变。案间依据正式说明核对公开行为，本批使用案间现有监听器独立实现。官方云的登录和发布行为在案间产品范围之外。[许可证](https://github.com/Innei/ryugi/blob/v1.108.5/LICENSE)
 
 ### v1.108.2 的能力差异
