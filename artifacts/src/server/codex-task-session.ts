@@ -74,6 +74,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
   >();
   const threads = new Set<string>();
   const questions = new Map<RequestId, PendingQuestion>();
+  const replies = new Map<RequestId, (status: boolean) => void>();
   let closed = false;
   let sequence = 0;
 
@@ -86,6 +87,8 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     calls.clear();
     threads.clear();
     questions.clear();
+    for (const finish of replies.values()) finish(false);
+    replies.clear();
     changed();
   }
 
@@ -134,14 +137,19 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
       if (
         questions.get(params.requestId)?.threadId === threadId &&
         questions.delete(params.requestId)
-      )
+      ) {
+        replies.get(params.requestId)?.(true);
         changed();
+      }
       return;
     }
     if (message.method === 'turn/completed' && threads.delete(threadId)) {
       let removed = false;
       for (const [id, pending] of questions) {
-        if (pending.threadId === threadId) removed = questions.delete(id) || removed;
+        if (pending.threadId === threadId) {
+          removed = questions.delete(id) || removed;
+          replies.get(id)?.(false);
+        }
       }
       if (removed) changed();
       return;
@@ -170,7 +178,8 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     get closed() {
       return closed;
     },
-    pendingQuestions: () => [...questions.values()],
+    pendingQuestions: () =>
+      [...questions.values()].filter(({ requestId }) => !replies.has(requestId)),
     async start(prompt: string) {
       await ready;
       const result = await call('thread/start', {
@@ -202,22 +211,28 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
       }
       return threadId;
     },
-    answer(threadId: string, id: RequestId, answers: Record<string, string>) {
+    async answer(threadId: string, id: RequestId, answers: Record<string, string>) {
       const pending = questions.get(id);
-      if (!pending || pending.threadId !== threadId) return false;
+      if (!pending || pending.threadId !== threadId || replies.has(id)) return false;
       if (pending.questions.some(({ id }) => !Object.hasOwn(answers, id) || !answers[id]?.trim()))
         return false;
-      send({
-        id,
-        result: {
-          answers: Object.fromEntries(
-            pending.questions.map(({ id }) => [id, { answers: [answers[id]] }]),
-          ),
-        },
-      });
-      questions.delete(id);
-      changed();
-      return true;
+      const timer = setTimeout(close, 15_000);
+      try {
+        return await new Promise<boolean>((resolve) => {
+          replies.set(id, resolve);
+          send({
+            id,
+            result: {
+              answers: Object.fromEntries(
+                pending.questions.map(({ id }) => [id, { answers: [answers[id]] }]),
+              ),
+            },
+          });
+        });
+      } finally {
+        clearTimeout(timer);
+        replies.delete(id);
+      }
     },
   };
 }

@@ -97,7 +97,7 @@ export function createCodexTaskApi(options: Options) {
           entries.every(([, value]) => typeof value === 'string' && value.length <= 16_000)
         ) {
           try {
-            const sent = sessions
+            const sent = await sessions
               .get(project)
               ?.answer(
                 body.threadId,

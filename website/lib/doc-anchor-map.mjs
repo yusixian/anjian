@@ -26,6 +26,10 @@ export const docAnchorMap = {
       en: 'send-a-document-answer-to-a-local-agent',
     },
     handover: { zh: '换一个-agent-接手', en: 'hand-over-to-another-agent' },
+    codexTasks: {
+      zh: '从作品页启动-codex-规划任务',
+      en: 'start-a-codex-planning-task-from-an-artifact',
+    },
   },
   'remote-cli': {
     install: { zh: '安装与授权', en: 'install-and-authorize' },
