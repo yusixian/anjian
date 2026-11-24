@@ -112,7 +112,13 @@ export const BOARD_LABEL_RULE: LabelRule = {
   hideBelow: 0.11,
   cap: true,
 };
-const TITLE_RULE: Omit<LabelRule, 'base'> = { follow: 1, min: 24, hideBelow: 0, cap: false };
+export const TITLE_MIN_SCREEN_SIZE = 24;
+const TITLE_RULE: Omit<LabelRule, 'base'> = {
+  follow: 1,
+  min: TITLE_MIN_SCREEN_SIZE,
+  hideBelow: 0,
+  cap: false,
+};
 
 export function labelSize(rule: LabelRule, k: number) {
   if (k < rule.hideBelow) return null;

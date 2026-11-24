@@ -99,6 +99,7 @@ export function usePanZoom(tool: Tool) {
     if (el) {
       el.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
       el.style.setProperty('--zoom', String(k));
+      if (gesture.current === undefined) el.style.setProperty('--settled-zoom', String(k));
     }
     const shift = overlayShift(rendered.current, current.current);
     const transform =
@@ -142,11 +143,12 @@ export function usePanZoom(tool: Tool) {
     clearTimeout(gesture.current);
     gesture.current = setTimeout(() => {
       gesture.current = undefined;
+      writeWorld();
       setWillChange('');
       setGesturing(false);
       setViewState(current.current);
     }, GESTURE_SETTLE_MS);
-  }, [setWillChange]);
+  }, [setWillChange, writeWorld]);
   const showFrame = useCallback(
     (next: View) => {
       current.current = next;

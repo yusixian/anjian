@@ -15,7 +15,7 @@ import { type BoardSpec, type CanvasSpec, isMediaBoard, type NoteSpec } from '..
 import type { Inspector } from '../hooks/useInspector';
 import type { BoardPhase } from '../lib/board-lifecycle';
 import { boardReady, boardSrc, canPlay } from '../lib/play';
-import { titleExpansionLimit, titleScale, type View } from '../lib/view';
+import { TITLE_MIN_SCREEN_SIZE, titleExpansionLimit, titleScale, type View } from '../lib/view';
 import { color } from '../tokens.stylex';
 import { ArtboardMoveHandle, type ArtboardPositionEditor } from './ArtboardMoveHandle';
 import { ArtboardObjectButton, type ArtboardObjectPicker } from './ArtboardObjectButton';
@@ -328,6 +328,12 @@ function CanvasTitle({
     [note, size, boards],
   );
   const fontSize = note.size ?? DEFAULT_TITLE_SIZE;
+  const fallback = titleScale(fontSize, zoom) * zoom;
+  const target = `max(var(--settled-zoom, ${fallback}), ${TITLE_MIN_SCREEN_SIZE / fontSize})`;
+  const settled =
+    limit === Infinity ? target : `min(${target}, calc(${limit} * var(--settled-zoom, ${zoom})))`;
+  const preferred = `calc(${settled} / var(--zoom, ${zoom}))`;
+  const scale = limit === Infinity ? preferred : `min(${limit}, ${preferred})`;
   return (
     <h2
       ref={ref}
@@ -339,7 +345,7 @@ function CanvasTitle({
         whiteSpace: note.w === undefined ? 'nowrap' : 'normal',
         fontSize,
         lineHeight: TITLE_LINE_HEIGHT,
-        transform: `scale(${Math.min(titleScale(fontSize, zoom), limit)})`,
+        transform: `scale(${scale})`,
       }}
     >
       {note.text}

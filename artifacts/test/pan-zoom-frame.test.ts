@@ -88,11 +88,16 @@ test('a gesture sets will-change and clears it once input settles', () => {
   flushFrame();
   expect(host.querySelector('output')!.dataset.gesturing).toBe('true');
   expect(world().style.willChange).toBe('transform');
+  expect(world().style.getPropertyValue('--settled-zoom')).toBe('0.5');
+  expect(Number(world().style.getPropertyValue('--zoom'))).toBeGreaterThan(0.5);
   act(() => vi.advanceTimersByTime(GESTURE_SETTLE_MS - 1));
   expect(host.querySelector('output')!.dataset.gesturing).toBe('true');
   act(() => vi.advanceTimersByTime(1));
   expect(host.querySelector('output')!.dataset.gesturing).toBe('false');
   expect(world().style.willChange).toBe('');
+  expect(world().style.getPropertyValue('--settled-zoom')).toBe(
+    world().style.getPropertyValue('--zoom'),
+  );
 });
 
 test('a pan moves the overlay with the world in the same frame and leaves the view state alone', () => {
