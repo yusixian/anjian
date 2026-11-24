@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 
 import type { StoryboardClip, StoryboardSnapshot } from '../src/shared/storyboard';
+import { Monitor } from '../src/viewer/storyboard/Monitor';
 import { moveClip, referencedMediaRevision } from '../src/viewer/storyboard/timeline-utils';
 import { useStoryboardDraft } from '../src/viewer/storyboard/useStoryboardDraft';
 
@@ -31,6 +32,44 @@ afterEach(() => {
   root = undefined;
   sessionStorage.clear();
   vi.unstubAllGlobals();
+});
+
+test('monitor arrow shortcuts respect the source trim and leave native controls alone', () => {
+  const host = document.createElement('div');
+  root = createRoot(host);
+  act(() =>
+    root!.render(
+      <Monitor
+        asset={{ path: 'assets/demo.mp4', kind: 'video', bytes: 10 }}
+        canRender={true}
+        clip={{ id: 'demo', asset: 'assets/demo.mp4', startMs: 0, trimMs: 1000, durationMs: 6000 }}
+        dirty={false}
+        duration={6000}
+        mediaRevision="media"
+        readOnly={false}
+        revision="first"
+        save={async () => null}
+        sourceVersion={0}
+        url={url}
+        onDuration={() => {}}
+      />,
+    ),
+  );
+  const video = host.querySelector('video')!;
+  const group = host.querySelector<HTMLElement>('[aria-keyshortcuts]')!;
+  Object.defineProperty(video, 'duration', { value: 8 });
+  video.currentTime = 1;
+  const arrow = (target: HTMLElement, key: string) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  expect(arrow(group, 'ArrowRight')).toBe(false);
+  expect(video.currentTime).toBe(6);
+  arrow(group, 'ArrowRight');
+  expect(video.currentTime).toBe(7);
+  expect(arrow(video, 'ArrowLeft')).toBe(true);
+  expect(video.currentTime).toBe(7);
+  arrow(group, 'ArrowLeft');
+  arrow(group, 'ArrowLeft');
+  expect(video.currentTime).toBe(1);
 });
 
 function Harness({ initial, readOnly }: { initial: StoryboardSnapshot; readOnly: boolean }) {
