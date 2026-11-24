@@ -62,4 +62,4 @@ function unreadReceiptCount(file, book, session) {
   }).length;
 }
 
-module.exports = { unreadReceiptCount, unreadThreadCount };
+module.exports = { isChoiceRecord, unreadReceiptCount, unreadThreadCount };

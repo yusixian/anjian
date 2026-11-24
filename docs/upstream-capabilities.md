@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-24 核对 Ryugi 正式版 `v1.108.2`（`7a3ee3c`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.2) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.108.5`（`4b20d0d`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.5) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -114,8 +114,14 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 - 项目内有多个会话时，Codex 批注和 HTML 选区按作品投递，Pi 监听状态按作品显示。真实 DeepSeek Web 的两个会话也能用 `/anjian watch` 分别订阅同一项目内的不同文档。[Codex 与 Pi 回归](https://github.com/yusixian/anjian/issues/55#issuecomment-7125296895) · [DeepSeek 双会话验收](https://github.com/yusixian/anjian/issues/55#issuecomment-7125506843)
 - 已接入 Codex App Server 的会话请求修改文件时，可在作品页查看补丁并决定一次允许、拒绝改动或取消本轮。桌面和窄屏 Chrome 已验证审批、取消与同名项目隔离。[浏览器验收 #209](https://github.com/yusixian/anjian/pull/209) · [中文用法](https://anjian.cosine.ren/zh/docs/updates/#01811) · [English guide](https://anjian.cosine.ren/en/docs/updates/#01811)
 
+## 选案轮次的即时反馈
+
+开放轮次内的板块或分组批注会即时通知已订阅作品的本地会话。选项点按保持安静，明确提交发送一条专用选案摘要。批注与提交若在同一次扫描内到达，Agent 可从提交通知读取该轮批注。[Hook 回归](../tests/hooks/test-comment-watch.cjs)
+
 ## 待验证能力
 
+- [#213](https://github.com/yusixian/anjian/issues/213) 引用并定位具体的文档块。
+- [#214](https://github.com/yusixian/anjian/issues/214) 分镜播放时钟、快捷键和旁白发音。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
 - [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互，继续验证直接从 ChatGPT 桌面应用打开的 Codex 会话。

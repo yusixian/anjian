@@ -352,9 +352,10 @@ A group with `"choose": true` is a question answered on the board: each
 board label gets a radio, the `recommend` board gets a tag, and a bar at the
 bottom submits the round. A round is the groups under one title note.
 
-- Comments on an open round stay quiet until it is submitted. The submit
-  arrives as a `anjian-choices` message (or they say done in the terminal):
-  run its command.
+- A comment on an open round notifies its listening session immediately.
+  Run the notification's command to read and respond to the comment.
+  Wait for the `anjian-choices` submission (or an explicit request in the
+  terminal) before drawing the next round.
 - `comment list --json` returns each choice group in `groups` (`kind:
 "choose"`, `choice`, `byRecommendation`, `threads`) and each round in
   `rounds` (`id`, `state`: `open`, `submitted` or `closed`). `choice` is the

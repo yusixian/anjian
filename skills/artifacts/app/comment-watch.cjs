@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { labelProcess } = require('./process-label.cjs');
-const { unreadReceiptCount, unreadThreadCount } = require('./comment-threads.cjs');
+const { isChoiceRecord, unreadReceiptCount, unreadThreadCount } = require('./comment-threads.cjs');
 const { beatSources, sessionOf, subscriptionSources } = require('./comment-subscriptions.cjs');
 const { createLocalCommentEvents } = require('./local-comment-events.cjs');
 const { createSelectionDispatch } = require('./selection-dispatch.cjs');
@@ -29,23 +29,24 @@ function ids(root, type) {
   }
 }
 
-function humanChanges(file, isDraft = () => false) {
+function humanChanges(file, inSubmittedRound = () => false) {
   if (!file || !Array.isArray(file.threads)) return null;
   const changes = new Map();
   for (const thread of file.threads) {
     if (!thread || typeof thread.id !== 'string' || !Array.isArray(thread.messages)) return null;
-    const draft = isDraft(thread);
+    if (isChoiceRecord(thread)) continue;
+    const coveredBySubmit = inSubmittedRound(thread);
     for (const message of thread.messages) {
       if (!message || typeof message.id !== 'string') return null;
       if (message.author === 'human' && thread.status !== 'resolved')
         changes.set(`${thread.id}/message/${message.id}`, {
-          draft,
+          coveredBySubmit,
           value: JSON.stringify([message.at, message.editedAt, message.text, message.deleted]),
         });
     }
     if ((thread.statusBy || 'human') === 'human' && thread.status !== 'resolved')
       changes.set(`${thread.id}/status`, {
-        draft,
+        coveredBySubmit,
         value: JSON.stringify([thread.status, thread.statusAt]),
       });
   }
@@ -115,10 +116,9 @@ function formatRoundSummary(event) {
   return SUMMARY_HEADING + JSON.stringify({ ...result, ...(truncated ? { truncated } : {}) });
 }
 
-function draftCheck(rounds) {
-  const open = rounds.filter((round) => round.state === 'open');
-  const boards = new Set(open.flatMap((round) => round.boards || []));
-  const groups = new Set(open.flatMap((round) => round.groups || []));
+function submittedRoundCheck(rounds) {
+  const boards = new Set(rounds.flatMap((round) => round.boards || []));
+  const groups = new Set(rounds.flatMap((round) => round.groups || []));
   if (!boards.size && !groups.size) return () => false;
   return (thread) => {
     const anchor = thread.anchor || {};
@@ -163,15 +163,15 @@ function createCommentWatch(project, key = cursorKey(process.env), session) {
         const states = new Map([...records].map(([id, { state }]) => [id, state]));
         // An empty list is a canvas being rewritten; keeping the last states stops a replayed submit.
         if (states.size > 0 || !known) roundStates.set(artifact, states);
-        const wasOpen = new Set(
-          [...(known ?? [])].filter(([, state]) => state === 'open').map(([id]) => id),
-        );
-        for (const [round, state] of states) {
+        const submittedRounds = [];
+        for (const [round, record] of records) {
+          const { state } = record;
           const before = known?.get(round);
           if (!known || before === undefined || before === state) continue;
           const submitted = state === 'submitted';
           if (!submitted && !(before === 'submitted' && state === 'open')) continue;
-          const summary = submitted ? records.get(round)?.summary : undefined;
+          if (submitted) submittedRounds.push(record);
+          const summary = submitted ? record.summary : undefined;
           events.push({
             type: 'anjian-choices',
             artifact,
@@ -185,15 +185,13 @@ function createCommentWatch(project, key = cursorKey(process.env), session) {
           });
         }
         const file = readJson(path.join(root, artifact, 'comments.json'));
-        const changes = humanChanges(
-          file,
-          draftCheck(rounds.map((r) => (wasOpen.has(r.id) ? { ...r, state: 'open' } : r))),
-        );
+        // The submit notification already tells the session to read these threads.
+        const changes = humanChanges(file, submittedRoundCheck(submittedRounds));
         if (!changes) continue; // A partial save is retried on the next poll.
         const previous = seen.get(artifact) || new Map();
         let changed = false;
-        for (const [event, { draft, value }] of changes) {
-          if (previous.get(event) !== value && !draft) changed = true;
+        for (const [event, { coveredBySubmit, value }] of changes) {
+          if (previous.get(event) !== value && !coveredBySubmit) changed = true;
           previous.set(event, value);
         }
         // Keep human status stamps when an agent changes the status, so its resolve cannot wake itself.
