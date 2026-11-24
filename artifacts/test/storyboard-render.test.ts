@@ -231,6 +231,88 @@ test('preserves the offset between a trimmed WebM and its embedded audio', async
   assert.ok(amplitude(audioAt(output, 0.25), 500) > 0.04);
 });
 
+test('holds the final video frame through a longer clip while audio ends naturally', async () => {
+  const video = path.join(root, 'short-picture.mp4');
+  const output = path.join(root, 'held-picture.mp4');
+  run('ffmpeg', [
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=red:s=160x90:r=30:d=0.4',
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=blue:s=160x90:r=30:d=0.3',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=500:sample_rate=48000:duration=0.7',
+    '-filter_complex',
+    '[0:v][1:v]concat=n=2:v=1:a=0[video]',
+    '-map',
+    '[video]',
+    '-map',
+    '2:a',
+    '-c:v',
+    'libx264',
+    '-c:a',
+    'aac',
+    video,
+  ]);
+  const storyboard: Storyboard = {
+    version: 1,
+    title: 'Hold the final frame',
+    tracks: [
+      {
+        id: 'video',
+        name: 'Video',
+        kind: 'video',
+        clips: [
+          { id: 'clip', asset: 'assets/short.mp4', startMs: 155, trimMs: 200, durationMs: 1500 },
+        ],
+      },
+    ],
+  };
+  const inputs = new Map([['assets/short.mp4', video]]);
+  await renderStoryboard(storyboard, inputs, output);
+  assert.deepEqual(pixel(output, 4), [0, 0, 0]);
+  assert.ok(pixel(output, 5)[0]! > 200, 'trimmed clip starts in the first color');
+  assert.ok(pixel(output, 20)[2]! > 200, 'the second color is shown before the source ends');
+  assert.deepEqual(
+    pixel(output, 49),
+    pixel(output, 20),
+    'the final color persists through the last timeline frame',
+  );
+  assert.ok(amplitude(audioAt(output, 0.3), 500) > 0.04, 'embedded audio plays during the source');
+  assert.ok(amplitude(audioAt(output, 1.1), 500) < 0.005, 'the held picture adds no audio');
+
+  const clip = storyboard.tracks[0]!.clips[0]!;
+  const nearEnd = path.join(root, 'held-from-tail.mp4');
+  await renderStoryboard(
+    {
+      ...storyboard,
+      tracks: [{ ...storyboard.tracks[0]!, clips: [{ ...clip, trimMs: 699 }] }],
+    },
+    inputs,
+    nearEnd,
+  );
+  assert.ok(
+    pixel(nearEnd, 5)[2]! > 200,
+    'a fractional cut near EOF can still sample the final frame',
+  );
+  await assert.rejects(
+    renderStoryboard(
+      {
+        ...storyboard,
+        tracks: [{ ...storyboard.tracks[0]!, clips: [{ ...clip, trimMs: 701 }] }],
+      },
+      inputs,
+      path.join(root, 'past-eof.mp4'),
+    ),
+    /exceeds the duration/,
+  );
+}, 15_000);
+
 test('rejects missing media, malformed media and source ranges that cannot play', async () => {
   const audio = path.join(root, 'short.wav');
   const broken = path.join(root, 'broken.wav');

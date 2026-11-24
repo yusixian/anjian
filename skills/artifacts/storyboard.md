@@ -43,6 +43,8 @@ Use integer milliseconds. `startMs` places the clip in the timeline. `trimMs` se
 
 Order video tracks from bottom to top. Clips on the same track can touch at a cut. Use different tracks for an overlap. Audio from video clips mixes with audio tracks. Black and silence fill intervals with no corresponding clip. Images hold for the clip's duration. The rendered MP4 uses 30 fps, so a cut between frames appears at the next frame. A storyboard supports up to eight tracks, 32 clips, five minutes, 256 media files, and 32 MiB of source files, with 24 MiB for a single media file.
 
+If a video clip runs longer than its source, the rendered picture holds the final frame through the end of the clip. Audio ends at the source's audio boundary. Set the trim start within the source.
+
 Keep the clip ID when moving, stretching, or changing its asset. Reread the latest timeline before writing. For a self-hosted project, pull first and push the complete timeline and its source assets so the revision check protects a newer edit.
 
 Set `project` to the project directory. Use Start to open the editor or receive the private link. Use Check to read source warnings.

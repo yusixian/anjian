@@ -172,7 +172,10 @@ export async function renderStoryboard(
     }
     if (media.kind !== 'still' && Number.isFinite(media.duration)) {
       const endMs = media.duration * 1000;
-      if (clip.trimMs >= endMs || clip.trimMs + clip.durationMs > endMs + 1) {
+      if (
+        clip.trimMs >= endMs ||
+        (media.kind === 'audio' && clip.trimMs + clip.durationMs > endMs + 1)
+      ) {
         throw new StoryboardRenderError(
           `Storyboard clip "${clip.id}" exceeds the duration of "${clip.asset}".`,
         );
@@ -194,10 +197,11 @@ export async function renderStoryboard(
       const sourceOffset = (clip.trimMs - clip.startMs) / 1000 + startFrame / FPS;
       const layer = `[clip${index}]`;
       const next = `[video${index}]`;
+      // Pad before sampling so a cut near EOF can still select the last frame.
       const timing =
         media.kind === 'still'
           ? `trim=end_frame=1,fps=${FPS},tpad=stop_mode=clone:stop=-1`
-          : `settb=AVTB,setpts=PTS-STARTPTS-${sourceOffset.toFixed(9)}/TB,fps=${FPS}:start_time=0:round=up`;
+          : `settb=AVTB,setpts=PTS-STARTPTS-${sourceOffset.toFixed(9)}/TB,tpad=stop_mode=clone:stop=-1,fps=${FPS}:start_time=0:round=up`;
       filters.push(
         `[${index}:${video.index}]${timing},trim=end_frame=${endFrame - startFrame},setpts=PTS-STARTPTS+${startFrame},` +
           `format=yuva420p,scale=w='max(2,trunc(min(${WIDTH},${HEIGHT}*dar)/2)*2)':h='max(2,trunc(min(${HEIGHT},${WIDTH}/dar)/2)*2)',setsar=1${layer}`,
