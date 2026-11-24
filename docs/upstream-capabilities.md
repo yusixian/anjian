@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-24 核对 Ryugi 正式版 `v1.108.6`（`92b2621`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.6) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.108.7`（`3bdef4c`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.7) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -122,14 +122,22 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 在 `<ref type="document">` 中填写 `block`，按目标文档和顶层块的稳定标识跳转。同文档引用支持浏览器返回。跨文档时桌面用只读侧栏，窄屏用完整文档。目标块缺失时，案间提示并打开有权查看的文档。公开分享仍需明确选择另行公开的目标快照。[实现与验收 #213](https://github.com/yusixian/anjian/issues/213) · [编写示例](../skills/artifacts/document.md)
 
-## 分镜末帧
+## 分镜播放与旁白
 
 分镜导出时，视频片段超出素材的部分保留最后一帧，原音轨自然结束。700 毫秒素材的 1.5 秒成片在桌面和窄屏 Chrome 均验证了末帧。[渲染回归](../artifacts/test/storyboard-render.test.ts) · [分镜用法](../skills/artifacts/storyboard.md)
 
+在监看器聚焦后，空格控制播放，左右键每次定位五秒。v0.18.17 监看器显示播放位置和总时长，视频缓冲时停在最近显示的帧。鼠标点击画面自动聚焦的修复已合入。导入 WAV 旁白并导出带语音的 MP4 已用正式包验证。[时钟验收 #228](https://github.com/yusixian/anjian/pull/228#issuecomment-7141459010) · [鼠标焦点 #230](https://github.com/yusixian/anjian/pull/230) · [旁白实测](https://github.com/yusixian/anjian/issues/214#issuecomment-7141384095) · [中文](https://anjian.cosine.ren/zh/docs/updates/#01817) · [English](https://anjian.cosine.ren/en/docs/updates/#01817)
+
+## 画板缩放、标题和快照
+
+缩放基准先确认真实板块内容已加载。v0.18.16 的 `anjian check` 会提示标题压到独立板块，移开标题后提示消失。正式包的桌面和窄屏 Chrome 均验证了长标题的换行以及缩远后的 24 px 字号下限。极低缩放时，字号下限可能让原本分开的标题压到板块。同次打开可捕获远景并卸载 iframe，重开会重新加载。[缩放基准 #225](https://github.com/yusixian/anjian/pull/225) · [标题与快照 #219](https://github.com/yusixian/anjian/issues/219#issuecomment-7141341701) · [低倍率标题复现](https://github.com/yusixian/anjian/issues/219#issuecomment-7141829371)
+
 ## 待验证能力
 
-- [#219](https://github.com/yusixian/anjian/issues/219) 画板折行标题、跨次打开快照以及实际板块加载后的缩放基准。
-- [#214](https://github.com/yusixian/anjian/issues/214) 分镜播放时钟、快捷键和旁白发音。
+- [#219](https://github.com/yusixian/anjian/issues/219) 画板远景标题避让、缩放流畅度与跨次打开的快照复用。
+- [#214](https://github.com/yusixian/anjian/issues/214) 分镜旁白生成、逐行发音提示和词表，以及触屏监看器交互。
+- [#231](https://github.com/yusixian/anjian/issues/231) 手机样机的开关、分段选择器和滑块。
+- [#232](https://github.com/yusixian/anjian/issues/232) 作品库文档缩略图的体积与可读性。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
 - [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互，继续验证直接从 ChatGPT 桌面应用打开的 Codex 会话。
