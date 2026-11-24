@@ -6,6 +6,15 @@
 
 ## 当前对照版本
 
+2026-11-24 核对 Ryugi 正式版 `v1.108.2`，最新提交 `7a3ee3c018b399886a141f772322c6d6caa56352`。相对 `v1.108.1` 新增 3 个公开提交，累计审计 230 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.2) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.1...v1.108.2)
+
+- **作品反馈隔离**。Codex 批注、HTML 选区和 Pi 监听状态通过定向回归。真实 DeepSeek Web 的两个同项目会话分别订阅两个文档，通知仅送达对应会话。无作品订阅时的项目级行为继续记录在 [#55](https://github.com/yusixian/anjian/issues/55#issuecomment-7125506843)。
+- **文档连接**。正式 v0.18.10 的同机 Hub 在桌面和窄屏 Chrome 保持两条连接空闲 65 秒，之后编辑即时同步，刷新后仍可读回。跨设备 HTTPS 留在 [#177](https://github.com/yusixian/anjian/issues/177)。[回归证据](https://github.com/yusixian/anjian/issues/55#issuecomment-7125469560)
+- **嵌入式宿主**。案间独立修复了 Pi、Antigravity、DeepSeek/Pi 反馈恢复和作品启动器的 Node 选择，编译的 Bun 宿主探针确认使用独立 Node。[实现 #210](https://github.com/yusixian/anjian/pull/210) · [宿主兼容 #165](https://github.com/yusixian/anjian/issues/165)
+- **来源与授权**。公开差异包括 Hook 订阅逻辑、宿主入口和测试，许可证文件未变。本批采用案间现有入口和独立实现。[许可证](https://github.com/Innei/ryugi/blob/v1.108.2/LICENSE)
+
+### v1.108.1 的能力差异
+
 2026-11-24 核对 Ryugi 正式版 `v1.108.1`，最新提交 `6f5b4cc70c0493f4848a8ec1fa090258389eff08`。相对 `v1.108.0` 新增 2 个公开提交，累计审计 227 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.1) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.0...v1.108.1)
 
 - **作品库刷新**。Ryugi 减少了跨项目列表的文件读取，并合并连续发布引发的刷新。案间已独立实现按项目缓存与可访问项目的合并变更流，两个项目各连续创建八份作品时分别只刷新一次。[实现 #183](https://github.com/yusixian/anjian/pull/183) · [浏览器证据 #180](https://github.com/yusixian/anjian/issues/180)
