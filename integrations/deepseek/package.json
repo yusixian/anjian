@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-anjian",
-  "version": "0.18.6",
+  "version": "0.18.7",
   "private": true,
   "description": "Subscribe a DeepSeek Harness session to local Anjian reviews",
   "license": "MIT",

@@ -1,5 +1,46 @@
 # anjian-workflow
 
+## 0.18.7
+
+### Patch Changes
+
+<!-- anjian:zh -->
+
+在作品页展开「Codex 任务」的最近任务，查看任务进度和该会话返回的规划结果。
+
+<!-- anjian:en -->
+
+Expand a recent task in the artifact's **Codex tasks** panel to see its status and the plan returned by that session.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+启用 Codex 任务后，Hub 所有者可以在作品页启动只读规划会话，并在桌面或手机上分别回复同一项目的多个待答会话。
+
+<!-- anjian:en -->
+
+With Codex tasks enabled, the Hub owner can start read-only planning sessions from an artifact and reply to multiple waiting sessions in that project from desktop or mobile.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+Hub 所有者可以从作品页接入同一项目中正在运行的 Codex 终端会话，并回复待答问题。需配置带令牌认证的共享 Codex App Server。
+
+<!-- anjian:en -->
+
+The Hub owner can connect an active Codex terminal session in the same project and answer pending questions from an artifact. This requires a shared Codex App Server with token authentication.
+
+<!-- anjian:end -->
+<!-- anjian:zh -->
+
+从作品页启动 Codex 规划任务时，可同时创建独立任务文档，保存首轮提示并从任务详情直接打开。
+
+<!-- anjian:en -->
+
+When starting a Codex planning task from an artifact, you can create a separate document with the first prompt and open it from the task details.
+
+<!-- anjian:end -->
+
 ## 0.18.6
 
 ### Patch Changes
