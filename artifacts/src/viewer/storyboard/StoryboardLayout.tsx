@@ -113,7 +113,7 @@ function Workbench({
       (!track && board.tracks.length >= MAX_STORYBOARD_TRACKS)
     ) {
       draft.setError(c.addFailed);
-      return;
+      return false;
     }
     const tracks = [...board.tracks];
     if (!track) {
@@ -127,7 +127,7 @@ function Workbench({
     );
     if (durationMs < 1) {
       draft.setError(c.addFailed);
-      return;
+      return false;
     }
     const clip: StoryboardClip = {
       id: 'c-' + mintArtifactId().toLowerCase(),
@@ -143,6 +143,7 @@ function Workbench({
     setSelection({ trackId: track.id, clipId: clip.id });
     pickSource(item);
     draft.setError('');
+    return true;
   }
   function moveTrack(delta: -1 | 1) {
     if (!selectedTrack) return;
@@ -271,9 +272,12 @@ function Workbench({
         <div className="sb-workbench" inert={draft.busy ? true : undefined}>
           <MediaBin
             assets={assets}
+            narration={board.narration}
+            narrationAvailable={base.narrationAvailable}
             selected={source}
             url={url}
             onAdd={addClip}
+            onNarrationChange={(narration) => setBoard({ ...board, narration })}
             onImport={(item) => {
               setImported((items) => [...items, item]);
               pickSource(item);

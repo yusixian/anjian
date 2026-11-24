@@ -17,7 +17,14 @@ import { selectionSendRoute } from './selection-send';
 import { slideDeckRoute } from './slides';
 import { slidesAgentCommentRoute, slidesCommentRoute } from './slides-comments';
 import { clientSocketRoute } from './sockets';
-import { storyboardAssetsRoute, storyboardJobRoute, storyboardRenderRoute, storyboardRoute, storyboardVideoRoute } from './storyboard';
+import {
+  storyboardAssetsRoute,
+  storyboardJobRoute,
+  storyboardNarrationRoute,
+  storyboardRenderRoute,
+  storyboardRoute,
+  storyboardVideoRoute,
+} from './storyboard';
 import { storyboardAgentCommentRoute, storyboardCommentRoute } from './storyboard-comments';
 import type { HttpRoute, UpgradeRoute } from './table';
 import { verificationRunsRoute } from './verification-runs';
@@ -46,6 +53,7 @@ export const HTTP_ROUTES: HttpRoute<ServerContext>[] = [
   artboardPositionsRoute,
   selectionSendRoute,
   storyboardAssetsRoute,
+  storyboardNarrationRoute,
   storyboardRenderRoute,
   storyboardJobRoute,
   storyboardVideoRoute,
