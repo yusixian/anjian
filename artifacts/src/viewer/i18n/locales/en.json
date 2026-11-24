@@ -147,6 +147,11 @@
     "canvasFailed": "The canvas could not be drawn: {{message}}"
   },
   "codexTasks": {
+    "recent": "Recent tasks",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "interrupted": "Interrupted",
     "title": "Codex tasks",
     "pending": "{{count}} awaiting a reply",
     "prompt": "First prompt",
