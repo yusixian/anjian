@@ -94,6 +94,7 @@ export function createCodexTaskApi(options: Options) {
         sendJson(res, 200, {
           sharedAvailable: Boolean(shared),
           approvals: session?.pendingApprovals() ?? [],
+          permissions: session?.pendingPermissions() ?? [],
           pending: session?.pendingQuestions() ?? [],
           tasks: url.searchParams.has('results') ? (session?.tasks() ?? []) : [],
         });
@@ -161,6 +162,28 @@ export function createCodexTaskApi(options: Options) {
           sendJson(res, 201, { threadId, documentUrl });
         } catch {
           sendJson(res, 502, { error: 'codex_start_failed', documentUrl });
+        }
+        return true;
+      }
+      if (
+        body.action === 'grant' &&
+        typeof body.threadId === 'string' &&
+        (typeof body.requestId === 'string' ||
+          (typeof body.requestId === 'number' && Number.isSafeInteger(body.requestId))) &&
+        Array.isArray(body.selected) &&
+        body.selected.every(Number.isSafeInteger)
+      ) {
+        try {
+          const sent = await sessions
+            .get(project)
+            ?.grant(body.threadId, body.requestId, body.selected);
+          sendJson(
+            res,
+            sent ? 200 : 409,
+            sent ? { sent: true } : { error: 'permission_request_unavailable' },
+          );
+        } catch {
+          sendJson(res, 502, { error: 'codex_permission_failed' });
         }
         return true;
       }

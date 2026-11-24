@@ -14,3 +14,13 @@ export type PendingCommandApproval = {
   reason?: string;
   decisions: CommandApprovalDecision[];
 };
+
+export type PermissionOption = { kind: 'network' } | { kind: 'read' | 'write'; path: string };
+
+export type PendingPermissionApproval = {
+  requestId: number | string;
+  threadId: string;
+  cwd?: string;
+  reason?: string;
+  options: PermissionOption[];
+};

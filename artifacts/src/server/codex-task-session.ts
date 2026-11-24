@@ -9,6 +9,8 @@ import {
   type CommandApprovalDecision,
   isCommandApprovalDecision,
   type PendingCommandApproval,
+  type PendingPermissionApproval,
+  type PermissionOption,
 } from '../shared/codex-approvals';
 import { isObject } from '../shared/comments';
 
@@ -64,6 +66,38 @@ function parseQuestions(input: unknown): PendingQuestion['questions'] | null {
     questions.push({ id: item.id, header: item.header, question: item.question, options });
   }
   return questions;
+}
+
+function permissionOptions(permissions: unknown): PermissionOption[] | null {
+  if (!isObject(permissions)) return null;
+  const options: PermissionOption[] = [];
+  if (isObject(permissions.network) && permissions.network.enabled === true)
+    options.push({ kind: 'network' });
+  const files = permissions.fileSystem;
+  if (!isObject(files)) return options;
+  if (Array.isArray(files.entries)) {
+    for (const entry of files.entries as unknown[]) {
+      if (
+        !isObject(entry) ||
+        (entry.access !== 'read' && entry.access !== 'write') ||
+        !isObject(entry.path) ||
+        entry.path.type !== 'path' ||
+        typeof entry.path.path !== 'string'
+      )
+        return null;
+      options.push({ kind: entry.access, path: entry.path.path });
+    }
+    return options;
+  }
+  for (const kind of ['read', 'write'] as const) {
+    const paths = files[kind];
+    if (!Array.isArray(paths)) continue;
+    for (const path of paths as unknown[]) {
+      if (typeof path !== 'string') return null;
+      options.push({ kind, path });
+    }
+  }
+  return options;
 }
 
 type Transport = {
@@ -165,6 +199,7 @@ export function createCodexTaskSession(
   const tasks = new Map<string, Task>();
   const questions = new Map<RequestId, PendingQuestion>();
   const approvals = new Map<RequestId, PendingCommandApproval>();
+  const permissions = new Map<RequestId, PendingPermissionApproval>();
   const replies = new Map<RequestId, (status: boolean) => void>();
   let closed = false;
   let sequence = 0;
@@ -178,6 +213,7 @@ export function createCodexTaskSession(
     tasks.clear();
     questions.clear();
     approvals.clear();
+    permissions.clear();
     for (const finish of replies.values()) finish(false);
     replies.clear();
     changed();
@@ -222,10 +258,14 @@ export function createCodexTaskSession(
     const params = isObject(message.params) ? message.params : {};
     const threadId = typeof params.threadId === 'string' ? params.threadId : '';
     if (message.method === 'serverRequest/resolved' && requestId(params.requestId)) {
-      const pending = questions.get(params.requestId) ?? approvals.get(params.requestId);
+      const pending =
+        questions.get(params.requestId) ??
+        approvals.get(params.requestId) ??
+        permissions.get(params.requestId);
       if (pending?.threadId === threadId) {
         questions.delete(params.requestId);
         approvals.delete(params.requestId);
+        permissions.delete(params.requestId);
         replies.get(params.requestId)?.(true);
         changed();
       }
@@ -279,6 +319,24 @@ export function createCodexTaskSession(
       }
       return;
     }
+    if (
+      shared &&
+      task?.status === 'running' &&
+      message.method === 'item/permissions/requestApproval'
+    ) {
+      const options = permissionOptions(params.permissions);
+      if (options?.length) {
+        permissions.set(message.id, {
+          requestId: message.id,
+          threadId,
+          options,
+          cwd: typeof params.cwd === 'string' ? params.cwd : undefined,
+          reason: typeof params.reason === 'string' ? params.reason : undefined,
+        });
+        changed();
+      }
+      return;
+    }
     const parsed =
       message.method === 'item/tool/requestUserInput' && task?.status === 'running'
         ? parseQuestions(params.questions)
@@ -293,7 +351,7 @@ export function createCodexTaskSession(
   }, close);
 
   function clearThreadRequests(threadId: string) {
-    for (const requests of [questions, approvals]) {
+    for (const requests of [questions, approvals, permissions]) {
       for (const [id, pending] of requests) {
         if (pending.threadId !== threadId) continue;
         requests.delete(id);
@@ -340,6 +398,41 @@ export function createCodexTaskSession(
       if (!pending || pending.threadId !== threadId || !pending.decisions.includes(decision))
         return false;
       return respond(id, { decision });
+    },
+    pendingPermissions: () =>
+      [...permissions.values()].filter(({ requestId }) => !replies.has(requestId)),
+    grant(threadId: string, id: RequestId, selected: number[]) {
+      const pending = permissions.get(id);
+      if (
+        !pending ||
+        pending.threadId !== threadId ||
+        selected.some(
+          (index) => !Number.isInteger(index) || index < 0 || index >= pending.options.length,
+        )
+      )
+        return false;
+      const allowed = [...new Set(selected)].map((index) => pending.options[index]!);
+      const read: string[] = [];
+      const write: string[] = [];
+      let network = false;
+      for (const option of allowed) {
+        if (option.kind === 'network') network = true;
+        else (option.kind === 'read' ? read : write).push(option.path);
+      }
+      return respond(id, {
+        permissions: {
+          ...(network ? { network: { enabled: true } } : {}),
+          ...(read.length || write.length
+            ? {
+                fileSystem: {
+                  read: read.length ? read : null,
+                  write: write.length ? write : null,
+                },
+              }
+            : {}),
+        },
+        scope: 'turn',
+      });
     },
     tasks: () => Array.from(tasks.values()).reverse(),
     async attach(threadId: string) {
