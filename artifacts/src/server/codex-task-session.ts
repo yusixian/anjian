@@ -313,6 +313,13 @@ export function createCodexTaskSession(
       return;
     }
     const task = tasks.get(threadId);
+    if (shared && task && message.method === 'turn/started') {
+      task.status = 'running';
+      task.plan = '';
+      task.output = '';
+      changed();
+      return;
+    }
     if (
       task?.status === 'running' &&
       message.method === 'item/completed' &&
