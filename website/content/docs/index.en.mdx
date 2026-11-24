@@ -1,37 +1,34 @@
 ---
-title: Meet Anjian
-description: Your own workspace for artboards, documents, HTML previews, and feedback grounded in the work.
+title: Quick Start
+description: What Anjian is, how to pick your setup path, and what you can do with it.
 ---
 
-Anjian brings artifacts and discussions together. You or your Agent write files in a project, and the browser displays the result. Leave comments at specific locations; the Agent reads your feedback, edits and uploads the artifact, then you return to check the result.
+**Anjian** is a visual workbench for you and your AI Agent.
 
-[Try the new review workflows](/docs/review-workflows) with a whiteboard, slide deck, or storyboard.
+Reviewing designs, specs, or prototypes inside a chat box gets messy fast. Anjian renders the **artboards, documents, and HTML pages** (plus whiteboards, slide decks, and storyboards) your Agent creates right in the browser—click the exact spot you want changed, leave a comment, and let your Agent ship the next version.
 
-## Start with your situation
+## Pick your starting point [#start-with-your-situation]
 
-| What you want to do                  | Start here                                   |
-| ------------------------------------ | -------------------------------------------- |
-| Use your own computer                | [Install and run locally](/docs/local)       |
-| Create your first artifact           | [Create an artifact](/docs/first-artifact)   |
-| Show your work to a friend           | [Public read-only sharing](/docs/sharing)    |
-| Let friends manage their own work    | [Invite friends](/docs/members)              |
-| Connect a local Agent to your server | [Devices and CLI](/docs/remote-cli)          |
-| Run a persistent service             | [Host your own instance](/docs/self-hosting) |
+| Your situation | First step |
+| --- | --- |
+| **You have an account or an invite link** | Click **Open Workbench** to sign in, then pair your local CLI in [Devices & CLI](/en/docs/remote-cli) |
+| **You want to try it locally first** | Follow [Local Setup](/en/docs/local) to grab a release package or build from source, then [Create Your First Artifact](/en/docs/first-artifact) |
+| **You want whiteboards, slides, storyboards & review docs** | Jump into [Review Workflows](/en/docs/review-workflows) |
+| **You want to run your own server** | Follow [Self-Hosting](/en/docs/self-hosting) to deploy with Docker or Dokploy and set up GitHub sign-in |
 
-## Features
+## What's included [#features]
 
-- **Artboards**: multi-page designs, pan and zoom, layer and property inspection, location-based comments, option selection, interactive prototypes, and adjustable parameters. [Artboard guide](/docs/artboards)
-- **Documents**: rich text, browser editing, text-anchored comments, code and diagrams, and history comparisons. [Document guide](/docs/documents)
-- **HTML**: preview web pages in an isolated environment and try the interactions and feedback controls provided by the artifact. [HTML guide](/docs/html)
-- **Comments and Agents**: read and reply to comments, track outstanding work, and explicitly sync changes back to artifacts. [Connect an Agent](/docs/agent)
-- **Artifact management**: filter by project and type, search, select multiple artifacts, and use the trash and restore features. [Manage artifacts](/docs/library)
-- **Sharing and members**: publish read-only snapshots or invite a specific GitHub account to an independent space. [Understand the difference](/docs/members)
-- **Storage**: shared quotas, personal or shared S3, verified migration, disk usage, and backups. [Manage storage](/docs/storage)
+- **[Artboards](/en/docs/artboards)**: Compare multi-page layouts side by side with pan/zoom, element inspection, pinned comments, option voting, and interactive prototypes.
+- **[Documents](/en/docs/documents)**: Rich-text specs with inline comments, direct copy edits in the browser, artifact references, Q&A/approvals, and revision diffs.
+- **[HTML Previews](/en/docs/html)**: Run full HTML pages in a sandboxed preview and send selection feedback straight to your Agent.
+- **[Whiteboards, Slides & Storyboards](/en/docs/review-workflows)**: Sketch diagrams, present decks with speaker notes, and render storyboard videos to MP4.
+- **[Connect an Agent](/en/docs/agent)**: Works with Claude Code, Codex, Pi, Antigravity, Copilot CLI, and custom hosts.
+- **[Public Sharing](/en/docs/sharing) & [Inviting Friends](/en/docs/members)**: Share a read-only link with anyone, or invite friends via GitHub to their own workspace.
+- **[Library](/en/docs/library) & [Storage](/en/docs/storage)**: Filter by project, bulk manage with a 30-day trash, and connect S3 storage.
 
 ## Where your data lives
 
-Local artifacts live in `.anjian/artifacts/` inside your chosen project. Self-hosted artifacts live on your server, with explicit CLI uploads and downloads between your computer and the server. Public shares contain a snapshot taken when published.
+- **Local mode**: Artifacts live in `.anjian/artifacts/` inside your project folder; server state lives in `~/.anjian/server/`.
+- **Self-hosted mode**: Everything stays on your own server and syncs explicitly via CLI `push` and `pull`.
 
-Anjian does not rely on Ryugi's official cloud, official accounts, subscriptions, or automatic downloads of upstream releases. It is an independently maintained fork of Ryugi. See [source and licensing](/docs/about).
-
-[See a real feedback workflow](/use-cases).
+Anjian has no cloud account, no subscription, and no upstream auto-updater. See [License & Credits](/en/docs/about) or check out a [real design-feedback walkthrough](/en/use-cases).

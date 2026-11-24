@@ -8,6 +8,7 @@ export const docAnchorMap = {
   },
   'local': {
     install: { zh: '安装与启动', en: 'install-and-start' },
+    source: { zh: '源码构建', en: 'build-from-source' },
     systemd: { zh: 'linux-用户服务', en: 'linux-user-service' },
     state: { zh: '作品和服务状态', en: 'artifacts-and-service-state' },
     devices: { zh: '让其他设备打开', en: 'open-from-another-device' },
@@ -33,6 +34,7 @@ export const docAnchorMap = {
   },
   'remote-cli': {
     install: { zh: '安装与授权', en: 'install-and-authorize' },
+    pair: { zh: '首次配对', en: 'pair-device' },
     link: { zh: '绑定作品项目', en: 'link-an-artifact-project' },
     transfer: { zh: '上传与拉取', en: 'upload-and-pull' },
     devices: { zh: '查看与撤销设备', en: 'review-and-revoke-devices' },

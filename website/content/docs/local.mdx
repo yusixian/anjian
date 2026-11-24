@@ -1,73 +1,80 @@
 ---
 title: 在本机使用
-description: 让作品留在自己的电脑里。完成构建后，在浏览器打开案间。
+description: 下载 macOS / Linux 安装包或从源码构建，5 分钟在自己电脑上跑起案间。
 ---
 
 <Environment />
 
-<Notice title="开始前">
-  请从案间 GitHub Releases 获取安装包，或从本仓库构建。下方源码构建命令需要 Git、Node.js 和 pnpm。
-</Notice>
+## 方式一：下载安装包（最快） [#安装与启动]
 
-## 安装与启动
+到 [GitHub Releases](https://github.com/yusixian/anjian/releases) 下载对应系统的归档和 `.sha256` 校验文件（包内已自带 Node.js，解压就能跑）：
 
-在 macOS 上，可以 [下载对应架构的安装包](https://github.com/yusixian/anjian/releases)，校验 SHA-256 并解压，再运行包内的 `anjian`。步骤见 [macOS 安装与离线更新](https://github.com/yusixian/anjian/blob/main/docs/install.md#macos-安装包)。
+- **macOS**：Apple 芯片选 `darwin-arm64`，Intel 选 `darwin-x64`，校验用 `shasum -a 256 -c <校验文件>`。
+- **Linux（glibc）**：`x86_64` 选 `linux-x64`，`aarch64` 选 `linux-arm64`，校验用 `sha256sum -c <校验文件>`。
 
-在使用 glibc 的 Linux 上，按 `uname -m` 选择 `linux-x64`（`x86_64`）或 `linux-arm64`（`aarch64`），下载同一发行页的归档和校验文件。用 `sha256sum -c 文件名.tar.gz.sha256` 校验，再解压并运行包内的 `anjian`。包内自带 Node.js。具体步骤见 [Linux 安装包](https://github.com/yusixian/anjian/blob/main/docs/install.md#linux-安装包)。
+解压后直接运行包内的 `./anjian start --project-dir /绝对路径/你的项目 --no-open --foreground`。详细步骤见 [安装说明](https://github.com/yusixian/anjian/blob/main/docs/install.md)。
+
+## 方式二：从源码构建 [#源码构建]
+
+需要 Git、Node.js（推荐 22）和 pnpm：
 
 <Steps>
-<Step title="获取源码并构建">
-在终端获取仓库，再进入应用目录安装锁定的依赖。
+<Step title="克隆并构建">
 
-```bash title="终端 · 获取源码"
+```bash title="终端"
 git clone https://github.com/yusixian/anjian.git
 cd anjian/artifacts
 pnpm install --frozen-lockfile
 pnpm build
 ```
 
+建议顺手配一个别名，后面文档里的 `anjian` 命令都能直接复制运行：
+
+```bash title="可选：写入 ~/.zshrc 或 ~/.bashrc"
+alias anjian="node /你的路径/anjian/artifacts/dist/cli.cjs"
+```
+
 </Step>
 <Step title="启动你的作品项目">
-将下方路径替换成实际作品项目目录，保持这个终端运行。
 
-```bash title="终端 · artifacts 目录"
-node dist/cli.cjs start \
-  --project-dir /绝对路径/作品项目 \
-  --no-open --foreground
+把路径换成你想存放作品的任意目录：
+
+```bash title="终端"
+anjian start --project-dir /绝对路径/你的项目 --no-open --foreground
 ```
 
 </Step>
 <Step title="打开浏览器">
-打开终端输出的完整 URL，不要自己拼接端口或丢掉访问参数。作品库最初为空时，可以继续[创建第一份作品](/docs/first-artifact)。
+
+复制终端输出的完整 URL（带访问参数）到浏览器打开。刚启动时作品库为空，下一步去 [创建第一份作品](/zh/docs/first-artifact)。
+
 </Step>
 </Steps>
 
-## Linux 用户服务
+## Linux 开机自启（systemd） [#linux-用户服务]
 
-在使用 systemd 的 Linux 桌面或终端上，解压安装包或完成源码构建后，可以让当前用户的 systemd 在登录时启动本机 Hub。安装和启动分开执行。若此前手工启动了同一个 Hub，先在合适的时候用 `anjian stop` 停止它。
-
-以下命令在解压目录中运行。从源码构建时，在 `artifacts/` 目录使用 `node dist/cli.cjs` 入口。
+在带 systemd 的 Linux 上，可以把本机 Hub 装成用户服务（先用 `anjian stop` 停掉手动跑的 Hub）：
 
 ```bash
-./anjian service install --project-dir /绝对路径/作品项目
+./anjian service install --project-dir /绝对路径/你的项目
 ./anjian service start
 ./anjian service status --json
 ```
 
-再执行 `./anjian start --project-dir /绝对路径/作品项目 --no-open` 可查看已运行 Hub 的链接。Hub 异常退出时，systemd 会尝试重启。要停止服务，执行 `service stop`；要停止并取消登录启动，执行 `service uninstall`。两者都保留作品及本机 Hub 状态。更换项目或移动案间安装目录时，先卸载原单元再重新安装。容器部署仍沿用[自托管指南](/docs/self-hosting)。
+停止用 `service stop`，取消开机自启用 `service uninstall`，都不会删除作品。
 
-## 作品和服务状态
+## 文件保存在哪？ [#作品和服务状态]
 
-作品位于项目的 `.anjian/artifacts/`；服务状态默认在 `~/.anjian/server/`。退出前台进程不会删除作品。下次使用同一个项目目录启动即可继续。
+- **作品文件**：`<你的项目>/.anjian/artifacts/`
+- **服务状态与日志**：`~/.anjian/server/`（含 `hub-events.jsonl` 启停记录）
 
-本机服务可以登记多个项目。停止共享服务会影响它服务的所有项目；停止前确认没有其他项目正在使用。
+按 `Ctrl+C` 退出不会删除任何作品。
 
-## 让其他设备打开
+## 想给手机或朋友看？ [#让其他设备打开]
 
-`localhost` 只代表打开链接的那台设备，不能直接发给另一台电脑或手机。朋友需要远程访问时，先完成[自托管](/docs/self-hosting)，再创建[公开分享](/docs/sharing)或[成员邀请](/docs/members)。服务需要持续运行并能从对方设备访问。
+`localhost` 只能在当前电脑打开。需要跨设备访问、发公开链接或邀请朋友时，请先按 [部署自己的实例](/zh/docs/self-hosting) 上线公网 HTTPS 服务。
 
 ## 更新案间
 
-备份作品与服务状态。安装包用户可下载新版和校验文件，离线解压后切换入口。源码用户可获取新版、重新构建并重启。
-
-新版安装包的 `anjian start` 会复用仍在响应的源码 Hub。如果要更改监听地址、端口或公开地址，请先在合适的时候运行 `anjian stop`，再用所需配置启动。CLI 启动或停止 Hub、以及从网页手动停止或重启时，可在 `~/.anjian/server/hub-events.jsonl` 查看保留、替换与停止的原因。自定义 `ANJIAN_SERVER_HOME` 时，文件位于该目录。
+- **安装包用户**：去 Releases 下载新版解压替换入口即可。
+- **源码用户**：`git pull` 后在 `artifacts/` 重跑 `pnpm install --frozen-lockfile && pnpm build` 再重启。

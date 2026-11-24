@@ -1,60 +1,31 @@
 ---
 title: Documents
-description: Read proposals, comment on selected text, edit words, and compare changes.
+description: Review specs, highlight text to comment, edit copy directly, and diff revisions.
 ---
 
-## Read and edit
+## Reading & direct edits [#read-and-edit]
 
-Documents render as rich text with headings, lists, tables, code, images, formulas, Mermaid diagrams, charts, steps, and embedded dynamic content. The artifact determines which content is present. The table of contents helps you navigate sections.
+Documents render rich text—headings, tables, code blocks, images, math, Mermaid diagrams, artifact references, and Q&A/approval cards—with a table of contents for fast navigation.
 
-Embedded HTML in private documents refreshes when its source file changes. An open document also loads the latest embedded content when the connection returns.
+Click **Edit text** to tweak wording right in the browser. If you see **Not synced** or **Storage quota exceeded**, keep the tab open until the connection or quota recovers.
 
-With permission, use the browser's text-editing action to change text. An Agent can also edit source files; the service manages saving and collaboration state. If you see an unsynced or insufficient-storage message, keep the page open, restore the connection or capacity, and wait for saving to finish.
+## Inline comments [#comment-on-text]
 
-## Comment on text
+Select text or a block to pin a thread in the right sidebar. If the passage is deleted later, the thread stays intact and marks the anchor stale.
 
-Select text or a paragraph and add a comment. Comments follow the relevant content, with conversations, replies, and status on the right. Deleting or substantially changing the original text can invalidate the anchor; use the surrounding context to identify the location.
+## Revision history [#compare-history]
 
-Ask an Agent to [read and reply to comments](/docs/agent), then review the changes before deciding whether to mark the comment resolved.
+Open **History** to compare any two points in time with **Changes only** filtering. History view is read-only; media files are not archived per revision.
 
-After restoring files or switching or merging a Git branch while the Hub is running, open **Recover comments** in the original document. If the workspace brought in human comments, review their authors and contents and choose **Merge these comments**.
+## Rerunning verification checks [#rerun-verification-checks]
 
-You can also choose **Import backup file** and select a `comments.json` exported from a backup or Git. Anjian merges the discussions and keeps their authors, timestamps, and anchors. You can import the same file again.
+Documents with verification reports let you inspect commands and raw output; when code changes, ask your Agent to rerun checks and refresh the report (see [Review Workflows](/en/docs/review-workflows)).
 
-## Compare history
+## File layout (for Agents) [#document-source-files]
 
-Open History and choose a point in time or comparison range to see additions, deletions, and changes. Show only changes or jump between differences. The document is read-only during comparison, and you can refresh the comparison when new content arrives.
+Documents live in `.anjian/artifacts/document/<id>/` (`doc.xml` LiteXML + `assets/`). Have your Agent read the bundled skill via CLI (setup in [Connect an Agent](/en/docs/agent)) and preserve existing block IDs when editing:
 
-Dynamic content does not run in history. Media resources do not have a complete historical archive, so an image at the same URL may have changed. History comparisons do not replace file backups.
-
-## Rerun verification checks
-
-On the machine that runs the local Hub, edit `verification-checks.json` in the Anjian server directory. The default is `~/.anjian/server`. If you set `ANJIAN_SERVER_HOME`, use that directory. Set the project to the absolute path from `pwd -P` and the document to the stable ID after `/document/` in its private link. Give each check an absolute executable path followed by its arguments. The Hub runs it from the project directory.
-
-```json
-{
-  "reports": [
-    {
-      "project": "/path/to/project",
-      "document": "A12345678901234567890",
-      "checks": [{ "id": "test", "title": "Project tests", "command": ["/path/to/pnpm", "test"] }]
-    }
-  ]
-}
+```bash
+anjian skills get artifacts
+anjian skills get artifacts --reference document.md
 ```
-
-Open that private document in the local Hub and choose **Verification checks** in the header, then **Run again**. Expand a recent result to see its output and SHA-256. The Hub keeps the run history in `verification-runs/` under its server directory and preserves the evidence already captured in the document. You can widen the results panel on desktop. On a phone it opens full width.
-
-For a self-hosted Hub, add `"allowSelfHosted": true` to each report entry you want to enable, then open the report on your site as its owner. The owner can run checks and view their history. With Docker, the configuration lives at `/data/server/verification-checks.json` inside the container. Specify the project and executable paths as seen from inside the container.
-
-Choose **Refresh report** at the top of the verification panel to load the latest document content, references and run history while keeping your edits on the page. Use **Run again** next to a check to start a new run.
-
-If the panel says verification checks are unavailable, close it to continue reading the report. Ask the Hub administrator to check the report configuration. Running checks on a self-hosted Hub requires Anjian v0.18.3 or later.
-
-## Document source files
-
-Documents use `.anjian/artifacts/document/<id>/doc.xml` (LiteXML) and `assets/`. Renaming a Markdown file to XML is not sufficient. Ask your Agent to run `anjian skills get artifacts --reference document.md` first.
-
-The server fills in block IDs. Read the file again before editing and preserve existing IDs so comments keep their anchors. Do not overwrite an entire document from an old copy or edit the server-managed `comments.json`.
-
-Here, `anjian` is the built CLI or your existing wrapper. See [Comments and Agents](/docs/agent) for the executable path and built-in Skill discovery.

@@ -1,36 +1,33 @@
 ---
-title: Create your first artifact
-description: Use a minimal HTML artifact to try saving, previewing, and checking your work.
+title: Create Your First Artifact
+description: Let your Agent generate one, or drop in a minimal HTML page to test the loop.
 ---
 
-## Create with an Agent
+## Option 1: Let your Agent create it (recommended) [#create-with-an-agent]
 
-Ask your Agent to run `anjian skills get artifacts` using the built CLI. Provide the absolute CLI path, artifact project directory, and whether you are running locally or remotely. See [Comments and Agents](/docs/agent) for configuration. For example:
+The CLI bundles the full Skill instructions. Copy this prompt to your Agent (replace the two paths; see [Connect an Agent](/en/docs/agent) for full host setup):
 
-```text title="Copy to your Agent · Local HTML example"
+```text title="Prompt for your Agent · Local HTML example"
 Create a minimal HTML artifact named hello in local mode.
-CLI: node /absolute/path/anjian/artifacts/dist/cli.cjs
-Artifact project: /absolute/path/to/artifact-project
-Reuse the project's configured CLI wrapper if one exists.
-First run these with that CLI:
+CLI: node /abs/path/to/anjian/artifacts/dist/cli.cjs
+Project: /abs/path/to/your-project
+First run with that CLI:
 skills get artifacts
 skills get artifacts --reference html.md
-Follow the guidance, create the artifact, run check, and give me its link.
+Follow the guide, run check, and send me the preview link.
 ```
 
-Replace both absolute paths before sending this prompt to your Agent. `anjian` is shorthand for that CLI, not an npm installation command. For a remote task, specify the server and project instead of local mode, read `skills get artifacts --reference remote.md`, then follow [Devices and CLI](/docs/remote-cli) to check and reuse the binding.
+For remote servers, also have it read `skills get artifacts --reference remote.md` and check its link in [Devices & CLI](/en/docs/remote-cli).
 
-Having the repository on disk does not mean hosts such as Claude or Codex automatically load its Skill. Explicitly read it or install it using the host's supported mechanism.
+## Option 2: Create a minimal HTML page manually [#create-html-manually]
 
-## Create HTML manually
+With your local server running ([Local Setup](/en/docs/local)), create:
 
-Start the service using the [local guide](/docs/local), then create this file in your artifact project:
-
-```text title="Artifact directory"
+```text
 .anjian/artifacts/html/hello/index.html
 ```
 
-Write the complete page below. Keep filenames and directory type fields in English.
+Paste in a simple page:
 
 ```html title="index.html"
 <!doctype html>
@@ -38,33 +35,29 @@ Write the complete page below. Keep filenames and directory type fields in Engli
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>My first artifact</title>
+    <title>My First Artifact</title>
   </head>
   <body>
     <h1>Hello, Anjian</h1>
-    <p>This page lives in my own project.</p>
+    <p>This page lives right inside your project.</p>
   </body>
 </html>
 ```
 
-Run the check with the built CLI, using the same project path as at startup:
+Run a check and open your library in the browser:
 
-```bash title="Terminal · Built CLI"
-node /absolute/path/anjian/artifacts/dist/cli.cjs check \
-  --project-dir /absolute/path/to/artifact-project \
-  --artifact html/hello --json
+```bash title="Terminal"
+anjian check --project-dir /abs/path/to/your-project --artifact html/hello --json
 ```
 
-Open the page from the artifact library and confirm its content is visible. No check warnings does not prove the page's scripts have run; test interactions in the browser.
+> Using a remote server? Run `anjian push --artifact html/hello` after saving—see [Devices & CLI](/en/docs/remote-cli).
 
-## Choose an artifact type
+## Choosing an artifact type [#choose-an-artifact-type]
 
-| Type | Source files | Good for |
+| Folder | Entry file | Best for |
 | --- | --- | --- |
-| `html` | `index.html` and assets | A page, component, or clickable prototype |
-| `document` | `doc.xml`, `assets/` | Proposals, explanations, reviews, and diagrams |
-| `artboard` | `canvas.json`, `pages/` | Multi-page designs, comparisons, and collections of states |
+| `html/<id>/` | `index.html` | Single pages, component demos, clickable prototypes |
+| `document/<id>/` | `doc.xml` + `assets/` | Specs, PRDs, review docs, diagrams |
+| `artboard/<id>/` | `canvas.json` + `pages/` | Multi-screen designs, side-by-side options, state galleries |
 
-Give each artifact its own directory. Keep resources inside it and use relative URLs. The server maintains comments, history, and `.state`; do not edit these manually.
-
-In remote mode, saving local files must be followed by `push`. See [Devices and CLI](/docs/remote-cli).
+Keep each artifact in its own folder with relative asset paths. Comments, history, and `.state` are managed by Anjian.

@@ -2,24 +2,60 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
 import { StorageMigration } from '../src/viewer/layouts/storage/StorageMigration';
 
-vi.mock('@stylexjs/stylex', async (original) => ({ ...(await original<object>()),
-  create: (value: unknown) => value, defineConsts: (value: unknown) => value, defineVars: (value: unknown) => value, props: () => ({}) }));
-vi.mock('@lobehub/ui/stylex/cssVar.stylex', () => ({ cssVar: new Proxy({}, { get: (_, key) => `var(--${String(key)})` }) }));
-vi.mock('@lobehub/ui', () => ({ Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button> }));
+vi.mock('@stylexjs/stylex', async (original) => ({
+  ...(await original<object>()),
+  create: (value: unknown) => value,
+  defineConsts: (value: unknown) => value,
+  defineVars: (value: unknown) => value,
+  props: () => ({}),
+}));
+vi.mock('@lobehub/ui/stylex/cssVar.stylex', () => ({
+  cssVar: new Proxy({}, { get: (_, key) => `var(--${String(key)})` }),
+}));
+vi.mock('@lobehub/ui', () => ({
+  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
+}));
 let host: HTMLElement;
 let root: Root;
-let jobs: Array<{ id: string; profileId: string; state: string; createdAt: number; files: number; bytes: number; verifiedFiles: number; running: boolean; error: string | null }>;
+let jobs: Array<{
+  id: string;
+  profileId: string;
+  state: string;
+  createdAt: number;
+  files: number;
+  bytes: number;
+  verifiedFiles: number;
+  running: boolean;
+  error: string | null;
+}>;
 const posts: Record<string, unknown>[] = [];
-const job = () => ({ id: 'job', profileId: 'profile', state: 'prepared', createdAt: 1, files: 2, bytes: 1024, verifiedFiles: 0, running: false, error: null });
+const job = () => ({
+  id: 'job',
+  profileId: 'profile',
+  state: 'prepared',
+  createdAt: 1,
+  files: 2,
+  bytes: 1024,
+  verifiedFiles: 0,
+  running: false,
+  error: null,
+});
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  jobs = []; posts.length = 0;
-  host = document.createElement('div'); document.body.append(host); root = createRoot(host);
+  jobs = [];
+  posts.length = 0;
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
   vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
-      const body = JSON.parse(String(init.body)); posts.push(body);
+      const body = JSON.parse(String(init.body));
+      posts.push(body);
       if (body.action === 'prepare') jobs = [job()];
       if (body.action === 'resume') jobs[0] = { ...jobs[0]!, running: true, state: 'copying' };
       return new Response(JSON.stringify({ job: jobs[0] }));
@@ -27,10 +63,32 @@ beforeEach(() => {
     return new Response(JSON.stringify({ jobs }));
   });
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.useRealTimers(); });
-const button = (label: string) => [...host.querySelectorAll('button')].find((item) => item.textContent === label)!;
-const click = async (label: string) => { await act(async () => { button(label).click(); }); };
-const render = async (enabled = true) => { await act(async () => root.render(<StorageMigration scope="personal" profileId="profile" enabled={enabled} disabled={false} onBusy={() => {}} />)); };
+afterEach(() => {
+  act(() => root.unmount());
+  host.remove();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+const button = (label: string) =>
+  [...host.querySelectorAll('button')].find((item) => item.textContent === label)!;
+const click = async (label: string) => {
+  await act(async () => {
+    button(label).click();
+  });
+};
+const render = async (enabled = true) => {
+  await act(async () =>
+    root.render(
+      <StorageMigration
+        disabled={false}
+        enabled={enabled}
+        profileId="profile"
+        scope="personal"
+        onBusy={() => {}}
+      />,
+    ),
+  );
+};
 
 test('requires tested settings, then prepares and copies without claiming storage activation', async () => {
   await render(false);
@@ -43,7 +101,7 @@ test('requires tested settings, then prepares and copies without claiming storag
   expect(host.textContent).toContain('Copying and verifying');
   jobs = [{ ...job(), state: 'verified', verifiedFiles: 2 }];
   await click('Refresh jobs');
-  expect(host.textContent).toContain('Files are checked again before activation');
+  expect(host.textContent).toContain('All files verified. Ready to activate S3.');
   expect(button('Activate S3').disabled).toBe(true);
   expect(button('Copy and verify')).toBeUndefined();
   expect(posts.every(({ action }) => action !== 'activate')).toBe(true);
@@ -60,12 +118,13 @@ test('interrupted jobs can resume but changed sources require a new preparation'
   expect(button('Prepare migration').disabled).toBe(false);
 });
 
-
 test('verified activation requires explicit confirmation and includes the retained-file choice', async () => {
   jobs = [{ ...job(), state: 'verified', verifiedFiles: 2 }];
   await render();
   expect(button('Activate S3').disabled).toBe(true);
-  await act(async () => { host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); });
+  await act(async () => {
+    host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+  });
   expect(button('Activate S3').disabled).toBe(false);
   await click('Activate S3');
   expect(posts).toEqual([{ action: 'activate', id: 'job', confirm: 'retain-original-files' }]);

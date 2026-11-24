@@ -1,13 +1,17 @@
 ---
-title: Devices and CLI
-description: Connect a local project to your remote workspace and sync artifacts over HTTPS.
+title: Devices & CLI
+description: Pair your local machine with a self-hosted Anjian server over HTTPS.
 ---
 
-## Install and authorize
+If you're using a self-hosted Anjian instance (like `https://anjian.cosine.ren`), your local Agent syncs artifacts and comments via CLI. You only need to pair each machine once.
 
-Build the CLI using the [local guide](/docs/local). Replace `anjian` below with `node /absolute/path/anjian/artifacts/dist/cli.cjs` if needed.
+> Below, `anjian` refers to your installed binary, wrapper, or `node /abs/path/to/anjian/artifacts/dist/cli.cjs` (see [Connect an Agent](/en/docs/agent)).
 
-```bash title="Terminal · Discover guidance and check the binding"
+## 1. Check skills and current binding first [#install-and-authorize]
+
+Always check whether this project is already linked before starting a new login:
+
+```bash title="Terminal · Discover skills and check status"
 anjian --help
 anjian skills list
 anjian skills get artifacts
@@ -15,54 +19,55 @@ anjian skills get artifacts --reference remote.md
 anjian remote status --json
 ```
 
-Run in the actual artifact project, or pass the same `--project-dir` throughout. Reuse the existing wrapper and client configuration. Help and Skill reads have no side effects; see [Comments and Agents](/docs/agent) for host integration. Check status before pairing: reuse a valid binding and continue to the artifact workflow below. Do not revoke and re-pair to expand access. If credentials exist but this directory is unlinked, proceed to linking.
+## 2. Pair your device [#pair-device]
 
-Only when authorization is missing, expired, or revoked, initiate pairing:
+Run this only when unauthorized, expired, or revoked:
 
-```bash title="Terminal · First pairing"
-anjian login https://anjian.example.com --name "My computer"
+```bash title="Terminal · Pair device"
+anjian login https://your-anjian-domain --name "My MacBook"
 ```
 
-An Agent can initiate `login`; keep the process running while the user approves in the browser. The browser opens a pairing page. Sign in, check the device name and pairing code, select all required projects that your account can grant, then approve the connection. If the terminal cannot open a browser, add `--no-open` and open the printed address manually.
+Your browser opens the pairing page (add `--no-open` on headless machines and open the printed URL manually):
 
-The protocol uses a device name and project list; it has no `--scope all` or administrator permission-level option.
+1. Sign in to the workbench if prompted.
+2. Verify the **device name** and **12-character pairing code**.
+3. Pick which projects this device can access and click **Approve connection**.
 
-Pairing codes last 10 minutes; device credentials last 90 days. Browser sign-in and device approval are separate steps.
+Pairing codes expire in 10 minutes; device credentials stay valid for 90 days.
 
-## Link an artifact project
+## 3. Link a local project [#link-an-artifact-project]
 
-Run in the actual local artifact project directory:
+Inside your local project directory:
 
-```bash title="Terminal · Link a project"
+```bash title="Terminal · Link project"
 anjian link
 anjian remote status --json
 ```
 
-If only one project is accessible, it is selected automatically. For multiple projects, follow the prompt with `link --project <project-ID>`. Use `--server` to choose among instances. A project ID is not a server filesystem path.
+If you have multiple server projects, pass `anjian link --project <project-id>`.
 
-## Upload and pull
+## 4. Push and pull artifacts [#upload-and-pull]
 
-```bash title="Terminal · Sync one artifact"
-anjian push --artifact document/plan
-anjian check --artifact document/plan
-anjian pull --artifact document/plan
+```bash title="Terminal"
+anjian push --artifact document/plan  # Upload local changes
+anjian check --artifact document/plan # Validate structure and assets
+anjian pull --artifact document/plan  # Download latest from server
 ```
 
-Source files remain in `.anjian/artifacts/<type>/<name>/`. Only the selected artifact's source and assets are transferred, excluding comments, history, dot directories, and keys. Symlinks are unsupported. Each transfer is limited to 1,000 files and 32 MiB.
+- **Source files only**: Syncs `.anjian/artifacts/<type>/<id>/` without comments, history, dotfiles, or symlinks. Limit: 1,000 files and 32 MiB.
+- **No silent overwrites**: `push` and `pull` both stop on conflict. To keep a local backup while pulling, run `anjian pull --artifact <id> --backup-local` and merge manually.
 
-If an artifact with the same name exists remotely, pull first to establish a revision baseline. Remote changes prevent an overwrite; ordinary `pull` also refuses to overwrite local changes. To retain a local copy before pulling, explicitly use `--backup-local`, then compare and merge manually. Sync does not automatically merge two versions.
+## 5. Manage or revoke devices [#review-and-revoke-devices]
 
-## Review and revoke devices
+Open **Devices & CLI** in the workbench sidebar to revoke any device at any time (existing artifacts and comments stay untouched). From the terminal:
 
-The workspace's Devices and CLI page shows device names, authorized projects, and expiration times, not whether devices are online. Revoking blocks subsequent requests; an operation in progress may already have completed. Artifacts and comments remain.
-
-```bash title="Terminal · Sign out and unlink"
-anjian logout https://anjian.example.com
+```bash title="Terminal"
+anjian logout https://your-anjian-domain
 anjian unlink
 ```
 
-`logout` revokes the server credential; `unlink` only removes the current directory's binding. Client credentials default to `~/.anjian/client/`. If you set `ANJIAN_CLIENT_HOME`, keep it consistent across commands.
+Credentials are stored in `~/.anjian/client/` by default (override with `ANJIAN_CLIENT_HOME`).
 
-## Connection problems
+## Common connection errors [#connection-problems]
 
-Public addresses must use HTTPS and match the origin advertised by the service. Pair again after expiration or revocation. For 403, check project authorization; for 429, wait before retrying. Do not disable authentication to fix connectivity.
+Public instances require `https://` matching the server's configured origin. Re-run `login` on 401, check project permissions on 403, and retry shortly on 429.

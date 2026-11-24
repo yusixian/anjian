@@ -6,9 +6,9 @@ import {
   FileText,
   Github,
   Laptop,
-  Link as LinkIcon,
   PanelsTopLeft,
-  Users,
+  Server,
+  Terminal,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -19,44 +19,44 @@ import { type Locale, localePath } from '@/lib/i18n';
 export function HomePage({ locale }: { locale: Locale }) {
   const paths = [
     {
-      Icon: Laptop,
-      title: locale === 'zh' ? '在自己的电脑上开始' : 'Start on your own computer',
+      Icon: Terminal,
+      title: locale === 'zh' ? '已有工作台或收到邀请' : 'Invited or have an account',
       description:
         locale === 'zh'
-          ? '构建并启动案间，创建第一份作品。'
-          : 'Build and start Anjian, then create your first artifact.',
-      label: locale === 'zh' ? '本机使用指南' : 'Local setup guide',
+          ? '登录工作台，三步把本地 CLI 和 Agent 接上来。'
+          : 'Sign in to the workbench and pair your local CLI & Agent in 3 steps.',
+      label: locale === 'zh' ? '连接设备与 Agent' : 'Connect CLI & Agent',
+      href: '/docs/remote-cli',
+    },
+    {
+      Icon: Laptop,
+      title: locale === 'zh' ? '先在自己电脑上用' : 'Try it on your machine',
+      description:
+        locale === 'zh'
+          ? '下载 macOS / Linux 安装包或源码构建，5 分钟建第一份作品。'
+          : 'Download the macOS/Linux package or build from source in 5 minutes.',
+      label: locale === 'zh' ? '本机安装与启动' : 'Local setup guide',
       href: '/docs/local',
     },
     {
-      Icon: LinkIcon,
-      title: locale === 'zh' ? '发个链接，让朋友看看' : 'Send a link to a friend',
+      Icon: Server,
+      title: locale === 'zh' ? '部署到自己的服务器' : 'Self-host on your server',
       description:
         locale === 'zh'
-          ? '创建公开快照，对方无需登录即可查看。'
-          : 'Publish a snapshot they can view without signing in.',
-      label: locale === 'zh' ? '公开分享' : 'Public sharing',
-      href: '/docs/sharing',
-    },
-    {
-      Icon: Users,
-      title: locale === 'zh' ? '给朋友一个独立空间' : 'Give friends their own space',
-      description:
-        locale === 'zh'
-          ? '通过 GitHub 邀请，让朋友管理自己的作品。'
-          : 'Invite friends through GitHub to manage their own artifacts.',
-      label: locale === 'zh' ? '邀请朋友' : 'Invite friends',
-      href: '/docs/members',
+          ? '用 Docker 或 Dokploy 上线，配置域名、GitHub 登录与好友空间。'
+          : 'Deploy with Docker or Dokploy, set up HTTPS, GitHub sign-in, and invites.',
+      label: locale === 'zh' ? '自托管指南' : 'Self-hosting guide',
+      href: '/docs/self-hosting',
     },
   ];
   const kinds = [
     {
       Icon: PanelsTopLeft,
-      title: locale === 'zh' ? '画板' : 'Artboards',
+      title: locale === 'zh' ? '画板与评审' : 'Artboards & Reviews',
       description:
         locale === 'zh'
-          ? '多个方案并排比较，批注落到具体元素。'
-          : 'Compare alternatives side by side and comment on specific elements.',
+          ? '多页设计并排对比、定点批注选方案，也支持白板、幻灯片和分镜。'
+          : 'Compare layouts side by side, pin comments, vote on options, plus whiteboards, slides & storyboards.',
       href: '/docs/artboards',
     },
     {
@@ -64,8 +64,8 @@ export function HomePage({ locale }: { locale: Locale }) {
       title: locale === 'zh' ? '文档' : 'Documents',
       description:
         locale === 'zh'
-          ? '选中文字批注，也能直接改字、对比历史。'
-          : 'Comment on selected text, edit words, and compare history.',
+          ? '划词评论、浏览器直接改字、对比历史，还能直接发起评审问答和批准。'
+          : 'Comment inline, edit copy directly, diff revisions, and collect answers or approvals.',
       href: '/docs/documents',
     },
     {
@@ -73,8 +73,8 @@ export function HomePage({ locale }: { locale: Locale }) {
       title: locale === 'zh' ? 'HTML 预览' : 'HTML previews',
       description:
         locale === 'zh'
-          ? '在隔离环境里试用页面交互，再提交反馈。'
-          : 'Try interactions in an isolated preview, then send feedback.',
+          ? '在隔离沙盒里直接点交互，选中元素把反馈发给 Agent。'
+          : 'Click through live prototypes inside a sandbox and send feedback to your Agent.',
       href: '/docs/html',
     },
   ];
@@ -85,31 +85,31 @@ export function HomePage({ locale }: { locale: Locale }) {
         <section className="hero">
           <div>
             <h1 className="display">
-              {locale === 'zh' ? '把想法摆出来，' : 'Put ideas on the canvas.'}
+              {locale === 'zh' ? '给你的 AI Agent 一个' : 'A visual workbench for'}
               <br />
-              {locale === 'zh' ? '让讨论有个' : 'Give feedback a '}
-              <em>{locale === 'zh' ? '落点。' : 'place.'}</em>
+              {locale === 'zh' ? '看得见的' : 'you and your '}
+              <em>{locale === 'zh' ? '作品工作台' : 'AI Agent'}</em>
             </h1>
             <p className="hero-copy">
               {locale === 'zh'
-                ? '画板里比较方案，文档上留下批注，HTML 中试用原型。和你的 Agent\n              一起，把反馈变成下一版作品。'
-                : 'Compare designs on artboards, comment on documents, and try HTML prototypes. Work with your Agent to turn feedback into the next version.'}
+                ? '画板对比设计、文档划词批注、HTML 实机预览。在具体位置指出哪里要改，让 Agent 读完直接迭代下一版。'
+                : 'Compare designs on artboards, comment right on documents, and test HTML live. Point to what needs changing and let your Agent ship the next version.'}
             </p>
             <div className="cta">
-              <Link className="btn btn-primary" href={localePath('/docs/local', locale)}>
-                {locale === 'zh' ? '开始本机使用' : 'Start locally'}
+              <Link className="btn btn-primary" href={localePath('/docs', locale)}>
+                {locale === 'zh' ? '5 分钟上手' : 'Quick start'}
                 <ArrowRight />
               </Link>
-              <Link className="btn btn-ghost" href={localePath('/docs', locale)}>
-                {locale === 'zh' ? '了解全部功能' : 'Explore the features'}
-              </Link>
+              <a className="btn btn-ghost" href="/library">
+                {locale === 'zh' ? '进入工作台' : 'Open Workbench'}
+              </a>
             </div>
           </div>
           <Workbench locale={locale} />
         </section>
         <section aria-labelledby="start-title" className="sec">
           <h2 className="sec-h" id="start-title">
-            {locale === 'zh' ? '你想从哪里开始？' : 'Where would you like to start?'}
+            {locale === 'zh' ? '从你的场景开始' : 'Pick your starting point'}
           </h2>
           <div className="grid3">
             {paths.map(({ Icon, title, description, label, href }) => (
@@ -132,7 +132,7 @@ export function HomePage({ locale }: { locale: Locale }) {
         </section>
         <section aria-labelledby="kinds-title" className="sec">
           <h2 className="sec-h" id="kinds-title">
-            {locale === 'zh' ? '三种作品，同一套批注' : 'Three formats. One feedback workflow.'}
+            {locale === 'zh' ? '三种作品，一套批注体验' : 'Three formats, one feedback loop'}
           </h2>
           <div className="grid3">
             {kinds.map(({ Icon, title, description, href }, index) => (
@@ -152,15 +152,18 @@ export function HomePage({ locale }: { locale: Locale }) {
         <footer className="foot">
           <span className="foot-l">
             <BrandLogo />
-            {locale === 'zh' ? '案间应用 · AGPL-3.0-only' : 'Anjian app · AGPL-3.0-only'}
+            {locale === 'zh' ? '案间 · AGPL-3.0 开源' : 'Anjian · Open source (AGPL-3.0)'}
           </span>
           <span className="foot-r">
+            <Link href={localePath('/docs/updates', locale)}>
+              {locale === 'zh' ? '更新记录' : 'Updates'}
+            </Link>
             <a href="https://github.com/yusixian/anjian">
               <Github />
               GitHub
             </a>
             <Link href={localePath('/docs/about', locale)}>
-              {locale === 'zh' ? '开源与许可' : 'Source and licensing'}
+              {locale === 'zh' ? '开源与许可' : 'License & Credits'}
               <ArrowUpRight />
             </Link>
           </span>

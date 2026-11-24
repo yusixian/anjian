@@ -1,36 +1,33 @@
 ---
 title: 创建第一份作品
-description: 先用一个最小 HTML 作品走通保存、预览与检查。
+description: 让 Agent 自动生成，或手动写一个最小 HTML 文件跑通预览与检查。
 ---
 
-## 用 Agent 创建
+## 方式一：让 Agent 帮你建（推荐） [#用-agent-创建]
 
-让你的 Agent 用构建后的 CLI 执行 `anjian skills get artifacts`，并告诉它 CLI 的绝对路径、作品项目目录和本机或远程运行方式。具体配置见[批注与 Agent](/docs/agent)。可以这样发起任务：
+CLI 内置了完整的 Skill 指引，直接把下面这段复制给你的 Agent（把两处路径换成你的实际路径，完整接入见 [批注与 Agent](/zh/docs/agent)）：
 
 ```text title="复制给 Agent · 本机 HTML 示例"
 请在本机模式创建一份名为 hello 的最小 HTML 作品。
 CLI：node /绝对路径/anjian/artifacts/dist/cli.cjs
-作品项目：/绝对路径/作品项目
-如果项目已配置 CLI 包装器，复用该入口。
+作品项目：/绝对路径/你的项目
 先用上述 CLI 执行：
 skills get artifacts
 skills get artifacts --reference html.md
-按指引创建作品，运行 check，并给我作品链接。
+按指引创建作品，运行 check，并把预览链接发给我。
 ```
 
-发送给 Agent 前，将两处绝对路径替换为实际路径。`anjian` 是该 CLI 的简写，不是 npm 安装命令。远程任务应将本机模式改为目标服务器与项目，继续读取 `skills get artifacts --reference remote.md`，再按[设备与 CLI](/docs/remote-cli)核验并复用绑定。
+如果是远程服务器，请让它再读 `skills get artifacts --reference remote.md`，并按 [设备与 CLI](/zh/docs/remote-cli) 核验绑定。
 
-仓库位于磁盘上，不代表 Claude、Codex 等宿主会自动加载它的 Skill；需要显式阅读或按宿主支持的方式安装。
+## 方式二：手动建一个最小 HTML 试试 [#手动创建-html]
 
-## 手动创建 HTML
+确认本机服务已启动（见 [在本机使用](/zh/docs/local)），在作品项目里新建：
 
-先按[本机使用](/docs/local)启动服务，再在你的作品项目内创建：
-
-```text title="作品目录"
+```text
 .anjian/artifacts/html/hello/index.html
 ```
 
-写入以下完整页面。文件名和目录中的类型字段保持英文。
+写入下面的内容：
 
 ```html title="index.html"
 <!doctype html>
@@ -47,24 +44,20 @@ skills get artifacts --reference html.md
 </html>
 ```
 
-用构建后的 CLI 运行检查；项目路径与启动时保持一致：
+跑一次检查，然后刷新浏览器作品库就能看到：
 
-```bash title="终端 · 构建后的 CLI"
-node /绝对路径/anjian/artifacts/dist/cli.cjs check \
-  --project-dir /绝对路径/作品项目 \
-  --artifact html/hello --json
+```bash title="终端"
+anjian check --project-dir /绝对路径/你的项目 --artifact html/hello --json
 ```
 
-在作品库打开页面，确认内容可见。没有检查警告不等于页面脚本已经运行；交互仍需在浏览器实际操作。
+> 远程模式下保存后记得执行 `anjian push --artifact html/hello`，详见 [设备与 CLI](/zh/docs/remote-cli)。
 
-## 选择作品类型
+## 三种作品怎么选？ [#选择作品类型]
 
-| 类型       | 源文件                  | 适合                           |
-| ---------- | ----------------------- | ------------------------------ |
-| `html`     | `index.html` 及资源     | 单个页面、组件、可点击原型     |
-| `document` | `doc.xml`、`assets/`    | 方案、说明、评审、图表         |
-| `artboard` | `canvas.json`、`pages/` | 多页面设计、方案对比、状态集合 |
+| 类型目录           | 入口文件                 | 适合放什么                         |
+| ------------------ | ------------------------ | ---------------------------------- |
+| `html/<名称>/`     | `index.html`             | 单个页面、组件演示、可点击原型     |
+| `document/<名称>/` | `doc.xml` + `assets/`    | 技术方案、PRD、评审文档、图表      |
+| `artboard/<名称>/` | `canvas.json` + `pages/` | 多页面设计稿、方案对比、多状态展示 |
 
-每个作品使用独立目录，资源放在作品内部并使用相对地址。评论、历史与 `.state` 由服务器维护，不要手工编辑它们。
-
-远程模式下，保存本地文件后还需要 `push`，详见[设备与 CLI](/docs/remote-cli)。
+每份作品单独一个目录，资源放同目录用相对路径引用；评论、历史和 `.state` 由案间维护，无需手改。
