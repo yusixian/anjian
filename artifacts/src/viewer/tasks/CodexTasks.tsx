@@ -7,6 +7,7 @@ import { useTranslation } from '../i18n';
 type Task = {
   threadId: string;
   title: string;
+  documentUrl?: string;
   status: 'running' | 'completed' | 'failed' | 'interrupted';
   output: string;
   plan: string;
@@ -78,6 +79,8 @@ export function CodexTasks({ artifact }: { artifact: string }) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
+  const [newDocument, setNewDocument] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const endpoint = '/api/hub/codex-tasks?' + new URLSearchParams({ artifact });
@@ -124,8 +127,10 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      const result = (await response.json()) as { error?: string; documentUrl?: string };
+      if (result.documentUrl) setDocumentUrl(result.documentUrl);
       if (!response.ok) {
-        setError(t(response.status === 409 ? 'codexTasks.expired' : failure));
+        setError(t(result.error === 'question_unavailable' ? 'codexTasks.expired' : failure));
         return false;
       }
       setNotice(t(success));
@@ -140,8 +145,15 @@ export function CodexTasks({ artifact }: { artifact: string }) {
     event.preventDefault();
     if (!prompt.trim()) return;
     setBusy(true);
+    setDocumentUrl('');
     try {
-      if (await post({ action: 'start', prompt }, 'codexTasks.started', 'codexTasks.startFailed'))
+      if (
+        await post(
+          { action: newDocument ? 'start-document' : 'start', prompt },
+          'codexTasks.started',
+          'codexTasks.startFailed',
+        )
+      )
         setPrompt('');
     } finally {
       setBusy(false);
@@ -174,11 +186,20 @@ export function CodexTasks({ artifact }: { artifact: string }) {
               onChange={(event) => setPrompt(event.target.value)}
             />
           </label>
+          <label>
+            <input
+              checked={newDocument}
+              type="checkbox"
+              onChange={(event) => setNewDocument(event.target.checked)}
+            />
+            {t('codexTasks.createDocument')}
+          </label>
           <button disabled={busy} type="submit">
             {t('codexTasks.start')}
           </button>
         </form>
         <div role="status">{notice}</div>
+        {documentUrl && <a href={documentUrl}>{t('codexTasks.openDocument')}</a>}
         {error && <p role="alert">{error}</p>}
         {pending.map((item) => (
           <QuestionForm
@@ -202,6 +223,7 @@ export function CodexTasks({ artifact }: { artifact: string }) {
                   {task.title} · {t('codexTasks.' + task.status)}
                 </summary>
                 <p>{t('codexTasks.session', { id: task.threadId.slice(-6) })}</p>
+                {task.documentUrl && <a href={task.documentUrl}>{t('codexTasks.openDocument')}</a>}
                 {(task.plan || task.output) && <pre>{task.plan || task.output}</pre>}
               </details>
             ))}
