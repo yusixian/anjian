@@ -200,6 +200,7 @@ export function Monitor({
     }
   }
   const videoUrl = job?.status === 'ready' ? jobUrl + '/video' : null;
+  const hasPlayableMedia = output ? !!videoUrl : !!asset && !isStill(asset.path);
   const busy = starting || running;
   const notice = error
     ? c.renderFailed + ' ' + error
@@ -222,7 +223,42 @@ export function Monitor({
           </button>
         </div>
       </header>
-      <div className="sb-screen">
+      <div
+        aria-keyshortcuts={hasPlayableMedia ? 'Space ArrowLeft ArrowRight' : undefined}
+        aria-label={hasPlayableMedia ? c.preview : undefined}
+        className="sb-screen"
+        role={hasPlayableMedia ? 'group' : undefined}
+        tabIndex={hasPlayableMedia ? 0 : undefined}
+        onKeyDown={(event) => {
+          if (
+            event.target !== event.currentTarget ||
+            event.defaultPrevented ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
+          )
+            return;
+          const { key } = event;
+          if (key !== ' ' && key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+          const media = event.currentTarget.querySelector<HTMLMediaElement>('video, audio');
+          if (!media || !Number.isFinite(media.duration)) return;
+          event.preventDefault();
+          if (key === ' ') {
+            if (event.repeat) return;
+            if (media.paused) void media.play().catch(() => {});
+            else media.pause();
+            return;
+          }
+          const start = output ? 0 : (clip?.trimMs ?? 0) / 1000;
+          const end =
+            output || !clip
+              ? media.duration
+              : Math.min(media.duration, start + clip.durationMs / 1000);
+          const offset = key === 'ArrowLeft' ? -5 : 5;
+          media.currentTime = Math.min(end, Math.max(start, media.currentTime + offset));
+        }}
+      >
         <div className="sb-frame">
           {output && videoUrl ? (
             <video
