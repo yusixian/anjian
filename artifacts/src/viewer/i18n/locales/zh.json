@@ -14,6 +14,16 @@
     "evidenceUpdated": "证据已更新",
     "stale": "锚点已失效"
   },
+  "artboardLayout": {
+    "edit": "调整布局",
+    "done": "完成布局调整",
+    "moveObject": "移动 {{title}}",
+    "instructions": "拖动移动把手，或聚焦把手后按方向键。",
+    "saving": "正在保存位置…",
+    "saved": "位置已保存",
+    "conflict": "此对象的位置已更新。请在当前布局中重试。",
+    "saveFailed": "位置未保存。请重试。"
+  },
   "bulk": {
     "toggleArtifact": "切换选择：{{title}}",
     "selectArtifact": "选择作品：{{title}}",
@@ -61,6 +71,12 @@
     "purge": "永久删除",
     "unconfirmed": "{{count}} 件作品的处理结果尚未确认；请刷新回收站后再操作。"
   },
+  "canvasObjects": {
+    "select": "选择画布对象",
+    "clear": "清除对象选区",
+    "selectObject": "选择 {{title}}",
+    "instructions": "点选卡片、标题或便签，Agent 可以读取选区。"
+  },
   "choices": {
     "agent": "Agent",
     "byRecommendation": "{{groups}} 按推荐",
@@ -79,22 +95,6 @@
     "submittedAt": "已提交 {{time}}",
     "unanswered": "{{groups}} 未选",
     "withdraw": "撤回"
-  },
-  "artboardLayout": {
-    "edit": "调整布局",
-    "done": "完成布局调整",
-    "moveObject": "移动 {{title}}",
-    "instructions": "拖动移动把手，或聚焦把手后按方向键。",
-    "saving": "正在保存位置…",
-    "saved": "位置已保存",
-    "conflict": "此对象的位置已更新。请在当前布局中重试。",
-    "saveFailed": "位置未保存。请重试。"
-  },
-  "canvasObjects": {
-    "select": "选择画布对象",
-    "clear": "清除对象选区",
-    "selectObject": "选择 {{title}}",
-    "instructions": "点选卡片、标题或便签，Agent 可以读取选区。"
   },
   "chrome": {
     "backToLibrary": "返回作品库",
@@ -140,6 +140,19 @@
     "close": "关闭",
     "waitingCanvas": "等 Agent 写入 canvas.json…",
     "canvasFailed": "画布画不出来：{{message}}"
+  },
+  "codexTasks": {
+    "title": "Codex 任务",
+    "pending": "{{count}} 个会话待回复",
+    "prompt": "首轮提示",
+    "start": "启动规划任务",
+    "session": "会话 {{id}}",
+    "reply": "发送回复",
+    "sent": "已发送回复。",
+    "started": "已启动规划任务。",
+    "expired": "这个问题已失效。",
+    "startFailed": "无法启动 Codex。请检查 Hub 主机后重试。",
+    "replyFailed": "无法发送回复，请重试。"
   },
   "comments": {
     "reviewRecordsRecovery": "此处恢复普通批注。验收与选项记录按画板当前证据管理。",
@@ -949,6 +962,25 @@
     "progress": "验收 {{passed}} / {{total}}",
     "nextPending": "下一个待验收的 group"
   },
+  "verification": {
+    "unavailable": "此报告的验收检查当前不可用。请让 Hub 管理员检查报告配置。如果 Hub 版本过旧，请升级后重试。",
+    "title": "验收检查",
+    "refreshReport": "刷新报告",
+    "run": "重跑",
+    "runNamed": "重跑 {{title}}",
+    "running": "运行中…",
+    "history": "最近结果",
+    "empty": "还没有运行记录。",
+    "close": "关闭",
+    "widen": "展开结果面板",
+    "narrow": "缩小结果面板",
+    "loading": "正在读取输出…",
+    "requestFailed": "无法完成请求，请重试。",
+    "writeFailed": "检查已结束，结果未能保存。",
+    "passed": "通过",
+    "failed": "失败",
+    "error": "运行异常"
+  },
   "video": {
     "play": "播放",
     "pause": "暂停",
@@ -998,24 +1030,5 @@
     "selected_other": "批注 {{count}} 个元素",
     "selectToComment": "选中元素后添加批注",
     "unsaved": "未保存"
-  },
-  "verification": {
-    "unavailable": "此报告的验收检查当前不可用。请让 Hub 管理员检查报告配置。如果 Hub 版本过旧，请升级后重试。",
-    "title": "验收检查",
-    "refreshReport": "刷新报告",
-    "run": "重跑",
-    "runNamed": "重跑 {{title}}",
-    "running": "运行中…",
-    "history": "最近结果",
-    "empty": "还没有运行记录。",
-    "close": "关闭",
-    "widen": "展开结果面板",
-    "narrow": "缩小结果面板",
-    "loading": "正在读取输出…",
-    "requestFailed": "无法完成请求，请重试。",
-    "writeFailed": "检查已结束，结果未能保存。",
-    "passed": "通过",
-    "failed": "失败",
-    "error": "运行异常"
   }
 }

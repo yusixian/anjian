@@ -30,6 +30,7 @@ import {
 import { listArtifacts } from './artifacts';
 import { routeBoardRequest } from './board-port';
 import { createBrowserAuth } from './browser-auth';
+import { createCodexTaskApi } from './codex-task-api';
 import { createContentAccess } from './content-access';
 import { readArtifactSource, titleOf } from './context';
 import { serveDocsSite } from './docs-site';
@@ -140,39 +141,54 @@ const DELETED_ARTIFACT_PATH = new RegExp(`^/(${ARTIFACT_TYPE_PATH})/([\\w-]+)/?$
 const ARTIFACT_MUTATION_PATH =
   /^\/api\/(?:(?:agent\/)?(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments|artboard\/[^/]+\/positions|document\/[^/]+\/update|(?:document|artboard|slides|storyboard|whiteboard)\/[^/]+\/comments\/(?:restore|recovery\/apply)|slides\/[^/]+|storyboard\/[^/]+(?:\/assets)?|whiteboard\/[^/]+(?:\/pages)?)$/;
 
-const ARTIFACT_CREATION = new Map<string, {
-  type: ArtifactType;
-  label: string;
-  prefix: string;
-  file: string;
-  maxTitle: number;
-  create: (title: string, language: unknown) => unknown;
-}>([
-  ['/api/hub/slides', {
-    type: 'slides',
-    label: 'Slide deck',
-    prefix: 'deck',
-    file: SLIDE_DECK_FILE,
-    maxTitle: MAX_SLIDE_TITLE,
-    create: (title) => defaultSlideDeck(title),
-  }],
-  ['/api/hub/storyboards', {
-    type: 'storyboard',
-    label: 'Storyboard',
-    prefix: 'storyboard',
-    file: STORYBOARD_FILE,
-    maxTitle: MAX_STORYBOARD_TITLE,
-    create: (title, language) =>
-      defaultStoryboard(title, language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined),
-  }],
-  ['/api/hub/whiteboards', {
-    type: 'whiteboard',
-    label: 'Whiteboard',
-    prefix: 'board',
-    file: WHITEBOARD_SCENE_FILE,
-    maxTitle: 120,
-    create: (title) => ({ ...emptyWhiteboardScene(), appState: { name: title } }),
-  }],
+const ARTIFACT_CREATION = new Map<
+  string,
+  {
+    type: ArtifactType;
+    label: string;
+    prefix: string;
+    file: string;
+    maxTitle: number;
+    create: (title: string, language: unknown) => unknown;
+  }
+>([
+  [
+    '/api/hub/slides',
+    {
+      type: 'slides',
+      label: 'Slide deck',
+      prefix: 'deck',
+      file: SLIDE_DECK_FILE,
+      maxTitle: MAX_SLIDE_TITLE,
+      create: (title) => defaultSlideDeck(title),
+    },
+  ],
+  [
+    '/api/hub/storyboards',
+    {
+      type: 'storyboard',
+      label: 'Storyboard',
+      prefix: 'storyboard',
+      file: STORYBOARD_FILE,
+      maxTitle: MAX_STORYBOARD_TITLE,
+      create: (title, language) =>
+        defaultStoryboard(
+          title,
+          language === 'en' ? { video: 'Video', audio: 'Audio' } : undefined,
+        ),
+    },
+  ],
+  [
+    '/api/hub/whiteboards',
+    {
+      type: 'whiteboard',
+      label: 'Whiteboard',
+      prefix: 'board',
+      file: WHITEBOARD_SCENE_FILE,
+      maxTitle: 120,
+      create: (title) => ({ ...emptyWhiteboardScene(), appState: { name: title } }),
+    },
+  ],
 ]);
 
 const realDir = (dir: string) => {
@@ -347,7 +363,10 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               localQuestionProject: loopback ? projectId(project) : undefined,
               libraryChanged: (sourceChanged) => {
                 const cached = librarySnapshots.get(project);
-                if (sourceChanged || (cached && cached.directoryStamp !== libraryDirectoryStamp(project)))
+                if (
+                  sourceChanged ||
+                  (cached && cached.directoryStamp !== libraryDirectoryStamp(project))
+                )
                   libraryChanged(project);
               },
               commentFileChanged: localCommentEvents
@@ -643,6 +662,27 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     authorized(req, new URL(req.url ?? '/', origin)) ? project : projectId(project);
   const resolveProject = (req: http.IncomingMessage, reference: string) =>
     visibleProjects(req).find((project) => projectReference(req, project) === reference) ?? null;
+  const codexTasks =
+    process.env.ANJIAN_CODEX_TASKS === '1'
+      ? createCodexTaskApi({
+          authorize: (req, url) =>
+            projectAccess.principal(req, url)?.role === 'owner' &&
+            originAllowed(policy, req.headers.origin) &&
+            navigationAllowed(req.headers['sec-fetch-site'] as string | undefined) &&
+            (req.method !== 'POST' ||
+              (!!req.headers.origin &&
+                req.headers['content-type']?.split(';')[0] === 'application/json')),
+          project: (req, url) => {
+            const artifact = url.searchParams.get('artifact');
+            if (artifact !== null) return projectForPath(artifact);
+            const project = url.searchParams.get('project');
+            return project ? resolveProject(req, project) : null;
+          },
+          available: (project) =>
+            !closing && registered(project) && available(project) && !suspension.wait(project),
+          readBody,
+        })
+      : null;
   const visibleArtifacts = (req: http.IncomingMessage) =>
     artifactList(new Set(visibleProjects(req)));
   const browserArtifacts = (req: http.IncomingMessage): HubArtifactList => {
@@ -769,6 +809,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               await mounted.quiesce(async () => {}, prepare);
               await mounted.close(prepare);
             }
+            codexTasks?.stop(real);
             mounts.delete(real);
             ready.delete(real);
           },
@@ -968,6 +1009,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
               }
               await mounted.close(prepare);
             }
+            codexTasks?.stop(project);
             mounts.delete(project);
             ready.delete(project);
           },
@@ -1138,9 +1180,12 @@ export async function startHub(options: HubOptions): Promise<Hub> {
     mount: mountOf,
     upload: writeQuota,
     resolveDocument: (dir, documentId) => {
-      const matches = index.list().filter(
-        (entry) => entry.project === dir && entry.type === 'document' && entry.address === documentId,
-      );
+      const matches = index
+        .list()
+        .filter(
+          (entry) =>
+            entry.project === dir && entry.type === 'document' && entry.address === documentId,
+        );
       return matches.length === 1 ? matches[0]!.id : undefined;
     },
     browserProject: (req, artifact) => {
@@ -1327,7 +1372,8 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         input.type === 'storyboard' ||
         typeof input.id !== 'string' ||
         (input.project !== undefined && typeof input.project !== 'string')
-      ) return null;
+      )
+        return null;
       const project =
         typeof input.project === 'string'
           ? resolveProject(req, input.project)
@@ -1370,6 +1416,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       if (await remoteAuth.handle(req, res, url)) return;
       if (await localQuestionDelivery?.(req, res, url)) return;
       if (await feedbackApi(req, res, url)) return;
+      if (await codexTasks?.handle(req, res, url)) return;
       if (await remoteApi(req, res, url)) return;
       if (/^\/api\/hub\/trash(?:\/(?:restore|purge))?$/.test(url.pathname)) {
         if (
@@ -1654,6 +1701,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
         }
         clearInterval(trashCleanup);
         libraryEvents.close();
+        codexTasks?.close();
         await verificationRuns.close();
         localCommentEvents?.close();
         remoteAuth.close();

@@ -139,3 +139,11 @@ The notification includes a read-only command. When the answer exceeds the messa
 Give the next Agent the artifact link, artifact ID, project directory, CLI entry point, Skill reading command, and precise editing scope. Have the previous Agent finish uploading first to avoid concurrent edits. A public share is for viewing and does not grant editing permission.
 
 [See the real workflow example](/use-cases).
+
+## Start a Codex planning task from an artifact
+
+Install and sign in to the Codex CLI on the Hub host. Make sure the Hub service account can find `codex` on its `PATH`. Start or restart the Hub with `ANJIAN_CODEX_TASKS=1`.
+
+Open an artifact as the Hub owner, expand **Codex tasks**, enter the first prompt, and start a planning task. Codex runs in the artifact's project directory with read-only access. Pending questions also appear on the other artifacts in the same project. On a phone, open the panel near the top of the artifact page. Answer each question, then select **Send reply**.
+
+This panel manages sessions created by Anjian. Open existing desktop sessions in Codex. Restarting the Hub clears questions from the previous connection.
