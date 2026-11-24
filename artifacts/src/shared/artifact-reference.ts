@@ -2,7 +2,7 @@ import { isArtifactAddress, isArtifactType } from './ids';
 import { ARTIFACT_TYPES, type ArtifactType } from './types';
 
 export interface ArtifactReference {
-  focus?: { kind: 'board' | 'group'; id: string };
+  focus?: { kind: 'board' | 'group' | 'block'; id: string };
   label?: string;
   reviewGroups?: string[];
   target: string;
@@ -39,16 +39,14 @@ export function validateArtifactReference(value: unknown): asserts value is Arti
   )
     throw new Error('<ref> label must contain 1–160 characters on one line');
   if (value.focus !== undefined) {
-    if (value.type !== 'artboard') throw new Error('<ref> focus is only supported for artboards');
     const { focus } = value;
-    if (
-      !isRecord(focus) ||
-      (focus.kind !== 'board' && focus.kind !== 'group') ||
-      typeof focus.id !== 'string' ||
-      !FOCUS_ID.test(focus.id) ||
-      /\s/.test(focus.id)
-    )
-      throw new Error('<ref> board or group must be a URL-safe ID of up to 128 characters');
+    if (!isRecord(focus) || typeof focus.id !== 'string' || !FOCUS_ID.test(focus.id))
+      throw new Error('<ref> focus must use a URL-safe ID of up to 128 characters');
+    if (!(
+      (value.type === 'artboard' && (focus.kind === 'board' || focus.kind === 'group')) ||
+      (value.type === 'document' && focus.kind === 'block')
+    ))
+      throw new Error('<ref> board and group locate artboards, and block locates documents');
     if (Object.keys(focus).some((key) => key !== 'kind' && key !== 'id'))
       throw new Error('<ref> contains unsupported focus fields');
   }

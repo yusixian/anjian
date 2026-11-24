@@ -344,8 +344,13 @@ describe('artifact reference blocks', () => {
     ['<p><ref ' + board + ' /></p>', 'top-level'],
     ['<ref ' + board + '>text</ref>', 'empty'],
     ['<ref ' + board + '><p>text</p></ref>', 'empty'],
-    ['<ref ' + board + ' board="b" group="g" />', 'either board or group'],
-    [`<ref type="document" target="${target}" board="b" />`, 'only supported for artboards'],
+    ['<ref ' + board + ' board="b" group="g" />', 'one of board, group, or block'],
+    [`<ref type="document" target="${target}" board="b" />`, 'block locates documents'],
+    [
+      `<ref type="document" target="${target}" block="b" group="g" />`,
+      'one of board, group, or block',
+    ],
+    ['<ref ' + board + ' block="b" />', 'block locates documents'],
     ['<ref ' + board + ' group="x?key=private" />', 'URL-safe ID'],
     ['<ref ' + board + ' group="' + 'a'.repeat(129) + '" />', 'URL-safe ID'],
     ['<ref ' + board + ' label=" " />', '1–160 characters'],
@@ -359,7 +364,8 @@ describe('artifact reference blocks', () => {
   });
 
   test('retains references and block IDs through Loro snapshot and updates', () => {
-    const xml = `<ref id="ref-a" ${board} group="review" label="Review" />`;
+    const xml = `<ref id="ref-a" ${board} group="review" label="Review" />
+      <ref id="ref-b" type="document" target="${target}" block="section-2" />`;
     const state = parseDocument(xml);
     const doc = new LoroDoc();
     const editor = createDocumentHeadlessEditor();

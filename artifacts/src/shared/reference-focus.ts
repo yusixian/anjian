@@ -8,6 +8,7 @@ export function resolveReferenceFocus(
   focus: NonNullable<ArtifactReference['focus']>,
 ): { page: string; bounds: Bounds } | null {
   const { id, kind } = focus;
+  if (kind === 'block') return null;
   if (kind === 'board') {
     if (!Object.hasOwn(canvas.boards, id)) return null;
     const board = canvas.boards[id]!;

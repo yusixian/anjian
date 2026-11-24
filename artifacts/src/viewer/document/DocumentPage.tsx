@@ -2,6 +2,7 @@ import { ShareButton } from '../components/ShareButton';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { feedbackApi } from '../feedback/localApi';
 import type { ArtifactReferenceResolver } from './ArtifactReferenceCard';
+import { DocumentReferenceNavigation } from './DocumentReferenceNavigation';
 import { DocumentView } from './DocumentView';
 import { useLocalTransport } from './useDocumentTransport';
 import { VerificationRuns } from './VerificationRuns';
@@ -33,23 +34,28 @@ export default function DocumentPage({ id }: { id: string }) {
   const { transport, live } = useLocalTransport(id);
   return (
     <FeedbackProvider createApi={feedbackApi}>
-      <DocumentView
-        commentRecoveryUrl={`/api/document/${encodeURIComponent(id)}/comments`}
-        id={id}
-        live={live}
-        resolveReference={resolveReference}
-        transport={transport}
-        actions={
-          <>
-            <VerificationRuns
-              documentId={id}
-              key={id}
-              onRefreshReport={() => transport.channel.emit({ type: 'refresh' })}
-            />
-            <ShareButton id={id} type="document" />
-          </>
-        }
-      />
+      <DocumentReferenceNavigation>
+        {(blockTarget) => (
+          <DocumentView
+            blockTarget={blockTarget}
+            commentRecoveryUrl={`/api/document/${encodeURIComponent(id)}/comments`}
+            id={id}
+            live={live}
+            resolveReference={resolveReference}
+            transport={transport}
+            actions={
+              <>
+                <VerificationRuns
+                  documentId={id}
+                  key={id}
+                  onRefreshReport={() => transport.channel.emit({ type: 'refresh' })}
+                />
+                <ShareButton id={id} type="document" />
+              </>
+            }
+          />
+        )}
+      </DocumentReferenceNavigation>
     </FeedbackProvider>
   );
 }

@@ -12,6 +12,7 @@ import { createChannel } from './channel';
 import { extraNodes, rendererConfig } from './DocumentEditor';
 import { DocumentLayout } from './DocumentLayout';
 import { type DynamicHost, DynamicHostContext } from './DynamicBlock';
+import { useDocumentBlockTarget } from './useDocumentBlockTarget';
 
 const styles = stylex.create({
   root: { minHeight: '100%', backgroundColor: cssVar.colorBgContainer, color: cssVar.colorText },
@@ -43,6 +44,11 @@ export default function SnapshotDocument({
 }: Props) {
   const dark = usePrefersDark();
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
+  const target = useMemo(
+    () => ({ blockId: new URLSearchParams(location.search).get('block') }),
+    [],
+  );
+  useDocumentBlockTarget(editor, target);
   const host = useMemo<DynamicHost>(
     () => ({
       artifact: `document/${id}`,

@@ -740,6 +740,10 @@
     "boards_other": "{{count}} boards"
   },
   "reference": {
+    "blockMissing": "Block unavailable. Opens the document",
+    "blockTarget": "Block {{title}}",
+    "openDocument": "Open document",
+    "preview": "Referenced document",
     "choicePending": "No confirmed choice",
     "choiceSelected": "Selected “{{title}}”",
     "reviewSummary": "{{pass}} passed, {{pending}} pending, {{reject}} rejected, {{unavailable}} unavailable",

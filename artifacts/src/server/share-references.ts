@@ -89,7 +89,7 @@ export function shareReferences(
       const artifact = findTarget(parent, reference, resolve);
       if (!artifact) return [{ ...base, reason: 'unavailable' }];
       base.label ||= artifact.title;
-      if (focus) {
+      if (focus && focus.kind !== 'block') {
         const { canvas, layout } = readCanvas(
           path.join(artifactsRootOf(parent.project), type, artifact.id),
         );
