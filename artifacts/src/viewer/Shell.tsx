@@ -7,6 +7,7 @@ import { useBrowserSession } from './hooks/useBrowserSession';
 import { t } from './i18n';
 import { startEmbedChild } from './lib/embed-bridge';
 import { canonicalPath, parseRoute } from './lib/route';
+import { CodexTasks } from './tasks/CodexTasks';
 
 const ArtboardLayout = lazy(() =>
   import('./layouts/ArtboardLayout').then(({ ArtboardLayout }) => ({ default: ArtboardLayout })),
@@ -98,6 +99,12 @@ function RouteView() {
   return local(<ArtboardLayout id={id} />);
 }
 
+function ArtifactTasks() {
+  const [path] = useLocation();
+  if (parseRoute(path).kind !== 'artifact') return null;
+  return <CodexTasks artifact={path} key={path} />;
+}
+
 export function Shell() {
   useBrowserSession();
   return (
@@ -109,6 +116,7 @@ export function Shell() {
       }
     >
       <RouteView />
+      <ArtifactTasks />
     </Suspense>
   );
 }

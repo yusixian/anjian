@@ -17,6 +17,16 @@
     "evidenceUpdated": "Evidence updated",
     "stale": "Anchor no longer matches"
   },
+  "artboardLayout": {
+    "edit": "Edit layout",
+    "done": "Finish editing layout",
+    "moveObject": "Move {{title}}",
+    "instructions": "Drag a handle or focus it and use the arrow keys.",
+    "saving": "Saving position…",
+    "saved": "Position saved",
+    "conflict": "This object moved in another view. Try again from its current position.",
+    "saveFailed": "Couldn’t save the position. Try again."
+  },
   "bulk": {
     "toggleArtifact": "Toggle selection: {{title}}",
     "selectArtifact": "Select artifact: {{title}}",
@@ -64,6 +74,12 @@
     "purge": "Delete forever",
     "unconfirmed": "The result for {{count}} artifacts is unconfirmed. Refresh Trash before trying again."
   },
+  "canvasObjects": {
+    "select": "Select canvas objects",
+    "clear": "Clear canvas selection",
+    "selectObject": "Select {{title}}",
+    "instructions": "Select boards, titles, or sticky notes for the Agent."
+  },
   "choices": {
     "agent": "The agent",
     "byRecommendation": "{{groups}} by recommendation",
@@ -83,22 +99,6 @@
     "submittedAt": "Submitted {{time}}",
     "unanswered": "{{groups}} unanswered",
     "withdraw": "Withdraw"
-  },
-  "artboardLayout": {
-    "edit": "Edit layout",
-    "done": "Finish editing layout",
-    "moveObject": "Move {{title}}",
-    "instructions": "Drag a handle or focus it and use the arrow keys.",
-    "saving": "Saving position…",
-    "saved": "Position saved",
-    "conflict": "This object moved in another view. Try again from its current position.",
-    "saveFailed": "Couldn’t save the position. Try again."
-  },
-  "canvasObjects": {
-    "select": "Select canvas objects",
-    "clear": "Clear canvas selection",
-    "selectObject": "Select {{title}}",
-    "instructions": "Select boards, titles, or sticky notes for the Agent."
   },
   "chrome": {
     "backToLibrary": "Back to library",
@@ -145,6 +145,19 @@
     "close": "Close",
     "waitingCanvas": "Waiting for the agent to write canvas.json…",
     "canvasFailed": "The canvas could not be drawn: {{message}}"
+  },
+  "codexTasks": {
+    "title": "Codex tasks",
+    "pending": "{{count}} awaiting a reply",
+    "prompt": "First prompt",
+    "start": "Start a planning task",
+    "session": "Session {{id}}",
+    "reply": "Send reply",
+    "sent": "Reply sent.",
+    "started": "Planning task started.",
+    "expired": "This question is no longer available.",
+    "startFailed": "Could not start Codex. Check the Hub host and try again.",
+    "replyFailed": "Could not send your reply. Try again."
   },
   "comments": {
     "reviewRecordsRecovery": "This restores discussion comments. Review verdicts and choices use the artboard’s current evidence.",
@@ -967,6 +980,25 @@
     "progress": "Verified {{passed}} / {{total}}",
     "nextPending": "Next group awaiting review"
   },
+  "verification": {
+    "unavailable": "Verification checks are unavailable for this report. Ask the Hub administrator to check the report configuration. If the Hub is running an older version, update it and try again.",
+    "title": "Verification checks",
+    "refreshReport": "Refresh report",
+    "run": "Run again",
+    "runNamed": "Run {{title}} again",
+    "running": "Running…",
+    "history": "Recent results",
+    "empty": "No runs yet.",
+    "close": "Close",
+    "widen": "Expand results panel",
+    "narrow": "Narrow results panel",
+    "loading": "Loading output…",
+    "requestFailed": "Could not complete the request. Try again.",
+    "writeFailed": "The check finished, but its result could not be saved.",
+    "passed": "Passed",
+    "failed": "Failed",
+    "error": "Could not run"
+  },
   "video": {
     "play": "Play",
     "pause": "Pause",
@@ -1018,24 +1050,5 @@
     "selected_other": "Comment on {{count}} elements",
     "selectToComment": "Select elements to comment",
     "unsaved": "Unsaved changes"
-  },
-  "verification": {
-    "unavailable": "Verification checks are unavailable for this report. Ask the Hub administrator to check the report configuration. If the Hub is running an older version, update it and try again.",
-    "title": "Verification checks",
-    "refreshReport": "Refresh report",
-    "run": "Run again",
-    "runNamed": "Run {{title}} again",
-    "running": "Running…",
-    "history": "Recent results",
-    "empty": "No runs yet.",
-    "close": "Close",
-    "widen": "Expand results panel",
-    "narrow": "Narrow results panel",
-    "loading": "Loading output…",
-    "requestFailed": "Could not complete the request. Try again.",
-    "writeFailed": "The check finished, but its result could not be saved.",
-    "passed": "Passed",
-    "failed": "Failed",
-    "error": "Could not run"
   }
 }

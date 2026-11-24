@@ -1,0 +1,64 @@
+.codex-tasks {
+  position: fixed;
+  z-index: 30;
+  inset-block-end: max(1rem, env(safe-area-inset-bottom));
+  inset-inline-start: 1rem;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-inline-size: calc(100vw - 2rem);
+  color: CanvasText;
+  font:
+    0.875rem/1.45 system-ui,
+    sans-serif;
+}
+
+.codex-tasks button,
+.codex-task-panel {
+  color: CanvasText;
+  background: Canvas;
+  border: 1px solid GrayText;
+  border-radius: 0.5rem;
+}
+
+.codex-tasks button {
+  min-block-size: 2.75rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.codex-tasks button span:not(:empty) {
+  margin-inline-start: 0.5rem;
+}
+
+.codex-task-panel {
+  box-sizing: border-box;
+  inline-size: min(25rem, calc(100vw - 2rem));
+  max-block-size: min(65dvh, 35rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.codex-task-panel fieldset {
+  min-inline-size: 0;
+  margin: 0.75rem 0 0;
+}
+.codex-task-panel label,
+.codex-task-panel textarea {
+  display: block;
+}
+.codex-task-panel textarea {
+  box-sizing: border-box;
+  inline-size: 100%;
+  margin: 0.375rem 0 0.75rem;
+  font: inherit;
+}
+
+@media (max-width: 40rem) {
+  .codex-tasks {
+    flex-direction: column;
+    inset-block: max(3.5rem, env(safe-area-inset-top)) auto;
+  }
+}

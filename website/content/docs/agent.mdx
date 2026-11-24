@@ -139,3 +139,11 @@ anjian comment list --artifact document/plan --session review-desk:terminal:123 
 给接手的 Agent：作品链接、作品标识、项目目录、CLI 入口、Skill 读取命令和具体修改范围。让前一个 Agent 先完成上传，避免同时编辑同一作品。公开分享链接只用于查看，不能代替编辑授权。
 
 [查看真实使用案例](/use-cases)。
+
+## 从作品页启动 Codex 规划任务
+
+在运行案间 Hub 的主机上安装并登录 Codex CLI，让 Hub 服务账号可以通过 `PATH` 找到 `codex`。用 `ANJIAN_CODEX_TASKS=1` 启动或重启 Hub。
+
+以 Hub 所有者身份打开作品，展开「Codex 任务」，填写首轮提示并启动规划任务。Codex 在该作品的项目目录内以只读方式运行。同一项目的其他作品页也会显示待回复的问题。在手机上可从作品页顶部打开同一面板。输入每个问题的答案，再选择「发送回复」。
+
+这个入口管理案间新建的会话。已有的 Codex 桌面会话仍从 Codex 操作。Hub 重启后，旧连接里的待答问题会清除。
