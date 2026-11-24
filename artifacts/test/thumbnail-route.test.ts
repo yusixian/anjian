@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { afterEach, expect, test } from 'vitest';
@@ -94,4 +95,36 @@ test('thumbnails refuse foreign pages and need a real artifact', async () => {
   expect((await thumbnail(server, '/html/missing')).status).toBe(404);
   expect((await thumbnail(server, '/html/..%2F..%2Fetc')).status).toBe(404);
   expect((await thumbnail(server, '/nope/tuner')).status).toBe(404);
+});
+
+test('a linked file revision invalidates the authenticated artboard snapshot key', async () => {
+  const { server, root } = await start();
+  writeArtboard(root, 'ideas', canvas, {
+    'pages/p/a.html': '<link rel="stylesheet" href="board.css"><p>Actual board</p>',
+    'pages/p/board.css': 'p{color:#abc}',
+  });
+  const css = path.join(root, 'artboard', 'ideas', 'pages', 'p', 'board.css');
+  const api = async () => {
+    const response = await get(`${base(server)}/api/artifacts/artboard/ideas`, {
+      Cookie: cookie(server),
+    });
+    expect(response.headers['cache-control']).toBe('no-store');
+    return JSON.parse(response.body) as {
+      boardSnapshotKey: string;
+      versions: Record<string, number>;
+    };
+  };
+  fs.utimesSync(css, 1000, 1000);
+  const original = await api();
+  expect(original.boardSnapshotKey).toMatch(/^[0-9a-f]{64}$/);
+  expect(await api()).toEqual(original);
+  fs.writeFileSync(css, 'p{color:#cba}');
+  fs.utimesSync(css, 2000, 2000);
+  const fresh = await api();
+  expect(fresh.versions).toEqual(original.versions);
+  expect(fresh.boardSnapshotKey).not.toBe(original.boardSnapshotKey);
+  const preview = await get(`${base(server)}/api/preview/artboard/ideas`, {
+    Cookie: cookie(server),
+  });
+  expect(preview.body).not.toContain('boardSnapshotKey');
 });

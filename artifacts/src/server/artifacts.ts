@@ -89,7 +89,8 @@ export function artifactSignature(dir: string, type?: ArtifactType): string {
       const full = path.join(current, entry.name);
       try {
         const stat = fs.statSync(full);
-        names.push(path.relative(dir, full));
+        const name = path.relative(dir, full);
+        names.push(type === 'artboard' ? JSON.stringify([name, stat.mtimeMs, stat.size]) : name);
         latest = Math.max(latest, stat.mtimeMs);
         if (entry.isDirectory()) walk(full);
         else size += stat.size;

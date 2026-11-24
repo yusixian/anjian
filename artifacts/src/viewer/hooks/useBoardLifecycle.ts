@@ -2,20 +2,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { type BoardSpec, isMediaBoard } from '../../shared/types';
 import {
+  boardNearViewport,
   type BoardPhase,
   createBoardLifecycle,
   type LifecycleOutput,
 } from '../lib/board-lifecycle';
+import {
+  canCacheBoardSnapshots,
+  loadBoardSnapshots,
+  saveBoardSnapshot,
+} from '../lib/board-snapshots';
 import { boardReady } from '../lib/play';
 import type { View } from '../lib/view';
 
 const CAPTURE_SCALE_MAX = 2;
+const SNAPSHOT_LOOKUP_MS = 150;
 
 interface Options {
   active: ReadonlySet<string>;
   boards: [string, BoardSpec][];
   gesturing: boolean;
   pending: ReadonlySet<string>;
+  snapshotKey?: string;
   versions: Record<string, number>;
   view: View;
   viewport: { width: number; height: number };
@@ -39,6 +47,7 @@ export function useBoardLifecycle({
   boards,
   versions,
   pending,
+  snapshotKey,
   view,
   viewport,
   active,
@@ -47,8 +56,43 @@ export function useBoardLifecycle({
   const controller = useMemo(() => createBoardLifecycle(), []);
   const frames = useRef(new Map<string, HTMLIFrameElement>());
   const refs = useRef(new Map<string, (element: HTMLIFrameElement | null) => void>());
-  const requests = useRef(new Map<string, { request: number; version: number }>());
+  const requests = useRef(
+    new Map<string, { request: number; version: number; cacheKey?: string }>(),
+  );
   const nextRequest = useRef(0);
+  const cacheKey = snapshotKey && canCacheBoardSnapshots() ? snapshotKey : undefined;
+  const currentCacheKey = useRef(cacheKey);
+  currentCacheKey.current = cacheKey;
+  const [lookup, setLookup] = useState<{ key: string; images: ReadonlyMap<string, string> }>();
+  const cached = !cacheKey ? undefined : lookup?.key === cacheKey ? lookup.images : null;
+  useEffect(() => {
+    if (!cacheKey) return;
+    let cancelled = false;
+    const images = new Map<string, string>();
+    const finish = () => setLookup({ key: cacheKey, images });
+    const timeout = window.setTimeout(() => {
+      cancelled = true;
+      finish();
+    }, SNAPSHOT_LOOKUP_MS);
+    void loadBoardSnapshots(cacheKey).then(
+      (loaded) => {
+        if (cancelled) return;
+        clearTimeout(timeout);
+        for (const [id, blob] of loaded) images.set(id, URL.createObjectURL(blob));
+        finish();
+      },
+      () => {
+        if (cancelled) return;
+        clearTimeout(timeout);
+        finish();
+      },
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      for (const url of images.values()) URL.revokeObjectURL(url);
+    };
+  }, [cacheKey]);
   const [images, setImages] = useState<ReadonlyMap<string, string>>(() => new Map());
   const imagesRef = useRef(images);
   imagesRef.current = images;
@@ -65,23 +109,35 @@ export function useBoardLifecycle({
         )
         .map(([id, board]) => ({
           id,
+          cacheable: !!cacheKey && !board.interactive,
           x: board.x,
           y: board.y,
           w: board.w,
           h: board.h,
           version: versions[board.file] ?? 0,
         })),
-    [boards, versions, pending],
+    [boards, versions, pending, cacheKey],
   );
 
   useEffect(() => {
-    const out = controller.update({ boards: tracked, view, viewport, active, gesturing });
+    const out = controller.update({
+      boards: tracked,
+      view,
+      viewport,
+      active,
+      gesturing,
+      snapshots: cached,
+    });
     setOutput((previous) => (sameOutput(previous, out) ? previous : out));
     const scale = Math.min(CAPTURE_SCALE_MAX, window.devicePixelRatio || 1);
     for (const id of out.capture) {
-      const version = tracked.find((board) => board.id === id)?.version ?? 0;
+      const board = tracked.find((candidate) => candidate.id === id)!;
       const request = ++nextRequest.current;
-      requests.current.set(id, { request, version });
+      requests.current.set(id, {
+        request,
+        version: board.version,
+        cacheKey: board.cacheable ? cacheKey : undefined,
+      });
       // A culled board is display:none until the capturing phase renders; a frame that loaded hidden reports a 0x0 window, so ask once it is laid out.
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
@@ -95,7 +151,7 @@ export function useBoardLifecycle({
     if (out.wakeAt === null) return;
     const timer = setTimeout(bump, Math.max(0, out.wakeAt - performance.now()));
     return () => clearTimeout(timer);
-  }, [controller, tracked, view, viewport, active, gesturing, tick, bump]);
+  }, [controller, tracked, view, viewport, active, gesturing, tick, bump, cached, cacheKey]);
 
   useEffect(() => {
     const ids = new Set(tracked.map((board) => board.id));
@@ -147,6 +203,8 @@ export function useBoardLifecycle({
           width > 0 &&
           height > 0;
         if (ok) {
+          if (pendingRequest.cacheKey && pendingRequest.cacheKey === currentCacheKey.current)
+            void saveBoardSnapshot(pendingRequest.cacheKey, id, blob).catch(() => {});
           const url = URL.createObjectURL(blob);
           setImages((previous) => {
             const next = new Map(previous);
@@ -181,14 +239,34 @@ export function useBoardLifecycle({
 
   const counts = useMemo(() => {
     const byPhase: Record<BoardPhase, number> = {
-      mounted: 0,
-      capturing: 0,
-      unloaded: 0,
-      restoring: 0,
+      'checking-snapshot': 0,
+      'mounted': 0,
+      'capturing': 0,
+      'unloaded': 0,
+      'restoring': 0,
     };
     for (const phase of output.phases.values()) byPhase[phase]++;
     return { ...byPhase, uncapturable: output.uncapturable.size };
   }, [output]);
 
-  return { phases: output.phases, images, frameRef, counts };
+  const phases = useMemo(() => {
+    if (cached !== null) return output.phases;
+    const next = new Map(output.phases);
+    for (const board of tracked) {
+      if (
+        board.cacheable &&
+        !next.has(board.id) &&
+        !active.has(board.id) &&
+        !boardNearViewport(board, view, viewport)
+      )
+        next.set(board.id, 'checking-snapshot');
+    }
+    return next;
+  }, [active, cached, output.phases, tracked, view, viewport]);
+  const displayImages = useMemo(
+    () => (cached?.size ? new Map([...cached, ...images]) : images),
+    [cached, images],
+  );
+
+  return { phases, images: displayImages, frameRef, counts };
 }

@@ -4,6 +4,7 @@ export interface ViewerPayload extends CanvasPayload {
   boardOrigin?: string;
   boardPath?: string;
   boardPort?: number;
+  boardSnapshotKey?: string;
   contentBase: string;
   stale: boolean;
 }
@@ -15,6 +16,7 @@ export function mergePayload(
   if (next.canvas === null && prev.canvas !== null) {
     return {
       ...prev,
+      boardSnapshotKey: next.boardSnapshotKey,
       warnings: next.warnings,
       pending: next.pending ?? prev.pending,
       contentBase: next.contentBase || prev.contentBase,

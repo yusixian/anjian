@@ -135,6 +135,7 @@ function DesktopArtboard({
   boardOrigin,
   boardPort,
   boardPath,
+  boardSnapshotKey,
   versions,
   live,
   loaded,
@@ -449,6 +450,7 @@ function DesktopArtboard({
   );
   const lifecycle = useBoardLifecycle({
     boards,
+    snapshotKey: readOnly ? undefined : boardSnapshotKey,
     versions,
     pending: waiting,
     view,

@@ -210,3 +210,49 @@ test('a board that has been on screen a long time starts its idle time when it l
   advance(IDLE_UNLOAD_MS);
   expect(lifecycle.update(away).capture).toContain('near');
 });
+
+test('reopening reuses a matching snapshot only for a far, inactive board', () => {
+  const { lifecycle, input } = setup();
+  const boards = [
+    { ...NEAR, cacheable: true },
+    { ...FAR, cacheable: true },
+  ];
+  const pending = lifecycle.update(input({ boards, snapshots: null }));
+  expect(pending.phases.get('near')).toBe('mounted');
+  expect(pending.phases.get('far')).toBe('checking-snapshot');
+  const snapshots = new Map([
+    ['near', 'blob:near'],
+    ['far', 'blob:far'],
+  ]);
+  const restored = lifecycle.update(input({ boards, snapshots }));
+  expect(restored.phases.get('near')).toBe('mounted');
+  expect(restored.phases.get('far')).toBe('unloaded');
+  expect(
+    lifecycle
+      .update(
+        input({
+          boards,
+          snapshots,
+          active: new Set(['far']),
+        }),
+      )
+      .phases.get('far'),
+  ).toBe('restoring');
+});
+
+test('a missing or invalidated snapshot falls back to the live frame', () => {
+  const { lifecycle, input } = setup();
+  const boards = [NEAR, { ...FAR, cacheable: true }];
+  const snapshots = new Map([['far', 'blob:far']]);
+  expect(lifecycle.update(input({ boards, snapshots })).phases.get('far')).toBe('unloaded');
+  expect(lifecycle.update(input({ boards, snapshots: null })).phases.get('far')).toBe('mounted');
+  expect(lifecycle.update(input({ boards, snapshots: new Map() })).phases.get('far')).toBe(
+    'mounted',
+  );
+});
+
+test('an interactive board opens live even if a snapshot is available', () => {
+  const { lifecycle, input } = setup();
+  const snapshots = new Map([['far', 'blob:far']]);
+  expect(lifecycle.update(input({ snapshots })).phases.get('far')).toBe('mounted');
+});

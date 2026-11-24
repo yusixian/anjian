@@ -4,9 +4,10 @@ export const IDLE_UNLOAD_MS = 300_000;
 export const READY_TIMEOUT_MS = 8000;
 export const CAPTURE_TIMEOUT_MS = 10_000;
 
-export type BoardPhase = 'mounted' | 'capturing' | 'unloaded' | 'restoring';
+export type BoardPhase = 'checking-snapshot' | 'mounted' | 'capturing' | 'unloaded' | 'restoring';
 
 export interface LifecycleBoard {
+  cacheable?: boolean;
   h: number;
   id: string;
   version: number;
@@ -19,6 +20,7 @@ export interface LifecycleInput {
   active: ReadonlySet<string>;
   boards: LifecycleBoard[];
   gesturing: boolean;
+  snapshots?: ReadonlyMap<string, string> | null;
   view: View;
   viewport: { width: number; height: number };
 }
@@ -35,8 +37,10 @@ interface BoardState {
   captureStartedAt: number;
   capturingVersion: number;
   lastActive: number;
-  phase: BoardPhase;
+  phase: Exclude<BoardPhase, 'checking-snapshot'>;
   restoreStartedAt: number;
+  reusedSnapshot: string | undefined;
+  snapshotChecked: boolean;
   uncapturableVersion: number | null;
   version: number;
 }
@@ -64,6 +68,14 @@ function overlaps(
     bottom > -viewport.height * reach &&
     top < viewport.height * (1 + reach)
   );
+}
+
+export function boardNearViewport(
+  board: LifecycleBoard,
+  view: View,
+  viewport: LifecycleInput['viewport'],
+) {
+  return overlaps(board, view, viewport, 1);
 }
 
 export function createBoardLifecycle({
@@ -114,6 +126,7 @@ export function createBoardLifecycle({
       }
       case 'restoring': {
         if (time - state.restoreStartedAt >= readyTimeoutMs) {
+          state.reusedSnapshot = undefined;
           state.phase = 'mounted';
           state.lastActive = time;
         }
@@ -130,7 +143,14 @@ export function createBoardLifecycle({
   };
 
   return {
-    update({ boards, view, viewport, active, gesturing }: LifecycleInput): LifecycleOutput {
+    update({
+      boards,
+      view,
+      viewport,
+      active,
+      gesturing,
+      snapshots,
+    }: LifecycleInput): LifecycleOutput {
       const time = now();
       const ids = new Set(boards.map((board) => board.id));
       for (const id of states.keys()) if (!ids.has(id)) states.delete(id);
@@ -149,6 +169,8 @@ export function createBoardLifecycle({
             captureStartedAt: 0,
             capturingVersion: board.version,
             restoreStartedAt: 0,
+            reusedSnapshot: undefined,
+            snapshotChecked: false,
             uncapturableVersion: null,
           };
           states.set(board.id, state);
@@ -159,8 +181,27 @@ export function createBoardLifecycle({
         if (isActive || state.active || (changed && state.phase !== 'unloaded'))
           state.lastActive = time;
         state.active = isActive;
-        if (!gesturing)
-          advance(state, board, isActive, overlaps(board, view, viewport, 1), time, capture);
+        const near = boardNearViewport(board, view, viewport);
+        const snapshot = snapshots?.get(board.id);
+        if (state.reusedSnapshot && state.reusedSnapshot !== snapshot) {
+          state.reusedSnapshot = undefined;
+          state.phase = 'mounted';
+          state.lastActive = time;
+        }
+        if (!state.snapshotChecked && board.cacheable && state.phase === 'mounted') {
+          if (!near && !isActive) {
+            if (snapshots === null) {
+              phases.set(board.id, 'checking-snapshot');
+              continue;
+            }
+            if (snapshot && !gesturing) {
+              state.phase = 'unloaded';
+              state.reusedSnapshot = snapshot;
+            }
+          }
+          state.snapshotChecked = true;
+        }
+        if (!gesturing) advance(state, board, isActive, near, time, capture);
         phases.set(board.id, state.phase);
         if (state.uncapturableVersion === board.version) uncapturable.add(board.id);
         const wake = gesturing ? null : wakeOf(state, isActive);
@@ -184,6 +225,7 @@ export function createBoardLifecycle({
     ready(id: string) {
       const state = states.get(id);
       if (state?.phase !== 'restoring') return;
+      state.reusedSnapshot = undefined;
       state.phase = 'mounted';
       state.lastActive = now();
     },

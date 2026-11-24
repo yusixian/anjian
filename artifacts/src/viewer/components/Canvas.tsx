@@ -213,7 +213,7 @@ const Boards = memo(function Boards({
     const phase = phases.get(id) ?? 'mounted';
     const image = images.get(id) ?? null;
     const showImage = !!image && (phase === 'unloaded' || phase === 'restoring');
-    const mountFrame = ready && (phase !== 'unloaded' || !image);
+    const mountFrame = ready && phase !== 'checking-snapshot' && (phase !== 'unloaded' || !image);
     const drawing = id === writing;
     return (
       <div

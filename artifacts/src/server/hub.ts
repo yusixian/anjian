@@ -599,7 +599,7 @@ export async function startHub(options: HubOptions): Promise<Hub> {
       navigationAllowed(req.headers['sec-fetch-site'] as string | undefined) &&
       projectAccess.canAccess(projectAccess.principal(req, url), project),
   });
-  const contentAccess = createContentAccess(projectAccess.canAccess);
+  const contentAccess = createContentAccess(projectAccess.canAccess, Date.now, options.token);
   const privateContent = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
