@@ -142,6 +142,10 @@
     "canvasFailed": "画布画不出来：{{message}}"
   },
   "codexTasks": {
+    "threadId": "Codex 会话 ID",
+    "attach": "接入已有会话",
+    "attached": "已接入 Codex 会话。",
+    "attachFailed": "接入失败。请确认会话仍在运行，且属于当前项目。",
     "createDocument": "创建任务文档",
     "openDocument": "打开任务文档",
     "recent": "最近任务",

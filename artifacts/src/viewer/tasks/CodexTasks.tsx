@@ -75,6 +75,9 @@ function QuestionForm({
 export function CodexTasks({ artifact }: { artifact: string }) {
   const { t } = useTranslation();
   const [pending, setPending] = useState<Pending[] | null>(null);
+  const [sharedAvailable, setSharedAvailable] = useState(false);
+  const [threadId, setThreadId] = useState('');
+  const [attaching, setAttaching] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -100,10 +103,15 @@ export function CodexTasks({ artifact }: { artifact: string }) {
           }
           throw new Error('Task status unavailable');
         }
-        const value = (await response.json()) as { pending: Pending[]; tasks?: Task[] };
+        const value = (await response.json()) as {
+          pending: Pending[];
+          tasks?: Task[];
+          sharedAvailable?: boolean;
+        };
         if (!Array.isArray(value.pending)) return;
         if (!abort.signal.aborted) {
           setPending(value.pending);
+          setSharedAvailable(value.sharedAvailable === true);
           setTasks(Array.isArray(value.tasks) ? value.tasks : []);
         }
       } catch {
@@ -160,6 +168,22 @@ export function CodexTasks({ artifact }: { artifact: string }) {
     }
   }
 
+  async function attach(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const id = threadId.trim();
+    if (!id) return;
+    setAttaching(true);
+    try {
+      await post(
+        { action: 'attach', threadId: id },
+        'codexTasks.attached',
+        'codexTasks.attachFailed',
+      );
+    } finally {
+      setAttaching(false);
+    }
+  }
+
   if (!pending) return null;
   return (
     <aside aria-label={t('codexTasks.title')} className="codex-tasks">
@@ -198,6 +222,26 @@ export function CodexTasks({ artifact }: { artifact: string }) {
             {t('codexTasks.start')}
           </button>
         </form>
+        {sharedAvailable && (
+          <form onSubmit={attach}>
+            <label>
+              {t('codexTasks.threadId')}
+              <input
+                required
+                autoCapitalize="none"
+                autoComplete="off"
+                maxLength={36}
+                spellCheck={false}
+                type="text"
+                value={threadId}
+                onChange={(event) => setThreadId(event.target.value)}
+              />
+            </label>
+            <button disabled={attaching} type="submit">
+              {t('codexTasks.attach')}
+            </button>
+          </form>
+        )}
         <div role="status">{notice}</div>
         {documentUrl && <a href={documentUrl}>{t('codexTasks.openDocument')}</a>}
         {error && <p role="alert">{error}</p>}

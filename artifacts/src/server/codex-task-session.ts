@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+
+import WebSocket from 'ws';
 
 import { isObject } from '../shared/comments';
 
@@ -57,8 +60,42 @@ function parseQuestions(input: unknown): PendingQuestion['questions'] | null {
   return questions;
 }
 
-/** Owns one App Server connection for a single trusted project directory. */
-export function createCodexTaskSession(binary: string, cwd: string, changed: () => void) {
+type Transport = {
+  ready: Promise<void>;
+  subscribe: (message: (line: string) => void, close: () => void) => void;
+  send: (line: string) => void;
+  close: () => void;
+};
+
+export type SharedCodexServer = { url: URL; token: string };
+
+function sharedTransport(config: SharedCodexServer): Transport {
+  const socket = new WebSocket(config.url, {
+    headers: { Authorization: `Bearer ${config.token}` },
+    followRedirects: false,
+    handshakeTimeout: 10_000,
+    maxPayload: 8 * 1024 * 1024,
+  });
+  const ready = new Promise<void>((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+    socket.once('close', () => reject(new Error('Codex App Server disconnected')));
+  });
+  return {
+    ready,
+    subscribe(message, close) {
+      socket.on('message', (data, binary) => {
+        if (!binary) message(data.toString());
+      });
+      socket.on('error', close);
+      socket.on('close', close);
+    },
+    send: (line) => socket.send(line),
+    close: () => socket.terminate(),
+  };
+}
+
+function stdioTransport(binary: string, cwd: string): Transport {
   const child = spawn(binary, ['app-server', '--listen', 'stdio://'], {
     cwd,
     env: Object.fromEntries(
@@ -77,6 +114,30 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     stdio: ['pipe', 'pipe', 'ignore'],
   });
   const lines = createInterface({ input: child.stdout });
+  return {
+    ready: Promise.resolve(),
+    subscribe(message, close) {
+      child.once('error', close);
+      child.once('close', close);
+      child.stdin.on('error', close);
+      lines.on('line', message);
+    },
+    send: (line) => child.stdin.write(line + '\n'),
+    close() {
+      lines.close();
+      child.kill();
+    },
+  };
+}
+
+/** Owns one App Server connection for a single trusted project directory. */
+export function createCodexTaskSession(
+  binary: string,
+  cwd: string,
+  changed: () => void,
+  shared?: SharedCodexServer,
+) {
+  const transport = shared ? sharedTransport(shared) : stdioTransport(binary, cwd);
   const calls = new Map<
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
@@ -90,8 +151,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
   function close() {
     if (closed) return;
     closed = true;
-    lines.close();
-    child.kill();
+    transport.close();
     for (const { reject } of calls.values()) reject(new Error('Codex App Server disconnected'));
     calls.clear();
     tasks.clear();
@@ -103,7 +163,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
 
   function send(message: object) {
     if (closed) throw new Error('Codex App Server disconnected');
-    child.stdin.write(JSON.stringify(message) + '\n');
+    transport.send(JSON.stringify(message));
   }
 
   async function call(method: string, params: object) {
@@ -121,10 +181,7 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     }
   }
 
-  child.once('error', close);
-  child.once('close', close);
-  child.stdin.on('error', close);
-  lines.on('line', (line) => {
+  transport.subscribe((line) => {
     let message: unknown;
     try {
       message = JSON.parse(line);
@@ -185,17 +242,22 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
         ? parseQuestions(params.questions)
         : null;
     if (!parsed) {
+      if (shared) return;
       send({ id: message.id, error: { code: -32601, message: 'Unsupported Codex request' } });
       return;
     }
     questions.set(message.id, { requestId: message.id, threadId, questions: parsed });
     changed();
-  });
+  }, close);
 
-  const ready = call('initialize', {
-    clientInfo: { name: 'anjian', version: '1' },
-    capabilities: { experimentalApi: true },
-  }).then(() => send({ method: 'initialized' }));
+  const ready = transport.ready
+    .then(() =>
+      call('initialize', {
+        clientInfo: { name: 'anjian', version: '1' },
+        capabilities: { experimentalApi: true },
+      }),
+    )
+    .then(() => send({ method: 'initialized' }));
   void ready.catch(close);
 
   return {
@@ -206,6 +268,46 @@ export function createCodexTaskSession(binary: string, cwd: string, changed: () 
     pendingQuestions: () =>
       [...questions.values()].filter(({ requestId }) => !replies.has(requestId)),
     tasks: () => Array.from(tasks.values()).reverse(),
+    async attach(threadId: string) {
+      if (!shared) return false;
+      await ready;
+      if (tasks.has(threadId)) return true;
+      let metadata: unknown;
+      try {
+        metadata = await call('thread/read', { threadId });
+      } catch {
+        return false;
+      }
+      if (
+        !isObject(metadata) ||
+        !isObject(metadata.thread) ||
+        metadata.thread.id !== threadId ||
+        typeof metadata.thread.cwd !== 'string' ||
+        realpathSync(metadata.thread.cwd, { encoding: 'utf8' }) !== cwd ||
+        !isObject(metadata.thread.status) ||
+        metadata.thread.status.type !== 'active'
+      )
+        return false;
+      if (tasks.has(threadId)) return true;
+      tasks.set(threadId, { threadId, title: 'Codex', status: 'running', output: '', plan: '' });
+      try {
+        const result = await call('thread/resume', { threadId });
+        if (!isObject(result) || !isObject(result.thread) || result.thread.id !== threadId)
+          throw new Error('Invalid resumed thread');
+        if (
+          tasks.get(threadId)?.status === 'running' &&
+          (!isObject(result.thread.status) || result.thread.status.type !== 'active')
+        )
+          throw new Error('Codex thread is no longer active');
+        return true;
+      } catch {
+        tasks.delete(threadId);
+        for (const [id, question] of questions) {
+          if (question.threadId === threadId) questions.delete(id);
+        }
+        return false;
+      }
+    },
     async start(prompt: string, documentUrl?: string) {
       await ready;
       const result = await call('thread/start', {
