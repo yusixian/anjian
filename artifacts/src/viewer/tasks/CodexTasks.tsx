@@ -2,6 +2,7 @@ import './codex-tasks.css';
 
 import { type FormEvent, useEffect, useId, useState } from 'react';
 
+import type { CommandApprovalDecision, PendingCommandApproval } from '../../shared/codex-approvals';
 import { useTranslation } from '../i18n';
 
 type Task = {
@@ -72,8 +73,44 @@ function QuestionForm({
   );
 }
 
+function CommandApproval({
+  approval,
+  submit,
+}: {
+  approval: PendingCommandApproval;
+  submit: (decision: CommandApprovalDecision) => Promise<boolean>;
+}) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  return (
+    <fieldset disabled={busy}>
+      <legend>{t('codexTasks.commandApproval', { id: approval.threadId.slice(-6) })}</legend>
+      <pre>
+        <code>{approval.command}</code>
+      </pre>
+      {approval.cwd && <p>{t('codexTasks.commandDirectory', { directory: approval.cwd })}</p>}
+      {approval.reason && <p>{approval.reason}</p>}
+      <div className="codex-approval-actions">
+        {approval.decisions.map((decision) => (
+          <button
+            key={decision}
+            type="button"
+            onClick={async () => {
+              setBusy(true);
+              if (!(await submit(decision))) setBusy(false);
+            }}
+          >
+            {t('codexTasks.approvalDecision.' + decision)}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 export function CodexTasks({ artifact }: { artifact: string }) {
   const { t } = useTranslation();
+  const [approvals, setApprovals] = useState<PendingCommandApproval[]>([]);
   const [pending, setPending] = useState<Pending[] | null>(null);
   const [sharedAvailable, setSharedAvailable] = useState(false);
   const [threadId, setThreadId] = useState('');
@@ -107,15 +144,20 @@ export function CodexTasks({ artifact }: { artifact: string }) {
           pending: Pending[];
           tasks?: Task[];
           sharedAvailable?: boolean;
+          approvals?: PendingCommandApproval[];
         };
         if (!Array.isArray(value.pending)) return;
         if (!abort.signal.aborted) {
           setPending(value.pending);
+          setApprovals(Array.isArray(value.approvals) ? value.approvals : []);
           setSharedAvailable(value.sharedAvailable === true);
           setTasks(Array.isArray(value.tasks) ? value.tasks : []);
         }
       } catch {
-        if (!abort.signal.aborted) setPending((previous) => (previous === null ? null : []));
+        if (!abort.signal.aborted) {
+          setPending((previous) => (previous === null ? null : []));
+          setApprovals([]);
+        }
       }
       if (!abort.signal.aborted) timer = setTimeout(refresh, 2000);
     }
@@ -196,6 +238,8 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         {t('codexTasks.title')}
         <span role="status">
           {pending.length > 0 && t('codexTasks.pending', { count: pending.length })}
+          {pending.length > 0 && approvals.length > 0 && ' · '}
+          {approvals.length > 0 && t('codexTasks.approvalsPending', { count: approvals.length })}
         </span>
       </button>
       <div className="codex-task-panel" hidden={!open} id="codex-task-panel">
@@ -245,6 +289,24 @@ export function CodexTasks({ artifact }: { artifact: string }) {
         <div role="status">{notice}</div>
         {documentUrl && <a href={documentUrl}>{t('codexTasks.openDocument')}</a>}
         {error && <p role="alert">{error}</p>}
+        {approvals.map((approval) => (
+          <CommandApproval
+            approval={approval}
+            key={JSON.stringify([approval.threadId, approval.requestId])}
+            submit={(decision) =>
+              post(
+                {
+                  action: 'decide',
+                  threadId: approval.threadId,
+                  requestId: approval.requestId,
+                  decision,
+                },
+                'codexTasks.approvalSent',
+                'codexTasks.approvalFailed',
+              )
+            }
+          />
+        ))}
         {pending.map((item) => (
           <QuestionForm
             key={JSON.stringify([item.threadId, item.requestId])}

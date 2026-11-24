@@ -5,6 +5,11 @@ import { createInterface } from 'node:readline';
 
 import WebSocket from 'ws';
 
+import {
+  type CommandApprovalDecision,
+  isCommandApprovalDecision,
+  type PendingCommandApproval,
+} from '../shared/codex-approvals';
 import { isObject } from '../shared/comments';
 
 type RequestId = number | string;
@@ -159,6 +164,7 @@ export function createCodexTaskSession(
   >();
   const tasks = new Map<string, Task>();
   const questions = new Map<RequestId, PendingQuestion>();
+  const approvals = new Map<RequestId, PendingCommandApproval>();
   const replies = new Map<RequestId, (status: boolean) => void>();
   let closed = false;
   let sequence = 0;
@@ -171,6 +177,7 @@ export function createCodexTaskSession(
     calls.clear();
     tasks.clear();
     questions.clear();
+    approvals.clear();
     for (const finish of replies.values()) finish(false);
     replies.clear();
     changed();
@@ -215,10 +222,10 @@ export function createCodexTaskSession(
     const params = isObject(message.params) ? message.params : {};
     const threadId = typeof params.threadId === 'string' ? params.threadId : '';
     if (message.method === 'serverRequest/resolved' && requestId(params.requestId)) {
-      if (
-        questions.get(params.requestId)?.threadId === threadId &&
-        questions.delete(params.requestId)
-      ) {
+      const pending = questions.get(params.requestId) ?? approvals.get(params.requestId);
+      if (pending?.threadId === threadId) {
+        questions.delete(params.requestId);
+        approvals.delete(params.requestId);
         replies.get(params.requestId)?.(true);
         changed();
       }
@@ -242,16 +249,36 @@ export function createCodexTaskSession(
     ) {
       const status = params.turn.status;
       task.status = status === 'completed' || status === 'interrupted' ? status : 'failed';
-      for (const [id, pending] of questions) {
-        if (pending.threadId === threadId) {
-          questions.delete(id);
-          replies.get(id)?.(false);
-        }
-      }
+      clearThreadRequests(threadId);
       changed();
       return;
     }
     if (!requestId(message.id)) return;
+    if (
+      shared &&
+      task?.status === 'running' &&
+      message.method === 'item/commandExecution/requestApproval' &&
+      typeof params.command === 'string' &&
+      params.command.trim() &&
+      !params.networkApprovalContext &&
+      !params.additionalPermissions
+    ) {
+      const decisions = Array.isArray(params.availableDecisions)
+        ? params.availableDecisions.filter(isCommandApprovalDecision)
+        : [];
+      if (decisions.length) {
+        approvals.set(message.id, {
+          requestId: message.id,
+          threadId,
+          command: params.command,
+          cwd: typeof params.cwd === 'string' ? params.cwd : undefined,
+          reason: typeof params.reason === 'string' ? params.reason : undefined,
+          decisions,
+        });
+        changed();
+      }
+      return;
+    }
     const parsed =
       message.method === 'item/tool/requestUserInput' && task?.status === 'running'
         ? parseQuestions(params.questions)
@@ -264,6 +291,30 @@ export function createCodexTaskSession(
     questions.set(message.id, { requestId: message.id, threadId, questions: parsed });
     changed();
   }, close);
+
+  function clearThreadRequests(threadId: string) {
+    for (const requests of [questions, approvals]) {
+      for (const [id, pending] of requests) {
+        if (pending.threadId !== threadId) continue;
+        requests.delete(id);
+        replies.get(id)?.(false);
+      }
+    }
+  }
+
+  async function respond(id: RequestId, result: object) {
+    if (replies.has(id)) return false;
+    const timer = setTimeout(close, 15_000);
+    try {
+      return await new Promise<boolean>((resolve) => {
+        replies.set(id, resolve);
+        send({ id, result });
+      });
+    } finally {
+      clearTimeout(timer);
+      replies.delete(id);
+    }
+  }
 
   const ready = transport.ready
     .then(() =>
@@ -282,6 +333,14 @@ export function createCodexTaskSession(
     },
     pendingQuestions: () =>
       [...questions.values()].filter(({ requestId }) => !replies.has(requestId)),
+    pendingApprovals: () =>
+      [...approvals.values()].filter(({ requestId }) => !replies.has(requestId)),
+    decide(threadId: string, id: RequestId, decision: CommandApprovalDecision) {
+      const pending = approvals.get(id);
+      if (!pending || pending.threadId !== threadId || !pending.decisions.includes(decision))
+        return false;
+      return respond(id, { decision });
+    },
     tasks: () => Array.from(tasks.values()).reverse(),
     async attach(threadId: string) {
       if (!shared) return false;
@@ -317,9 +376,7 @@ export function createCodexTaskSession(
         return true;
       } catch {
         tasks.delete(threadId);
-        for (const [id, question] of questions) {
-          if (question.threadId === threadId) questions.delete(id);
-        }
+        clearThreadRequests(threadId);
         return false;
       }
     },
@@ -370,23 +427,11 @@ export function createCodexTaskSession(
       if (!pending || pending.threadId !== threadId || replies.has(id)) return false;
       if (pending.questions.some(({ id }) => !Object.hasOwn(answers, id) || !answers[id]?.trim()))
         return false;
-      const timer = setTimeout(close, 15_000);
-      try {
-        return await new Promise<boolean>((resolve) => {
-          replies.set(id, resolve);
-          send({
-            id,
-            result: {
-              answers: Object.fromEntries(
-                pending.questions.map(({ id }) => [id, { answers: [answers[id]] }]),
-              ),
-            },
-          });
-        });
-      } finally {
-        clearTimeout(timer);
-        replies.delete(id);
-      }
+      return respond(id, {
+        answers: Object.fromEntries(
+          pending.questions.map(({ id }) => [id, { answers: [answers[id]] }]),
+        ),
+      });
     },
   };
 }
