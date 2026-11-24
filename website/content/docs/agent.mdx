@@ -165,3 +165,12 @@ codex --remote ws://127.0.0.1:8765 --remote-auth-token-env CODEX_SHARED_TOKEN
 ```
 
 会话运行后，在同一项目的作品页展开「Codex 任务」，填写会话 ID 并选择「接入已有会话」。已有待答问题会出现在面板。Hub 断开后，只要 App Server 上的会话仍在运行，可以再次输入同一 ID 接入。此前通过独立进程启动的会话，需要继续在原 Codex 客户端操作。
+
+Hub 与 Codex App Server 也可以在同一台 Linux 或 macOS 主机上通过 Unix socket 连接。由运行 Hub 的同一用户在私有目录创建 socket，并将 `ANJIAN_CODEX_SHARED_SOCKET` 设为该 socket 的绝对路径。使用此方式时无需设置 WebSocket 地址与令牌文件。
+
+```bash
+codex app-server --listen unix:///path/to/private/codex.sock
+codex --remote unix:///path/to/private/codex.sock
+```
+
+分别在两个终端运行这两条命令。等待会话需要输入后，从作品页使用同一会话 ID 接入。

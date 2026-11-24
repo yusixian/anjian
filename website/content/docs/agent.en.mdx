@@ -165,3 +165,12 @@ codex --remote ws://127.0.0.1:8765 --remote-auth-token-env CODEX_SHARED_TOKEN
 ```
 
 While the session is active, open **Codex tasks** on an artifact in the same project, enter the session ID, and select **Connect existing session**. Any pending question appears in the panel. If the Hub disconnects, reconnect with the same ID while the session is still running on the App Server. Continue using the original Codex client for sessions started in independent processes.
+
+The Hub and Codex App Server can also connect through a Unix socket on the same Linux or macOS host. Run both as the same user, create the socket in a private directory, and set `ANJIAN_CODEX_SHARED_SOCKET` to its absolute path. Leave the WebSocket URL and token file unset when using the socket.
+
+```bash
+codex app-server --listen unix:///path/to/private/codex.sock
+codex --remote unix:///path/to/private/codex.sock
+```
+
+Run these commands in separate terminals. Once the session needs input, connect it from the artifact page using the same session ID.
