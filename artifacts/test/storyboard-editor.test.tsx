@@ -9,7 +9,12 @@ import { moveClip, referencedMediaRevision } from '../src/viewer/storyboard/time
 import { useStoryboardDraft } from '../src/viewer/storyboard/useStoryboardDraft';
 
 vi.mock('../src/viewer/storyboard/copy', () => ({
-  useStoryboardCopy: () => ({ invalid: 'invalid', discard: 'discard', saveFailed: 'save failed' }),
+  useStoryboardCopy: () => ({
+    invalid: 'invalid',
+    discard: 'discard',
+    saveFailed: 'save failed',
+    playbackPosition: 'Playback position',
+  }),
 }));
 
 const url = '/api/storyboard/demo';
@@ -34,7 +39,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('monitor arrow shortcuts respect the source trim and leave native controls alone', () => {
+function renderMonitor() {
   const host = document.createElement('div');
   root = createRoot(host);
   act(() =>
@@ -55,6 +60,11 @@ test('monitor arrow shortcuts respect the source trim and leave native controls 
       />,
     ),
   );
+  return host;
+}
+
+test('monitor arrow shortcuts respect the source trim and leave native controls alone', () => {
+  const host = renderMonitor();
   const video = host.querySelector('video')!;
   const group = host.querySelector<HTMLElement>('[aria-keyshortcuts]')!;
   Object.defineProperty(video, 'duration', { value: 8 });
@@ -70,6 +80,45 @@ test('monitor arrow shortcuts respect the source trim and leave native controls 
   arrow(group, 'ArrowLeft');
   arrow(group, 'ArrowLeft');
   expect(video.currentTime).toBe(1);
+});
+
+test('video clock advances on presented frames and holds during a seek without a frame', () => {
+  const prototype = HTMLVideoElement.prototype;
+  const request = Object.getOwnPropertyDescriptor(prototype, 'requestVideoFrameCallback');
+  const cancel = Object.getOwnPropertyDescriptor(prototype, 'cancelVideoFrameCallback');
+  let callback: ((now: number, metadata: { mediaTime: number }) => void) | undefined;
+  const cancelFrame = vi.fn();
+  Object.defineProperties(prototype, {
+    requestVideoFrameCallback: {
+      configurable: true,
+      value: (expected: typeof callback) => {
+        callback = expected;
+        return 7;
+      },
+    },
+    cancelVideoFrameCallback: { configurable: true, value: cancelFrame },
+  });
+  try {
+    const host = renderMonitor();
+    const clock = host.querySelector('[title="Playback position"]')!;
+    const video = host.querySelector('video')!;
+    expect(clock.textContent).toBe('00:00.00');
+    act(() => callback!(0, { mediaTime: 2.25 }));
+    expect(clock.textContent).toBe('00:01.25');
+    video.currentTime = 4;
+    act(() => video.dispatchEvent(new Event('timeupdate')));
+    expect(clock.textContent).toBe('00:01.25');
+    act(() => callback!(0, { mediaTime: 4 }));
+    expect(clock.textContent).toBe('00:03.00');
+  } finally {
+    act(() => root?.unmount());
+    root = undefined;
+    if (request) Object.defineProperty(prototype, 'requestVideoFrameCallback', request);
+    else Reflect.deleteProperty(prototype, 'requestVideoFrameCallback');
+    if (cancel) Object.defineProperty(prototype, 'cancelVideoFrameCallback', cancel);
+    else Reflect.deleteProperty(prototype, 'cancelVideoFrameCallback');
+  }
+  expect(cancelFrame).toHaveBeenCalledWith(7);
 });
 
 function Harness({ initial, readOnly }: { initial: StoryboardSnapshot; readOnly: boolean }) {
