@@ -126,16 +126,24 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 
 分镜导出时，视频片段超出素材的部分保留最后一帧，原音轨自然结束。700 毫秒素材的 1.5 秒成片在桌面和窄屏 Chrome 均验证了末帧。[渲染回归](../artifacts/test/storyboard-render.test.ts) · [分镜用法](../skills/artifacts/storyboard.md)
 
-在监看器聚焦后，空格控制播放，左右键每次定位五秒。v0.18.17 监看器显示播放位置和总时长，视频缓冲时停在最近显示的帧。鼠标点击画面自动聚焦的修复已合入。导入 WAV 旁白并导出带语音的 MP4 已用正式包验证。[时钟验收 #228](https://github.com/yusixian/anjian/pull/228#issuecomment-7141459010) · [鼠标焦点 #230](https://github.com/yusixian/anjian/pull/230) · [旁白实测](https://github.com/yusixian/anjian/issues/214#issuecomment-7141384095) · [中文](https://anjian.cosine.ren/zh/docs/updates/#01817) · [English](https://anjian.cosine.ren/en/docs/updates/#01817)
+v0.18.17 监看器显示当前位置和总时长，限速缓冲时停在最后显示的帧。v0.18.18 可用鼠标点击视频画面聚焦，再按空格播放或暂停，按左右键定位五秒。390 px Chrome 触屏模拟也通过了原生播放、暂停、拖动定位及编辑时间线起点。[正式包时钟验收](https://github.com/yusixian/anjian/issues/214#issuecomment-7141959837) · [鼠标与键盘](https://github.com/yusixian/anjian/issues/214#issuecomment-7142351425) · [触屏](https://github.com/yusixian/anjian/issues/214#issuecomment-7143180294)
+
+v0.18.18 的双片段试验验证了第一段末帧保留、第二段按素材入点裁切、WAV 导入及带旁白 MP4 导出。[双片段验收](https://github.com/yusixian/anjian/issues/214#issuecomment-7143094490)
+
+v0.18.21 可用本机 macOS 系统语音和 FFmpeg 逐行生成旁白。录入词表后可在单行覆盖读法，原文继续保留。正式包验证了生成、试听、加入音轨和导出。其他环境可以编辑脚本并导入已有录音。[旁白正式包验收](https://github.com/yusixian/anjian/issues/239#issuecomment-7144211571) · [分镜验收汇总](https://github.com/yusixian/anjian/issues/214#issuecomment-7144218927) · [中文教程](https://anjian.cosine.ren/zh/docs/storyboards/) · [English guide](https://anjian.cosine.ren/en/docs/storyboards/)
 
 ## 画板缩放、标题和快照
 
-缩放基准先确认真实板块内容已加载。v0.18.16 的 `anjian check` 会提示标题压到独立板块，移开标题后提示消失。正式包的桌面和窄屏 Chrome 均验证了长标题的换行以及缩远后的 24 px 字号下限。极低缩放时，字号下限可能让原本分开的标题压到板块。同次打开可捕获远景并卸载 iframe，重开会重新加载。[缩放基准 #225](https://github.com/yusixian/anjian/pull/225) · [标题与快照 #219](https://github.com/yusixian/anjian/issues/219#issuecomment-7141341701) · [低倍率标题复现](https://github.com/yusixian/anjian/issues/219#issuecomment-7141829371)
+缩放基准先确认真实板块内容已加载。v0.18.17 Apple 芯片包在无头 Chrome 的 1440 和 390 px 视口各测三轮，P95 中位数均为 16.7 ms。前台窗口曾测到 34.9 ms P95，执行环境不同。[夹具](https://github.com/yusixian/anjian/pull/225) · [正式包基准](https://github.com/yusixian/anjian/issues/219#issuecomment-7142352349)
+
+v0.18.19 可在同一浏览器重开后复用远处静态板块的截图。靠近板块后加载实时内容。关联 CSS 更新会让旧图失效，浏览器拒绝存储时也能加载实时板块。[快照正式包验收](https://github.com/yusixian/anjian/issues/219#issuecomment-7143221635) · [中文](https://anjian.cosine.ren/zh/docs/updates/#01819) · [English](https://anjian.cosine.ren/en/docs/updates/#01819)
+
+v0.18.16 的 `anjian check` 能提示标题压到独立板块。v0.18.20 缩远时按实际空间限制标题放大，标题行数在缩放前后保持一致。正式包覆盖了 1280 和 390 px Chrome，以及后者的双指缩放模拟。[标题告警](https://github.com/yusixian/anjian/pull/226) · [标题正式包验收](https://github.com/yusixian/anjian/issues/219#issuecomment-7143453152) · [中文](https://anjian.cosine.ren/zh/docs/updates/#01820) · [English](https://anjian.cosine.ren/en/docs/updates/#01820)
+
+v0.18.22 在可用空间内保持手势开始时的字号，手势结束后再按新缩放比例调整。空间不足时，标题会在手势期间缩小以避开板块。桌面滚轮和 390 px 的双指缩放已覆盖。[验收记录](https://github.com/yusixian/anjian/issues/219) · [中文](https://anjian.cosine.ren/zh/docs/updates/#01822) · [English](https://anjian.cosine.ren/en/docs/updates/#01822)
 
 ## 待验证能力
 
-- [#219](https://github.com/yusixian/anjian/issues/219) 画板远景标题避让、缩放流畅度与跨次打开的快照复用。
-- [#214](https://github.com/yusixian/anjian/issues/214) 分镜旁白生成、逐行发音提示和词表，以及触屏监看器交互。
 - [#231](https://github.com/yusixian/anjian/issues/231) 手机样机的开关、分段选择器和滑块。
 - [#232](https://github.com/yusixian/anjian/issues/232) 作品库文档缩略图的体积与可读性。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。

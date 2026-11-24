@@ -1,0 +1,35 @@
+---
+title: Storyboards
+description: Edit a short video, preview narration, and export an MP4.
+---
+
+## Edit your first clip [#edit-your-first-clip]
+
+1. Select a project in the library and choose **New storyboard**.
+2. Import video or audio in the media bin. Use **Add to timeline** next to the asset to place it on a track.
+3. Select the clip and open **Properties**. Set **Timeline start (s)** for its position in the edit, **Source in (s)** to skip the start of the source, and **Duration (s)** for its length.
+
+Click the video picture in the monitor to play or pause. Then use Space to toggle playback or the arrow keys to seek five seconds. On a touchscreen, use the player's Play button and progress bar.
+
+## Generate narration by line [#generate-narration-by-line]
+
+Local Anjian can generate narration with macOS system voices starting in v0.18.21. Before starting Anjian, make FFmpeg available on your terminal's PATH and install the Mandarin or US English system voice you need.
+
+1. Open **Narration** in the storyboard media bin and choose **Add narration line**.
+2. Enter the original text and choose a voice language. Use the **Pronunciation glossary** to specify how names and terms should sound. To override the glossary for a line, enter the full sentence in **Spoken line**.
+3. Select **Generate preview**, listen to the clip, and select **Add to audio track**. Close Narration and use **Properties** to place the audio clip on the timeline.
+4. Select **Save** in the toolbar to keep the script and audio track. To replace an earlier take, add the new clip, remove the earlier one, and set the new clip's timeline start.
+
+You can also add WAV, MP3, or M4A files through **Import media**. The script and its glossary are stored in the storyboard.
+
+## Render and download [#render-and-download]
+
+Make sure your terminal can find `ffmpeg` and `ffprobe`. Select **Save and render** or **Render video**, check the picture and sound in **Edited video**, and select **Download MP4**.
+
+[Connect an Agent](/en/docs/agent) and ask it to read the built-in storyboard guide:
+
+```bash
+anjian skills get artifacts --reference storyboard.md
+```
+
+[Local setup](/en/docs/local) · [v0.18.21 release notes](/en/docs/updates/#01821)

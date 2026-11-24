@@ -66,6 +66,7 @@ test('both languages expose the bundled Skill discovery chain', async () => {
     'documents': ['document.md'],
     'html': ['html.md', 'ui.md'],
     'artboards': ['artboard.md', 'artboard-prototype.md'],
+    'storyboards': ['storyboard.md'],
   };
   for (const language of ['zh', 'en']) {
     for (const [slug, names] of Object.entries(references)) {

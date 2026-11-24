@@ -8,7 +8,7 @@
 
 2026-11-24 核对 Ryugi 正式版 `v1.108.7`，最新提交 `3bdef4c8efbbb8e655e16d7bbd0c9ad4ea14b8d9`。相对 `v1.108.6` 新增 1 个公开提交，累计审计 233 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.7) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.6...v1.108.7)
 
-- **画板缩放**。案间已在真实板块加载后建立缩放基准，并验证离屏抓图。进一步核对缩放中的渲染稳定性、标题避让和跨次打开快照，见 [#219](https://github.com/yusixian/anjian/issues/219)。
+- **画板缩放**。案间已在真实板块加载后建立桌面和窄屏缩放基准。v0.18.19 验证了跨次打开的静态板块快照，v0.18.20 验证了远景标题避让，v0.18.22 在空间允许时保持手势开始时的字号。[画板验收 #219](https://github.com/yusixian/anjian/issues/219)
 - **手机样机与文档缩略图**。沿用案间的 HTML 画板和作品库 SVG 缩略图，按 [样机控件 #231](https://github.com/yusixian/anjian/issues/231) 和 [文档缩略图 #232](https://github.com/yusixian/anjian/issues/232) 验收差距。
 - **界面与云服务**。字体沿用案间自己的界面设计。官方云中继的按需查询和定向收件箱属于上游官方 Cloud。
 - **来源与授权**。公开增量只涉及发行与宿主清单，界面行为依据正式发布说明进行核对。[许可证](https://github.com/Innei/ryugi/blob/v1.108.7/LICENSE)
