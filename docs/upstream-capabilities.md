@@ -1,6 +1,6 @@
 # 案间与 Ryugi 能力对照
 
-2026-11-24 核对 Ryugi 正式版 `v1.108.1`（`6f5b4cc`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.1) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
+2026-11-24 核对 Ryugi 正式版 `v1.108.2`（`7a3ee3c`）。案间以 `0.4.0`（`04d711a`）为实施起点。下表区分正式版与已合入的能力。[案间正式版](https://github.com/yusixian/anjian/releases) · [Ryugi 正式版](https://github.com/Innei/ryugi/releases/tag/v1.108.2) · [总追踪 #55](https://github.com/yusixian/anjian/issues/55) · [提交及授权记录](../UPSTREAM.md)
 
 ## 已有能力与证据
 
@@ -109,12 +109,17 @@ Ryugi 官网列出 Copilot CLI 兼容。案间以官方 Copilot CLI 1.0.114 和�
 - 同一画板里的卡片和便签可由两个会话同时调整，双方实时看到更新。同一对象的较晚保存若基于旧坐标，会显示冲突并采用已保存的位置。三种工具都可从预览内用鼠标中键拖动平移。[Chrome 验收 #153](https://github.com/yusixian/anjian/issues/153#issuecomment-7115385124) · [中文指南](https://anjian.cosine.ren/zh/docs/artboards/) · [English guide](https://anjian.cosine.ren/en/docs/artboards/)
 - v0.18.3 支持自托管站点所有者重跑显式登记的检查，也能用「刷新报告」同步正文、引用和运行历史并保留草稿。桌面和触摸视口已实测。旧 Hub 拒绝重跑时，新面板给出核对配置和升级的提示。恢复报告配置后可刷新面板继续运行。[报告验收 #152](https://github.com/yusixian/anjian/issues/152) · [兼容提示 #191](https://github.com/yusixian/anjian/pull/191) · [中文指南](https://anjian.cosine.ren/zh/docs/documents/) · [English guide](https://anjian.cosine.ren/en/docs/documents/)
 
+## Codex、Pi 与 DeepSeek 的定向反馈
+
+- 项目内有多个会话时，Codex 批注和 HTML 选区按作品投递，Pi 监听状态按作品显示。真实 DeepSeek Web 的两个会话也能用 `/anjian watch` 分别订阅同一项目内的不同文档。[Codex 与 Pi 回归](https://github.com/yusixian/anjian/issues/55#issuecomment-7125296895) · [DeepSeek 双会话验收](https://github.com/yusixian/anjian/issues/55#issuecomment-7125506843)
+- 已接入 Codex App Server 的会话请求修改文件时，可在作品页查看补丁并决定一次允许、拒绝改动或取消本轮。桌面和窄屏 Chrome 已验证审批、取消与同名项目隔离。[浏览器验收 #209](https://github.com/yusixian/anjian/pull/209) · [中文用法](https://anjian.cosine.ren/zh/docs/updates/#01811) · [English guide](https://anjian.cosine.ren/en/docs/updates/#01811)
+
 ## 待验证能力
 
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
 - [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。
-- [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互。
-- [#154](https://github.com/yusixian/anjian/issues/154) DeepSeek Harness 安装与定向批注。
+- [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互，继续验证直接从 ChatGPT 桌面应用打开的 Codex 会话。
+- [#165](https://github.com/yusixian/anjian/issues/165) 其余宿主的离线安装和跨版本协议。未订阅作品的 DeepSeek 会话是否需要项目级提醒，见 [#55](https://github.com/yusixian/anjian/issues/55#issuecomment-7125506843)。
 - Linux 主机电源、进程和临时防休眠。v0.18.1 已修复启动期间停止 systemd 用户服务会误报失败的问题。[#139](https://github.com/yusixian/anjian/issues/139)
 
 - macOS 双架构 CLI 发布包的 Developer ID 签名与公证。现有包已通过解压安装、启动测试与 SHA-256 校验。[签名与公证 #124](https://github.com/yusixian/anjian/issues/124)
