@@ -42,7 +42,7 @@ const thumbnail = (s: ArtifactsServer, address: string) =>
 test('each artifact type is drawn from the local preview payload', async () => {
   const { server, root } = await start();
   writeDocument(root, 'spec', {
-    'doc.xml': '<doc><h1>Actual design</h1><p>Opening paragraph</p></doc>',
+    'doc.xml': '<doc><h1>Actual &amp; design &#x2713;</h1><p>Opening paragraph</p></doc>',
   });
   writeArtboard(root, 'ideas', canvas, { 'pages/p/a.html': '<p>Actual board</p>' });
   writeHtml(root, 'tuner', { 'index.html': '<title>Actual tuner</title>' });
@@ -82,7 +82,11 @@ test('each artifact type is drawn from the local preview payload', async () => {
     );
   }
   expect((await thumbnail(server, '/artboard/ideas')).body).toContain('Sidebar');
-  expect((await thumbnail(server, '/document/spec')).body).toContain('Opening paragraph');
+  const documentThumbnail = (await thumbnail(server, '/document/spec')).body;
+  expect(documentThumbnail).toContain('Actual &amp; design ✓');
+  expect(documentThumbnail).not.toContain('&amp;amp;');
+  expect(documentThumbnail).not.toContain('Opening paragraph');
+  expect(documentThumbnail.match(/<text /g)).toHaveLength(1);
 });
 
 test('thumbnails refuse foreign pages and need a real artifact', async () => {

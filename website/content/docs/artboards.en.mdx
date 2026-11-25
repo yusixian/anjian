@@ -22,6 +22,8 @@ Click any element to inspect its layer tree, dimensions, computed styles, and li
 
 Most boards are static by default. When a board declares interactivity or parameters, click **Play** to try interactions or **Parameters** to adjust controls live. Images, videos, and mobile browsing are supported.
 
+Set `"interactive": true` for each phone mockup. Use a labeled HTML checkbox for a switch, radio inputs with a shared name for a segmented control, and a range input for a slider. On desktop, choose **Play** to interact, **Replay** to reset that mockup, and **Stop** to resume reviewing. On a phone, expand the mockup to use its controls and choose **Back to canvas** to return to the review. Each mockup keeps its own state.
+
 ## File layout (for Agents) [#file-conventions-for-agents]
 
 Artboards live in `.anjian/artifacts/artboard/<id>/` (`canvas.json` + `pages/`). Have your Agent read the bundled skill via CLI (setup in [Connect an Agent](/en/docs/agent)):

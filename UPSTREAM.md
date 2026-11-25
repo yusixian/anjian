@@ -6,10 +6,18 @@
 
 ## 当前对照版本
 
+2026-11-25 核对 Ryugi 正式版 `v1.111.0`（`f8939fadfb91fd88bc4b405d1799681884d3da09`），本批覆盖 `v1.109.1`、`v1.110.1` 和 `v1.111.0`。相对 `v1.108.7` 有 13 个公开提交，累计对照 246 个。许可证文件未变。本批按公开行为对照，并在案间独立实现。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.111.0) · [公开增量](https://github.com/Innei/ryugi/compare/v1.108.7...v1.111.0)
+
+- **v1.109.1**。共享 HTML 的逐板默认参数、Oh My Pi 与离线图标检索分别由 [#245](https://github.com/yusixian/anjian/issues/245)、[#248](https://github.com/yusixian/anjian/issues/248) 和 [#250](https://github.com/yusixian/anjian/issues/250) 跟踪。案间继续使用本地或自托管 Hub。Rust 守护进程迁移和分栏动画的实际收益待测。[发布说明](https://github.com/Innei/ryugi/releases/tag/v1.109.1)
+- **v1.110.1**。案间已有验收报告和授权重跑。交互式数据报告的筛选、数据刷新与反馈路径由 [#249](https://github.com/yusixian/anjian/issues/249) 对照。机器级固定开发构建与宿主入口继续在 [#165](https://github.com/yusixian/anjian/issues/165) 核对。[发布说明](https://github.com/Innei/ryugi/releases/tag/v1.110.1)
+- **v1.111.0**。案间的 Mermaid 已能渲染、放大及复制源码，编辑由 [#246](https://github.com/yusixian/anjian/issues/246) 核对。画板叠层同步和单行标签裁切见 [#247](https://github.com/yusixian/anjian/issues/247)。选案通知已有队列逐轮隔离的回归，继续复查写入顺序。[发布说明](https://github.com/Innei/ryugi/releases/tag/v1.111.0) · [选案回归](tests/hooks/test-codex-comment-watch.cjs)
+
+### v1.108.7 的能力差异
+
 2026-11-24 核对 Ryugi 正式版 `v1.108.7`，最新提交 `3bdef4c8efbbb8e655e16d7bbd0c9ad4ea14b8d9`。相对 `v1.108.6` 新增 1 个公开提交，累计审计 233 个提交。[正式发布](https://github.com/Innei/ryugi/releases/tag/v1.108.7) · [增量差异](https://github.com/Innei/ryugi/compare/v1.108.6...v1.108.7)
 
 - **画板缩放**。案间已在真实板块加载后建立桌面和窄屏缩放基准。v0.18.19 验证了跨次打开的静态板块快照，v0.18.20 验证了远景标题避让，v0.18.22 在空间允许时保持手势开始时的字号。[画板验收 #219](https://github.com/yusixian/anjian/issues/219)
-- **手机样机与文档缩略图**。沿用案间的 HTML 画板和作品库 SVG 缩略图，按 [样机控件 #231](https://github.com/yusixian/anjian/issues/231) 和 [文档缩略图 #232](https://github.com/yusixian/anjian/issues/232) 验收差距。
+- **手机样机与文档缩略图**。原生 HTML 控件已通过鼠标、键盘和窄屏触控验收。文档缩略图保留标题，用装饰线条表示正文。[样机控件 #231](https://github.com/yusixian/anjian/issues/231#issuecomment-7161585917) · [文档缩略图 #232](https://github.com/yusixian/anjian/issues/232)
 - **界面与云服务**。字体沿用案间自己的界面设计。官方云中继的按需查询和定向收件箱属于上游官方 Cloud。
 - **来源与授权**。公开增量只涉及发行与宿主清单，界面行为依据正式发布说明进行核对。[许可证](https://github.com/Innei/ryugi/blob/v1.108.7/LICENSE)
 
