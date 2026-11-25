@@ -9,7 +9,7 @@ export interface ThumbnailArtifact {
 }
 
 // Bump the path when the drawing changes so immutable browser copies are replaced.
-export const THUMBNAIL_PATH = '_anjian/thumbnail-v2.svg';
+export const THUMBNAIL_PATH = '_anjian/thumbnail-v3.svg';
 
 const STYLE =
   '<style>:root{--ink:#333;--muted:#85817c;--paper:#fff;--bg:#f3f2f0;--border:#dedcd7;--block:#f2f1ee;--alert:#f7eee4}@media (prefers-color-scheme: dark){:root{--ink:#e5e5e5;--muted:#a0a0a0;--paper:#292929;--bg:#1c1c1c;--border:#424242;--block:#353535;--alert:#3b342e}}text{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,sans-serif}rect{stroke-width:.8;vector-effect:non-scaling-stroke}</style>';
@@ -58,110 +58,16 @@ function wrap(value: string, size: number, width: number, limit: number) {
   return lines;
 }
 
-function nodeText(node: ObjectValue) {
-  const pending = [node],
-    parts: string[] = [];
-  for (let i = 0; pending.length && i < 300; i++) {
-    const current = pending.pop()!;
-    if (typeof current.text === 'string') parts.push(current.text.slice(0, 4000));
-    else pending.push(...children(current.children).reverse());
-  }
-  return parts.join('').slice(0, 4000);
-}
-
-function documentDrawing(title: string, payload: ObjectValue) {
-  const blocks = children(object(object(payload.state).root).children);
-  const parts = [
-    '<rect x="78" y="18" width="444" height="540" fill="var(--paper)" stroke="var(--edge)" filter="url(#lift)"/>',
-  ];
-  let y = 47;
-  const lines = (value: string, size: number, count: number, indent = 0, weight = 400) => {
-    for (const line of wrap(value, size, 392 - indent, count)) {
-      parts.push(text(104 + indent, y, line, size, 'var(--ink)', weight));
-      y += size * 1.5;
-    }
-  };
-  if (blocks[0]?.type !== 'heading') {
-    lines(title, 18, 2, 0, 650);
-    y += 7;
-  }
-  for (const block of blocks.slice(0, 18)) {
-    if (y > 330) break;
-    const type = string(block.type);
-    if (type === 'heading') {
-      const size = block.tag === 'h1' ? 18 : 11.5;
-      y += block.tag === 'h1' ? 0 : 8;
-      lines(nodeText(block), size, 2, 0, 650);
-      y += 8;
-    } else if (type === 'table') {
-      const rows = children(block.children).slice(0, 5);
-      const cols = Math.max(1, ...rows.map((row) => children(row.children).length));
-      const width = 392 / cols;
-      rows.forEach((row, ri) => {
-        children(row.children).forEach((cell, ci) => {
-          parts.push(
-            rect(
-              104 + ci * width,
-              y - 8 + ri * 22,
-              width,
-              22,
-              ri === 0 ? 'var(--block)' : 'var(--paper)',
-              'var(--border)',
-            ),
-          );
-          parts.push(
-            text(
-              109 + ci * width,
-              y + 6 + ri * 22,
-              wrap(nodeText(cell), 7.5, width - 10, 1)[0] ?? '',
-              7.5,
-            ),
-          );
-        });
-      });
-      y += rows.length * 22 + 10;
-    } else if (type === 'list') {
-      children(block.children)
-        .slice(0, 4)
-        .forEach((item, i) => {
-          parts.push(text(104, y, block.listType === 'number' ? `${i + 1}.` : '•'));
-          lines(nodeText(item), 9, 2, 13);
-        });
-      y += 8;
-    } else if (type === 'alert-quote') {
-      const body = children(object(object(block.content).root).children)
-        .map(nodeText)
-        .join(' ');
-      const rows = wrap(body, 9, 368, 3);
-      parts.push(
-        rect(104, y - 8, 392, rows.length * 14 + 16, 'var(--alert)'),
-        rect(104, y - 8, 2, rows.length * 14 + 16, '#c3986d'),
-      );
-      rows.forEach((line) => {
-        parts.push(text(116, y + 7, line));
-        y += 14;
-      });
-      y += 21;
-    } else if (type === 'code-block') {
-      const rows = wrap(string(block.code), 8, 372, 4);
-      parts.push(rect(104, y - 8, 392, rows.length * 12 + 18, 'var(--block)'));
-      rows.forEach((line) => {
-        parts.push(text(114, y + 6, line, 8));
-        y += 12;
-      });
-      y += 20;
-    } else if (type === 'paragraph' || type === 'quote') {
-      lines(nodeText(block), 9, 3);
-      y += 7;
-    } else {
-      parts.push(
-        rect(104, y - 8, 392, 30, 'var(--block)'),
-        text(114, y + 11, type.toUpperCase().slice(0, 30), 8, 'var(--muted)'),
-      );
-      y += 40;
-    }
-  }
-  return `<style>:root{--desk:#eaeef0;--edge:none}@media (prefers-color-scheme: dark){:root{--desk:#202427;--edge:#3a3a3a}}</style>${rect(0, 0, 600, 360, 'var(--desk)')}<defs><filter id="lift" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#1d3540" flood-opacity=".12"/></filter></defs><g transform="rotate(-3 300 288)"><g transform="translate(0 22)">${parts.join('')}</g></g>`;
+function documentDrawing(title: string) {
+  const page =
+    '<rect x="78" y="18" width="444" height="540" fill="var(--paper)" stroke="var(--edge)" filter="url(#lift)"/>';
+  const titleLines = wrap(title, 28, 392, 2);
+  const heading = titleLines
+    .map((line, index) => text(104, 64 + index * 36, line, 28, 'var(--ink)', 650))
+    .join('');
+  const bodyTop = 66 + titleLines.length * 36;
+  const lines = `<path d="M108 ${bodyTop}h354m-354 19h300m-300 19h332m-332 32h354m-354 19h230" fill="none" stroke="var(--block)" stroke-width="8" stroke-linecap="round"/>`;
+  return `<style>:root{--desk:#eaeef0;--edge:none}@media (prefers-color-scheme: dark){:root{--desk:#202427;--edge:#3a3a3a}}</style>${rect(0, 0, 600, 360, 'var(--desk)')}<defs><filter id="lift" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#1d3540" flood-opacity=".12"/></filter></defs><g transform="rotate(-3 300 288)"><g transform="translate(0 22)">${page}${heading}${lines}</g></g>`;
 }
 
 interface Box {
@@ -280,10 +186,15 @@ function artboardDrawing(payload: ObjectValue) {
 export function renderThumbnail(artifact: ThumbnailArtifact, value: unknown) {
   const title = artifact.title ?? artifact.id;
   let body: string;
-  if (artifact.type === 'document') body = documentDrawing(title, object(value));
+  if (artifact.type === 'document') body = documentDrawing(title);
   else if (artifact.type === 'artboard') body = artboardDrawing(object(value));
   else if (artifact.type === 'slides' || artifact.type === 'storyboard') {
-    body = `${rect(0, 0, 600, 360, 'var(--bg)')}${rect(36, 32, 528, 296, 'var(--paper)', 'var(--border)')}<path transform="translate(59 55) scale(1.8)" d="${TYPE_GLYPHS[artifact.type].stroke}" stroke="var(--muted)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>${wrap(title, 32, 450, 3)
+    body = `${rect(0, 0, 600, 360, 'var(--bg)')}${rect(36, 32, 528, 296, 'var(--paper)', 'var(--border)')}<path transform="translate(59 55) scale(1.8)" d="${TYPE_GLYPHS[artifact.type].stroke}" stroke="var(--muted)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>${wrap(
+      title,
+      32,
+      450,
+      3,
+    )
       .map((line, index) => text(64, 165 + index * 40, line, 32, 'var(--ink)', 600))
       .join('')}`;
   } else {
@@ -303,7 +214,9 @@ export function renderThumbnail(artifact: ThumbnailArtifact, value: unknown) {
       3,
     )
       .map((line, i) => text(42, 160 + i * 36, line, 25, 'var(--ink)', 600))
-      .join('')}${text(42, 318, `${artifact.project ?? 'ANJIAN'}${whiteboard ? '' : ' / HTML'}`, 11, 'var(--muted)')}`;
+      .join(
+        '',
+      )}${text(42, 318, `${artifact.project ?? 'ANJIAN'}${whiteboard ? '' : ' / HTML'}`, 11, 'var(--muted)')}`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360"><title>${escape(title)}</title>${STYLE}${body}</svg>`;
 }

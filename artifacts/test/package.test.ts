@@ -33,7 +33,7 @@ test('the published package holds the CLI, the server, the viewer under fixed en
   // Vite and StyleX may rename CSS when sharing it between HTML entry points.
   for (const entry of ['index', 'preview', 'share']) {
     const html = fs.readFileSync(path.join(pkgDir, `dist/viewer/${entry}.html`), 'utf8');
-    const stylesheets = [...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)];
+    const stylesheets = [...html.matchAll(/<link\s[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)];
     expect(stylesheets.length).toBeGreaterThan(0);
     for (const match of stylesheets)
       expect(files).toContain(`dist/viewer/${match[1]!.replace(/^\//, '')}`);
@@ -118,7 +118,7 @@ test('the thumbnail entry is one self-contained module a Worker can bundle', asy
   const code = fs.readFileSync(file, 'utf8');
   expect(code).not.toMatch(/\bimport\b|\brequire\(|\.css\b/);
   const { renderThumbnail, renderBoardPlaceholder, THUMBNAIL_PATH } = await import(file);
-  expect(THUMBNAIL_PATH).toBe('_anjian/thumbnail-v2.svg');
+  expect(THUMBNAIL_PATH).toBe('_anjian/thumbnail-v3.svg');
   expect(renderThumbnail({ id: 'a', type: 'html', title: 'Hi' }, null)).toMatch(/^<svg /);
   expect(renderBoardPlaceholder({ id: 'a', w: 10, h: 10 })).toMatch(/^<svg /);
 });

@@ -108,7 +108,9 @@ export const thumbnailRoute: HttpRoute<ServerContext> = {
       const title = titleOf(payload);
       const svg = renderThumbnail(
         { id: ref.id, type: ref.type, title, project: projectName(ctx) },
-        ref.type === 'html' ? null : previewPayload(ref, resolved.dir, title, payload),
+        ref.type === 'html' || ref.type === 'document'
+          ? null
+          : previewPayload(ref, resolved.dir, title, payload),
       );
       send(res, 200, svg, {
         'Content-Type': 'image/svg+xml',

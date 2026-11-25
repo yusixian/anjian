@@ -16,8 +16,8 @@ const names = fs
   .filter((file) => file.endsWith('.json'))
   .map((file) => file.slice(0, -'.json'.length));
 
-test('the thumbnail path moves to v2 so cached v1 drawings are replaced', () => {
-  expect(THUMBNAIL_PATH).toBe('_anjian/thumbnail-v2.svg');
+test('the thumbnail path moves to v3 so cached v2 drawings are replaced', () => {
+  expect(THUMBNAIL_PATH).toBe('_anjian/thumbnail-v3.svg');
 });
 
 test('a document thumbnail lays the page at a slant with a soft shadow', () => {

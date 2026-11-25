@@ -142,10 +142,20 @@ v0.18.16 的 `anjian check` 能提示标题压到独立板块。v0.18.20 缩远�
 
 v0.18.22 在可用空间内保持手势开始时的字号，手势结束后再按新缩放比例调整。空间不足时，标题会在手势期间缩小以避开板块。桌面滚轮和 390 px 的双指缩放已覆盖。[验收记录](https://github.com/yusixian/anjian/issues/219) · [中文](https://anjian.cosine.ren/zh/docs/updates/#01822) · [English](https://anjian.cosine.ren/en/docs/updates/#01822)
 
+## 手机样机与文档缩略图
+
+v0.18.22 正式包用同一画板的两个样机验证了开关、分段选择和滑块。屏幕内使用原生 HTML 控件，桌面支持键盘、独立重播和回到评审，390 px Chrome 触屏模拟支持展开、操作及返回画布。[样机验收 #231](https://github.com/yusixian/anjian/issues/231#issuecomment-7161585917)
+
+文档缩略图显示标题并用线条表示正文。24 张中英混排样本在冷加载下的 SVG 响应总量从 78,958 降至 31,390 字节，SVG 文本节点从 360 个降为 24 个。原文从文档页查看。[文档缩略图 #232](https://github.com/yusixian/anjian/issues/232)
+
 ## 待验证能力
 
-- [#231](https://github.com/yusixian/anjian/issues/231) 手机样机的开关、分段选择器和滑块。
-- [#232](https://github.com/yusixian/anjian/issues/232) 作品库文档缩略图的体积与可读性。
+- [#245](https://github.com/yusixian/anjian/issues/245) 同一 HTML 的多个画板实例分别指定默认参数。
+- [#246](https://github.com/yusixian/anjian/issues/246) 文档 Mermaid 重命名、源码编辑与保存。
+- [#247](https://github.com/yusixian/anjian/issues/247) 画板平移缩放时叠层同步与标签裁切。
+- [#248](https://github.com/yusixian/anjian/issues/248) Oh My Pi 宿主和作品定向反馈。
+- [#249](https://github.com/yusixian/anjian/issues/249) 交互式数据报告的筛选、刷新和反馈。
+- [#250](https://github.com/yusixian/anjian/issues/250) 图标离线检索与接入浏览器前的未知图标名检查。
 - [#177](https://github.com/yusixian/anjian/issues/177) 自托管私有作品的实体第二台设备验收，以及其他作品类型的协议不兼容提示和只读路径。
 - [#166](https://github.com/yusixian/anjian/issues/166) Antigravity 原生桌面作品侧栏。官方 CLI 已校验隔离插件声明，模拟宿主测试已覆盖侧栏空态、作品切换和会话隔离。原生宿主、真实 Hub 和实时批注仍待验收。
 - [#151](https://github.com/yusixian/anjian/issues/151) 浏览器任务入口与运行中的本地会话交互，继续验证直接从 ChatGPT 桌面应用打开的 Codex 会话。
