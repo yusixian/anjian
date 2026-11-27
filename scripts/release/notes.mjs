@@ -39,5 +39,5 @@ export function currentNotes(root, version) {
 
 export function releaseBody(version, notes) {
   if (!notes.zh || !notes.en) throw new Error(`Release ${version} requires both languages`);
-  return `# Anjian ${version}\n\n## 中文\n\n${notes.zh}\n\n## English\n\n${notes.en}\n`;
+  return `## 中文\n\n${notes.zh}\n\n## English\n\n${notes.en}\n`;
 }
