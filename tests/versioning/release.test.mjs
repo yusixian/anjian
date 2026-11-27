@@ -143,6 +143,8 @@ test('release retries do not duplicate tags or releases, including interrupted a
     /interrupted/,
   );
   publishRelease(input, api, gate);
+  assert.equal(store.release.name, 'Anjian 0.2.0');
+  assert.ok(store.release.body.startsWith('## 中文\n\n变化\n\n## English\n\nChange\n'));
   publishRelease(input, api, gate);
   assert.equal(store.writes, 2);
 });
