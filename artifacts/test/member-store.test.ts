@@ -1,16 +1,27 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
 import { afterEach, expect, test, vi } from 'vitest';
+
 import { createMemberStore } from '../src/server/member-store';
 
 const homes: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true }); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true });
+});
 function fixture() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'anjian-members-'));
   homes.push(home);
   let time = 1_800_000_000_000;
-  return { home, store: createMemberStore(home, 1, () => time), advance: (ms: number) => { time += ms; } };
+  return {
+    home,
+    store: createMemberStore(home, 1, () => time),
+    advance: (ms: number) => {
+      time += ms;
+    },
+  };
 }
 const alice = { id: 2, login: 'alice' };
 
@@ -19,7 +30,9 @@ test('invitations are account-bound, single use and store only a token hash', ()
   const invitation = store.invite(alice, 1024);
   expect(store.principal(2)).toBeNull();
   expect(JSON.stringify(store.list())).not.toContain(invitation.token);
-  expect(fs.readFileSync(path.join(home, 'members/index.json'), 'utf8')).not.toContain(invitation.token);
+  expect(fs.readFileSync(path.join(home, 'members/index.json'), 'utf8')).not.toContain(
+    invitation.token,
+  );
   expect(() => store.accept({ id: 3, login: 'other' }, invitation.token)).toThrow('受邀');
   expect(store.accept(alice, invitation.token)).toMatchObject({ role: 'member', id: 'github:2' });
   expect(() => store.accept(alice, invitation.token)).toThrow('邀请无效');
@@ -80,7 +93,9 @@ test('corrupt or symlinked metadata fails closed without resetting membership', 
 test('failed persistence does not consume an invitation or grant membership', () => {
   const { home, store } = fixture();
   const invitation = store.invite(alice, 1024);
-  const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('disk full'); });
+  const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+    throw new Error('disk full');
+  });
   expect(() => store.accept(alice, invitation.token)).toThrow('disk full');
   rename.mockRestore();
   expect(store.principal(2)).toBeNull();
@@ -94,4 +109,42 @@ test('invalid quota and Owner changes are rejected', () => {
   for (const bytes of [-1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1])
     expect(() => store.invite(alice, bytes)).toThrow('额度无效');
   expect(() => store.update('owner', { status: 'suspended' })).toThrow('成员不存在');
+});
+
+test('applications can be submitted, updated idempotently, approved, or rejected', () => {
+  const { home, store } = fixture();
+  expect(() => store.apply({ id: 1, login: 'owner' })).toThrow('无需申请');
+  const first = store.apply(alice, '  我是 Alice  ');
+  expect(first.note).toBe('我是 Alice');
+  expect(store.applicationFor(alice.id)?.id).toBe(first.id);
+  expect(store.principal(alice.id)).toBeNull();
+  const updated = store.apply({ id: 2, login: 'alice-new' }, '更新备注');
+  expect(updated.id).toBe(first.id);
+  expect(updated.login).toBe('alice-new');
+  expect(updated.note).toBe('更新备注');
+  expect(store.list().applications).toHaveLength(1);
+  const member = store.approveApplication(first.id, 4096);
+  expect(member).toMatchObject({
+    id: 'github:2',
+    login: 'alice-new',
+    status: 'active',
+    quotaBytes: 4096,
+  });
+  expect(store.list().applications).toEqual([]);
+  expect(store.principal(2)).toMatchObject({ id: 'github:2', role: 'member' });
+  expect(() => store.apply(alice)).toThrow('已是成员');
+
+  const bob = { id: 3, login: 'bob' };
+  const bobApp = store.apply(bob);
+  expect(store.list().applications).toHaveLength(1);
+  store.rejectApplication(bobApp.id);
+  expect(store.list().applications).toEqual([]);
+  expect(store.principal(3)).toBeNull();
+
+  // Legacy index.json without an applications array remains readable.
+  const file = path.join(home, 'members/index.json');
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  delete raw.applications;
+  fs.writeFileSync(file, JSON.stringify(raw));
+  expect(createMemberStore(home, 1).list().applications).toEqual([]);
 });
